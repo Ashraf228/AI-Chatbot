@@ -1,0 +1,37 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: chatbot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgres://postgres:postgres@db:5432/chatbot
+      WIDGET_CDN_ORIGIN: http://localhost:8080
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+      OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL}
+      SITE_DOMAIN_ALLOWLIST_MODE: strict
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+
+  widget:
+    image: nginx:alpine
+    volumes:
+      - ./widget:/usr/share/nginx/html:ro
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:

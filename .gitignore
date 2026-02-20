@@ -1,0 +1,15 @@
+# env
+.env
+.env.*
+*.env
+
+# node
+node_modules/
+dist/
+coverage/
+
+# logs
+*.log
+
+# docker
+pgdata/gti 
