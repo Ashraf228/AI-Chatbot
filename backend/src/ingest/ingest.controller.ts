@@ -1,7 +1,9 @@
-import { Body, Controller, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Post, UploadedFile, UseInterceptors, UseGuards } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { IngestService } from './ingest.service';
+import { AdminKeyGuard } from '../utils/admin.guard';
 
+@UseGuards(AdminKeyGuard)
 @Controller('admin/ingest')
 export class IngestController {
   constructor(private ingest: IngestService) {}

@@ -6,6 +6,7 @@ import { LlmService } from '../vector/llm.service';
 import { SitesService } from '../sites/sites.service';
 import { isDomainAllowed } from '../utils/cors';
 import { buildSystemPrompt } from './prompt';
+import { rateLimit } from '../utils/rate-limit';
 
 @Injectable()
 export class ChatService {
@@ -16,9 +17,21 @@ export class ChatService {
     private sites: SitesService,
   ) {}
 
-  async reply(dto: ChatMessageDto, origin?: string) {
+  async reply(dto: ChatMessageDto, req?: any, origin?: string) {
     const site = await this.sites.getSite(dto.siteId);
     if (!site) throw new Error('Invalid siteId');
+
+    // Rate Limiting
+    const ip = req?.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+               req?.socket?.remoteAddress ||
+               'unknown';
+
+    const okIp = await rateLimit(`ip:${ip}`, 30, 60);
+    const okSite = await rateLimit(`site:${dto.siteId}`, 300, 60);
+
+    if (!okIp || !okSite) {
+      throw new Error('Rate limit exceeded');
+    }
 
     const mode = process.env.SITE_DOMAIN_ALLOWLIST_MODE || 'strict';
     if (mode === 'strict') {

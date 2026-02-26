@@ -1,17 +1,31 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
+import { randomBytes } from 'crypto';
 
 @Injectable()
 export class SitesService {
   constructor(private db: PrismaService) {}
 
-  async createSite(id: string, name: string, allowedDomains: string[], config: any = {}) {
+  async createSite(
+    id: string,
+    tenantId: string,
+    name: string,
+    allowedDomains: string[],
+    config: any = {},
+  ) {
+    const publicKey = 'pk_' + randomBytes(32).toString('hex');
+
     await this.db.query(
-      `INSERT INTO sites(id, name, allowed_domains, config)
-       VALUES ($1,$2,$3,$4)
-       ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, allowed_domains=EXCLUDED.allowed_domains, config=EXCLUDED.config`,
-      [id, name, allowedDomains, config],
+      `INSERT INTO sites(id, tenant_id, name, allowed_domains, public_key, config)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (id) DO UPDATE SET
+         tenant_id=EXCLUDED.tenant_id,
+         name=EXCLUDED.name,
+         allowed_domains=EXCLUDED.allowed_domains,
+         config=EXCLUDED.config`,
+      [id, tenantId, name, allowedDomains, publicKey, config],
     );
+
     return this.getSite(id);
   }
 
