@@ -21,11 +21,12 @@ services:
       OPENAI_MODEL: ${OPENAI_MODEL}
       OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL}
       SITE_DOMAIN_ALLOWLIST_MODE: strict
+      REDIS_URL: redis://redis:6379
     ports:
       - "5000:5000"
     depends_on:
       - db
-      - redis  # Add redis dependency
+      - redis  
 
   widget:
     image: nginx:alpine
@@ -34,7 +35,7 @@ services:
     ports:
       - "8080:80"
 
-  redis:  # Fixed indentation
+  redis: 
     image: redis:7-alpine
     ports:
       - "6379:6379"

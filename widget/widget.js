@@ -2,6 +2,20 @@
   const cfg = window.SSB_CHAT || {};
   const siteId = cfg.siteId;
   const apiBase = cfg.apiBase || "http://localhost:5000";
+  const publicKey = cfg.publicKey;
+
+if (!publicKey) {
+  console.error("[SSB_CHAT] Missing publicKey");
+  return;
+}
+
+// stable per-site session id in localStorage
+const sessionStorageKey = `ssb_session_${siteId}`;
+let sessionId = localStorage.getItem(sessionStorageKey);
+if (!sessionId) {
+  sessionId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + "_" + Math.random().toString(16).slice(2);
+  localStorage.setItem(sessionStorageKey, sessionId);
+}
 
   if (!siteId) {
     console.error("[SSB_CHAT] Missing siteId");
@@ -106,10 +120,19 @@
       const res = await fetch(apiBase + "/chat/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId, message: text })
+        body: JSON.stringify({
+  siteId,
+  publicKey,
+  sessionId,
+  message: text
+})
       });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
+      if (data && data.sessionId && data.sessionId !== sessionId) {
+  sessionId = data.sessionId;
+  localStorage.setItem(sessionStorageKey, sessionId);
+}
       addMsg(data.answer || "(keine Antwort)", "bot", data.sources || []);
     } catch (e) {
       addMsg("Fehler beim Verbinden. Bitte später erneut versuchen.", "bot");
