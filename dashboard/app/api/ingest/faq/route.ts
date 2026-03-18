@@ -16,9 +16,23 @@ export async function POST(req: Request) {
   const auth = await requireAuth();
   if (auth) return auth;
 
-  const base = process.env.BACKEND_BASE_URL!;
-  const adminKey = process.env.ADMIN_KEY!;
+  const base = process.env.BACKEND_BASE_URL?.trim();
+  const adminKey = process.env.ADMIN_KEY?.trim();
   const body = await req.json();
+
+  if (!base) {
+    return NextResponse.json(
+      { message: "BACKEND_BASE_URL missing in dashboard/.env.local" },
+      { status: 500 }
+    );
+  }
+
+  if (!adminKey) {
+    return NextResponse.json(
+      { message: "ADMIN_KEY missing in dashboard/.env.local" },
+      { status: 500 }
+    );
+  }
 
   const r = await fetch(`${base}/admin/ingest/faq`, {
     method: "POST",
@@ -29,6 +43,10 @@ export async function POST(req: Request) {
     body: JSON.stringify(body),
   });
 
-  const data = await r.json().catch(() => ({}));
-  return NextResponse.json(data, { status: r.status });
+  const text = await r.text();
+
+  return new NextResponse(text, {
+    status: r.status,
+    headers: { "Content-Type": "application/json" },
+  });
 }

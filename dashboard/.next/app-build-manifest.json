@@ -5,25 +5,10 @@
       "static/chunks/main-app.js",
       "static/chunks/app/layout.js"
     ],
-    "/page": [
+    "/ingest/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
-    ],
-    "/login/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/login/page.js"
-    ],
-    "/api/auth/login/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/auth/login/route.js"
-    ],
-    "/sites/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/sites/page.js"
+      "static/chunks/app/ingest/page.js"
     ],
     "/api/sites/page": [
       "static/chunks/webpack.js",
@@ -34,6 +19,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/sites/route.js"
+    ],
+    "/api/ingest/faq/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/ingest/faq/route.js"
     ]
   }
 }
