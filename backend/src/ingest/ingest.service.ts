@@ -54,45 +54,54 @@ export class IngestService {
     return { documentId: docId, inserted };
   }
 
-  async ingestPdf(siteId: string, file: { buffer: Buffer; originalname: string }) {
-    if (!siteId) throw new Error('siteId missing');
-    if (!file?.buffer) throw new Error('file missing');
+  async ingestPdf(siteId: string, file: Express.Multer.File) {
+  if (!siteId) throw new Error('siteId missing');
+  if (!file?.buffer) throw new Error('file missing or buffer missing');
 
-    const site = await this.sites.getSite(siteId);
-    if (!site?.tenant_id) throw new Error('Invalid siteId / tenant missing');
-    const tenantId = site.tenant_id;
+  const site = await this.sites.getSite(siteId);
+  if (!site?.tenant_id) throw new Error('Invalid siteId / tenant missing');
+  const tenantId = site.tenant_id;
 
-    const parsed = await pdfParse(file.buffer);
-    const text = (parsed.text || '').trim();
-    if (!text) throw new Error('PDF has no extractable text');
+  const parsed = await pdfParse(file.buffer);
+  const text = (parsed.text || '').trim();
 
-    const docId = randomUUID();
-    await this.db.query(
-      `INSERT INTO documents(id, tenant_id, site_id, type, title) VALUES ($1,$2,$3,$4,$5)`,
-      [docId, tenantId, siteId, 'pdf', file.originalname],
-    );
-
-    const chunks = chunkText(text, 1400, 250);
-
-    let inserted = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      const content = chunks[i];
-      const embedding = await this.embedder.embed(content);
-
-      const res = await this.vector.upsertChunk({
-        id: randomUUID(),
-        tenantId,
-        siteId,
-        documentId: docId,
-        content,
-        metadata: { kind: 'pdf', filename: file.originalname, chunkIndex: i },
-        contentHash: sha256(content),
-        embedding,
-      });
-
-      if (!res.skipped) inserted++;
-    }
-
-    return { documentId: docId, chunks: chunks.length, inserted };
+  if (!text) {
+    throw new Error('PDF has no extractable text');
   }
+
+  const docId = randomUUID();
+
+  await this.db.query(
+    `INSERT INTO documents(id, tenant_id, site_id, type, title)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [docId, tenantId, siteId, 'pdf', file.originalname],
+  );
+
+  const chunks = chunkText(text, 1400, 250);
+
+  let inserted = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    const content = chunks[i];
+    const embedding = await this.embedder.embed(content);
+
+    const res = await this.vector.upsertChunk({
+      id: randomUUID(),
+      tenantId,
+      siteId,
+      documentId: docId,
+      content,
+      metadata: {
+        kind: 'pdf',
+        filename: file.originalname,
+        chunkIndex: i,
+      },
+      contentHash: sha256(content),
+      embedding,
+    });
+
+    if (!res.skipped) inserted++;
+  }
+
+  return { documentId: docId, chunks: chunks.length, inserted };
+}
 }

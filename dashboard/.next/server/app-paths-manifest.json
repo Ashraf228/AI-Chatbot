@@ -1,6 +1,6 @@
 {
-  "/api/sites/route": "app/api/sites/route.js",
-  "/api/ingest/faq/route": "app/api/ingest/faq/route.js",
-  "/ingest/page": "app/ingest/page.js",
-  "/api/sites/page": "app/api/sites/page.js"
+  "/page": "app/page.js",
+  "/login/page": "app/login/page.js",
+  "/pdf/page": "app/pdf/page.js",
+  "/sites/page": "app/sites/page.js"
 }
