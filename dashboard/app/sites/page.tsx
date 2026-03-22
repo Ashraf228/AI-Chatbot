@@ -108,15 +108,21 @@ export default function SitesPage() {
     }
   }
 
-  async function copyText(value: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setMsg(`${label} kopiert.`);
-      setErr(null);
-    } catch {
-      setErr(`${label} konnte nicht kopiert werden.`);
-    }
+  const [copied, setCopied] = useState<string | null>(null);
+
+async function copyText(value: string, label: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    setCopied(label);
+    setErr(null);
+
+    setTimeout(() => {
+      setCopied(null);
+    }, 2000);
+  } catch {
+    setErr(`${label} konnte nicht kopiert werden.`);
   }
+}
 
   return (
     <div style={{ maxWidth: 1100, margin: "30px auto", fontFamily: "system-ui", padding: 20 }}>
@@ -214,7 +220,16 @@ export default function SitesPage() {
                 </select>
 
                 {selectedSite && (
-                  <div style={{ display: "grid", gap: 12 }}>
+                  <div
+  style={{
+    display: "grid",
+    gap: 12,
+    padding: 16,
+    borderRadius: 12,
+    background: "#f9fafc",
+    border: "1px solid #eee",
+  }}
+>
                     <div>
                       <strong>Site ID:</strong>
                       <div>{selectedSite.id}</div>
@@ -255,12 +270,19 @@ export default function SitesPage() {
 
                       {selectedSite.public_key && (
                         <button
-                          type="button"
-                          onClick={() => copyText(selectedSite.public_key!, "Public Key")}
-                          style={{ marginTop: 8, padding: 10, cursor: "pointer" }}
-                        >
-                          Public Key kopieren
-                        </button>
+  type="button"
+  onClick={() => copyText(selectedSite.public_key!, "pk")}
+  style={{
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    border: "1px solid #ccc",
+    cursor: "pointer",
+    background: copied === "pk" ? "#d4edda" : "#fff",
+  }}
+>
+  {copied === "pk" ? "✓ kopiert" : "Public Key kopieren"}
+</button>
                       )}
                     </div>
 
@@ -280,12 +302,19 @@ export default function SitesPage() {
 
                       {embedCode && (
                         <button
-                          type="button"
-                          onClick={() => copyText(embedCode, "Embed Code")}
-                          style={{ marginTop: 8, padding: 10, cursor: "pointer" }}
-                        >
-                          Embed Code kopieren
-                        </button>
+  type="button"
+  onClick={() => copyText(embedCode, "embed")}
+  style={{
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    border: "1px solid #ccc",
+    cursor: "pointer",
+    background: copied === "embed" ? "#d4edda" : "#fff",
+  }}
+>
+  {copied === "embed" ? "✓ kopiert" : "Embed Code kopieren"}
+</button>
                       )}
                     </div>
                   </div>

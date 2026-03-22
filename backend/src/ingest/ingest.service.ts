@@ -6,7 +6,8 @@ import { SitesService } from '../sites/sites.service';
 import { chunkText } from '../utils/chunk';
 import { sha256 } from '../utils/hash';
 import { randomUUID } from 'crypto';
-import pdfParse from 'pdf-parse';
+
+const pdfParse = require('pdf-parse');
 
 @Injectable()
 export class IngestService {

@@ -12,6 +12,7 @@ import { EmbeddingService } from './vector/embedding.service';
 import { LlmService } from './vector/llm.service';
 import { RateLimitService } from './utils/rate-limit.service';
 import { RetentionService } from './retention/retention.service';
+import { ConversationsModule } from './conversations/conversations.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { RetentionService } from './retention/retention.service';
     SitesModule,
     IngestModule,
     ChatModule,
+    ConversationsModule,
   ],
   providers: [
     PrismaService,
