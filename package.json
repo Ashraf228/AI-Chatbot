@@ -1,0 +1,22 @@
+{
+  "name": "ai-chatbot",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:api": "npm run build --workspace=apps/api",
+    "build:widget": "npm run build --workspace=apps/widget",
+    "build:reporter": "npm exec tsc -- --noEmit -p apps/reporter/tsconfig.json",
+    "build:all": "npm run build:api && npm run build:widget && npm run build:reporter",
+    "dev:api": "npm run start:dev --workspace=apps/api",
+    "dev:widget": "npm run dev --workspace=apps/widget",
+    "dev:reporter": "npm run dev --workspace=apps/reporter",
+    "check:api": "npm exec tsc -- --noEmit -p apps/api/tsconfig.json",
+    "check:widget": "npm exec tsc -- --noEmit -p apps/widget/tsconfig.json",
+    "check:reporter": "npm exec tsc -- --noEmit -p apps/reporter/tsconfig.json",
+    "check:all": "npm run check:api && npm run check:widget && npm run check:reporter"
+  }
+}

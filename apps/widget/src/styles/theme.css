@@ -1,0 +1,19 @@
+:root {
+  --ssb-font-sans: "Arial", "Helvetica Neue", sans-serif;
+  --ssb-color-bg: #fffdf8;
+  --ssb-color-surface: #ffffff;
+  --ssb-color-panel: #fff7e8;
+  --ssb-color-border: rgba(27, 31, 35, 0.12);
+  --ssb-color-text: #1b1f23;
+  --ssb-color-muted: #5f646d;
+  --ssb-color-primary: #b55400;
+  --ssb-color-primary-strong: #8f4300;
+  --ssb-color-primary-soft: #ffe2c4;
+  --ssb-color-primary-rgb: 181, 84, 0;
+  --ssb-color-user: #1b1f23;
+  --ssb-color-user-text: #ffffff;
+  --ssb-shadow-lg: 0 22px 54px rgba(24, 18, 10, 0.18);
+  --ssb-radius-xl: 22px;
+  --ssb-radius-lg: 16px;
+  --ssb-radius-md: 12px;
+}

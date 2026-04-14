@@ -1,0 +1,22 @@
+{
+  "name": "@ai-chatbot/reporter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "weekly": "tsx src/jobs/generateWeeklyReports.ts",
+    "monthly": "tsx src/jobs/generateMonthlyReports.ts",
+    "lead-digest": "tsx src/jobs/sendLeadDigest.ts"
+  },
+  "dependencies": {
+    "nodemailer": "^6.10.1",
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/nodemailer": "^6.4.17",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,27 @@
+# env
+.env
+.env.*
+*.env
+
+# node
+node_modules/
+package-lock.json
+!apps/api/package-lock.json
+dist/
+coverage/
+.next/
+.vite/
+
+# logs
+*.log
+
+# docker
+pgdata/
+
+# macOS / archives
+.DS_Store
+__MACOSX/
+
+# app outputs
+apps/*/dist/
+packages/*/dist/
