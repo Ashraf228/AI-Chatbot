@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { ReportSubscriptionForm } from "./ReportSubscriptionForm";
+import { EmptyState } from "../shared/EmptyState";
+import { ErrorState } from "../shared/ErrorState";
 
 type ReportHistoryTableProps = {
   siteId?: string;
@@ -44,22 +46,22 @@ export function ReportHistoryTable({ siteId }: ReportHistoryTableProps) {
   }, [siteId]);
 
   return (
-    <div style={{ display: "grid", gap: 18 }}>
+    <div className="dashboard-grid">
       <ReportSubscriptionForm siteId={siteId} />
 
-      <div style={panelStyle}>
-        <h2 style={{ marginTop: 0 }}>Report-Historie</h2>
+      <div className="dashboard-card">
+        <h2 className="dashboard-card-title">Report-Historie</h2>
         {error ? (
-          <div style={{ color: "#b91c1c" }}>{error}</div>
+          <ErrorState message={error} />
         ) : runs.length === 0 ? (
-          <div>Noch keine Report-Läufe vorhanden.</div>
+          <EmptyState title="Noch keine Report-Läufe vorhanden." />
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
+          <div className="dashboard-table-wrap">
+            <table className="dashboard-table dashboard-table--wide">
               <thead>
                 <tr>
                   {["Zeit", "Site", "Frequenz", "Status", "Empfänger", "Betreff"].map((label) => (
-                    <th key={label} style={thStyle}>
+                    <th key={label} className="dashboard-th">
                       {label}
                     </th>
                   ))}
@@ -68,17 +70,19 @@ export function ReportHistoryTable({ siteId }: ReportHistoryTableProps) {
               <tbody>
                 {runs.map((run) => (
                   <tr key={run.id}>
-                    <td style={tdStyle}>{new Date(run.createdAt).toLocaleString()}</td>
-                    <td style={tdStyle}>{run.siteName || run.siteId || "-"}</td>
-                    <td style={tdStyle}>
+                    <td className="dashboard-td">{new Date(run.createdAt).toLocaleString()}</td>
+                    <td className="dashboard-td">{run.siteName || run.siteId || "-"}</td>
+                    <td className="dashboard-td">
                       {run.frequency} · {run.triggerSource}
                     </td>
-                    <td style={tdStyle}>{run.status}</td>
-                    <td style={tdStyle}>{run.recipientEmail || "-"}</td>
-                    <td style={tdStyle}>
+                    <td className="dashboard-td">{run.status}</td>
+                    <td className="dashboard-td">{run.recipientEmail || "-"}</td>
+                    <td className="dashboard-td">
                       <div>{run.reportSubject || "-"}</div>
                       {run.errorMessage && (
-                        <div style={{ color: "#b91c1c", marginTop: 4 }}>{run.errorMessage}</div>
+                        <div className="dashboard-status dashboard-status--error" style={{ marginTop: 4 }}>
+                          {run.errorMessage}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -91,22 +95,3 @@ export function ReportHistoryTable({ siteId }: ReportHistoryTableProps) {
     </div>
   );
 }
-
-const panelStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 20,
-};
-
-const thStyle: CSSProperties = {
-  textAlign: "left",
-  padding: "10px 8px",
-  borderBottom: "1px solid #e5e7eb",
-};
-
-const tdStyle: CSSProperties = {
-  padding: "12px 8px",
-  borderBottom: "1px solid #f3f4f6",
-  verticalAlign: "top",
-};

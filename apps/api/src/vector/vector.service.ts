@@ -1,6 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
 
+export type VectorChunkMetadata = Record<string, unknown>;
+
+export type VectorSearchRow = {
+  id: string;
+  content: string;
+  metadata: VectorChunkMetadata;
+  title: string | null;
+  source_url: string | null;
+  score: number;
+};
+
 @Injectable()
 export class VectorService {
   constructor(private db: PrismaService) {}
@@ -15,11 +26,11 @@ export class VectorService {
     siteId: string;
     documentId: string;
     content: string;
-    metadata: any;
+    metadata: VectorChunkMetadata;
     contentHash: string;
     embedding: number[];
   }) {
-    const exists = await this.db.query(
+    const exists = await this.db.query<{ id: string }>(
       `SELECT id FROM chunks WHERE tenant_id=$1 AND document_id=$2 AND content_hash=$3 LIMIT 1`,
       [params.tenantId, params.documentId, params.contentHash],
     );
@@ -43,8 +54,13 @@ export class VectorService {
     return { id: params.id, skipped: false };
   }
 
-  async search(tenantId: string, siteId: string, embedding: number[], k = 6) {
-    const res = await this.db.query(
+  async search(
+    tenantId: string,
+    siteId: string,
+    embedding: number[],
+    k = 6,
+  ): Promise<VectorSearchRow[]> {
+    const res = await this.db.query<VectorSearchRow>(
       `
       SELECT
         c.id,

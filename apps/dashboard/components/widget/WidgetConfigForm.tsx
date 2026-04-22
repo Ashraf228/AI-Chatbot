@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { ConsentSettings } from "./ConsentSettings";
 import { LeadFlowSettings } from "./LeadFlowSettings";
 import { SuggestedQuestionsEditor } from "./SuggestedQuestionsEditor";
+import { Button } from "../shared/Button";
+import { ErrorState } from "../shared/ErrorState";
+import { Input } from "../shared/Input";
+import { LoadingState } from "../shared/LoadingState";
 
 type WidgetConfigFormProps = {
   siteId: string;
@@ -99,13 +103,13 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
   }
 
   if (loading) {
-    return <div style={panelStyle}>Widget-Konfiguration wird geladen...</div>;
+    return <LoadingState />;
   }
 
   return (
-    <div style={panelStyle}>
-      <h2 style={{ marginTop: 0 }}>Widget Setup</h2>
-      <div style={{ display: "grid", gap: 14 }}>
+    <div className="dashboard-card">
+      <h2 className="dashboard-card-title">Widget Setup</h2>
+      <div className="dashboard-stack">
         <Field label="Site Key" value={form.siteKey} onChange={(value) => setForm({ ...form, siteKey: value })} />
         <Field label="Primäre Domain" value={form.domain} onChange={(value) => setForm({ ...form, domain: value })} />
         <Field
@@ -119,7 +123,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
           onChange={(value) => setForm({ ...form, widgetBundleUrl: value })}
         />
 
-        <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <label className="dashboard-checkbox">
           <input
             type="checkbox"
             checked={form.isActive}
@@ -141,11 +145,11 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
           onChange={(value) => setForm({ ...form, suggestedQuestionsByPath: value })}
         />
 
-        <button onClick={save} disabled={saving} style={buttonStyle}>
+        <Button onClick={save} disabled={saving}>
           {saving ? "Speichert..." : "Widget-Konfiguration speichern"}
-        </button>
-        {message && <div style={{ color: "#047857" }}>{message}</div>}
-        {error && <div style={{ color: "#b91c1c" }}>{error}</div>}
+        </Button>
+        {message && <p className="dashboard-status dashboard-status--success">{message}</p>}
+        {error && <ErrorState message={error} />}
       </div>
     </div>
   );
@@ -161,29 +165,9 @@ function Field({
   onChange: (value: string) => void;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <span style={{ fontWeight: 600 }}>{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 10 }}
-      />
+    <label className="dashboard-field">
+      <span className="dashboard-field-label">{label}</span>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
-
-const panelStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 20,
-};
-
-const buttonStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 10,
-  border: "1px solid #111827",
-  background: "#111827",
-  color: "#fff",
-  cursor: "pointer",
-};

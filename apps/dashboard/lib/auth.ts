@@ -5,7 +5,10 @@ export {
   SESSION_COOKIE_NAME,
   verifyAdminSessionToken,
 } from "@/lib/auth-core";
-import { SESSION_COOKIE_NAME, verifyAdminSessionToken } from "@/lib/auth-core";
+import {
+  SESSION_COOKIE_NAME,
+  verifyAdminSessionToken,
+} from "@/lib/auth-core";
 
 export async function isAuthenticated() {
   const cookieStore = await cookies();

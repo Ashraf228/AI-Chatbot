@@ -1,87 +1,190 @@
 services:
+  proxy:
+    build:
+      context: .
+      dockerfile: ./infra/nginx/Dockerfile
+    restart: unless-stopped
+    environment:
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-admin.localhost}
+      API_DOMAIN: ${API_DOMAIN:-api.localhost}
+      WIDGET_DOMAIN: ${WIDGET_DOMAIN:-widget.localhost}
+      TLS_ENABLED: ${TLS_ENABLED:-false}
+      TLS_CERT_PATH: ${TLS_CERT_PATH:-/etc/nginx/certs/fullchain.pem}
+      TLS_KEY_PATH: ${TLS_KEY_PATH:-/etc/nginx/certs/privkey.pem}
+    depends_on:
+      api:
+        condition: service_healthy
+      dashboard:
+        condition: service_healthy
+      widget:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - edge
+      - internal
+    volumes:
+      - ${TLS_CERTS_DIR:-./infra/nginx/certs}:/etc/nginx/certs:ro
+
   db:
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: chatbot
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-chatbot}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-chatbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - internal
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD:?REDIS_PASSWORD is required}",
+        "--protected-mode",
+        "yes"
+      ]
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - internal
 
   api:
     build:
       context: ./apps/api
+    init: true
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 5000
-      DATABASE_URL: postgres://postgres:postgres@db:5432/chatbot
-      REDIS_URL: redis://redis:6379
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-chatbot}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL:-text-embedding-3-small}
-      ADMIN_KEY: ${ADMIN_KEY}
+      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY is required}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:-admin.localhost}
+      API_DOMAIN: ${API_DOMAIN:-api.localhost}
+      WIDGET_DOMAIN: ${WIDGET_DOMAIN:-widget.localhost}
       SITE_DOMAIN_ALLOWLIST_MODE: ${SITE_DOMAIN_ALLOWLIST_MODE:-strict}
-      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:-http://localhost:8080}
-      PUBLIC_WIDGET_BUNDLE_URL: ${PUBLIC_WIDGET_BUNDLE_URL:-http://localhost:8080/widget.js}
-    ports:
-      - "5001:5000"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?PUBLIC_API_BASE_URL is required}
+      PUBLIC_WIDGET_BUNDLE_URL: ${PUBLIC_WIDGET_BUNDLE_URL:?PUBLIC_WIDGET_BUNDLE_URL is required}
+      NEXT_PUBLIC_WIDGET_LOADER_URL: ${NEXT_PUBLIC_WIDGET_LOADER_URL:?NEXT_PUBLIC_WIDGET_LOADER_URL is required}
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - internal
 
   widget:
     build:
       context: .
       dockerfile: ./apps/widget/Dockerfile
-    ports:
-      - "8080:80"
+    restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - internal
 
   dashboard:
     build:
       context: ./apps/dashboard
+    init: true
+    restart: unless-stopped
     environment:
       NODE_ENV: production
       BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://api:5000}
-      ADMIN_KEY: ${ADMIN_KEY}
-      ADMIN_PANEL_PASSWORD: ${ADMIN_PANEL_PASSWORD}
-      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
-      NEXT_PUBLIC_WIDGET_LOADER_URL: ${NEXT_PUBLIC_WIDGET_LOADER_URL:-http://localhost:8080/loader.js}
-    ports:
-      - "3000:3000"
+      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY is required}
+      ADMIN_PANEL_PASSWORD_HASH: ${ADMIN_PANEL_PASSWORD_HASH:-}
+      ADMIN_PANEL_PASSWORD: ${ADMIN_PANEL_PASSWORD:-}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?ADMIN_SESSION_SECRET is required}
+      NEXT_PUBLIC_WIDGET_LOADER_URL: ${NEXT_PUBLIC_WIDGET_LOADER_URL:?NEXT_PUBLIC_WIDGET_LOADER_URL is required}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - internal
 
   reporter:
     build:
       context: ./apps/reporter
+    init: true
+    restart: "no"
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://postgres:postgres@db:5432/chatbot
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-chatbot}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
       BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://api:5000}
       REPORTER_API_BASE_URL: ${REPORTER_API_BASE_URL:-http://api:5000}
-      ADMIN_KEY: ${ADMIN_KEY}
+      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY is required}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       REPORTS_FROM_EMAIL: ${REPORTS_FROM_EMAIL}
       REPORTER_JOB: ${REPORTER_JOB:-weekly}
-    command: ["npm", "run", "start", "--", "${REPORTER_JOB:-weekly}"]
+    command: ["node", "dist/main.js", "${REPORTER_JOB:-weekly}"]
     depends_on:
-      - db
-      - api
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
     profiles:
       - reporter
+    networks:
+      - internal
 
 volumes:
   pgdata:
+
+networks:
+  edge:
+  internal:
+    internal: true

@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { Topbar } from "../../components/layout/Topbar";
+import { Button } from "../../components/shared/Button";
+import { EmptyState } from "../../components/shared/EmptyState";
+import { ErrorState } from "../../components/shared/ErrorState";
+import { Input } from "../../components/shared/Input";
 
 type UsageRow = {
   tenant_id: string;
@@ -31,6 +35,18 @@ type UsageSummary = {
   total_error_count: number;
   avg_latency_ms: number;
 };
+
+function parseJsonResponse<T>(text: string): T | null {
+  if (!text) {
+    return null;
+  }
+
+  return JSON.parse(text) as T;
+}
+
+function toErrorMessage(value: unknown) {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
 
 export default function UsagePage() {
   const [rows, setRows] = useState<UsageRow[]>([]);
@@ -63,29 +79,36 @@ export default function UsagePage() {
     const usageText = await usageRes.text();
     const summaryText = await summaryRes.text();
 
-    let usageData: any = [];
-    let summaryData: any = {};
+    let usageData: UsageRow[] | Record<string, unknown> | null = null;
+    let summaryData: UsageSummary | Record<string, unknown> | null = null;
 
     try {
-      usageData = usageText ? JSON.parse(usageText) : [];
-      summaryData = summaryText ? JSON.parse(summaryText) : {};
+      usageData = parseJsonResponse<UsageRow[] | Record<string, unknown>>(usageText);
+      summaryData = parseJsonResponse<UsageSummary | Record<string, unknown>>(summaryText);
     } catch {
       setErr("Ungültige Antwort von /api/usage");
       return;
     }
 
     if (!usageRes.ok) {
-      setErr(typeof usageData === "string" ? usageData : JSON.stringify(usageData));
+      setErr(toErrorMessage(usageData));
       return;
     }
 
     if (!summaryRes.ok) {
-      setErr(typeof summaryData === "string" ? summaryData : JSON.stringify(summaryData));
+      setErr(toErrorMessage(summaryData));
       return;
     }
 
     setRows(Array.isArray(usageData) ? usageData : []);
-    setSummary(summaryData);
+    setSummary(
+      summaryData &&
+        typeof summaryData === "object" &&
+        !Array.isArray(summaryData) &&
+        "total_requests" in summaryData
+        ? (summaryData as UsageSummary)
+        : null
+    );
   }
 
   useEffect(() => {
@@ -95,37 +118,28 @@ export default function UsagePage() {
   return (
     <div>
       <Topbar title="Usage & Kosten" />
-      <div style={{ maxWidth: 1300, padding: 24 }}>
-        <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-          <input
+      <div className="dashboard-page" style={{ maxWidth: 1300 }}>
+        <div className="dashboard-inline" style={{ marginBottom: 16 }}>
+          <Input
             placeholder="tenantId filtern"
             value={tenantId}
             onChange={(e) => setTenantId(e.target.value)}
-            style={{ padding: 10, flex: 1 }}
+            style={{ flex: 1 }}
           />
-          <input
+          <Input
             placeholder="siteId filtern"
             value={siteId}
             onChange={(e) => setSiteId(e.target.value)}
-            style={{ padding: 10, flex: 1 }}
+            style={{ flex: 1 }}
           />
-          <button onClick={loadUsage} style={{ padding: 10 }}>
-            Laden
-          </button>
+          <Button onClick={loadUsage}>Laden</Button>
         </div>
 
-        {err && <pre style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{err}</pre>}
+        {err && <ErrorState message={err} />}
 
         {summary && (
           <>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-                gap: 16,
-                marginBottom: 16,
-              }}
-            >
+            <div className="dashboard-grid dashboard-grid--metrics-5" style={{ gap: 16, marginBottom: 16 }}>
               <Card title="Total Requests" value={Number(summary.total_requests).toLocaleString()} />
               <Card title="Total Tokens" value={Number(summary.total_tokens).toLocaleString()} />
               <Card title="Input Tokens" value={Number(summary.total_input_tokens).toLocaleString()} />
@@ -136,14 +150,7 @@ export default function UsagePage() {
               />
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                gap: 16,
-                marginBottom: 24,
-              }}
-            >
+            <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16, marginBottom: 24 }}>
               <Card
                 title="User Messages"
                 value={Number(summary.total_user_messages).toLocaleString()}
@@ -173,60 +180,53 @@ export default function UsagePage() {
           </>
         )}
 
-        <div
-          style={{
-            background: "#fff",
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            padding: 16,
-          }}
-        >
-          <h2>Tägliche Nutzung</h2>
+        <div className="dashboard-card">
+          <h2 className="dashboard-card-title">Tägliche Nutzung</h2>
 
           {rows.length === 0 ? (
-            <p>Keine Usage-Daten vorhanden.</p>
+            <EmptyState title="Keine Usage-Daten vorhanden." />
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
+            <div className="dashboard-table-wrap">
+              <table className="dashboard-table dashboard-table--usage">
                 <thead>
                   <tr>
-                    <th style={thStyle}>Tag</th>
-                    <th style={thStyle}>Tenant</th>
-                    <th style={thStyle}>Site</th>
-                    <th style={thStyleRight}>Requests</th>
-                    <th style={thStyleRight}>User</th>
-                    <th style={thStyleRight}>Assistant</th>
-                    <th style={thStyleRight}>Input Tokens</th>
-                    <th style={thStyleRight}>Output Tokens</th>
-                    <th style={thStyleRight}>Total Tokens</th>
-                    <th style={thStyleRight}>Success</th>
-                    <th style={thStyleRight}>Errors</th>
-                    <th style={thStyleRight}>Avg Latency</th>
-                    <th style={thStyleRight}>Kosten (€)</th>
+                    <th className="dashboard-th">Tag</th>
+                    <th className="dashboard-th">Tenant</th>
+                    <th className="dashboard-th">Site</th>
+                    <th className="dashboard-th dashboard-th--right">Requests</th>
+                    <th className="dashboard-th dashboard-th--right">User</th>
+                    <th className="dashboard-th dashboard-th--right">Assistant</th>
+                    <th className="dashboard-th dashboard-th--right">Input Tokens</th>
+                    <th className="dashboard-th dashboard-th--right">Output Tokens</th>
+                    <th className="dashboard-th dashboard-th--right">Total Tokens</th>
+                    <th className="dashboard-th dashboard-th--right">Success</th>
+                    <th className="dashboard-th dashboard-th--right">Errors</th>
+                    <th className="dashboard-th dashboard-th--right">Avg Latency</th>
+                    <th className="dashboard-th dashboard-th--right">Kosten (€)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row, idx) => (
                     <tr key={`${row.tenant_id}-${row.site_id}-${row.day}-${idx}`}>
-                      <td style={tdStyle}>{row.day}</td>
-                      <td style={tdStyle}>{row.tenant_id}</td>
-                      <td style={tdStyle}>{row.site_id}</td>
-                      <td style={tdStyleRight}>{Number(row.request_count).toLocaleString()}</td>
-                      <td style={tdStyleRight}>
+                      <td className="dashboard-td">{row.day}</td>
+                      <td className="dashboard-td">{row.tenant_id}</td>
+                      <td className="dashboard-td">{row.site_id}</td>
+                      <td className="dashboard-td dashboard-td--right">{Number(row.request_count).toLocaleString()}</td>
+                      <td className="dashboard-td dashboard-td--right">
                         {Number(row.user_message_count).toLocaleString()}
                       </td>
-                      <td style={tdStyleRight}>
+                      <td className="dashboard-td dashboard-td--right">
                         {Number(row.assistant_message_count).toLocaleString()}
                       </td>
-                      <td style={tdStyleRight}>{Number(row.input_tokens).toLocaleString()}</td>
-                      <td style={tdStyleRight}>{Number(row.output_tokens).toLocaleString()}</td>
-                      <td style={tdStyleRight}>{Number(row.total_tokens).toLocaleString()}</td>
-                      <td style={tdStyleRight}>{Number(row.success_count).toLocaleString()}</td>
-                      <td style={tdStyleRight}>{Number(row.error_count).toLocaleString()}</td>
-                      <td style={tdStyleRight}>
+                      <td className="dashboard-td dashboard-td--right">{Number(row.input_tokens).toLocaleString()}</td>
+                      <td className="dashboard-td dashboard-td--right">{Number(row.output_tokens).toLocaleString()}</td>
+                      <td className="dashboard-td dashboard-td--right">{Number(row.total_tokens).toLocaleString()}</td>
+                      <td className="dashboard-td dashboard-td--right">{Number(row.success_count).toLocaleString()}</td>
+                      <td className="dashboard-td dashboard-td--right">{Number(row.error_count).toLocaleString()}</td>
+                      <td className="dashboard-td dashboard-td--right">
                         {Number(row.avg_latency_ms || 0).toFixed(0)} ms
                       </td>
-                      <td style={tdStyleRight}>
+                      <td className="dashboard-td dashboard-td--right">
                         €{Number(row.estimated_cost || 0).toFixed(4)}
                       </td>
                     </tr>
@@ -243,32 +243,9 @@ export default function UsagePage() {
 
 function Card({ title, value }: { title: string; value: string }) {
   return (
-    <div style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 12, padding: 16 }}>
-      <div style={{ fontSize: 13, opacity: 0.7 }}>{title}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, marginTop: 6 }}>{value}</div>
+    <div className="dashboard-metric-card">
+      <div className="dashboard-metric-label">{title}</div>
+      <div className="dashboard-metric-value">{value}</div>
     </div>
   );
 }
-
-const thStyle: CSSProperties = {
-  textAlign: "left",
-  padding: "10px 8px",
-  borderBottom: "1px solid #ddd",
-  fontSize: 13,
-};
-
-const thStyleRight: CSSProperties = {
-  ...thStyle,
-  textAlign: "right",
-};
-
-const tdStyle: CSSProperties = {
-  padding: "10px 8px",
-  borderBottom: "1px solid #f0f0f0",
-  fontSize: 14,
-};
-
-const tdStyleRight: CSSProperties = {
-  ...tdStyle,
-  textAlign: "right",
-};

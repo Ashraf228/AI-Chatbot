@@ -4,20 +4,35 @@ import { Response } from 'express';
 import { randomUUID } from 'crypto';
 
 import { SendMessageDto } from '../dto/send-message.dto';
-import { ConversationMessageEntity } from '../entities/conversation-message.entity';
+import {
+  ConversationMessageEntity,
+  ConversationMessageRole,
+} from '../entities/conversation-message.entity';
 import { ChatService } from '../../../chat/chat.service';
 import { PrismaService } from '../../../db/prisma.service';
 import { WidgetConfigService } from './widget-config.service';
 import { EmbeddingService } from '../../../vector/embedding.service';
-import { VectorService } from '../../../vector/vector.service';
+import { VectorSearchRow, VectorService } from '../../../vector/vector.service';
 import { LlmService } from '../../../vector/llm.service';
 import { buildSystemPrompt } from '../../../chat/prompt';
 import { redactPII } from '../../../utils/pii';
 import { sanitizeInput, sanitizeOutput } from '../../../utils/security';
 import { WidgetSecurityService } from './widget-security.service';
 
+type MessageRow = {
+  id: string;
+  session_id: string;
+  role: ConversationMessageRole;
+  content: string;
+  created_at: string;
+};
+
 @Injectable()
 export class WidgetChatService {
+  private getErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
+  }
+
   constructor(
     private readonly chatService: ChatService,
     private readonly widgetConfigService: WidgetConfigService,
@@ -43,7 +58,7 @@ export class WidgetChatService {
       req,
     );
 
-    const rows = await this.db.query<any>(
+    const rows = await this.db.query<MessageRow>(
       `SELECT m.id, c.session_id, m.role, m.content, m.created_at
        FROM messages m
        JOIN conversations c ON c.id = m.conversation_id
@@ -56,7 +71,7 @@ export class WidgetChatService {
     const messages: ConversationMessageEntity[] = rows.rows
       .slice()
       .reverse()
-      .map((row: any) => ({
+      .map((row) => ({
         id: row.id,
         sessionId: row.session_id,
         role: row.role,
@@ -109,7 +124,7 @@ export class WidgetChatService {
     const qEmbedding = await this.embeddingService.embed(message);
     const hits = await this.vectorService.search(tenantId, site.id, qEmbedding, 6);
     const context = hits
-      .map((h: any, idx: number) => {
+      .map((h: VectorSearchRow, idx: number) => {
         const src = h.source_url ? `URL: ${h.source_url}` : `Titel: ${h.title || 'Unbekannt'}`;
         return `# Kontext ${idx + 1} (score ${Number(h.score).toFixed(3)})\n${src}\n${h.content}`;
       })
@@ -123,7 +138,7 @@ Kontext:
 ${context || '(kein Kontext gefunden)'}
 `.trim();
 
-    const sources = hits.map((h: any) => ({
+    const sources = hits.map((h: VectorSearchRow) => ({
       title: h.title,
       url: h.source_url,
       score: Number(h.score),
@@ -178,10 +193,10 @@ ${context || '(kein Kontext gefunden)'}
         sessionId,
         sources,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       writeEvent({
         type: 'error',
-        message: error?.message || 'Streaming failed',
+        message: this.getErrorMessage(error, 'Streaming failed'),
       });
     } finally {
       res.end();

@@ -12,7 +12,7 @@ export default async function SiteReportsPage({
   return (
     <div>
       <Topbar title={`Reports · ${siteId}`} />
-      <div style={{ padding: 24 }}>
+      <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <ReportSubscriptionForm siteId={siteId} />
       </div>

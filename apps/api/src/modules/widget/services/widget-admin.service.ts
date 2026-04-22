@@ -2,14 +2,95 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../db/prisma.service';
 
-type JsonObject = Record<string, any>;
+type SiteConfig = {
+  siteKey?: string;
+  domain?: string;
+  brandColor?: string;
+  accentColor?: string;
+  welcomeMessage?: string;
+  privacyUrl?: string;
+  isActive?: boolean;
+  companyName?: string;
+  botName?: string;
+  logoUrl?: string;
+  widgetBundleUrl?: string;
+  consentRequired?: boolean;
+  leadCaptureEnabled?: boolean;
+  suggestedQuestionsByPath?: Record<string, string[]>;
+};
+
+type SiteRow = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  public_key: string;
+  allowed_domains: string[] | null;
+  config: unknown;
+  created_at: string;
+};
+
+type LeadRow = {
+  id: string;
+  site_id: string;
+  session_id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+  site_name?: string;
+};
+
+type TotalSessionsRow = { total_sessions: number };
+type EventsSummaryRow = {
+  widget_impressions: number;
+  widget_openings: number;
+  started_chats: number;
+  fallback_answers: number;
+};
+type LeadsCountRow = { leads: number };
+type AverageDurationRow = { average_duration: number };
+type CountedContentRow = { content: string; total: number };
+type CountedPageRow = { page_url: string; total: number };
+type MessageCountsRow = { user_messages: number; assistant_messages: number };
+type DropOffSessionsRow = { drop_off_sessions: number };
+type ReportSubscriptionRow = {
+  id: string;
+  site_id: string;
+  recipient_email: string;
+  frequency: string;
+  is_enabled: boolean;
+};
+type ReportRunRow = {
+  id: string;
+  site_id: string | null;
+  frequency: string;
+  trigger_source: string;
+  status: string;
+  recipient_email: string | null;
+  report_subject: string | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+  site_name: string | null;
+};
+type RecipientRow = { recipient_email: string };
+
+function parseSiteConfig(value: unknown): SiteConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as SiteConfig;
+}
 
 @Injectable()
 export class WidgetAdminService {
   constructor(private readonly db: PrismaService) {}
 
   async getSite(siteId: string) {
-    const res = await this.db.query<any>(
+    const res = await this.db.query<SiteRow>(
       `SELECT
          s.id,
          s.tenant_id,
@@ -29,7 +110,7 @@ export class WidgetAdminService {
       throw new NotFoundException('Site not found');
     }
 
-    const config = (row.config || {}) as JsonObject;
+    const config = parseSiteConfig(row.config);
     return {
       id: row.id,
       tenantId: row.tenant_id,
@@ -131,7 +212,7 @@ export class WidgetAdminService {
   }
 
   async listLeads(params: { siteId?: string; status?: string }) {
-    const values: any[] = [];
+    const values: string[] = [];
     const where: string[] = [];
 
     if (params.siteId) {
@@ -145,7 +226,7 @@ export class WidgetAdminService {
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const res = await this.db.query<any>(
+    const res = await this.db.query<LeadRow>(
       `SELECT
          l.id,
          l.site_id,
@@ -180,7 +261,7 @@ export class WidgetAdminService {
   }
 
   async updateLead(id: string, payload: { status: string }) {
-    const res = await this.db.query<any>(
+    const res = await this.db.query<LeadRow>(
       `UPDATE widget_leads
        SET status = $2
        WHERE id = $1
@@ -212,13 +293,13 @@ export class WidgetAdminService {
 
     const [sessionsRes, eventsRes, leadsRes, avgDurationRes, topQuestionsRes, activePagesRes, messagesRes] =
       await Promise.all([
-        this.db.query<any>(
+        this.db.query<TotalSessionsRow>(
           `SELECT COUNT(*)::int AS total_sessions
            FROM widget_sessions ws
            ${siteFilter}`,
           params,
         ),
-        this.db.query<any>(
+        this.db.query<EventsSummaryRow>(
           `SELECT
              COUNT(*) FILTER (WHERE event_type = 'impression')::int AS widget_impressions,
              COUNT(*) FILTER (WHERE event_type = 'open')::int AS widget_openings,
@@ -228,22 +309,22 @@ export class WidgetAdminService {
                  OR COALESCE((metadata->>'fallback')::boolean, false) = true
              )::int AS fallback_answers
            FROM widget_events
-           ${siteId ? 'WHERE site_id = $1' : ''}`,
+          ${siteId ? 'WHERE site_id = $1' : ''}`,
           params,
         ),
-        this.db.query<any>(
+        this.db.query<LeadsCountRow>(
           `SELECT COUNT(*)::int AS leads
            FROM widget_leads
            ${siteId ? 'WHERE site_id = $1' : ''}`,
           params,
         ),
-        this.db.query<any>(
+        this.db.query<AverageDurationRow>(
           `SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (last_seen_at - started_at))), 0)::float AS average_duration
            FROM widget_sessions ws
            ${siteFilter}`,
           params,
         ),
-        this.db.query<any>(
+        this.db.query<CountedContentRow>(
           `SELECT m.content, COUNT(*)::int AS total
            FROM conversations c
            JOIN messages m ON m.conversation_id = c.id
@@ -253,7 +334,7 @@ export class WidgetAdminService {
            LIMIT 5`,
           params,
         ),
-        this.db.query<any>(
+        this.db.query<CountedPageRow>(
           `SELECT page_url, COUNT(*)::int AS total
            FROM widget_events
            ${siteId ? 'WHERE site_id = $1' : ''}
@@ -262,7 +343,7 @@ export class WidgetAdminService {
            LIMIT 5`,
           params,
         ),
-        this.db.query<any>(
+        this.db.query<MessageCountsRow>(
           `SELECT
              COUNT(*) FILTER (WHERE m.role = 'user')::int AS user_messages,
              COUNT(*) FILTER (WHERE m.role = 'assistant')::int AS assistant_messages
@@ -311,7 +392,7 @@ export class WidgetAdminService {
     const dropOffWhere = siteId ? `WHERE ws.site_id = $1` : 'WHERE 1=1';
 
     const [unansweredRes, dropOffRes] = await Promise.all([
-      this.db.query<any>(
+      this.db.query<CountedContentRow>(
         `SELECT m.content, COUNT(*)::int AS total
          FROM conversations c
          JOIN messages m ON m.conversation_id = c.id
@@ -328,7 +409,7 @@ export class WidgetAdminService {
          LIMIT 10`,
         params,
       ),
-      this.db.query<any>(
+      this.db.query<DropOffSessionsRow>(
         `SELECT COUNT(*)::int AS drop_off_sessions
          FROM widget_sessions ws
          ${dropOffWhere}
@@ -363,7 +444,7 @@ export class WidgetAdminService {
   }
 
   async listReportSubscriptions(siteId?: string) {
-    const res = await this.db.query<any>(
+    const res = await this.db.query<ReportSubscriptionRow>(
       `SELECT id, site_id, recipient_email, frequency, is_enabled
        FROM report_subscriptions
        ${siteId ? 'WHERE site_id = $1' : ''}
@@ -381,7 +462,7 @@ export class WidgetAdminService {
   }
 
   async listReportRuns(siteId?: string) {
-    const res = await this.db.query<any>(
+    const res = await this.db.query<ReportRunRow>(
       `SELECT
          rr.id,
          rr.site_id,
@@ -444,7 +525,7 @@ export class WidgetAdminService {
     id: string,
     payload: { recipientEmail?: string; frequency?: string; isEnabled?: boolean },
   ) {
-    const current = await this.db.query<any>(
+    const current = await this.db.query<ReportSubscriptionRow>(
       `SELECT id, site_id, recipient_email, frequency, is_enabled
        FROM report_subscriptions
        WHERE id = $1
@@ -491,7 +572,7 @@ export class WidgetAdminService {
     if (payload.siteId) {
       const site = await this.getSite(payload.siteId);
       siteName = site.name;
-      const sub = await this.db.query<any>(
+      const sub = await this.db.query<RecipientRow>(
         `SELECT recipient_email
          FROM report_subscriptions
          WHERE site_id = $1 AND is_enabled = true

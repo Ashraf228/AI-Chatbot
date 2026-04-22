@@ -2,6 +2,23 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
 
+type UsageDailyRow = {
+  tenant_id: string;
+  site_id: string;
+  day: string;
+  request_count: number;
+  user_message_count: number;
+  assistant_message_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type UsageSummaryRow = {
+  total_requests: number;
+  total_user_messages: number;
+  total_assistant_messages: number;
+};
+
 @UseGuards(AdminKeyGuard)
 @Controller('admin/usage')
 export class UsageController {
@@ -12,7 +29,7 @@ export class UsageController {
     @Query('tenantId') tenantId?: string,
     @Query('siteId') siteId?: string,
   ) {
-    const params: any[] = [];
+    const params: string[] = [];
     const where: string[] = [];
 
     if (tenantId) {
@@ -27,7 +44,7 @@ export class UsageController {
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const res = await this.db.query(
+    const res = await this.db.query<UsageDailyRow>(
       `
       SELECT
         tenant_id,
@@ -48,7 +65,7 @@ export class UsageController {
 
     const costPerRequest = 0.001;
 
-    const enriched = res.rows.map((row: any) => {
+    const enriched = res.rows.map((row) => {
       const requests = Number(row.request_count) || 0;
       const estimatedCost = requests * costPerRequest;
 
@@ -66,7 +83,7 @@ export class UsageController {
     @Query('tenantId') tenantId?: string,
     @Query('siteId') siteId?: string,
   ) {
-    const params: any[] = [];
+    const params: string[] = [];
     const where: string[] = [];
 
     if (tenantId) {
@@ -81,7 +98,7 @@ export class UsageController {
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const res = await this.db.query(
+    const res = await this.db.query<UsageSummaryRow>(
       `
       SELECT
         COALESCE(SUM(request_count), 0) AS total_requests,

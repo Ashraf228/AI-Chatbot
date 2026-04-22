@@ -9,76 +9,28 @@ type WidgetPreviewProps = {
 
 export function WidgetPreview(props: WidgetPreviewProps) {
   return (
-    <div
-      style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: 18,
-        overflow: "hidden",
-        background: "#fff",
-        minHeight: 280,
-      }}
-    >
-      <div
-        style={{
-          background: props.brandColor,
-          color: "#fff",
-          padding: 16,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
+    <div className="dashboard-preview-card">
+      <div className="dashboard-preview-header" style={{ background: props.brandColor }}>
         {props.logoUrl ? (
-          <img
-            src={props.logoUrl}
-            alt={props.companyName}
-            style={{ width: 36, height: 36, borderRadius: 999, objectFit: "cover", background: "#fff" }}
-          />
+          <img src={props.logoUrl} alt={props.companyName} className="dashboard-preview-logo" />
         ) : (
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 999,
-              display: "grid",
-              placeItems: "center",
-              background: "rgba(255,255,255,0.18)",
-              fontWeight: 700,
-            }}
-          >
+          <div className="dashboard-preview-fallback">
             {props.companyName.slice(0, 1).toUpperCase()}
           </div>
         )}
         <div>
           <div style={{ fontWeight: 700 }}>{props.botName}</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>{props.companyName}</div>
+          <div className="dashboard-meta">{props.companyName}</div>
         </div>
       </div>
 
-      <div style={{ padding: 16, background: "#fafaf9" }}>
-        <div
-          style={{
-            maxWidth: "80%",
-            background: props.accentColor,
-            borderRadius: 16,
-            padding: "12px 14px",
-            lineHeight: 1.5,
-            color: "#111827",
-          }}
-        >
+      <div className="dashboard-preview-body">
+        <div className="dashboard-preview-bubble" style={{ background: props.accentColor }}>
           {props.welcomeMessage}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
-          <div
-            style={{
-              width: 58,
-              height: 58,
-              borderRadius: 999,
-              background: props.brandColor,
-              boxShadow: "0 10px 25px rgba(0,0,0,0.14)",
-            }}
-          />
+        <div className="dashboard-preview-launcher-row">
+          <div className="dashboard-preview-launcher" style={{ background: props.brandColor }} />
         </div>
       </div>
     </div>

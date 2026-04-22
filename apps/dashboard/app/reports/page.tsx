@@ -5,7 +5,7 @@ export default function ReportsPage() {
   return (
     <div>
       <Topbar title="Reports" />
-      <div style={{ padding: 24 }}>
+      <div className="dashboard-page">
         <ReportHistoryTable />
       </div>
     </div>

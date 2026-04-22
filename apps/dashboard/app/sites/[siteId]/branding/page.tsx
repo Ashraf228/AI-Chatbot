@@ -12,7 +12,7 @@ export default async function SiteBrandingPage({
   return (
     <div>
       <Topbar title={`Branding · ${siteId}`} />
-      <div style={{ padding: 24 }}>
+      <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <BrandingForm siteId={siteId} />
       </div>

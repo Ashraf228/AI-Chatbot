@@ -1,6 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
 import { randomBytes } from 'crypto';
+import { SiteConfigInput } from './dto';
+
+type SiteRow = {
+  id: string;
+  tenant_id: string | null;
+  name: string;
+  allowed_domains: string[];
+  public_key: string | null;
+  config: Record<string, unknown>;
+  created_at?: string;
+};
 
 @Injectable()
 export class SitesService {
@@ -11,7 +22,7 @@ export class SitesService {
     tenantId: string,
     name: string,
     allowedDomains: string[],
-    config: any = {},
+    config: SiteConfigInput = {},
   ) {
     const publicKey = 'pk_' + randomBytes(32).toString('hex');
 
@@ -29,13 +40,13 @@ export class SitesService {
     return this.getSite(id);
   }
 
-  async getSite(id: string) {
-    const res = await this.db.query(`SELECT * FROM sites WHERE id=$1`, [id]);
+  async getSite(id: string): Promise<SiteRow | null> {
+    const res = await this.db.query<SiteRow>(`SELECT * FROM sites WHERE id=$1`, [id]);
     return res.rows[0] || null;
   }
 
-  async listSites() {
-    const res = await this.db.query(`SELECT * FROM sites ORDER BY created_at DESC`);
+  async listSites(): Promise<SiteRow[]> {
+    const res = await this.db.query<SiteRow>(`SELECT * FROM sites ORDER BY created_at DESC`);
     return res.rows;
   }
 }

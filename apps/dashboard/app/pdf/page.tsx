@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Topbar } from "../../components/layout/Topbar";
+import { Button } from "../../components/shared/Button";
+import { ErrorState } from "../../components/shared/ErrorState";
+import { Select } from "../../components/shared/Select";
 
 type Site = {
   id: string;
@@ -95,57 +98,44 @@ export default function PdfUploadPage() {
   return (
     <div>
       <Topbar title="PDF Upload" />
-      <div style={{ maxWidth: 900, padding: 24 }}>
+      <div className="dashboard-page dashboard-page--md">
         {preselectedSiteId && (
-          <div style={{ marginBottom: 12, color: "#4b5563" }}>
+          <div className="dashboard-copy dashboard-mb-16">
             Site-Kontext aktiv: <strong>{preselectedSiteId}</strong>
           </div>
         )}
-        <form
-          onSubmit={submitPdf}
-          style={{
-            display: "grid",
-            gap: 12,
-            padding: 16,
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            background: "#fff",
-          }}
-        >
-          <label>
+        <form onSubmit={submitPdf} className="dashboard-card dashboard-stack dashboard-gap-12">
+          <label className="dashboard-field">
             <div>Site</div>
-            <select
+            <Select
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
             >
               {sites.map((site) => (
                 <option key={site.id} value={site.id}>
                   {site.id} — {site.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
-          <label>
+          <label className="dashboard-field">
             <div>PDF Datei</div>
             <input
               type="file"
               accept="application/pdf"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              style={{ marginTop: 6 }}
+              className="dashboard-control"
             />
           </label>
 
-          <button type="submit" disabled={loading} style={{ padding: 12, cursor: "pointer" }}>
+          <Button type="submit" disabled={loading}>
             {loading ? "Lade hoch..." : "PDF hochladen"}
-          </button>
+          </Button>
         </form>
 
-        {msg && <p style={{ color: "green", marginTop: 16 }}>{msg}</p>}
-        {err && (
-          <pre style={{ color: "crimson", whiteSpace: "pre-wrap", marginTop: 16 }}>{err}</pre>
-        )}
+        {msg && <p className="dashboard-status dashboard-status--success dashboard-mb-16">{msg}</p>}
+        {err && <ErrorState message={err} />}
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ export default async function SiteAnalyticsPage({
   return (
     <div>
       <Topbar title={`Analytics · ${siteId}`} />
-      <div style={{ padding: 24, display: "grid", gap: 16 }}>
+      <div className="dashboard-page dashboard-grid dashboard-gap-16">
         <SiteTabs siteId={siteId} />
         <AnalyticsOverview siteId={siteId} />
       </div>

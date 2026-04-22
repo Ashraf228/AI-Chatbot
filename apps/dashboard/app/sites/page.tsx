@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Topbar } from "../../components/layout/Topbar";
+import { Button } from "../../components/shared/Button";
+import { EmptyState } from "../../components/shared/EmptyState";
+import { ErrorState } from "../../components/shared/ErrorState";
+import { Select } from "../../components/shared/Select";
+import { EmbedSnippetCard } from "../../components/sites/EmbedSnippetCard";
+import { SiteForm } from "../../components/sites/SiteForm";
 
 type Site = {
   id: string;
@@ -56,9 +62,7 @@ export default function SitesPage() {
     if (!selectedSite) return "";
 
     const loaderUrl =
-      (typeof window !== "undefined" && (window as any).__NEXT_DATA__
-        ? (process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js")
-        : "http://localhost:8080/loader.js");
+      process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js";
 
     return `<script src="${loaderUrl}" data-site-key="${selectedSite.id}" defer></script>`;
   }, [selectedSite]);
@@ -123,100 +127,40 @@ export default function SitesPage() {
   return (
     <div>
       <Topbar title="Sites" />
-      <div style={{ maxWidth: 1100, padding: 24 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(320px, 1fr) minmax(360px, 1.2fr)",
-            gap: 24,
-            alignItems: "start",
-          }}
-        >
+      <div className="dashboard-page dashboard-page--wide">
+        <div className="dashboard-grid dashboard-grid--split">
           <div>
-            <h2>Neue Site anlegen</h2>
+            <h2 className="dashboard-section-title">Neue Site anlegen</h2>
 
-            <form
-              onSubmit={createSite}
-              style={{
-                display: "grid",
-                gap: 10,
-                padding: 16,
-                border: "1px solid #ddd",
-                borderRadius: 12,
-                background: "#fff",
-              }}
-            >
-              <input
-                placeholder="siteId (z. B. kunde-4)"
-                value={form.id}
-                onChange={(e) => setForm({ ...form, id: e.target.value })}
-                style={{ padding: 10 }}
-              />
+            <SiteForm form={form} onChange={setForm} onSubmit={createSite} />
 
-              <input
-                placeholder="tenantId (z. B. t_default)"
-                value={form.tenantId}
-                onChange={(e) => setForm({ ...form, tenantId: e.target.value })}
-                style={{ padding: 10 }}
-              />
+            {err && <ErrorState message={err} />}
 
-              <input
-                placeholder="Name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                style={{ padding: 10 }}
-              />
-
-              <input
-                placeholder="Domain (z. B. localhost oder kunde.de)"
-                value={form.domain}
-                onChange={(e) => setForm({ ...form, domain: e.target.value })}
-                style={{ padding: 10 }}
-              />
-
-              <button type="submit" style={{ padding: 12, cursor: "pointer" }}>
-                Site erstellen
-              </button>
-            </form>
-
-            {err && (
-              <pre style={{ color: "crimson", whiteSpace: "pre-wrap", marginTop: 12 }}>
-                {err}
-              </pre>
-            )}
-
-            {msg && <p style={{ color: "green", marginTop: 12 }}>{msg}</p>}
+            {msg && <p className="dashboard-status dashboard-status--success">{msg}</p>}
           </div>
 
           <div>
-            <h2>Vorhandene Sites</h2>
+            <h2 className="dashboard-section-title">Vorhandene Sites</h2>
 
-            <div
-              style={{
-                padding: 16,
-                border: "1px solid #ddd",
-                borderRadius: 12,
-                background: "#fff",
-              }}
-            >
+            <div className="dashboard-card">
               {sites.length === 0 ? (
-                <p>Keine Sites vorhanden.</p>
+                <EmptyState title="Keine Sites vorhanden." />
               ) : (
                 <>
-                  <select
+                  <Select
                     value={selectedSiteId}
                     onChange={(e) => setSelectedSiteId(e.target.value)}
-                    style={{ width: "100%", padding: 10, marginBottom: 16 }}
+                    style={{ marginBottom: 16 }}
                   >
                     {sites.map((site) => (
                       <option key={site.id} value={site.id}>
                         {site.id} — {site.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
 
                   {selectedSite && (
-                    <div style={{ display: "grid", gap: 10 }}>
+                    <div className="dashboard-stack dashboard-stack--sm">
                       <InfoRow label="Name" value={selectedSite.name} />
                       <InfoRow label="Tenant" value={selectedSite.tenant_id || "-"} />
                       <InfoRow
@@ -228,40 +172,37 @@ export default function SitesPage() {
                         value={selectedSite.public_key || "nicht vorhanden"}
                       />
 
-                      {selectedSite.public_key && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => copyText(selectedSite.public_key || "", "Public Key")}
-                            style={{ padding: 10, cursor: "pointer" }}
-                          >
-                            Public Key kopieren
-                          </button>
+                      <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
+                        <Button
+                          type="button"
+                          variant="primary"
+                          onClick={() => {
+                            window.location.href = `/sites/${selectedSite.id}/branding`;
+                          }}
+                        >
+                          Site öffnen
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            window.location.href = `/sites/${selectedSite.id}/widget`;
+                          }}
+                        >
+                          Widget konfigurieren
+                        </Button>
+                      </div>
 
-                          <button
-                            type="button"
-                            onClick={() => copyText(embedCode, "Embed Code")}
-                            style={{ padding: 10, cursor: "pointer" }}
-                          >
-                            Embed Code kopieren
-                          </button>
-
-                          <textarea
-                            readOnly
-                            value={embedCode}
-                            style={{
-                              width: "100%",
-                              minHeight: 210,
-                              marginTop: 8,
-                              padding: 12,
-                              fontFamily: "ui-monospace, SFMono-Regular, monospace",
-                              fontSize: 13,
-                            }}
-                          />
-                        </>
-                      )}
-
-                      {copied && <p style={{ color: "green", margin: 0 }}>{copied} kopiert.</p>}
+                      <EmbedSnippetCard
+                        loaderUrl={
+                          process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js"
+                        }
+                        siteId={selectedSite.id}
+                        publicKey={selectedSite.public_key}
+                        embedCode={embedCode}
+                        copied={copied}
+                        onCopy={copyText}
+                      />
                     </div>
                   )}
                 </>
@@ -276,16 +217,9 @@ export default function SitesPage() {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "110px 1fr",
-        gap: 12,
-        alignItems: "start",
-      }}
-    >
+    <div className="dashboard-info-row">
       <strong>{label}</strong>
-      <span style={{ wordBreak: "break-word" }}>{value}</span>
+      <span className="dashboard-breakword">{value}</span>
     </div>
   );
 }

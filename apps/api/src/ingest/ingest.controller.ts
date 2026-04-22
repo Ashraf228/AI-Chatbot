@@ -11,6 +11,33 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { IngestService } from './ingest.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
+import { IsArray, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class FaqItemDto {
+  @IsString()
+  @MaxLength(500)
+  q!: string;
+
+  @IsString()
+  @MaxLength(4000)
+  a!: string;
+}
+
+class IngestFaqDto {
+  @IsString()
+  @MaxLength(120)
+  siteId!: string;
+
+  @IsString()
+  @MaxLength(255)
+  title = 'FAQ';
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FaqItemDto)
+  items!: FaqItemDto[];
+}
 
 @UseGuards(AdminKeyGuard)
 @Controller('admin/ingest')
@@ -19,7 +46,7 @@ export class IngestController {
 
   // FAQ import: { siteId, title, items: [{q,a}] }
   @Post('faq')
-  async faq(@Body() body: any) {
+  async faq(@Body() body: IngestFaqDto) {
     return this.ingest.ingestFaq(body.siteId, body.title ?? 'FAQ', body.items ?? []);
   }
 
@@ -33,7 +60,7 @@ export class IngestController {
       },
       fileFilter: (_req, file, cb) => {
         if (file.mimetype !== 'application/pdf') {
-          return cb(new BadRequestException('Only PDF files are allowed') as any, false);
+          return cb(new BadRequestException('Only PDF files are allowed'), false);
         }
         cb(null, true);
       },

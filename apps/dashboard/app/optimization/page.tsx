@@ -5,7 +5,7 @@ export default function OptimizationPage() {
   return (
     <div>
       <Topbar title="Optimization" />
-      <div style={{ padding: 24 }}>
+      <div className="dashboard-page">
         <OptimizationOverview />
       </div>
     </div>

@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { LeadFilters } from "./LeadFilters";
 import { LeadStatusBadge } from "./LeadStatusBadge";
+import { EmptyState } from "../shared/EmptyState";
+import { ErrorState } from "../shared/ErrorState";
+import { LoadingState } from "../shared/LoadingState";
+import { Select } from "../shared/Select";
 
 type LeadTableProps = {
   siteId?: string;
@@ -57,22 +61,22 @@ export function LeadTable({ siteId }: LeadTableProps) {
   }
 
   return (
-    <div style={panelStyle}>
+    <div className="dashboard-card">
       <LeadFilters status={status} onStatusChange={setStatus} />
 
       {loading ? (
-        <div>Leads werden geladen...</div>
+        <LoadingState />
       ) : error ? (
-        <div style={{ color: "#b91c1c" }}>{error}</div>
+        <ErrorState message={error} />
       ) : items.length === 0 ? (
-        <div>Keine Leads gefunden.</div>
+        <EmptyState title="Keine Leads gefunden." />
       ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
+        <div className="dashboard-table-wrap">
+          <table className="dashboard-table" style={{ minWidth: 860 }}>
             <thead>
               <tr>
                 {["Lead", "Site", "Kontakt", "Status", "Nachricht", "Zeit"].map((cell) => (
-                  <th key={cell} style={thStyle}>
+                  <th key={cell} className="dashboard-th">
                     {cell}
                   </th>
                 ))}
@@ -81,31 +85,30 @@ export function LeadTable({ siteId }: LeadTableProps) {
             <tbody>
               {items.map((lead) => (
                 <tr key={lead.id}>
-                  <td style={tdStyle}>
+                  <td className="dashboard-td">
                     <strong>{lead.name}</strong>
                   </td>
-                  <td style={tdStyle}>{lead.siteName || lead.siteId}</td>
-                  <td style={tdStyle}>
+                  <td className="dashboard-td">{lead.siteName || lead.siteId}</td>
+                  <td className="dashboard-td">
                     <div>{lead.email}</div>
-                    {lead.phone && <div style={{ color: "#6b7280" }}>{lead.phone}</div>}
+                    {lead.phone && <div className="dashboard-copy dashboard-copy--muted">{lead.phone}</div>}
                   </td>
-                  <td style={tdStyle}>
-                    <div style={{ display: "grid", gap: 8 }}>
+                  <td className="dashboard-td">
+                    <div className="dashboard-stack dashboard-stack--sm">
                       <LeadStatusBadge status={lead.status} />
-                      <select
+                      <Select
                         value={lead.status}
                         onChange={(e) => updateStatus(lead.id, e.target.value)}
-                        style={{ padding: 8, borderRadius: 8, border: "1px solid #d1d5db" }}
                       >
                         <option value="new">new</option>
                         <option value="contacted">contacted</option>
                         <option value="qualified">qualified</option>
                         <option value="lost">lost</option>
-                      </select>
+                      </Select>
                     </div>
                   </td>
-                  <td style={tdStyle}>{lead.message || "-"}</td>
-                  <td style={tdStyle}>{new Date(lead.createdAt).toLocaleString()}</td>
+                  <td className="dashboard-td">{lead.message || "-"}</td>
+                  <td className="dashboard-td">{new Date(lead.createdAt).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -115,22 +118,3 @@ export function LeadTable({ siteId }: LeadTableProps) {
     </div>
   );
 }
-
-const panelStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 20,
-};
-
-const thStyle: CSSProperties = {
-  textAlign: "left",
-  padding: "10px 8px",
-  borderBottom: "1px solid #e5e7eb",
-};
-
-const tdStyle: CSSProperties = {
-  padding: "12px 8px",
-  borderBottom: "1px solid #f3f4f6",
-  verticalAlign: "top",
-};

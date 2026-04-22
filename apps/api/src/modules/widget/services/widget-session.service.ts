@@ -7,6 +7,17 @@ import { WidgetSessionEntity } from '../entities/widget-session.entity';
 import { PrismaService } from '../../../db/prisma.service';
 import { WidgetConfigService } from './widget-config.service';
 
+type WidgetSessionRow = {
+  id: string;
+  site_id: string;
+  visitor_id: string;
+  started_at: string;
+  last_seen_at: string;
+  source_url: string | null;
+  user_agent: string | null;
+  lead_captured: boolean;
+};
+
 @Injectable()
 export class WidgetSessionService {
   constructor(
@@ -25,7 +36,7 @@ export class WidgetSessionService {
     const timestamp = new Date().toISOString();
     const userAgent = dto.userAgent || (req?.headers['user-agent'] as string | undefined);
 
-    const existing = await this.db.query<any>(
+    const existing = await this.db.query<WidgetSessionRow>(
       `SELECT id, site_id, visitor_id, started_at, last_seen_at, source_url, user_agent, lead_captured
        FROM widget_sessions
        WHERE site_id = $1 AND visitor_id = $2
@@ -49,8 +60,8 @@ export class WidgetSessionService {
         visitorId: existing.rows[0].visitor_id,
         startedAt: new Date(existing.rows[0].started_at).toISOString(),
         lastSeenAt: timestamp,
-        sourceUrl: normalizedSourceUrl || existing.rows[0].source_url,
-        userAgent: userAgent || existing.rows[0].user_agent,
+        sourceUrl: normalizedSourceUrl ?? existing.rows[0].source_url ?? undefined,
+        userAgent: userAgent ?? existing.rows[0].user_agent ?? undefined,
         leadCaptured: existing.rows[0].lead_captured,
       };
     }

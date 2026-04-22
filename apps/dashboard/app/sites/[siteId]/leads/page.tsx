@@ -12,7 +12,7 @@ export default async function SiteLeadsPage({
   return (
     <div>
       <Topbar title={`Leads · ${siteId}`} />
-      <div style={{ padding: 24 }}>
+      <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <LeadTable siteId={siteId} />
       </div>

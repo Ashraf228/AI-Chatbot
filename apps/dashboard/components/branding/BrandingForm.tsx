@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { ColorPickerField } from "./ColorPickerField";
 import { LogoUploadField } from "./LogoUploadField";
 import { WidgetPreview } from "./WidgetPreview";
+import { Button } from "../shared/Button";
+import { ErrorState } from "../shared/ErrorState";
+import { Input } from "../shared/Input";
+import { LoadingState } from "../shared/LoadingState";
 
 type BrandingFormProps = {
   siteId: string;
@@ -85,14 +89,14 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
   }
 
   if (loading) {
-    return <div style={panelStyle}>Branding wird geladen...</div>;
+    return <LoadingState />;
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: 20 }}>
-      <div style={panelStyle}>
-        <h2 style={{ marginTop: 0 }}>Branding</h2>
-        <div style={{ display: "grid", gap: 14 }}>
+    <div className="dashboard-grid dashboard-grid--form-preview">
+      <div className="dashboard-card">
+        <h2 className="dashboard-card-title">Branding</h2>
+        <div className="dashboard-stack">
           <Field
             label="Firmenname"
             value={form.companyName}
@@ -117,13 +121,13 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
             value={form.accentColor}
             onChange={(value) => setForm({ ...form, accentColor: value })}
           />
-          <label style={{ display: "grid", gap: 6 }}>
-            <span style={{ fontWeight: 600 }}>Willkommensnachricht</span>
+          <label className="dashboard-field">
+            <span className="dashboard-field-label">Willkommensnachricht</span>
             <textarea
+              className="dashboard-textarea"
               value={form.welcomeMessage}
               onChange={(e) => setForm({ ...form, welcomeMessage: e.target.value })}
               rows={4}
-              style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 10 }}
             />
           </label>
           <Field
@@ -132,12 +136,12 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
             onChange={(value) => setForm({ ...form, privacyUrl: value })}
           />
 
-          <button onClick={save} disabled={saving} style={buttonStyle}>
+          <Button onClick={save} disabled={saving}>
             {saving ? "Speichert..." : "Branding speichern"}
-          </button>
+          </Button>
 
-          {message && <div style={{ color: "#047857" }}>{message}</div>}
-          {error && <div style={{ color: "#b91c1c" }}>{error}</div>}
+          {message && <p className="dashboard-status dashboard-status--success">{message}</p>}
+          {error && <ErrorState message={error} />}
         </div>
       </div>
 
@@ -156,29 +160,9 @@ function Field({
   onChange: (value: string) => void;
 }) {
   return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <span style={{ fontWeight: 600 }}>{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 10 }}
-      />
+    <label className="dashboard-field">
+      <span className="dashboard-field-label">{label}</span>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </label>
   );
 }
-
-const panelStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 20,
-};
-
-const buttonStyle: CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 10,
-  border: "1px solid #111827",
-  background: "#111827",
-  color: "#fff",
-  cursor: "pointer",
-};

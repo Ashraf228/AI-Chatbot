@@ -1,5 +1,4 @@
 import Link from "next/link";
-import type { CSSProperties } from "react";
 import { SiteTabs } from "../../../../components/layout/SiteTabs";
 import { Topbar } from "../../../../components/layout/Topbar";
 
@@ -13,19 +12,13 @@ export default async function SiteKnowledgePage({
   return (
     <div>
       <Topbar title={`Knowledge · ${siteId}`} />
-      <div style={{ padding: 24 }}>
+      <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-            gap: 16,
-          }}
-        >
-          <Link href={`/ingest?siteId=${siteId}`} style={cardStyle}>
+        <div className="dashboard-grid dashboard-grid--two dashboard-gap-16">
+          <Link href={`/ingest?siteId=${siteId}`} className="dashboard-card dashboard-link-card">
             FAQ-Inhalte bearbeiten
           </Link>
-          <Link href={`/pdf?siteId=${siteId}`} style={cardStyle}>
+          <Link href={`/pdf?siteId=${siteId}`} className="dashboard-card dashboard-link-card">
             PDFs für diese Site hochladen
           </Link>
         </div>
@@ -33,12 +26,3 @@ export default async function SiteKnowledgePage({
     </div>
   );
 }
-
-const cardStyle: CSSProperties = {
-  textDecoration: "none",
-  color: "#111827",
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 20,
-};

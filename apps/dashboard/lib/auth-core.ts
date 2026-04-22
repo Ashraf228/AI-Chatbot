@@ -1,5 +1,6 @@
 export const SESSION_COOKIE_NAME = "ssb_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
+const MIN_SESSION_SECRET_LENGTH = 32;
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
@@ -35,12 +36,7 @@ function base64UrlDecode(input: string) {
 }
 
 function getSessionSecret() {
-  return (
-    process.env.ADMIN_SESSION_SECRET?.trim() ||
-    process.env.ADMIN_KEY?.trim() ||
-    process.env.ADMIN_PANEL_PASSWORD?.trim() ||
-    ""
-  );
+  return process.env.ADMIN_SESSION_SECRET?.trim() || "";
 }
 
 async function importHmacKey(secret: string) {
@@ -81,7 +77,7 @@ function timingSafeEqual(a: string, b: string) {
 export function getSessionCookieOptions() {
   return {
     httpOnly: true,
-    sameSite: "lax" as const,
+    sameSite: "strict" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
@@ -90,16 +86,20 @@ export function getSessionCookieOptions() {
 
 export async function createAdminSessionToken() {
   const secret = getSessionSecret();
-  if (!secret) {
+  if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) {
     throw new Error(
-      "Missing admin session secret. Set ADMIN_SESSION_SECRET, ADMIN_KEY, or ADMIN_PANEL_PASSWORD."
+      "Missing strong admin session secret. Set ADMIN_SESSION_SECRET to a random value with at least 32 characters."
     );
   }
 
+  const randomBytes = crypto.getRandomValues(new Uint8Array(16));
   const payload = base64UrlEncode(
     JSON.stringify({
       role: "admin",
+      sub: "dashboard-admin",
+      iat: Date.now(),
       exp: Date.now() + SESSION_TTL_SECONDS * 1000,
+      jti: bytesToBase64(randomBytes),
     })
   );
   const signature = await sign(payload, secret);
@@ -111,7 +111,7 @@ export async function verifyAdminSessionToken(token?: string | null) {
   if (!token) return false;
 
   const secret = getSessionSecret();
-  if (!secret) return false;
+  if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) return false;
 
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return false;
@@ -121,7 +121,11 @@ export async function verifyAdminSessionToken(token?: string | null) {
 
   try {
     const parsed = JSON.parse(base64UrlDecode(payload));
-    return parsed?.role === "admin" && Number(parsed?.exp) > Date.now();
+    return (
+      parsed?.role === "admin" &&
+      parsed?.sub === "dashboard-admin" &&
+      Number(parsed?.exp) > Date.now()
+    );
   } catch {
     return false;
   }

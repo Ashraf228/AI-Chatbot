@@ -15,6 +15,7 @@ import { RetentionService } from './retention/retention.service';
 import { ConversationsModule } from './conversations/conversations.module';
 import { UsageModule } from './usage/usage.module';
 import { WidgetModule } from './modules/widget/widget.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { WidgetModule } from './modules/widget/widget.module';
     ConversationsModule,
     UsageModule,
   ],
+  controllers: [HealthController],
   providers: [
     PrismaService,
     VectorService,

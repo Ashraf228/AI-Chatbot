@@ -8,18 +8,7 @@ const colors: Record<string, { bg: string; fg: string }> = {
 export function LeadStatusBadge({ status }: { status: string }) {
   const color = colors[status] || { bg: "#f3f4f6", fg: "#374151" };
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        borderRadius: 999,
-        padding: "4px 10px",
-        background: color.bg,
-        color: color.fg,
-        fontSize: 12,
-        fontWeight: 700,
-      }}
-    >
+    <span className="dashboard-badge" style={{ background: color.bg, color: color.fg }}>
       {status}
     </span>
   );

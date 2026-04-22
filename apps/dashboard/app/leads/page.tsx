@@ -5,7 +5,7 @@ export default function LeadsPage() {
   return (
     <div>
       <Topbar title="Leads" />
-      <div style={{ padding: 24 }}>
+      <div className="dashboard-page">
         <LeadTable />
       </div>
     </div>

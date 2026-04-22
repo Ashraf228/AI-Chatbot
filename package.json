@@ -6,17 +6,28 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "@nestjs/common": "11.1.19",
+    "@nestjs/core": "11.1.19"
+  },
+  "devDependencies": {
+    "@nestjs/common": "11.1.19",
+    "@nestjs/core": "11.1.19"
+  },
   "scripts": {
     "build:api": "npm run build --workspace=apps/api",
+    "build:dashboard": "npm run build --workspace=apps/dashboard",
     "build:widget": "npm run build --workspace=apps/widget",
-    "build:reporter": "npm exec tsc -- --noEmit -p apps/reporter/tsconfig.json",
-    "build:all": "npm run build:api && npm run build:widget && npm run build:reporter",
+    "build:reporter": "npm run build --workspace=apps/reporter",
+    "build:all": "npm run build:api && npm run build:dashboard && npm run build:widget && npm run build:reporter",
+    "generate:server-secrets": "node scripts/generate-server-secrets.mjs",
     "dev:api": "npm run start:dev --workspace=apps/api",
     "dev:widget": "npm run dev --workspace=apps/widget",
     "dev:reporter": "npm run dev --workspace=apps/reporter",
     "check:api": "npm exec tsc -- --noEmit -p apps/api/tsconfig.json",
+    "check:dashboard": "npm run build --workspace=apps/dashboard",
     "check:widget": "npm exec tsc -- --noEmit -p apps/widget/tsconfig.json",
     "check:reporter": "npm exec tsc -- --noEmit -p apps/reporter/tsconfig.json",
-    "check:all": "npm run check:api && npm run check:widget && npm run check:reporter"
+    "check:all": "npm run check:api && npm run check:dashboard && npm run check:widget && npm run check:reporter"
   }
 }

@@ -43,6 +43,37 @@ export type ReportPayload = {
   recommendations: ReportRecommendation[];
 };
 
+type SiteResponse = {
+  name?: string;
+  companyName?: string;
+};
+
+type SummaryResponse = {
+  widgetImpressions?: number;
+  widgetOpenings?: number;
+  startedChats?: number;
+  sentMessages?: number;
+  aiAnswerRate?: number;
+  fallbackAnswers?: number;
+  leads?: number;
+  leadRate?: number;
+  averageConversationDurationSeconds?: number;
+  estimatedSupportRelief?: number;
+  topQuestions?: TopQuestion[];
+  mostActivePages?: Array<{
+    pageUrl: string;
+    count?: number;
+    impressions?: number;
+    openings?: number;
+  }>;
+};
+
+type OptimizationResponse = {
+  unansweredQuestions?: TopQuestion[];
+  dropOffSessions?: number;
+  recommendations?: string[];
+};
+
 export class ReportAggregatorService {
   async aggregate(params: {
     frequency: ReportFrequency;
@@ -61,9 +92,18 @@ export class ReportAggregatorService {
     }
 
     const [site, summary, optimization] = await Promise.all([
-      this.fetchJson<any>(`${apiBase}/admin/widget/sites/${params.siteId}`, adminKey),
-      this.fetchJson<any>(`${apiBase}/admin/widget/events/summary?siteId=${encodeURIComponent(params.siteId)}`, adminKey),
-      this.fetchJson<any>(`${apiBase}/admin/widget/optimization?siteId=${encodeURIComponent(params.siteId)}`, adminKey),
+      this.fetchJson<SiteResponse>(
+        `${apiBase}/admin/widget/sites/${params.siteId}`,
+        adminKey,
+      ),
+      this.fetchJson<SummaryResponse>(
+        `${apiBase}/admin/widget/events/summary?siteId=${encodeURIComponent(params.siteId)}`,
+        adminKey,
+      ),
+      this.fetchJson<OptimizationResponse>(
+        `${apiBase}/admin/widget/optimization?siteId=${encodeURIComponent(params.siteId)}`,
+        adminKey,
+      ),
     ]);
 
     const metrics: ReportMetrics = {
@@ -79,7 +119,7 @@ export class ReportAggregatorService {
       estimatedSupportRelief: Number(summary.estimatedSupportRelief || 0),
       topQuestions: Array.isArray(summary.topQuestions) ? summary.topQuestions : [],
       mostActivePages: Array.isArray(summary.mostActivePages)
-        ? summary.mostActivePages.map((item: any) => ({
+        ? summary.mostActivePages.map((item) => ({
             pageUrl: item.pageUrl,
             impressions: Number(item.count || item.impressions || 0),
             openings: Number(item.count || item.openings || 0),

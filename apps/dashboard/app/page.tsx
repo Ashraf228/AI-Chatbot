@@ -33,7 +33,7 @@ export default function DashboardHomePage() {
   return (
     <div>
       <Topbar title="Overview" />
-      <div style={{ padding: 24 }}>
+      <div className="dashboard-page">
         <div
           style={{
             display: "grid",
@@ -47,15 +47,12 @@ export default function DashboardHomePage() {
               href={card.href}
               style={{
                 textDecoration: "none",
-                color: "#111827",
-                background: "#fff",
-                border: "1px solid #e5e7eb",
-                borderRadius: 16,
-                padding: 20,
+                color: "inherit",
               }}
+              className="dashboard-card"
             >
-              <h2 style={{ marginTop: 0, fontSize: 18 }}>{card.title}</h2>
-              <p style={{ marginBottom: 0, lineHeight: 1.5, color: "#4b5563" }}>
+              <h2 className="dashboard-card-title">{card.title}</h2>
+              <p className="dashboard-copy" style={{ marginBottom: 0 }}>
                 {card.description}
               </p>
             </Link>

@@ -5,6 +5,7 @@ COPY apps/widget/package.json apps/widget/package-lock.json* ./
 RUN npm ci
 
 COPY apps/widget ./
+COPY packages/widget-sdk/src/runtime-config.ts /app/packages/widget-sdk/src/runtime-config.ts
 RUN npm run build
 
 FROM node:20-alpine AS loader-build

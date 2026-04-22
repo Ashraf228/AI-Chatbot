@@ -49,9 +49,9 @@ export async function GET(
       status: r.status,
       headers: { "Content-Type": "application/json" },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { message: err?.message || "Internal server error" },
+      { message: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 }
     );
   }
@@ -103,9 +103,9 @@ export async function DELETE(
       status: r.status,
       headers: { "Content-Type": "application/json" },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { message: err?.message || "Internal server error" },
+      { message: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 }
     );
   }

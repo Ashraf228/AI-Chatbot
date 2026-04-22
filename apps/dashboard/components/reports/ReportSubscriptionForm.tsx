@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { ReportTriggerButton } from "./ReportTriggerButton";
+import { Button } from "../shared/Button";
+import { EmptyState } from "../shared/EmptyState";
+import { ErrorState } from "../shared/ErrorState";
+import { Input } from "../shared/Input";
+import { Select } from "../shared/Select";
 
 type ReportSubscriptionFormProps = {
   siteId?: string;
@@ -81,66 +86,57 @@ export function ReportSubscriptionForm({ siteId }: ReportSubscriptionFormProps) 
   }
 
   return (
-    <div style={{ display: "grid", gap: 18 }}>
+    <div className="dashboard-grid">
       {siteId && (
-        <div style={panelStyle}>
-          <h2 style={{ marginTop: 0 }}>Report-Empfänger</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 180px 160px", gap: 12 }}>
-            <input
+        <div className="dashboard-card">
+          <h2 className="dashboard-card-title">Report-Empfänger</h2>
+          <div className="dashboard-grid" style={{ gridTemplateColumns: "1fr 180px 160px", gap: 12 }}>
+            <Input
               placeholder="report@kunde.de"
               value={recipientEmail}
               onChange={(e) => setRecipientEmail(e.target.value)}
-              style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 10 }}
             />
-            <select
+            <Select
               value={frequency}
               onChange={(e) => setFrequency(e.target.value)}
-              style={{ padding: 10, border: "1px solid #d1d5db", borderRadius: 10 }}
             >
               <option value="weekly">weekly</option>
               <option value="monthly">monthly</option>
-            </select>
-            <button onClick={createSubscription} disabled={saving} style={buttonStyle}>
+            </Select>
+            <Button onClick={createSubscription} disabled={saving}>
               {saving ? "Speichert..." : "Hinzufügen"}
-            </button>
+            </Button>
           </div>
-          {error && <div style={{ marginTop: 10, color: "#b91c1c" }}>{error}</div>}
+          {error && <ErrorState message={error} />}
         </div>
       )}
 
-      <div style={panelStyle}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <h2 style={{ margin: 0 }}>Subscriptions</h2>
+      <div className="dashboard-card">
+        <div className="dashboard-inline" style={{ justifyContent: "space-between", marginBottom: 16 }}>
+          <h2 className="dashboard-card-title" style={{ marginBottom: 0 }}>Subscriptions</h2>
           <ReportTriggerButton siteId={siteId} />
         </div>
         {items.length === 0 ? (
-          <div style={{ marginTop: 14 }}>Keine Report-Subscriptions vorhanden.</div>
+          <EmptyState title="Keine Report-Subscriptions vorhanden." />
         ) : (
-          <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
+          <div className="dashboard-stack dashboard-stack--sm">
             {items.map((item) => (
               <div
                 key={item.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 120px 120px 100px",
-                  gap: 12,
-                  alignItems: "center",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 12,
-                  padding: 14,
-                }}
+                className="dashboard-card"
+                style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px 100px", gap: 12, alignItems: "center", padding: 14 }}
               >
                 <div>
                   <strong>{item.recipientEmail}</strong>
-                  {!siteId && <div style={{ color: "#6b7280", marginTop: 4 }}>Site: {item.siteId}</div>}
+                  {!siteId && <div className="dashboard-copy" style={{ marginTop: 4 }}>Site: {item.siteId}</div>}
                 </div>
                 <div>{item.frequency}</div>
-                <button onClick={() => toggleSubscription(item)} style={secondaryButtonStyle}>
+                <Button variant="secondary" onClick={() => toggleSubscription(item)}>
                   {item.isEnabled ? "Aktiv" : "Pausiert"}
-                </button>
-                <button onClick={() => removeSubscription(item.id)} style={dangerButtonStyle}>
+                </Button>
+                <Button variant="danger" onClick={() => removeSubscription(item.id)}>
                   Entfernen
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -149,32 +145,3 @@ export function ReportSubscriptionForm({ siteId }: ReportSubscriptionFormProps) 
     </div>
   );
 }
-
-const panelStyle: CSSProperties = {
-  background: "#fff",
-  border: "1px solid #e5e7eb",
-  borderRadius: 16,
-  padding: 20,
-};
-
-const buttonStyle: CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid #111827",
-  background: "#111827",
-  color: "#fff",
-  cursor: "pointer",
-};
-
-const secondaryButtonStyle: CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid #d1d5db",
-  background: "#fff",
-  cursor: "pointer",
-};
-
-const dangerButtonStyle: React.CSSProperties = {
-  ...secondaryButtonStyle,
-  color: "#991b1b",
-};

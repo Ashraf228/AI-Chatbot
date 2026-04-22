@@ -1,8 +1,8 @@
 export function MetricCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div style={{ padding: 16, border: "1px solid #e5e7eb", borderRadius: 12 }}>
-      <div>{label}</div>
-      <strong>{value}</strong>
+    <div className="dashboard-metric-card">
+      <div className="dashboard-metric-label">{label}</div>
+      <strong className="dashboard-metric-value">{value}</strong>
     </div>
   );
 }

@@ -3,20 +3,9 @@ import { siteTabs } from "../../lib/dashboard-config";
 
 export function SiteTabs({ siteId }: { siteId: string }) {
   return (
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+    <div className="dashboard-tab-row">
       {siteTabs.map((tab) => (
-        <Link
-          key={tab}
-          href={`/sites/${siteId}/${tab}`}
-          style={{
-            textDecoration: "none",
-            color: "#111827",
-            padding: "8px 12px",
-            borderRadius: 10,
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-          }}
-        >
+        <Link key={tab} href={`/sites/${siteId}/${tab}`} className="dashboard-tab-link">
           {tab}
         </Link>
       ))}

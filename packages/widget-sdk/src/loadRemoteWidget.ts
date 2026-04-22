@@ -1,4 +1,4 @@
-import type { BootstrapConfig, LoaderDataset } from "./types";
+import type { BootstrapConfig, LoaderDataset, RemoteWidgetConfig, WidgetGlobalConfig } from "./types";
 
 function resolveBundleUrl(bundleUrl: string) {
   return new URL(bundleUrl, window.location.href).toString();
@@ -20,9 +20,7 @@ async function fetchRemoteConfig(dataset: LoaderDataset): Promise<BootstrapConfi
     throw new Error(`[AI-Chatbot] Config request failed with HTTP ${response.status}`);
   }
 
-  const remoteConfig = (await response.json()) as Omit<BootstrapConfig, "widgetBundleUrl"> & {
-    widgetBundleUrl?: string;
-  };
+  const remoteConfig = (await response.json()) as RemoteWidgetConfig;
   const widgetBundleUrl = dataset.widgetSrc || remoteConfig.widgetBundleUrl;
 
   if (!widgetBundleUrl) {
@@ -36,26 +34,28 @@ async function fetchRemoteConfig(dataset: LoaderDataset): Promise<BootstrapConfi
 }
 
 function assignRuntimeConfig(config: BootstrapConfig, container: HTMLDivElement) {
-  window.SSB_CHAT = {
+  const runtimeConfig: WidgetGlobalConfig = {
     siteId: config.siteId,
     siteKey: config.siteKey,
     publicKey: config.publicKey,
     apiBase: config.apiBase,
     title: config.title,
-    companyName: (config as any).companyName,
-    botName: (config as any).botName,
-    logoUrl: (config as any).logoUrl,
+    companyName: config.companyName,
+    botName: config.botName,
+    logoUrl: config.logoUrl,
     greeting: config.greeting,
     placeholder: config.placeholder,
     buttonText: config.buttonText,
     position: config.position,
     consentRequired: config.consentRequired,
     leadCaptureEnabled: config.leadCaptureEnabled,
-    theme: (config as any).theme,
-    privacyUrl: (config as any).privacyUrl,
-    suggestedQuestionsByPath: (config as any).suggestedQuestionsByPath,
+    theme: config.theme,
+    privacyUrl: config.privacyUrl,
+    suggestedQuestionsByPath: config.suggestedQuestionsByPath,
     containerId: container.id,
   };
+
+  window.SSB_CHAT = runtimeConfig;
 }
 
 function injectWidgetScript(bundleUrl: string): Promise<void> {

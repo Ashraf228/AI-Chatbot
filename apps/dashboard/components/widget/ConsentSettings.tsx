@@ -5,7 +5,7 @@ type ConsentSettingsProps = {
 
 export function ConsentSettings({ checked, onChange }: ConsentSettingsProps) {
   return (
-    <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+    <label className="dashboard-checkbox">
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span>DSGVO-Hinweis und Consent aktivieren</span>
     </label>

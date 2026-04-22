@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { Pool } from 'pg';
+import { Pool, QueryResultRow } from 'pg';
 
 @Injectable()
 export class PrismaService implements OnModuleInit {
@@ -239,7 +239,14 @@ export class PrismaService implements OnModuleInit {
     `);
   }
 
-  async query<T = any>(sql: string, params?: any[]): Promise<{ rows: T[] }> {
-    return this.pool.query(sql, params);
+  async query<T extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    params?: readonly unknown[],
+  ): Promise<{ rows: T[] }> {
+    if (params) {
+      return this.pool.query<T>(sql, [...params]);
+    }
+
+    return this.pool.query<T>(sql);
   }
 }

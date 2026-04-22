@@ -2,6 +2,26 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { PrismaService } from '../../../db/prisma.service';
 import { SiteEntity } from '../entities/site.entity';
 
+type WidgetConfigRow = {
+  id: string;
+  tenant_id: string | null;
+  name: string;
+  domain: string;
+  brand_color: string;
+  accent_color: string;
+  welcome_message: string;
+  privacy_url: string;
+  is_active: boolean;
+  company_name: string;
+  bot_name: string;
+  logo_url: string;
+  public_key: string | null;
+  widget_bundle_url: string;
+  consent_required: boolean;
+  lead_capture_enabled: boolean;
+  suggested_questions_by_path: Record<string, string[]>;
+};
+
 @Injectable()
 export class WidgetConfigService {
   constructor(private readonly db: PrismaService) {}
@@ -22,8 +42,8 @@ export class WidgetConfigService {
       placeholder: 'Nachricht schreiben...',
       buttonText: 'Chat',
       position: 'bottom-right',
-      consentRequired: true,
-      leadCaptureEnabled: true,
+      consentRequired: site.consentRequired,
+      leadCaptureEnabled: site.leadCaptureEnabled,
       widgetBundleUrl: site.widgetBundleUrl || process.env.PUBLIC_WIDGET_BUNDLE_URL || '',
       companyName: site.companyName || site.name,
       botName: site.botName,
@@ -47,13 +67,15 @@ export class WidgetConfigService {
       publicKey?: string;
       tenantId?: string;
       widgetBundleUrl?: string;
+      consentRequired: boolean;
+      leadCaptureEnabled: boolean;
       suggestedQuestionsByPath?: Record<string, string[]>;
     }
   > {
-    const res = await this.db.query<any>(
+    const res = await this.db.query<WidgetConfigRow>(
       `SELECT id, tenant_id, name, domain, brand_color, accent_color, welcome_message,
               privacy_url, is_active, company_name, bot_name, logo_url, public_key,
-              widget_bundle_url, suggested_questions_by_path
+              widget_bundle_url, consent_required, lead_capture_enabled, suggested_questions_by_path
        FROM (
          SELECT
            s.id,
@@ -70,6 +92,8 @@ export class WidgetConfigService {
            COALESCE(s.config->>'logoUrl', '') AS logo_url,
            s.public_key,
            COALESCE(s.config->>'widgetBundleUrl', '') AS widget_bundle_url,
+           COALESCE((s.config->>'consentRequired')::boolean, true) AS consent_required,
+           COALESCE((s.config->>'leadCaptureEnabled')::boolean, true) AS lead_capture_enabled,
            COALESCE(s.config->'suggestedQuestionsByPath', '{}'::jsonb) AS suggested_questions_by_path
          FROM sites s
          WHERE COALESCE(s.config->>'siteKey', s.id) = $1
@@ -100,9 +124,11 @@ export class WidgetConfigService {
       welcomeMessage: row.welcome_message,
       privacyUrl: row.privacy_url,
       isActive: row.is_active,
-      publicKey: row.public_key,
-      tenantId: row.tenant_id,
+      publicKey: row.public_key ?? undefined,
+      tenantId: row.tenant_id ?? undefined,
       widgetBundleUrl: row.widget_bundle_url,
+      consentRequired: row.consent_required,
+      leadCaptureEnabled: row.lead_capture_enabled,
       suggestedQuestionsByPath: row.suggested_questions_by_path,
     };
   }

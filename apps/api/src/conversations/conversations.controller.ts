@@ -2,6 +2,32 @@ import { Controller, Delete, Get, Param, Query, UseGuards } from '@nestjs/common
 import { PrismaService } from '../db/prisma.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
 
+type ConversationListRow = {
+  id: string;
+  tenant_id: string;
+  site_id: string;
+  session_id: string;
+  created_at: string;
+  last_active_at: string;
+  message_count: string;
+};
+
+type ConversationRow = {
+  id: string;
+  tenant_id: string;
+  site_id: string;
+  session_id: string;
+  created_at: string;
+  last_active_at: string;
+};
+
+type ConversationMessageRow = {
+  id: string;
+  role: string;
+  content: string;
+  created_at: string;
+};
+
 @UseGuards(AdminKeyGuard)
 @Controller('admin/conversations')
 export class ConversationsController {
@@ -9,7 +35,7 @@ export class ConversationsController {
 
   @Get()
   async list(@Query('siteId') siteId?: string) {
-    const params: any[] = [];
+    const params: string[] = [];
     let where = '';
 
     if (siteId) {
@@ -17,7 +43,7 @@ export class ConversationsController {
       where = `WHERE c.site_id = $1`;
     }
 
-    const res = await this.db.query(
+    const res = await this.db.query<ConversationListRow>(
       `
       SELECT
         c.id,
@@ -42,7 +68,7 @@ export class ConversationsController {
 
   @Get(':id')
   async detail(@Param('id') id: string) {
-    const conv = await this.db.query(
+    const conv = await this.db.query<ConversationRow>(
       `SELECT * FROM conversations WHERE id = $1 LIMIT 1`,
       [id],
     );
@@ -51,7 +77,7 @@ export class ConversationsController {
       return { message: 'Conversation not found' };
     }
 
-    const msgs = await this.db.query(
+    const msgs = await this.db.query<ConversationMessageRow>(
       `SELECT id, role, content, created_at
        FROM messages
        WHERE conversation_id = $1

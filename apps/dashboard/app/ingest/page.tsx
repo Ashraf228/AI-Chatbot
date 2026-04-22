@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Topbar } from "../../components/layout/Topbar";
+import { Button } from "../../components/shared/Button";
+import { ErrorState } from "../../components/shared/ErrorState";
+import { Input } from "../../components/shared/Input";
+import { Select } from "../../components/shared/Select";
 
 type Site = {
   id: string;
@@ -92,76 +96,59 @@ export default function IngestPage() {
   return (
     <div>
       <Topbar title="FAQ Ingest" />
-      <div style={{ maxWidth: 900, padding: 24 }}>
+      <div className="dashboard-page dashboard-page--md">
         {preselectedSiteId && (
-          <div style={{ marginBottom: 12, color: "#4b5563" }}>
+          <div className="dashboard-copy dashboard-mb-16">
             Site-Kontext aktiv: <strong>{preselectedSiteId}</strong>
           </div>
         )}
-        <form
-          onSubmit={submitFaq}
-          style={{
-            display: "grid",
-            gap: 12,
-            padding: 16,
-            border: "1px solid #ddd",
-            borderRadius: 12,
-            background: "#fff",
-          }}
-        >
-          <label>
+        <form onSubmit={submitFaq} className="dashboard-card dashboard-stack dashboard-gap-12">
+          <label className="dashboard-field">
             <div>Site</div>
-            <select
+            <Select
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
             >
               {sites.map((site) => (
                 <option key={site.id} value={site.id}>
                   {site.id} — {site.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
-          <label>
+          <label className="dashboard-field">
             <div>Titel</div>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
-            />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
           </label>
 
-          <label>
+          <label className="dashboard-field">
             <div>Frage</div>
-            <input
+            <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="z. B. Wie lange dauert der Versand?"
-              style={{ width: "100%", padding: 10, marginTop: 6 }}
             />
           </label>
 
-          <label>
+          <label className="dashboard-field">
             <div>Antwort</div>
             <textarea
+              className="dashboard-textarea"
               value={a}
               onChange={(e) => setA(e.target.value)}
               placeholder="z. B. 2–4 Werktage."
-              style={{ width: "100%", height: 140, padding: 10, marginTop: 6 }}
+              style={{ minHeight: 140 }}
             />
           </label>
 
-          <button type="submit" disabled={loading} style={{ padding: 12, cursor: "pointer" }}>
+          <Button type="submit" disabled={loading}>
             {loading ? "Speichere..." : "FAQ speichern"}
-          </button>
+          </Button>
         </form>
 
-        {msg && <p style={{ color: "green", marginTop: 16 }}>{msg}</p>}
-        {err && (
-          <pre style={{ color: "crimson", whiteSpace: "pre-wrap", marginTop: 16 }}>{err}</pre>
-        )}
+        {msg && <p className="dashboard-status dashboard-status--success dashboard-mb-16">{msg}</p>}
+        {err && <ErrorState message={err} />}
       </div>
     </div>
   );

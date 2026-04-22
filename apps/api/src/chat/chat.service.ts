@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 
 import { ChatMessageDto } from './dto';
 import { EmbeddingService } from '../vector/embedding.service';
-import { VectorService } from '../vector/vector.service';
+import { VectorSearchRow, VectorService } from '../vector/vector.service';
 import { LlmService } from '../vector/llm.service';
 import { SitesService } from '../sites/sites.service';
 import { isDomainAllowed } from '../utils/cors';
@@ -18,6 +18,10 @@ import { estimateOpenAICost } from '../usage/costs';
 
 @Injectable()
 export class ChatService {
+  private getErrorMessage(error: unknown, fallback: string) {
+    return error instanceof Error ? error.message : fallback;
+  }
+
   constructor(
     private embedder: EmbeddingService,
     private vector: VectorService,
@@ -201,7 +205,7 @@ export class ChatService {
     }
 
     // 7) Daily usage limit
-    const dailyLimitRes = await this.db.query(
+    const dailyLimitRes = await this.db.query<{ count: string | number }>(
       `SELECT COUNT(*) AS count
        FROM conversations c
        JOIN messages m ON m.conversation_id = c.id
@@ -226,8 +230,11 @@ export class ChatService {
     let safeMessage: string;
     try {
       safeMessage = sanitizeInput(dto.message);
-    } catch (err: any) {
-      throw new HttpException(err.message || 'Invalid input', HttpStatus.BAD_REQUEST);
+    } catch (err: unknown) {
+      throw new HttpException(
+        this.getErrorMessage(err, 'Invalid input'),
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // 9) Conversation find/create
@@ -286,7 +293,7 @@ export class ChatService {
     });
 
     const context = hits
-      .map((h: any, idx: number) => {
+      .map((h: VectorSearchRow, idx: number) => {
         const src = h.source_url
           ? `URL: ${h.source_url}`
           : `Titel: ${h.title || 'Unbekannt'}`;
@@ -364,7 +371,7 @@ ${context || '(kein Kontext gefunden)'}
       [conversationId],
     );
 
-    const sources = hits.map((h: any) => ({
+    const sources = hits.map((h: VectorSearchRow) => ({
       title: h.title,
       url: h.source_url,
       score: Number(h.score),

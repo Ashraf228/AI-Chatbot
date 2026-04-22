@@ -1,3 +1,6 @@
+import type { WidgetGlobalConfig, WidgetRuntimeConfig } from "./runtime-config";
+export type { WidgetGlobalConfig, WidgetRuntimeConfig, WidgetPosition, WidgetTheme } from "./runtime-config";
+
 export type LoaderDataset = {
   siteKey: string;
   apiBase: string;
@@ -5,18 +8,7 @@ export type LoaderDataset = {
   widgetSrc?: string;
 };
 
-export type RemoteWidgetConfig = {
-  siteId: string;
-  siteKey: string;
-  publicKey: string;
-  apiBase: string;
-  title?: string;
-  greeting?: string;
-  placeholder?: string;
-  buttonText?: string;
-  position?: "bottom-right" | "bottom-left";
-  consentRequired?: boolean;
-  leadCaptureEnabled?: boolean;
+export type RemoteWidgetConfig = WidgetRuntimeConfig & {
   widgetBundleUrl?: string;
 };
 
@@ -32,7 +24,7 @@ export type HostedWidgetHandle = {
 
 declare global {
   interface Window {
-    SSB_CHAT?: Record<string, unknown>;
+    SSB_CHAT?: WidgetGlobalConfig;
     SSB_CHAT_MOUNTED?: boolean;
     SSB_CHAT_LOADING?: boolean;
   }

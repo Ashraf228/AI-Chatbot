@@ -1,3 +1,3 @@
 export function LoadingState() {
-  return <div>Loading...</div>;
+  return <div className="dashboard-loading">Loading...</div>;
 }

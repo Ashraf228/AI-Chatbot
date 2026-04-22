@@ -28,7 +28,7 @@ const defaultConfig: Omit<WidgetRuntimeConfig, "siteId" | "siteKey" | "publicKey
 };
 
 export function loadConfig(override?: WidgetGlobalConfig): WidgetRuntimeConfig {
-  const runtimeConfig = {
+  const runtimeConfig: WidgetGlobalConfig = {
     ...defaultConfig,
     ...(window.SSB_CHAT ?? {}),
     ...(override ?? {}),
@@ -46,5 +46,24 @@ export function loadConfig(override?: WidgetGlobalConfig): WidgetRuntimeConfig {
     throw new Error("[SSB_CHAT] Missing publicKey");
   }
 
-  return runtimeConfig as WidgetRuntimeConfig;
+  return {
+    siteId: runtimeConfig.siteId,
+    siteKey: runtimeConfig.siteKey,
+    publicKey: runtimeConfig.publicKey,
+    apiBase: runtimeConfig.apiBase ?? defaultConfig.apiBase,
+    title: runtimeConfig.title ?? defaultConfig.title,
+    companyName: runtimeConfig.companyName ?? defaultConfig.companyName,
+    botName: runtimeConfig.botName ?? defaultConfig.botName,
+    logoUrl: runtimeConfig.logoUrl ?? defaultConfig.logoUrl,
+    greeting: runtimeConfig.greeting ?? defaultConfig.greeting,
+    placeholder: runtimeConfig.placeholder ?? defaultConfig.placeholder,
+    buttonText: runtimeConfig.buttonText ?? defaultConfig.buttonText,
+    position: runtimeConfig.position ?? defaultConfig.position,
+    consentRequired: runtimeConfig.consentRequired ?? defaultConfig.consentRequired,
+    leadCaptureEnabled: runtimeConfig.leadCaptureEnabled ?? defaultConfig.leadCaptureEnabled,
+    theme: runtimeConfig.theme ?? defaultConfig.theme,
+    privacyUrl: runtimeConfig.privacyUrl ?? defaultConfig.privacyUrl,
+    suggestedQuestionsByPath:
+      runtimeConfig.suggestedQuestionsByPath ?? defaultConfig.suggestedQuestionsByPath,
+  };
 }

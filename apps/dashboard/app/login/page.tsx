@@ -3,6 +3,9 @@
 import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "../../components/shared/Button";
+import { Input } from "../../components/shared/Input";
+import { ErrorState } from "../../components/shared/ErrorState";
 
 export default function LoginPage() {
   const [password, setPassword] = useState("");
@@ -34,27 +37,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        background:
-          "radial-gradient(circle at top, rgba(28,25,23,0.14), transparent 38%), linear-gradient(180deg, #f7f5f2 0%, #efebe6 100%)",
-      }}
-    >
-      <div
-        style={{
-          width: 420,
-          background: "rgba(255,255,255,0.88)",
-          border: "1px solid rgba(28,25,23,0.08)",
-          borderRadius: 24,
-          padding: 32,
-          boxShadow: "0 24px 70px rgba(28,25,23,0.12)",
-          backdropFilter: "blur(12px)",
-        }}
-      >
-        <div style={{ display: "grid", justifyItems: "center", marginBottom: 18 }}>
+    <div className="dashboard-auth">
+      <div className="dashboard-auth-card">
+        <div className="dashboard-auth-logo">
           <Image
             src="/soule-logo.png"
             alt="SSB Soule"
@@ -65,60 +50,26 @@ export default function LoginPage() {
           />
         </div>
 
-        <p
-          style={{
-            margin: 0,
-            color: "#78716c",
-            fontWeight: 700,
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            fontSize: 12,
-          }}
-        >
-          Soulé Admin
-        </p>
-        <h1 style={{ marginTop: 12, marginBottom: 6, fontSize: 34, color: "#1c1917" }}>
-          Willkommen zurück
-        </h1>
-        <p style={{ marginTop: 0, color: "#57534e", lineHeight: 1.5 }}>
+        <p className="dashboard-eyebrow">Soulé Admin</p>
+        <h1 className="dashboard-auth-title">Willkommen zurück</h1>
+        <p className="dashboard-copy" style={{ marginTop: 0 }}>
           Melde dich an, um Kunden-Sites, Leads, Reports und Widget-Einstellungen zu verwalten.
         </p>
 
-        <form onSubmit={onLogin}>
-          <input
+        <form onSubmit={onLogin} className="dashboard-stack">
+          <Input
             type="password"
             placeholder="Passwort"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: "100%",
-              padding: 14,
-              marginTop: 12,
-              borderRadius: 14,
-              border: "1px solid #d6d3d1",
-              background: "#fcfcfb",
-            }}
           />
 
-          <button
-            type="submit"
-            style={{
-              marginTop: 14,
-              padding: 14,
-              width: "100%",
-              borderRadius: 14,
-              border: "1px solid #111",
-              background: "#111",
-              color: "#fff",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
-          >
+          <Button type="submit" fullWidth>
             Login
-          </button>
+          </Button>
         </form>
 
-        {err && <p style={{ color: "crimson", marginTop: 12 }}>{err}</p>}
+        {err && <ErrorState message={err} />}
       </div>
     </div>
   );

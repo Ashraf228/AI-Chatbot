@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Topbar } from "../../components/layout/Topbar";
+import { Button } from "../../components/shared/Button";
+import { EmptyState } from "../../components/shared/EmptyState";
+import { ErrorState } from "../../components/shared/ErrorState";
+import { Input } from "../../components/shared/Input";
 
 type Conversation = {
   id: string;
@@ -20,6 +24,22 @@ type Message = {
   created_at: string;
 };
 
+type ConversationMessagesResponse = {
+  messages?: Message[];
+};
+
+function parseJsonResponse<T>(text: string): T | null {
+  if (!text) {
+    return null;
+  }
+
+  return JSON.parse(text) as T;
+}
+
+function toErrorMessage(value: unknown) {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
 export default function ConversationsPage() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [siteId, setSiteId] = useState("");
@@ -37,16 +57,16 @@ export default function ConversationsPage() {
     const r = await fetch(url, { cache: "no-store" });
     const text = await r.text();
 
-    let data: any = {};
+    let data: Conversation[] | Record<string, unknown> | null = null;
     try {
-      data = text ? JSON.parse(text) : {};
+      data = parseJsonResponse<Conversation[] | Record<string, unknown>>(text);
     } catch {
       setErr("Ungültige Antwort von /api/conversations");
       return;
     }
 
     if (!r.ok) {
-      setErr(typeof data === "string" ? data : JSON.stringify(data));
+      setErr(toErrorMessage(data));
       return;
     }
 
@@ -59,21 +79,25 @@ export default function ConversationsPage() {
     const r = await fetch(`/api/conversations/${id}`, { cache: "no-store" });
     const text = await r.text();
 
-    let data: any = {};
+    let data: ConversationMessagesResponse | Record<string, unknown> | null = null;
     try {
-      data = text ? JSON.parse(text) : {};
+      data = parseJsonResponse<ConversationMessagesResponse | Record<string, unknown>>(text);
     } catch {
       setErr("Ungültige Antwort von /api/conversations/[id]");
       return;
     }
 
     if (!r.ok) {
-      setErr(typeof data === "string" ? data : JSON.stringify(data));
+      setErr(toErrorMessage(data));
       return;
     }
 
     setSelectedId(id);
-    setMessages(Array.isArray(data.messages) ? data.messages : []);
+    setMessages(
+      data && typeof data === "object" && "messages" in data && Array.isArray(data.messages)
+        ? data.messages
+        : []
+    );
   }
 
   async function deleteConversation(id: string) {
@@ -82,15 +106,15 @@ export default function ConversationsPage() {
       method: "DELETE",
     });
     const text = await r.text();
-    let data: any = {};
+    let data: Record<string, unknown> | null = null;
     try {
-      data = text ? JSON.parse(text) : {};
+      data = parseJsonResponse<Record<string, unknown>>(text);
     } catch {
       setErr("Ungültige Antwort beim Löschen");
       return;
     }
     if (!r.ok) {
-      setErr(typeof data === "string" ? data : JSON.stringify(data));
+      setErr(toErrorMessage(data));
       return;
     }
     if (selectedId === id) {
@@ -107,117 +131,84 @@ export default function ConversationsPage() {
   return (
     <div>
       <Topbar title="Conversations" />
-      <div style={{ maxWidth: 1200, padding: 24 }}>
-        <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-          <input
+      <div className="dashboard-page dashboard-page--lg">
+        <div className="dashboard-inline dashboard-gap-12 dashboard-mb-16">
+          <Input
             placeholder="Nach siteId filtern (z. B. kunde-1)"
             value={siteId}
             onChange={(e) => setSiteId(e.target.value)}
-            style={{ padding: 10, flex: 1 }}
+            style={{ flex: 1 }}
           />
-          <button onClick={loadConversations} style={{ padding: 10 }}>
-            Laden
-          </button>
+          <Button onClick={loadConversations}>Laden</Button>
         </div>
 
-        {err && <pre style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{err}</pre>}
+        {err && <ErrorState message={err} />}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 20 }}>
-          <div
-            style={{
-              background: "#fff",
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 16,
-            }}
-          >
-            <h2>Liste</h2>
+        <div className="dashboard-grid dashboard-grid--split">
+          <div className="dashboard-card">
+            <h2 className="dashboard-card-title">Liste</h2>
 
             {items.length === 0 ? (
-              <p>Keine Conversations gefunden.</p>
+              <EmptyState title="Keine Conversations gefunden." />
             ) : (
-              <div style={{ display: "grid", gap: 10 }}>
+              <div className="dashboard-conversation-list">
                 {items.map((conv) => (
                   <div key={conv.id}>
                     <button
                       onClick={() => loadMessages(conv.id)}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: 12,
-                        borderRadius: 10,
-                        border: selectedId === conv.id ? "2px solid #111" : "1px solid #ddd",
-                        background: "#fff",
-                        cursor: "pointer",
-                      }}
+                      className={`dashboard-conversation-item ${selectedId === conv.id ? "is-selected" : ""}`}
                     >
                       <div>
                         <strong>{conv.site_id}</strong>
                       </div>
-                      <div style={{ fontSize: 13, opacity: 0.8 }}>
+                      <div className="dashboard-meta">
                         session: {conv.session_id.slice(0, 8)}...
                       </div>
-                      <div style={{ fontSize: 13, opacity: 0.8 }}>
+                      <div className="dashboard-meta">
                         messages: {conv.message_count}
                       </div>
-                      <div style={{ fontSize: 12, opacity: 0.6 }}>
+                      <div className="dashboard-meta dashboard-meta--subtle">
                         last active: {new Date(conv.last_active_at).toLocaleString()}
                       </div>
                     </button>
 
-                    <button
+                    <Button
                       type="button"
+                      variant="secondary"
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteConversation(conv.id);
                       }}
-                      style={{
-                        marginTop: 8,
-                        padding: 8,
-                        borderRadius: 8,
-                        border: "1px solid #ccc",
-                        background: "#fff",
-                        cursor: "pointer",
-                      }}
+                      className="dashboard-mt-4"
                     >
                       Löschen
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <div
-            style={{
-              background: "#fff",
-              border: "1px solid #ddd",
-              borderRadius: 12,
-              padding: 16,
-            }}
-          >
-            <h2>Nachrichten</h2>
+          <div className="dashboard-card">
+            <h2 className="dashboard-card-title">Nachrichten</h2>
 
             {!selectedId ? (
-              <p>Wähle links eine Conversation aus.</p>
+              <EmptyState title="Wähle links eine Conversation aus." />
             ) : messages.length === 0 ? (
-              <p>Keine Nachrichten gefunden.</p>
+              <EmptyState title="Keine Nachrichten gefunden." />
             ) : (
-              <div style={{ display: "grid", gap: 12 }}>
+              <div className="dashboard-stack">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
-                    style={{
-                      padding: 12,
-                      borderRadius: 10,
-                      background: msg.role === "user" ? "#eef4ff" : "#f7f7f7",
-                      border: "1px solid #ddd",
-                    }}
+                    className={`dashboard-message-card ${
+                      msg.role === "user" ? "dashboard-message-card--user" : "dashboard-message-card--assistant"
+                    }`}
                   >
-                    <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+                    <div className="dashboard-message-head">
                       {msg.role.toUpperCase()} — {new Date(msg.created_at).toLocaleString()}
                     </div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+                    <div className="dashboard-prewrap">{msg.content}</div>
                   </div>
                 ))}
               </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
+import { Button } from "../shared/Button";
 
 export function ReportTriggerButton({ siteId }: { siteId?: string }) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
@@ -16,7 +17,7 @@ export function ReportTriggerButton({ siteId }: { siteId?: string }) {
   }
 
   return (
-    <button onClick={trigger} style={buttonStyle}>
+    <Button onClick={trigger}>
       {state === "loading"
         ? "Wird ausgelöst..."
         : state === "done"
@@ -24,15 +25,6 @@ export function ReportTriggerButton({ siteId }: { siteId?: string }) {
           : state === "error"
             ? "Erneut versuchen"
             : "Report auslösen"}
-    </button>
+    </Button>
   );
 }
-
-const buttonStyle: CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: 10,
-  border: "1px solid #111827",
-  background: "#111827",
-  color: "#fff",
-  cursor: "pointer",
-};
