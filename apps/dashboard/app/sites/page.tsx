@@ -17,6 +17,32 @@ type Site = {
   public_key: string | null;
 };
 
+function resolveLoaderUrl() {
+  const configured = process.env.NEXT_PUBLIC_WIDGET_LOADER_URL?.trim();
+  const hasUsableConfiguredUrl =
+    configured && !configured.includes("localhost") && !configured.includes("127.0.0.1");
+
+  if (hasUsableConfiguredUrl) {
+    return configured;
+  }
+
+  if (typeof window === "undefined") {
+    return configured || "http://localhost:8080/loader.js";
+  }
+
+  const { protocol, hostname } = window.location;
+
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return configured || "http://localhost:8080/loader.js";
+  }
+
+  const widgetHost = hostname.startsWith("app.")
+    ? hostname.replace(/^app\./, "widget.")
+    : `widget.${hostname}`;
+
+  return `${protocol}//${widgetHost}/loader.js`;
+}
+
 export default function SitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState("");
@@ -29,6 +55,13 @@ export default function SitesPage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [loaderUrl, setLoaderUrl] = useState(
+    process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js"
+  );
+
+  useEffect(() => {
+    setLoaderUrl(resolveLoaderUrl());
+  }, []);
 
   async function loadSites() {
     setErr(null);
@@ -61,11 +94,8 @@ export default function SitesPage() {
   const embedCode = useMemo(() => {
     if (!selectedSite) return "";
 
-    const loaderUrl =
-      process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js";
-
     return `<script src="${loaderUrl}" data-site-key="${selectedSite.id}" defer></script>`;
-  }, [selectedSite]);
+  }, [loaderUrl, selectedSite]);
 
   async function createSite(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -194,9 +224,7 @@ export default function SitesPage() {
                       </div>
 
                       <EmbedSnippetCard
-                        loaderUrl={
-                          process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js"
-                        }
+                        loaderUrl={loaderUrl}
                         siteId={selectedSite.id}
                         publicKey={selectedSite.public_key}
                         embedCode={embedCode}
