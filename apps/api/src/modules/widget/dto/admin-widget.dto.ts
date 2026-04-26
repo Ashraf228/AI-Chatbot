@@ -15,6 +15,15 @@ import {
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
+function normalizeOptionalString(value: unknown) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function normalizeStringArray(value: unknown) {
   if (!Array.isArray(value)) {
     return value;
@@ -37,16 +46,19 @@ function normalizeSuggestedQuestions(value: unknown) {
 
 export class UpdateBrandingDto {
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsString()
   @MaxLength(120)
   companyName?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsString()
   @MaxLength(120)
   botName?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsUrl({ require_tld: false }, { message: 'logoUrl must be a valid URL' })
   @MaxLength(1000)
   logoUrl?: string;
@@ -60,11 +72,13 @@ export class UpdateBrandingDto {
   accentColor?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsString()
   @MaxLength(1000)
   welcomeMessage?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsUrl({ require_tld: false }, { message: 'privacyUrl must be a valid URL' })
   @MaxLength(1000)
   privacyUrl?: string;
@@ -72,11 +86,13 @@ export class UpdateBrandingDto {
 
 export class UpdateWidgetConfigDto {
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsString()
   @MaxLength(120)
   siteKey?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsString()
   @MaxLength(255)
   domain?: string;
@@ -86,6 +102,7 @@ export class UpdateWidgetConfigDto {
   isActive?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsUrl({ require_tld: false }, { message: 'widgetBundleUrl must be a valid URL' })
   @MaxLength(1000)
   widgetBundleUrl?: string;
@@ -112,6 +129,7 @@ export class UpdateWidgetConfigDto {
   suggestedQuestionsByPath?: Record<string, string[]>;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsString()
   @MaxLength(12000)
   systemPrompt?: string;
