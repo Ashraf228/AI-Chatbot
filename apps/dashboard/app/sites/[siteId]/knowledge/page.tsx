@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SiteTabs } from "../../../../components/layout/SiteTabs";
 import { Topbar } from "../../../../components/layout/Topbar";
+import { KnowledgeManager } from "../../../../components/knowledge/KnowledgeManager";
 
 export default async function SiteKnowledgePage({
   params,
@@ -22,6 +23,7 @@ export default async function SiteKnowledgePage({
             PDFs für diese Site hochladen
           </Link>
         </div>
+        <KnowledgeManager siteId={siteId} />
       </div>
     </div>
   );

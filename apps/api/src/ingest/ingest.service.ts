@@ -14,6 +14,21 @@ import { randomUUID } from 'crypto';
 
 const { PDFParse } = require('pdf-parse');
 
+type KnowledgeDocumentRow = {
+  id: string;
+  type: string;
+  title: string | null;
+  source_url: string | null;
+  created_at: string;
+  chunk_count: number;
+};
+
+type FaqChunkRow = {
+  id: string;
+  content: string;
+  created_at: string;
+};
+
 @Injectable()
 export class IngestService {
   constructor(
@@ -179,4 +194,104 @@ export class IngestService {
 
     return { documentId: docId, chunks: chunks.length, inserted };
   }
+
+  async listKnowledge(siteId: string) {
+    if (!siteId?.trim()) {
+      throw new BadRequestException('siteId missing');
+    }
+
+    const site = await this.sites.getSite(siteId);
+    if (!site) {
+      throw new BadRequestException('Invalid siteId');
+    }
+
+    const docs = await this.db.query<KnowledgeDocumentRow>(
+      `SELECT
+         d.id,
+         d.type,
+         d.title,
+         d.source_url,
+         d.created_at,
+         COUNT(c.id)::int AS chunk_count
+       FROM documents d
+       LEFT JOIN chunks c ON c.document_id = d.id
+       WHERE d.site_id = $1
+       GROUP BY d.id
+       ORDER BY d.created_at DESC`,
+      [siteId],
+    );
+
+    const faqDocs = docs.rows.filter((row) => row.type === 'faq');
+    const faqItemsByDoc = new Map<string, Array<{ question: string; answer: string }>>();
+
+    if (faqDocs.length > 0) {
+      const faqChunks = await this.db.query<FaqChunkRow>(
+        `SELECT c.id, c.document_id, c.content, c.created_at
+         FROM chunks c
+         JOIN documents d ON d.id = c.document_id
+         WHERE d.site_id = $1
+           AND d.type = 'faq'
+         ORDER BY c.created_at ASC`,
+        [siteId],
+      );
+
+      for (const chunk of faqChunks.rows as Array<FaqChunkRow & { document_id: string }>) {
+        const parsed = parseFaqChunk(chunk.content);
+        const items = faqItemsByDoc.get(chunk.document_id) || [];
+        if (parsed) {
+          items.push(parsed);
+        }
+        faqItemsByDoc.set(chunk.document_id, items);
+      }
+    }
+
+    return docs.rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      title: row.title || '',
+      sourceUrl: row.source_url || '',
+      createdAt: row.created_at,
+      chunkCount: row.chunk_count,
+      faqItems: faqItemsByDoc.get(row.id) || [],
+    }));
+  }
+
+  async deleteKnowledge(documentId: string) {
+    if (!documentId?.trim()) {
+      throw new BadRequestException('documentId missing');
+    }
+
+    const existing = await this.db.query<{ id: string; site_id: string }>(
+      `SELECT id, site_id
+       FROM documents
+       WHERE id = $1
+       LIMIT 1`,
+      [documentId],
+    );
+
+    const row = existing.rows[0];
+    if (!row) {
+      throw new BadRequestException('Invalid documentId');
+    }
+
+    await this.db.query(`DELETE FROM documents WHERE id = $1`, [documentId]);
+
+    return {
+      ok: true,
+      deletedId: documentId,
+      siteId: row.site_id,
+    };
+  }
+}
+
+function parseFaqChunk(content: string) {
+  const match = content.match(/^Frage:\s*(.+?)\nAntwort:\s*([\s\S]+)$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    question: match[1].trim(),
+    answer: match[2].trim(),
+  };
 }

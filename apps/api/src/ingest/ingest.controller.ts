@@ -2,7 +2,11 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
+  Get,
+  Param,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -43,6 +47,16 @@ class IngestFaqDto {
 @Controller('admin/ingest')
 export class IngestController {
   constructor(private ingest: IngestService) {}
+
+  @Get('knowledge')
+  async listKnowledge(@Query('siteId') siteId: string) {
+    return this.ingest.listKnowledge(siteId);
+  }
+
+  @Delete('knowledge/:documentId')
+  async deleteKnowledge(@Param('documentId') documentId: string) {
+    return this.ingest.deleteKnowledge(documentId);
+  }
 
   // FAQ import: { siteId, title, items: [{q,a}] }
   @Post('faq')
