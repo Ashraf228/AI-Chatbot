@@ -83,7 +83,6 @@ export class WidgetChatService {
     return {
       sessionId: reply.sessionId,
       answer: reply.answer,
-      sources: reply.sources,
       messages,
     };
   }
@@ -138,13 +137,6 @@ Kontext:
 ${context || '(kein Kontext gefunden)'}
 `.trim();
 
-    const sources = hits.map((h: VectorSearchRow) => ({
-      title: h.title,
-      url: h.source_url,
-      score: Number(h.score),
-      metadata: h.metadata,
-    }));
-
     res.status(200);
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -191,7 +183,6 @@ ${context || '(kein Kontext gefunden)'}
         type: 'done',
         answer: safeAnswer,
         sessionId,
-        sources,
       });
     } catch (error: unknown) {
       writeEvent({

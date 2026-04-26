@@ -161,12 +161,6 @@
   border-bottom-left-radius: 6px;
 }
 
-.ssb-message-sources {
-  margin-top: 6px;
-  font-size: 11px;
-  color: var(--ssb-color-muted);
-}
-
 .ssb-message-cta {
   margin-top: 6px;
   font-size: 12px;

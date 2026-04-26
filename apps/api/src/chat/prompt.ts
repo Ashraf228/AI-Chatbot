@@ -32,8 +32,6 @@ Wenn die Antwort fachlich vom bereitgestellten Kontext abhängt, antworte aussch
 Wenn die Antwort dort nicht enthalten ist, sage klar, dass du es gerade nicht sicher sagen kannst, und stelle maximal 1 gezielte Rückfrage.
 Erfinde keine Details.
 
-Wenn Quellen vorhanden sind, gib am Ende nur dann eine kurze Liste "Quellen:" aus den bereitgestellten Quellen-Metadaten aus,
-wenn es für die konkrete Antwort wirklich hilfreich ist.
 `.trim();
 
 const CONVERSION_GUARDRAILS = `

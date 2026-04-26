@@ -31,27 +31,6 @@ export function MessageBubble({
           </button>
         </div>
       ) : null}
-      {isAssistant && Array.isArray(message.sources) && message.sources.length > 0 ? (
-        <div className="ssb-message-sources">
-          Quellen:{" "}
-          {message.sources.slice(0, 3).map((source, index) => {
-            const label = source.url ? source.title || source.url : source.title || "Quelle";
-
-            return (
-              <span key={`${label}-${index}`}>
-                {index > 0 ? " · " : ""}
-                {source.url ? (
-                  <a href={source.url} target="_blank" rel="noreferrer">
-                    {label}
-                  </a>
-                ) : (
-                  label
-                )}
-              </span>
-            );
-          })}
-        </div>
-      ) : null}
     </div>
   );
 }
