@@ -15,13 +15,45 @@ function injectStyles(target: ShadowRoot) {
   target.appendChild(styleTag);
 }
 
+function hexToRgbTriplet(color: string) {
+  const hex = color.replace("#", "").trim();
+
+  if (hex.length !== 3 && hex.length !== 6) {
+    return "181, 84, 0";
+  }
+
+  const normalized =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((char) => `${char}${char}`)
+          .join("")
+      : hex;
+
+  const value = Number.parseInt(normalized, 16);
+  if (Number.isNaN(value)) {
+    return "181, 84, 0";
+  }
+
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `${r}, ${g}, ${b}`;
+}
+
 function injectThemeVariables(target: ShadowRoot, config: ReturnType<typeof loadConfig>) {
+  const brandColor = config.theme?.brandColor || "#b55400";
+  const accentColor = config.theme?.accentColor || "#ffe2c4";
+  const primaryRgb = hexToRgbTriplet(brandColor);
+
   const themeTag = document.createElement("style");
   themeTag.textContent = `
     :host, :root {
-      --ssb-color-primary: ${config.theme?.brandColor || "#b55400"};
-      --ssb-color-primary-strong: ${config.theme?.brandColor || "#8f4300"};
-      --ssb-color-primary-soft: ${config.theme?.accentColor || "#ffe2c4"};
+      --ssb-color-primary: ${brandColor};
+      --ssb-color-primary-strong: ${brandColor};
+      --ssb-color-primary-soft: ${accentColor};
+      --ssb-color-primary-rgb: ${primaryRgb};
+      --ssb-color-panel: ${accentColor};
     }
   `;
   target.appendChild(themeTag);
