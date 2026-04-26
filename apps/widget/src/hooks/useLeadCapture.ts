@@ -4,8 +4,13 @@ import type { LeadPayload, LeadSubmissionState } from "../types/lead";
 import { useWidgetConfig } from "./useWidgetConfig";
 import { useAnalytics } from "./useAnalytics";
 import { useSessionContext } from "../app/providers/SessionProvider";
+import type { LeadPayload as LeadPayloadType } from "../types/lead";
 
-export function useLeadCapture() {
+type UseLeadCaptureOptions = {
+  onSuccess?: (lead: LeadPayloadType) => void | Promise<void>;
+};
+
+export function useLeadCapture(options?: UseLeadCaptureOptions) {
   const config = useWidgetConfig();
   const { track } = useAnalytics();
   const { sessionId } = useSessionContext();
@@ -27,6 +32,7 @@ export function useLeadCapture() {
       await submitLead(config, sessionId, lead);
       setState("success");
       setIsModalOpen(false);
+      await options?.onSuccess?.(lead);
       await track("lead_submitted", { email: lead.email });
     } catch {
       setState("error");

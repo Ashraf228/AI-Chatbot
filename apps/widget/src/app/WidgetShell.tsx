@@ -10,7 +10,7 @@ export function WidgetShell() {
   const config = useWidgetConfig();
   const { track } = useAnalytics();
   const { consentAccepted, acceptConsent } = useSessionContext();
-  const { messages, isSending, error, sendMessage } = useChat();
+  const { messages, isSending, error, sendMessage, appendAssistantMessage } = useChat();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const path = typeof window !== "undefined" ? window.location.pathname : "/";
@@ -45,6 +45,12 @@ export function WidgetShell() {
     await track("consent_accepted");
   }
 
+  function handleLeadSubmitted() {
+    appendAssistantMessage(
+      "Danke dir! Deine Kontaktdaten sind bei uns angekommen. Wir melden uns schnellstmoeglich bei dir.",
+    );
+  }
+
   return (
     <div
       className={`ssb-widget-shell ssb-widget-shell--${config.position} ${
@@ -66,6 +72,7 @@ export function WidgetShell() {
           consentAccepted={consentAccepted}
           onAcceptConsent={handleAcceptConsent}
           onSendMessage={sendMessage}
+          onLeadSubmitted={handleLeadSubmitted}
           onClose={closeWidget}
         />
       ) : null}

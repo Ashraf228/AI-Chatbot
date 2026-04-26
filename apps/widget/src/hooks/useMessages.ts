@@ -42,6 +42,12 @@ export function useMessages(greeting: string) {
     return message;
   }
 
+  function appendAssistantMessage(content: string, sources?: MessageSource[]) {
+    const message = createMessage("assistant", content, { sources });
+    setMessages((current) => [...current, message]);
+    return message;
+  }
+
   function appendAssistantPlaceholder() {
     const placeholder = createMessage("assistant", "", { pending: true });
     setMessages((current) => [...current, placeholder]);
@@ -86,6 +92,7 @@ export function useMessages(greeting: string) {
   return {
     messages,
     appendUserMessage,
+    appendAssistantMessage,
     appendAssistantPlaceholder,
     updateAssistantMessage,
     resolveAssistantMessage,

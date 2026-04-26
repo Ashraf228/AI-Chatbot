@@ -14,6 +14,7 @@ export function useChat() {
   const {
     messages,
     appendUserMessage,
+    appendAssistantMessage,
     appendAssistantPlaceholder,
     updateAssistantMessage,
     resolveAssistantMessage,
@@ -81,5 +82,6 @@ export function useChat() {
     isSending,
     error,
     sendMessage,
+    appendAssistantMessage,
   };
 }

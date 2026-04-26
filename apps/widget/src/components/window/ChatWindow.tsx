@@ -23,6 +23,7 @@ type ChatWindowProps = {
   consentAccepted: boolean;
   onAcceptConsent: () => void;
   onSendMessage: (value: string) => void | Promise<void>;
+  onLeadSubmitted: () => void | Promise<void>;
   onClose: () => void;
 };
 
@@ -61,6 +62,7 @@ export function ChatWindow({
   consentAccepted,
   onAcceptConsent,
   onSendMessage,
+  onLeadSubmitted,
   onClose,
 }: ChatWindowProps) {
   const {
@@ -69,7 +71,11 @@ export function ChatWindow({
     openLeadCapture,
     closeLeadCapture,
     saveLead,
-  } = useLeadCapture();
+  } = useLeadCapture({
+    onSuccess: async () => {
+      await onLeadSubmitted();
+    },
+  });
   const contactCtaMessageId =
     leadState === "success" ? null : getContactCtaMessageId(messages);
 
