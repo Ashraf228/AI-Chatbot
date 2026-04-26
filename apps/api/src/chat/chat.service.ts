@@ -293,13 +293,10 @@ export class ChatService {
     });
 
     const context = hits
-      .map((h: VectorSearchRow, idx: number) => {
-        const src = h.source_url
-          ? `URL: ${h.source_url}`
-          : `Titel: ${h.title || 'Unbekannt'}`;
-
-        return `# Kontext ${idx + 1} (score ${Number(h.score).toFixed(3)})\n${src}\n${h.content}`;
-      })
+      .map(
+        (h: VectorSearchRow, idx: number) =>
+          `# Kontext ${idx + 1} (score ${Number(h.score).toFixed(3)})\n${h.content}`,
+      )
       .join('\n\n');
 
     const userPrompt = `
