@@ -43,7 +43,7 @@ export function useMessages(greeting: string) {
   }
 
   function appendAssistantPlaceholder() {
-    const placeholder = createMessage("assistant", "Antwort wird geladen ...", { pending: true });
+    const placeholder = createMessage("assistant", "", { pending: true });
     setMessages((current) => [...current, placeholder]);
     return placeholder.id;
   }

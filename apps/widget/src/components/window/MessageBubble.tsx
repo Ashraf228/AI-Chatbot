@@ -3,6 +3,10 @@ import type { ChatMessage } from "../../types/chat";
 export function MessageBubble({ message }: { message: ChatMessage }) {
   const isAssistant = message.role === "assistant";
 
+  if (message.pending && !message.content.trim()) {
+    return null;
+  }
+
   return (
     <div className={`ssb-message ssb-message--${message.role}`}>
       <div className="ssb-message-bubble">{message.content}</div>

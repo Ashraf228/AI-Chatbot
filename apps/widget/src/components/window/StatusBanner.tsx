@@ -9,11 +9,7 @@ export function StatusBanner({ error, isSending }: StatusBannerProps) {
   }
 
   if (isSending) {
-    return (
-      <div className="ssb-status-banner ssb-status-banner--loading">
-        Antwort wird vorbereitet und gleich eingeblendet.
-      </div>
-    );
+    return null;
   }
 
   return null;

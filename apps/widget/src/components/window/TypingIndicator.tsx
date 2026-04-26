@@ -8,7 +8,6 @@ export function TypingIndicator({ visible }: { visible: boolean }) {
   return (
     <div className="ssb-typing">
       <Spinner />
-      <span>Antwort wird vorbereitet ...</span>
     </div>
   );
 }
