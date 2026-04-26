@@ -1,8 +1,6 @@
 import { useLeadCapture } from "../../hooks/useLeadCapture";
 import type { ChatMessage } from "../../types/chat";
 import { LeadCaptureModal } from "../lead/LeadCaptureModal";
-import { LeadCapturePrompt } from "../lead/LeadCapturePrompt";
-import { LeadSuccessState } from "../lead/LeadSuccessState";
 import { ConsentBanner } from "../consent/ConsentBanner";
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
@@ -28,6 +26,27 @@ type ChatWindowProps = {
   onClose: () => void;
 };
 
+function getContactCtaMessageId(messages: ChatMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "assistant" || !message.content) {
+      continue;
+    }
+
+    if (
+      /kontakt|anfrage|termin|rueckruf|rückruf|gemeinsam anschauen|durchgehen|melden/i.test(
+        message.content,
+      )
+    ) {
+      return message.id;
+    }
+
+    return null;
+  }
+
+  return null;
+}
+
 export function ChatWindow({
   title,
   companyName,
@@ -46,12 +65,13 @@ export function ChatWindow({
 }: ChatWindowProps) {
   const {
     leadState,
-    shouldOfferLeadCapture,
     isModalOpen,
     openLeadCapture,
     closeLeadCapture,
     saveLead,
-  } = useLeadCapture(messages.length);
+  } = useLeadCapture();
+  const contactCtaMessageId =
+    leadState === "success" ? null : getContactCtaMessageId(messages);
 
   return (
     <>
@@ -74,15 +94,12 @@ export function ChatWindow({
             onSelect={onSendMessage}
           />
           <StatusBanner error={error} isSending={isSending} />
-          <MessageList messages={messages} />
+          <MessageList
+            messages={messages}
+            contactCtaMessageId={contactCtaMessageId}
+            onContactCtaClick={openLeadCapture}
+          />
           <TypingIndicator visible={isSending} />
-          {shouldOfferLeadCapture ? (
-            leadState === "success" ? (
-              <LeadSuccessState />
-            ) : (
-              <LeadCapturePrompt onOpen={openLeadCapture} />
-            )
-          ) : null}
           <Composer
             placeholder={placeholder}
             disabled={isSending || (consentRequired && !consentAccepted)}

@@ -5,15 +5,12 @@ import { useWidgetConfig } from "./useWidgetConfig";
 import { useAnalytics } from "./useAnalytics";
 import { useSessionContext } from "../app/providers/SessionProvider";
 
-export function useLeadCapture(messageCount: number) {
+export function useLeadCapture() {
   const config = useWidgetConfig();
   const { track } = useAnalytics();
   const { sessionId } = useSessionContext();
   const [state, setState] = useState<LeadSubmissionState>("idle");
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const shouldOfferLeadCapture =
-    config.leadCaptureEnabled && messageCount >= 4;
 
   async function openLeadCapture() {
     setIsModalOpen(true);
@@ -38,7 +35,6 @@ export function useLeadCapture(messageCount: number) {
 
   return {
     leadState: state,
-    shouldOfferLeadCapture,
     isModalOpen,
     openLeadCapture,
     closeLeadCapture,

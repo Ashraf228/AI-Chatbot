@@ -167,6 +167,11 @@
   color: var(--ssb-color-muted);
 }
 
+.ssb-message-cta {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
 .ssb-composer,
 .ssb-consent-banner,
 .ssb-lead-form,

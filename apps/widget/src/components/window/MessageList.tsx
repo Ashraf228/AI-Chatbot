@@ -2,7 +2,17 @@ import { useEffect, useRef } from "react";
 import type { ChatMessage } from "../../types/chat";
 import { MessageBubble } from "./MessageBubble";
 
-export function MessageList({ messages }: { messages: ChatMessage[] }) {
+type MessageListProps = {
+  messages: ChatMessage[];
+  contactCtaMessageId?: string | null;
+  onContactCtaClick?: () => void | Promise<void>;
+};
+
+export function MessageList({
+  messages,
+  contactCtaMessageId,
+  onContactCtaClick,
+}: MessageListProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -16,7 +26,12 @@ export function MessageList({ messages }: { messages: ChatMessage[] }) {
   return (
     <div ref={listRef} className="ssb-message-list">
       {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} />
+        <MessageBubble
+          key={message.id}
+          message={message}
+          showLeadLink={message.id === contactCtaMessageId}
+          onLeadLinkClick={onContactCtaClick}
+        />
       ))}
     </div>
   );
