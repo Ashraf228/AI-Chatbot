@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { SiteTabs } from "../../../components/layout/SiteTabs";
 import { Topbar } from "../../../components/layout/Topbar";
+import { decodeSiteId, encodeSiteId } from "../../../lib/site-id";
 
 export default async function SiteDetailPage({
   params,
 }: {
   params: Promise<{ siteId: string }>;
 }) {
-  const { siteId } = await params;
+  const { siteId: rawSiteId } = await params;
+  const siteId = decodeSiteId(rawSiteId);
+  const siteSlug = encodeSiteId(siteId);
 
   return (
     <div>
@@ -26,22 +29,22 @@ export default async function SiteDetailPage({
 
             <div className="dashboard-hub-grid">
               <SiteHubLink
-                href={`/sites/${siteId}/branding`}
+                href={`/sites/${siteSlug}/branding`}
                 title="Branding"
                 description="Logo, Farben, Bot-Name und Begrüßung anpassen."
               />
               <SiteHubLink
-                href={`/sites/${siteId}/widget`}
+                href={`/sites/${siteSlug}/widget`}
                 title="Widget"
                 description="Consent, Lead-Capture und Fragen pro Unterseite steuern."
               />
               <SiteHubLink
-                href={`/sites/${siteId}/knowledge`}
+                href={`/sites/${siteSlug}/knowledge`}
                 title="Knowledge"
                 description="FAQ, PDFs und Trainingsdaten für die RAG-Basis pflegen."
               />
               <SiteHubLink
-                href={`/sites/${siteId}/reports`}
+                href={`/sites/${siteSlug}/reports`}
                 title="Reports"
                 description="Empfänger, Versandfrequenz und Report-Historie prüfen."
               />

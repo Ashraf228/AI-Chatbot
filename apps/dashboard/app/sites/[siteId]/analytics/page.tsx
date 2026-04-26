@@ -1,13 +1,15 @@
 import { AnalyticsOverview } from "../../../../components/analytics/AnalyticsOverview";
 import { SiteTabs } from "../../../../components/layout/SiteTabs";
 import { Topbar } from "../../../../components/layout/Topbar";
+import { decodeSiteId } from "../../../../lib/site-id";
 
 export default async function SiteAnalyticsPage({
   params,
 }: {
   params: Promise<{ siteId: string }>;
 }) {
-  const { siteId } = await params;
+  const { siteId: rawSiteId } = await params;
+  const siteId = decodeSiteId(rawSiteId);
 
   return (
     <div>
