@@ -22,6 +22,7 @@ const defaultConfig: Omit<WidgetRuntimeConfig, "siteId" | "siteKey" | "publicKey
   theme: {
     brandColor: "#b55400",
     accentColor: "#fff0d9",
+    fontFamily: "system",
   },
   privacyUrl: "",
   suggestedQuestionsByPath: {},

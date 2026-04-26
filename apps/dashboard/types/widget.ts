@@ -4,6 +4,7 @@ export type WidgetBranding = {
   logoUrl?: string;
   brandColor?: string;
   accentColor?: string;
+  fontFamily?: string;
   welcomeMessage?: string;
   privacyUrl?: string;
 };

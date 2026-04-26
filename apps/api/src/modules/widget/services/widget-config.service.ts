@@ -9,6 +9,7 @@ type WidgetConfigRow = {
   domain: string;
   brand_color: string;
   accent_color: string;
+  font_family: string;
   welcome_message: string;
   privacy_url: string;
   is_active: boolean;
@@ -52,6 +53,7 @@ export class WidgetConfigService {
       theme: {
         brandColor: site.brandColor,
         accentColor: site.accentColor,
+        fontFamily: site.fontFamily,
       },
       suggestedQuestionsByPath:
         site.suggestedQuestionsByPath || {
@@ -75,7 +77,7 @@ export class WidgetConfigService {
     }
   > {
     const res = await this.db.query<WidgetConfigRow>(
-      `SELECT id, tenant_id, name, domain, brand_color, accent_color, welcome_message,
+      `SELECT id, tenant_id, name, domain, brand_color, accent_color, font_family, welcome_message,
               privacy_url, is_active, company_name, bot_name, logo_url, public_key,
               widget_bundle_url, consent_required, lead_capture_enabled, suggested_questions_by_path,
               system_prompt
@@ -86,8 +88,9 @@ export class WidgetConfigService {
            s.name,
            COALESCE(s.config->>'domain', s.allowed_domains[1], '') AS domain,
            COALESCE(s.config->>'brandColor', '#b55400') AS brand_color,
-           COALESCE(s.config->>'accentColor', '#fff0d9') AS accent_color,
-           COALESCE(s.config->>'welcomeMessage', 'Hi! Wie kann ich helfen?') AS welcome_message,
+      COALESCE(s.config->>'accentColor', '#fff0d9') AS accent_color,
+      COALESCE(s.config->>'fontFamily', 'system') AS font_family,
+      COALESCE(s.config->>'welcomeMessage', 'Hi! Wie kann ich helfen?') AS welcome_message,
            COALESCE(s.config->>'privacyUrl', '') AS privacy_url,
            COALESCE((s.config->>'isActive')::boolean, true) AS is_active,
            COALESCE(s.config->>'companyName', s.name) AS company_name,
@@ -125,6 +128,7 @@ export class WidgetConfigService {
       logoUrl: row.logo_url,
       brandColor: row.brand_color,
       accentColor: row.accent_color,
+      fontFamily: row.font_family,
       welcomeMessage: row.welcome_message,
       privacyUrl: row.privacy_url,
       isActive: row.is_active,

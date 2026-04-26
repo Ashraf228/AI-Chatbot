@@ -44,6 +44,7 @@ function hexToRgbTriplet(color: string) {
 function injectThemeVariables(target: ShadowRoot, config: ReturnType<typeof loadConfig>) {
   const brandColor = config.theme?.brandColor || "#b55400";
   const accentColor = config.theme?.accentColor || "#ffe2c4";
+  const fontStack = resolveWidgetFontStack(config.theme?.fontFamily);
   const primaryRgb = hexToRgbTriplet(brandColor);
 
   const themeTag = document.createElement("style");
@@ -54,9 +55,32 @@ function injectThemeVariables(target: ShadowRoot, config: ReturnType<typeof load
       --ssb-color-primary-soft: ${accentColor};
       --ssb-color-primary-rgb: ${primaryRgb};
       --ssb-color-panel: ${accentColor};
+      --ssb-font-sans: ${fontStack};
     }
   `;
   target.appendChild(themeTag);
+}
+
+function resolveWidgetFontStack(fontFamily?: string) {
+  switch (fontFamily) {
+    case "inter":
+      return '"Inter", "Helvetica Neue", Arial, sans-serif';
+    case "avenir":
+      return '"Avenir Next", "Segoe UI", Arial, sans-serif';
+    case "georgia":
+      return 'Georgia, "Times New Roman", serif';
+    case "times":
+      return '"Times New Roman", Times, serif';
+    case "trebuchet":
+      return '"Trebuchet MS", "Segoe UI", sans-serif';
+    case "verdana":
+      return "Verdana, Geneva, sans-serif";
+    case "monospace":
+      return '"SFMono-Regular", Consolas, "Liberation Mono", monospace';
+    case "system":
+    default:
+      return '"Arial", "Helvetica Neue", sans-serif';
+  }
 }
 
 export function mountWidget(options?: WidgetMountOptions) {

@@ -1,9 +1,12 @@
+import { resolveBrandingFontStack } from "../../lib/branding-fonts";
+
 type WidgetPreviewProps = {
   companyName: string;
   botName: string;
   logoUrl: string;
   brandColor: string;
   accentColor: string;
+  fontFamily: string;
   welcomeMessage: string;
 };
 
@@ -12,7 +15,10 @@ export function WidgetPreview(props: WidgetPreviewProps) {
   const displayBotName = props.botName || "Service-Assistent";
 
   return (
-    <div className="dashboard-preview-card">
+    <div
+      className="dashboard-preview-card"
+      style={{ fontFamily: resolveBrandingFontStack(props.fontFamily) }}
+    >
       <div className="dashboard-preview-header">
         <div className="dashboard-preview-identity">
           {props.logoUrl ? (

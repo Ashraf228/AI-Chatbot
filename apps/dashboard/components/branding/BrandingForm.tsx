@@ -8,6 +8,8 @@ import { Button } from "../shared/Button";
 import { ErrorState } from "../shared/ErrorState";
 import { Input } from "../shared/Input";
 import { LoadingState } from "../shared/LoadingState";
+import { Select } from "../shared/Select";
+import { BRANDING_FONT_OPTIONS } from "../../lib/branding-fonts";
 
 type BrandingFormProps = {
   siteId: string;
@@ -19,6 +21,7 @@ type SiteData = {
   logoUrl: string;
   brandColor: string;
   accentColor: string;
+  fontFamily: string;
   welcomeMessage: string;
   privacyUrl: string;
 };
@@ -30,6 +33,7 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
     logoUrl: "",
     brandColor: "#b55400",
     accentColor: "#fff0d9",
+    fontFamily: "system",
     welcomeMessage: "",
     privacyUrl: "",
   });
@@ -57,6 +61,7 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
         logoUrl: data.logoUrl || "",
         brandColor: data.brandColor || "#b55400",
         accentColor: data.accentColor || "#fff0d9",
+        fontFamily: data.fontFamily || "system",
         welcomeMessage: data.welcomeMessage || "",
         privacyUrl: data.privacyUrl || "",
       });
@@ -121,6 +126,19 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
             value={form.accentColor}
             onChange={(value) => setForm({ ...form, accentColor: value })}
           />
+          <label className="dashboard-field">
+            <span className="dashboard-field-label">Schriftart</span>
+            <Select
+              value={form.fontFamily}
+              onChange={(e) => setForm({ ...form, fontFamily: e.target.value })}
+            >
+              {BRANDING_FONT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </label>
           <label className="dashboard-field">
             <span className="dashboard-field-label">Willkommensnachricht</span>
             <textarea

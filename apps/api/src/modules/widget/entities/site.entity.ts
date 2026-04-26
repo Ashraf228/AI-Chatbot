@@ -8,6 +8,7 @@ export class SiteEntity {
   logoUrl?: string;
   brandColor!: string;
   accentColor!: string;
+  fontFamily!: string;
   welcomeMessage!: string;
   privacyUrl!: string;
   isActive!: boolean;

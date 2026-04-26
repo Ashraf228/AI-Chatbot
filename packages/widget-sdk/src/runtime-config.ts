@@ -3,6 +3,7 @@ export type WidgetPosition = "bottom-right" | "bottom-left";
 export type WidgetTheme = {
   brandColor?: string;
   accentColor?: string;
+  fontFamily?: string;
 };
 
 export type WidgetRuntimeConfig = {

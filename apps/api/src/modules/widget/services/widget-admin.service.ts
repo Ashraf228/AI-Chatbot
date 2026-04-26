@@ -9,6 +9,7 @@ type SiteConfig = {
   domain?: string;
   brandColor?: string;
   accentColor?: string;
+  fontFamily?: string;
   welcomeMessage?: string;
   privacyUrl?: string;
   isActive?: boolean;
@@ -127,6 +128,7 @@ export class WidgetAdminService {
       domain: config.domain || row.allowed_domains?.[0] || '',
       brandColor: config.brandColor || '#b55400',
       accentColor: config.accentColor || '#fff0d9',
+      fontFamily: config.fontFamily || 'system',
       welcomeMessage: config.welcomeMessage || 'Hi! Wie kann ich helfen?',
       privacyUrl: config.privacyUrl || '',
       isActive: config.isActive ?? true,
@@ -150,6 +152,7 @@ export class WidgetAdminService {
       logoUrl?: string;
       brandColor?: string;
       accentColor?: string;
+      fontFamily?: string;
       welcomeMessage?: string;
       privacyUrl?: string;
     },
@@ -161,6 +164,7 @@ export class WidgetAdminService {
       logoUrl: payload.logoUrl ?? site.logoUrl,
       brandColor: payload.brandColor ?? site.brandColor,
       accentColor: payload.accentColor ?? site.accentColor,
+      fontFamily: payload.fontFamily ?? site.fontFamily,
       welcomeMessage: payload.welcomeMessage ?? site.welcomeMessage,
       privacyUrl: payload.privacyUrl ?? site.privacyUrl,
     };

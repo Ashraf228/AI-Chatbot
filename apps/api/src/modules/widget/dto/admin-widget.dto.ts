@@ -14,6 +14,16 @@ import {
 } from 'class-validator';
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const BRANDING_FONT_OPTIONS = [
+  'system',
+  'inter',
+  'avenir',
+  'georgia',
+  'times',
+  'trebuchet',
+  'verdana',
+  'monospace',
+] as const;
 
 function normalizeOptionalString(value: unknown) {
   if (typeof value !== 'string') {
@@ -70,6 +80,10 @@ export class UpdateBrandingDto {
   @IsOptional()
   @Matches(HEX_COLOR_PATTERN, { message: 'accentColor must be a valid hex color' })
   accentColor?: string;
+
+  @IsOptional()
+  @IsIn(BRANDING_FONT_OPTIONS)
+  fontFamily?: (typeof BRANDING_FONT_OPTIONS)[number];
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))
