@@ -1,5 +1,14 @@
+import { forwardRef } from "react";
 import type { InputHTMLAttributes } from "react";
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`ssb-input ${props.className ?? ""}`.trim()} />;
-}
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
+  function Input(props, ref) {
+    return (
+      <input
+        {...props}
+        ref={ref}
+        className={`ssb-input ${props.className ?? ""}`.trim()}
+      />
+    );
+  }
+);
