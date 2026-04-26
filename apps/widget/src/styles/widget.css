@@ -72,6 +72,10 @@
   align-items: center;
 }
 
+.ssb-chat-header__copy {
+  min-width: 0;
+}
+
 .ssb-chat-avatar {
   width: 42px;
   height: 42px;

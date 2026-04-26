@@ -15,9 +15,11 @@ export function ChatHeader({ title, companyName, botName, logoUrl, onClose }: Ch
         <div className="ssb-chat-avatar" aria-hidden="true">
           {logoUrl ? <img src={logoUrl} alt="" /> : <span>{(botName || title).slice(0, 1)}</span>}
         </div>
-        <div className="ssb-chat-title">{title}</div>
-        <div className="ssb-chat-subtitle">
-          {(botName || "Service-Assistent") + " • " + (companyName || "KI-gestuetzter Support")}
+        <div className="ssb-chat-header__copy">
+          <div className="ssb-chat-title">{title}</div>
+          <div className="ssb-chat-subtitle">
+            {(botName || "Service-Assistent") + " • " + (companyName || "KI-gestuetzter Support")}
+          </div>
         </div>
       </div>
       <Button type="button" variant="ghost" onClick={onClose} aria-label="Chat schliessen">
