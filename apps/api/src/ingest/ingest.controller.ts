@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Patch,
   Param,
   Post,
   Query,
@@ -43,6 +44,16 @@ class IngestFaqDto {
   items!: FaqItemDto[];
 }
 
+class UpdateFaqItemDto {
+  @IsString()
+  @MaxLength(500)
+  q!: string;
+
+  @IsString()
+  @MaxLength(4000)
+  a!: string;
+}
+
 @UseGuards(AdminKeyGuard)
 @Controller('admin/ingest')
 export class IngestController {
@@ -56,6 +67,11 @@ export class IngestController {
   @Delete('knowledge/:documentId')
   async deleteKnowledge(@Param('documentId') documentId: string) {
     return this.ingest.deleteKnowledge(documentId);
+  }
+
+  @Patch('faq/:chunkId')
+  async updateFaqItem(@Param('chunkId') chunkId: string, @Body() body: UpdateFaqItemDto) {
+    return this.ingest.updateFaqItem(chunkId, body.q, body.a);
   }
 
   // FAQ import: { siteId, title, items: [{q,a}] }

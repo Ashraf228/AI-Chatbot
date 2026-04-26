@@ -25,8 +25,15 @@ type KnowledgeDocumentRow = {
 
 type FaqChunkRow = {
   id: string;
+  document_id: string;
   content: string;
   created_at: string;
+};
+
+type FaqChunkDetailRow = {
+  id: string;
+  site_id: string;
+  metadata: Record<string, unknown> | null;
 };
 
 @Injectable()
@@ -222,7 +229,10 @@ export class IngestService {
     );
 
     const faqDocs = docs.rows.filter((row) => row.type === 'faq');
-    const faqItemsByDoc = new Map<string, Array<{ question: string; answer: string }>>();
+    const faqItemsByDoc = new Map<
+      string,
+      Array<{ id: string; question: string; answer: string }>
+    >();
 
     if (faqDocs.length > 0) {
       const faqChunks = await this.db.query<FaqChunkRow>(
@@ -235,11 +245,15 @@ export class IngestService {
         [siteId],
       );
 
-      for (const chunk of faqChunks.rows as Array<FaqChunkRow & { document_id: string }>) {
+      for (const chunk of faqChunks.rows) {
         const parsed = parseFaqChunk(chunk.content);
         const items = faqItemsByDoc.get(chunk.document_id) || [];
         if (parsed) {
-          items.push(parsed);
+          items.push({
+            id: chunk.id,
+            question: parsed.question,
+            answer: parsed.answer,
+          });
         }
         faqItemsByDoc.set(chunk.document_id, items);
       }
@@ -280,6 +294,71 @@ export class IngestService {
       ok: true,
       deletedId: documentId,
       siteId: row.site_id,
+    };
+  }
+
+  async updateFaqItem(chunkId: string, question: string, answer: string) {
+    if (!chunkId?.trim()) {
+      throw new BadRequestException('chunkId missing');
+    }
+
+    const q = question?.trim();
+    const a = answer?.trim();
+
+    if (!q || !a) {
+      throw new BadRequestException('Question and answer are required');
+    }
+
+    const current = await this.db.query<FaqChunkDetailRow>(
+      `SELECT c.id, c.site_id, c.metadata
+       FROM chunks c
+       JOIN documents d ON d.id = c.document_id
+       WHERE c.id = $1
+         AND d.type = 'faq'
+       LIMIT 1`,
+      [chunkId],
+    );
+
+    const row = current.rows[0];
+    if (!row) {
+      throw new BadRequestException('Invalid FAQ item id');
+    }
+
+    const content = `Frage: ${q}\nAntwort: ${a}`.trim();
+
+    let embedding: number[];
+    try {
+      embedding = await this.embedder.embed(content);
+    } catch (error) {
+      console.error('Failed to re-embed FAQ item', error);
+      throw new BadGatewayException('Embedding request failed');
+    }
+
+    const metadata = {
+      ...(row.metadata || {}),
+      kind: 'faq',
+      q,
+    };
+
+    try {
+      await this.vector.updateChunk({
+        id: chunkId,
+        content,
+        metadata,
+        contentHash: sha256(content),
+        embedding,
+      });
+    } catch (error) {
+      console.error('Failed to update FAQ chunk', error);
+      throw new InternalServerErrorException('Failed to update FAQ chunk');
+    }
+
+    return {
+      ok: true,
+      id: chunkId,
+      siteId: row.site_id,
+      question: q,
+      answer: a,
     };
   }
 }

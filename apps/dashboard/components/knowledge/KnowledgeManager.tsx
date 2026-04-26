@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "../shared/Button";
 import { EmptyState } from "../shared/EmptyState";
 import { ErrorState } from "../shared/ErrorState";
+import { Input } from "../shared/Input";
 
 type KnowledgeItem = {
   id: string;
@@ -13,6 +14,7 @@ type KnowledgeItem = {
   createdAt: string;
   chunkCount: number;
   faqItems: Array<{
+    id: string;
     question: string;
     answer: string;
   }>;
@@ -23,6 +25,10 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
+  const [faqQuestionDraft, setFaqQuestionDraft] = useState("");
+  const [faqAnswerDraft, setFaqAnswerDraft] = useState("");
+  const [savingFaqId, setSavingFaqId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -60,6 +66,59 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
     }
     setItems((current) => current.filter((item) => item.id !== documentId));
     setDeletingId(null);
+  }
+
+  function startEditFaq(id: string, question: string, answer: string) {
+    setEditingFaqId(id);
+    setFaqQuestionDraft(question);
+    setFaqAnswerDraft(answer);
+    setError(null);
+  }
+
+  function cancelEditFaq() {
+    setEditingFaqId(null);
+    setFaqQuestionDraft("");
+    setFaqAnswerDraft("");
+  }
+
+  async function saveFaq(itemId: string, documentId: string) {
+    setSavingFaqId(itemId);
+    setError(null);
+    const res = await fetch(`/api/knowledge/faq/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        q: faqQuestionDraft,
+        a: faqAnswerDraft,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data?.message || "FAQ konnte nicht gespeichert werden.");
+      setSavingFaqId(null);
+      return;
+    }
+
+    setItems((current) =>
+      current.map((item) =>
+        item.id !== documentId
+          ? item
+          : {
+              ...item,
+              faqItems: item.faqItems.map((faq) =>
+                faq.id === itemId
+                  ? {
+                      ...faq,
+                      question: faqQuestionDraft,
+                      answer: faqAnswerDraft,
+                    }
+                  : faq,
+              ),
+            },
+      ),
+    );
+    setSavingFaqId(null);
+    cancelEditFaq();
   }
 
   const pdfItems = items.filter((item) => item.type === "pdf");
@@ -128,11 +187,49 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
                 {item.faqItems.length > 0 ? (
                   <div className="dashboard-stack dashboard-stack--sm" style={{ marginTop: 14 }}>
                     {item.faqItems.map((faq, index) => (
-                      <div key={`${item.id}-${index}`}>
-                        <strong>{faq.question}</strong>
-                        <p className="dashboard-copy" style={{ marginBottom: 0, marginTop: 4 }}>
-                          {faq.answer}
-                        </p>
+                      <div key={faq.id} className="dashboard-card">
+                        {editingFaqId === faq.id ? (
+                          <div className="dashboard-stack dashboard-stack--sm">
+                            <Input
+                              value={faqQuestionDraft}
+                              onChange={(e) => setFaqQuestionDraft(e.target.value)}
+                              placeholder="Frage"
+                            />
+                            <textarea
+                              className="dashboard-textarea"
+                              value={faqAnswerDraft}
+                              onChange={(e) => setFaqAnswerDraft(e.target.value)}
+                              placeholder="Antwort"
+                              style={{ minHeight: 120 }}
+                            />
+                            <div className="dashboard-inline" style={{ gap: 10 }}>
+                              <Button
+                                onClick={() => saveFaq(faq.id, item.id)}
+                                disabled={savingFaqId === faq.id}
+                              >
+                                {savingFaqId === faq.id ? "Speichert..." : "Speichern"}
+                              </Button>
+                              <Button variant="ghost" onClick={cancelEditFaq}>
+                                Abbrechen
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="dashboard-inline" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                            <div>
+                              <strong>{faq.question}</strong>
+                              <p className="dashboard-copy" style={{ marginBottom: 0, marginTop: 4 }}>
+                                {faq.answer}
+                              </p>
+                            </div>
+                            <Button
+                              variant="secondary"
+                              onClick={() => startEditFaq(faq.id, faq.question, faq.answer)}
+                            >
+                              Bearbeiten
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

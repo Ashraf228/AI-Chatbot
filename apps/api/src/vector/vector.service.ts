@@ -54,6 +54,32 @@ export class VectorService {
     return { id: params.id, skipped: false };
   }
 
+  async updateChunk(params: {
+    id: string;
+    content: string;
+    metadata: VectorChunkMetadata;
+    contentHash: string;
+    embedding: number[];
+  }) {
+    await this.db.query(
+      `UPDATE chunks
+       SET content = $2,
+           metadata = $3,
+           content_hash = $4,
+           embedding = $5::vector
+       WHERE id = $1`,
+      [
+        params.id,
+        params.content,
+        params.metadata,
+        params.contentHash,
+        this.toPgVectorLiteral(params.embedding),
+      ],
+    );
+
+    return { id: params.id, updated: true };
+  }
+
   async search(
     tenantId: string,
     siteId: string,
