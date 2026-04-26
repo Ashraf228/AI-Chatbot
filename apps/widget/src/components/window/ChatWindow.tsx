@@ -54,30 +54,32 @@ export function ChatWindow({
         logoUrl={logoUrl}
         onClose={onClose}
       />
-      <ConsentBanner
-        visible={consentRequired && !consentAccepted}
-        onAccept={onAcceptConsent}
-      />
-      <SuggestedQuestions
-        questions={suggestedQuestions}
-        disabled={isSending || (consentRequired && !consentAccepted)}
-        onSelect={onSendMessage}
-      />
-      <StatusBanner error={error} isSending={isSending} />
-      <MessageList messages={messages} />
-      <TypingIndicator visible={isSending} />
-      {shouldShowLeadForm ? (
-        leadState === "success" ? (
-          <LeadSuccessState />
-        ) : (
-          <LeadCaptureForm state={leadState} onSubmit={saveLead} />
-        )
-      ) : null}
-      <Composer
-        placeholder={placeholder}
-        disabled={isSending || (consentRequired && !consentAccepted)}
-        onSubmit={onSendMessage}
-      />
+      <div className="ssb-chat-body">
+        <ConsentBanner
+          visible={consentRequired && !consentAccepted}
+          onAccept={onAcceptConsent}
+        />
+        <SuggestedQuestions
+          questions={suggestedQuestions}
+          disabled={isSending || (consentRequired && !consentAccepted)}
+          onSelect={onSendMessage}
+        />
+        <StatusBanner error={error} isSending={isSending} />
+        <MessageList messages={messages} />
+        <TypingIndicator visible={isSending} />
+        {shouldShowLeadForm ? (
+          leadState === "success" ? (
+            <LeadSuccessState />
+          ) : (
+            <LeadCaptureForm state={leadState} onSubmit={saveLead} />
+          )
+        ) : null}
+        <Composer
+          placeholder={placeholder}
+          disabled={isSending || (consentRequired && !consentAccepted)}
+          onSubmit={onSendMessage}
+        />
+      </div>
     </div>
   );
 }

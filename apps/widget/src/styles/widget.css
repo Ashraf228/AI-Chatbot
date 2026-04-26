@@ -44,9 +44,9 @@
 
 .ssb-chat-window {
   width: min(360px, calc(100vw - 32px));
-  max-height: min(640px, calc(100vh - 100px));
-  display: grid;
-  grid-template-rows: auto auto auto auto minmax(320px, 1fr) auto auto auto;
+  height: min(640px, calc(100vh - 100px));
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border-radius: 28px;
   background: linear-gradient(180deg, #fffaf1 0%, #ffffff 100%);
@@ -54,6 +54,13 @@
   box-shadow: var(--ssb-shadow-lg);
   transform-origin: bottom right;
   animation: ssb-scale-in 240ms ease;
+}
+
+.ssb-chat-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
 }
 
 .ssb-chat-header {
@@ -108,8 +115,10 @@
 }
 
 .ssb-message-list {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  padding: 16px 16px 42px;
+  padding: 16px;
   background:
     radial-gradient(circle at top right, rgba(255, 212, 164, 0.3), transparent 35%),
     linear-gradient(180deg, rgba(255, 249, 240, 0.8), rgba(255, 255, 255, 0.95));
