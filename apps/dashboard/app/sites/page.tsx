@@ -55,6 +55,9 @@ export default function SitesPage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptSaving, setPromptSaving] = useState(false);
   const [loaderUrl, setLoaderUrl] = useState(
     process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js"
   );
@@ -96,6 +99,34 @@ export default function SitesPage() {
 
     return `<script src="${loaderUrl}" data-site-key="${selectedSite.id}" defer></script>`;
   }, [loaderUrl, selectedSite]);
+
+  useEffect(() => {
+    async function loadSelectedSiteConfig() {
+      if (!selectedSiteId) {
+        setSystemPrompt("");
+        return;
+      }
+
+      setPromptLoading(true);
+
+      try {
+        const r = await fetch(`/api/widget/sites/${selectedSiteId}`, { cache: "no-store" });
+        const data = await r.json().catch(() => ({}));
+
+        if (!r.ok) {
+          setErr(data?.message || "System Prompt konnte nicht geladen werden.");
+          setSystemPrompt("");
+          return;
+        }
+
+        setSystemPrompt(data.systemPrompt || "");
+      } finally {
+        setPromptLoading(false);
+      }
+    }
+
+    loadSelectedSiteConfig();
+  }, [selectedSiteId]);
 
   async function createSite(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -151,6 +182,38 @@ export default function SitesPage() {
       }, 2000);
     } catch {
       setErr(`${label} konnte nicht kopiert werden.`);
+    }
+  }
+
+  async function saveSystemPrompt() {
+    if (!selectedSite) return;
+
+    setPromptSaving(true);
+    setErr(null);
+    setMsg(null);
+
+    try {
+      const r = await fetch(`/api/widget/config/${selectedSite.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemPrompt,
+        }),
+      });
+
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok) {
+        setErr(data?.message || "System Prompt konnte nicht gespeichert werden.");
+        return;
+      }
+
+      setSystemPrompt(data.systemPrompt || systemPrompt);
+      setMsg("System Prompt gespeichert.");
+    } finally {
+      setPromptSaving(false);
     }
   }
 
@@ -231,6 +294,40 @@ export default function SitesPage() {
                         copied={copied}
                         onCopy={copyText}
                       />
+
+                      <div className="dashboard-card dashboard-stack dashboard-stack--sm">
+                        <div>
+                          <h3 className="dashboard-card-title dashboard-card-title--sm">
+                            Kunden-Systemprompt
+                          </h3>
+                          <p className="dashboard-copy dashboard-copy--muted">
+                            Dieser Prompt gilt nur für den ausgewählten Kunden. Leer lassen =
+                            globaler Standardprompt.
+                          </p>
+                        </div>
+
+                        <textarea
+                          className="dashboard-textarea dashboard-mono"
+                          value={systemPrompt}
+                          onChange={(e) => setSystemPrompt(e.target.value)}
+                          placeholder="Optionaler kundenspezifischer Systemprompt"
+                          style={{ minHeight: 220 }}
+                          disabled={promptLoading || promptSaving}
+                        />
+
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={saveSystemPrompt}
+                          disabled={promptLoading || promptSaving}
+                        >
+                          {promptLoading
+                            ? "Lade..."
+                            : promptSaving
+                              ? "Speichert..."
+                              : "System Prompt speichern"}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </>
