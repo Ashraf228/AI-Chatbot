@@ -69,11 +69,13 @@ export function WidgetShell() {
           onClose={closeWidget}
         />
       ) : null}
-      <ChatLauncher
-        label={config.buttonText}
-        unreadCount={unreadCount}
-        onClick={isOpen ? closeWidget : openWidget}
-      />
+      {!isOpen ? (
+        <ChatLauncher
+          label={config.buttonText}
+          unreadCount={unreadCount}
+          onClick={openWidget}
+        />
+      ) : null}
     </div>
   );
 }
