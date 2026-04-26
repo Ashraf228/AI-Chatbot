@@ -5,6 +5,7 @@ export type WidgetEventName =
   | "chat_started"
   | "message_sent"
   | "message_received"
+  | "lead_modal_opened"
   | "lead_submitted"
   | "consent_accepted";
 

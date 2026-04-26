@@ -10,15 +10,26 @@ export function useLeadCapture(messageCount: number) {
   const { track } = useAnalytics();
   const { sessionId } = useSessionContext();
   const [state, setState] = useState<LeadSubmissionState>("idle");
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const shouldShowLeadForm =
-    config.leadCaptureEnabled && messageCount >= 4 && state !== "success";
+  const shouldOfferLeadCapture =
+    config.leadCaptureEnabled && messageCount >= 4;
+
+  async function openLeadCapture() {
+    setIsModalOpen(true);
+    await track("lead_modal_opened");
+  }
+
+  function closeLeadCapture() {
+    setIsModalOpen(false);
+  }
 
   async function saveLead(lead: LeadPayload) {
     try {
       setState("submitting");
       await submitLead(config, sessionId, lead);
       setState("success");
+      setIsModalOpen(false);
       await track("lead_submitted", { email: lead.email });
     } catch {
       setState("error");
@@ -27,7 +38,10 @@ export function useLeadCapture(messageCount: number) {
 
   return {
     leadState: state,
-    shouldShowLeadForm,
+    shouldOfferLeadCapture,
+    isModalOpen,
+    openLeadCapture,
+    closeLeadCapture,
     saveLead,
   };
 }

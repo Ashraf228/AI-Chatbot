@@ -14,6 +14,8 @@ function mapEventType(name: WidgetEvent["name"]) {
       return "message_sent";
     case "message_received":
       return "message_received";
+    case "lead_modal_opened":
+      return "lead_modal_opened";
     case "lead_submitted":
       return "lead_submitted";
     case "consent_accepted":

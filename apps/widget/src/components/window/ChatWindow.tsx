@@ -1,6 +1,7 @@
 import { useLeadCapture } from "../../hooks/useLeadCapture";
 import type { ChatMessage } from "../../types/chat";
-import { LeadCaptureForm } from "../lead/LeadCaptureForm";
+import { LeadCaptureModal } from "../lead/LeadCaptureModal";
+import { LeadCapturePrompt } from "../lead/LeadCapturePrompt";
 import { LeadSuccessState } from "../lead/LeadSuccessState";
 import { ConsentBanner } from "../consent/ConsentBanner";
 import { ChatHeader } from "./ChatHeader";
@@ -43,43 +44,58 @@ export function ChatWindow({
   onSendMessage,
   onClose,
 }: ChatWindowProps) {
-  const { leadState, shouldShowLeadForm, saveLead } = useLeadCapture(messages.length);
+  const {
+    leadState,
+    shouldOfferLeadCapture,
+    isModalOpen,
+    openLeadCapture,
+    closeLeadCapture,
+    saveLead,
+  } = useLeadCapture(messages.length);
 
   return (
-    <div className="ssb-chat-window">
-      <ChatHeader
-        title={title}
-        companyName={companyName}
-        botName={botName}
-        logoUrl={logoUrl}
-        onClose={onClose}
-      />
-      <div className="ssb-chat-body">
-        <ConsentBanner
-          visible={consentRequired && !consentAccepted}
-          onAccept={onAcceptConsent}
+    <>
+      <div className="ssb-chat-window">
+        <ChatHeader
+          title={title}
+          companyName={companyName}
+          botName={botName}
+          logoUrl={logoUrl}
+          onClose={onClose}
         />
-        <SuggestedQuestions
-          questions={suggestedQuestions}
-          disabled={isSending || (consentRequired && !consentAccepted)}
-          onSelect={onSendMessage}
-        />
-        <StatusBanner error={error} isSending={isSending} />
-        <MessageList messages={messages} />
-        <TypingIndicator visible={isSending} />
-        {shouldShowLeadForm ? (
-          leadState === "success" ? (
-            <LeadSuccessState />
-          ) : (
-            <LeadCaptureForm state={leadState} onSubmit={saveLead} />
-          )
-        ) : null}
-        <Composer
-          placeholder={placeholder}
-          disabled={isSending || (consentRequired && !consentAccepted)}
-          onSubmit={onSendMessage}
-        />
+        <div className="ssb-chat-body">
+          <ConsentBanner
+            visible={consentRequired && !consentAccepted}
+            onAccept={onAcceptConsent}
+          />
+          <SuggestedQuestions
+            questions={suggestedQuestions}
+            disabled={isSending || (consentRequired && !consentAccepted)}
+            onSelect={onSendMessage}
+          />
+          <StatusBanner error={error} isSending={isSending} />
+          <MessageList messages={messages} />
+          <TypingIndicator visible={isSending} />
+          {shouldOfferLeadCapture ? (
+            leadState === "success" ? (
+              <LeadSuccessState />
+            ) : (
+              <LeadCapturePrompt onOpen={openLeadCapture} />
+            )
+          ) : null}
+          <Composer
+            placeholder={placeholder}
+            disabled={isSending || (consentRequired && !consentAccepted)}
+            onSubmit={onSendMessage}
+          />
+        </div>
       </div>
-    </div>
+      <LeadCaptureModal
+        open={isModalOpen}
+        state={leadState}
+        onClose={closeLeadCapture}
+        onSubmit={saveLead}
+      />
+    </>
   );
 }
