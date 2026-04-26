@@ -159,7 +159,7 @@ ${context || '(kein Kontext gefunden)'}
     let fullAnswer = '';
 
     try {
-      await this.llmService.streamAnswer(buildSystemPrompt(), userPrompt, async (chunk) => {
+      await this.llmService.streamAnswer(buildSystemPrompt(site.systemPrompt), userPrompt, async (chunk) => {
         const safeChunk = sanitizeOutput(chunk);
         fullAnswer += safeChunk;
         writeEvent({ type: 'chunk', delta: safeChunk });

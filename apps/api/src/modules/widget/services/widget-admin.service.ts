@@ -17,6 +17,7 @@ type SiteConfig = {
   consentRequired?: boolean;
   leadCaptureEnabled?: boolean;
   suggestedQuestionsByPath?: Record<string, string[]>;
+  systemPrompt?: string;
 };
 
 type SiteRow = {
@@ -131,6 +132,7 @@ export class WidgetAdminService {
       consentRequired: config.consentRequired ?? true,
       leadCaptureEnabled: config.leadCaptureEnabled ?? true,
       suggestedQuestionsByPath: config.suggestedQuestionsByPath || {},
+      systemPrompt: config.systemPrompt || '',
       createdAt: row.created_at,
     };
   }
@@ -178,6 +180,7 @@ export class WidgetAdminService {
       consentRequired?: boolean;
       leadCaptureEnabled?: boolean;
       suggestedQuestionsByPath?: Record<string, string[]>;
+      systemPrompt?: string;
       allowedDomains?: string[];
     },
   ) {
@@ -198,6 +201,7 @@ export class WidgetAdminService {
       leadCaptureEnabled: payload.leadCaptureEnabled ?? site.leadCaptureEnabled,
       suggestedQuestionsByPath:
         payload.suggestedQuestionsByPath ?? site.suggestedQuestionsByPath,
+      systemPrompt: payload.systemPrompt ?? site.systemPrompt,
     };
 
     await this.db.query(

@@ -8,7 +8,7 @@ import { VectorSearchRow, VectorService } from '../vector/vector.service';
 import { LlmService } from '../vector/llm.service';
 import { SitesService } from '../sites/sites.service';
 import { isDomainAllowed } from '../utils/cors';
-import { buildSystemPrompt } from './prompt';
+import { buildSystemPrompt, getSiteSystemPrompt } from './prompt';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { PrismaService } from '../db/prisma.service';
 import { redactPII } from '../utils/pii';
@@ -312,7 +312,10 @@ ${context || '(kein Kontext gefunden)'}
 
     // 12) LLM Call
     const llmStart = Date.now();
-    const llmRes = await this.llm.answer(buildSystemPrompt(), userPrompt);
+    const llmRes = await this.llm.answer(
+      buildSystemPrompt(getSiteSystemPrompt(site.config)),
+      userPrompt,
+    );
     const llmTime = Date.now() - llmStart;
 
     // 13) Kosten schätzen

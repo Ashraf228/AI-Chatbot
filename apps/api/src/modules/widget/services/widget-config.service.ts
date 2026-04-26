@@ -20,6 +20,7 @@ type WidgetConfigRow = {
   consent_required: boolean;
   lead_capture_enabled: boolean;
   suggested_questions_by_path: Record<string, string[]>;
+  system_prompt: string;
 };
 
 @Injectable()
@@ -70,12 +71,14 @@ export class WidgetConfigService {
       consentRequired: boolean;
       leadCaptureEnabled: boolean;
       suggestedQuestionsByPath?: Record<string, string[]>;
+      systemPrompt?: string;
     }
   > {
     const res = await this.db.query<WidgetConfigRow>(
       `SELECT id, tenant_id, name, domain, brand_color, accent_color, welcome_message,
               privacy_url, is_active, company_name, bot_name, logo_url, public_key,
-              widget_bundle_url, consent_required, lead_capture_enabled, suggested_questions_by_path
+              widget_bundle_url, consent_required, lead_capture_enabled, suggested_questions_by_path,
+              system_prompt
        FROM (
          SELECT
            s.id,
@@ -94,7 +97,8 @@ export class WidgetConfigService {
            COALESCE(s.config->>'widgetBundleUrl', '') AS widget_bundle_url,
            COALESCE((s.config->>'consentRequired')::boolean, true) AS consent_required,
            COALESCE((s.config->>'leadCaptureEnabled')::boolean, true) AS lead_capture_enabled,
-           COALESCE(s.config->'suggestedQuestionsByPath', '{}'::jsonb) AS suggested_questions_by_path
+           COALESCE(s.config->'suggestedQuestionsByPath', '{}'::jsonb) AS suggested_questions_by_path,
+           COALESCE(s.config->>'systemPrompt', '') AS system_prompt
          FROM sites s
          WHERE COALESCE(s.config->>'siteKey', s.id) = $1
          LIMIT 1
@@ -130,6 +134,7 @@ export class WidgetConfigService {
       consentRequired: row.consent_required,
       leadCaptureEnabled: row.lead_capture_enabled,
       suggestedQuestionsByPath: row.suggested_questions_by_path,
+      systemPrompt: row.system_prompt || undefined,
     };
   }
 }

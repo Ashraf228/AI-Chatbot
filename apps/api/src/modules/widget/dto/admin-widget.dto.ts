@@ -110,6 +110,11 @@ export class UpdateWidgetConfigDto {
   @Transform(({ value }) => normalizeSuggestedQuestions(value))
   @IsObject()
   suggestedQuestionsByPath?: Record<string, string[]>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(12000)
+  systemPrompt?: string;
 }
 
 export class ListLeadsQueryDto {

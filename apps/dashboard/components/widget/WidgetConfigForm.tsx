@@ -18,6 +18,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     siteKey: "",
     domain: "",
     widgetBundleUrl: "",
+    systemPrompt: "",
     isActive: true,
     consentRequired: true,
     leadCaptureEnabled: true,
@@ -45,6 +46,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         siteKey: data.siteKey || siteId,
         domain: data.domain || "",
         widgetBundleUrl: data.widgetBundleUrl || "",
+        systemPrompt: data.systemPrompt || "",
         isActive: data.isActive ?? true,
         consentRequired: data.consentRequired ?? true,
         leadCaptureEnabled: data.leadCaptureEnabled ?? true,
@@ -75,6 +77,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
       siteKey: form.siteKey,
       domain: form.domain,
       widgetBundleUrl: form.widgetBundleUrl,
+      systemPrompt: form.systemPrompt.trim() || undefined,
       isActive: form.isActive,
       consentRequired: form.consentRequired,
       leadCaptureEnabled: form.leadCaptureEnabled,
@@ -122,6 +125,16 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
           value={form.widgetBundleUrl}
           onChange={(value) => setForm({ ...form, widgetBundleUrl: value })}
         />
+        <label className="dashboard-field">
+          <span className="dashboard-field-label">System Prompt</span>
+          <textarea
+            className="dashboard-textarea"
+            value={form.systemPrompt}
+            onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
+            placeholder="Optionaler kundenspezifischer Systemprompt. Leer lassen = globaler Standard."
+            style={{ minHeight: 200 }}
+          />
+        </label>
 
         <label className="dashboard-checkbox">
           <input
