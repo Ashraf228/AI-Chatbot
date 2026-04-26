@@ -50,7 +50,12 @@ export function buildSystemPrompt(override?: string | null) {
     return `${DEFAULT_SYSTEM_PROMPT}\n\n${CONVERSION_GUARDRAILS}`;
   }
 
-  return `${custom}\n\n${CONVERSION_GUARDRAILS}`;
+  return [
+    DEFAULT_SYSTEM_PROMPT,
+    "Kundenspezifische Vorgaben:",
+    custom,
+    CONVERSION_GUARDRAILS,
+  ].join("\n\n");
 }
 
 export function getSiteSystemPrompt(config: unknown) {
