@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../db/prisma.service';
+import { ReportMailerService } from './report-mailer.service';
+import { ReportPayload, ReportRendererService } from './report-renderer.service';
 
 type SiteConfig = {
   siteKey?: string;
@@ -88,7 +90,10 @@ function parseSiteConfig(value: unknown): SiteConfig {
 
 @Injectable()
 export class WidgetAdminService {
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly reportMailer: ReportMailerService,
+  ) {}
 
   async getSite(siteId: string) {
     const res = await this.db.query<SiteRow>(
@@ -571,41 +576,138 @@ export class WidgetAdminService {
   }
 
   async runReport(payload: { siteId?: string; frequency?: string }) {
-    let recipientEmail: string | null = null;
-    let siteName: string | null = null;
-    if (payload.siteId) {
-      const site = await this.getSite(payload.siteId);
-      siteName = site.name;
-      const sub = await this.db.query<RecipientRow>(
-        `SELECT recipient_email
-         FROM report_subscriptions
-         WHERE site_id = $1 AND is_enabled = true
-         ORDER BY recipient_email ASC
-         LIMIT 1`,
-        [payload.siteId],
-      );
-      recipientEmail = sub.rows[0]?.recipient_email || null;
+    if (!payload.siteId) {
+      throw new BadRequestException('siteId is required to run a report manually.');
     }
 
+    const site = await this.getSite(payload.siteId);
+    const sub = await this.db.query<RecipientRow>(
+      `SELECT recipient_email
+       FROM report_subscriptions
+       WHERE site_id = $1 AND is_enabled = true
+       ORDER BY recipient_email ASC
+       LIMIT 1`,
+      [payload.siteId],
+    );
+    const recipientEmail = sub.rows[0]?.recipient_email || null;
+    if (!recipientEmail) {
+      throw new BadRequestException('No active report recipient configured for this site.');
+    }
+
+    this.reportMailer.assertConfigured();
     const frequency = payload.frequency || 'weekly';
     const runId = randomUUID();
-    const subject = siteName ? `${frequency} report for ${siteName}` : `${frequency} report`;
+    const subject = site.name ? `${frequency} report for ${site.name}` : `${frequency} report`;
 
     await this.db.query(
       `INSERT INTO report_runs(
          id, site_id, frequency, trigger_source, status, recipient_email, report_subject, created_at, completed_at
        )
-       VALUES ($1, $2, $3, 'manual', 'queued', $4, $5, now(), now())`,
-      [runId, payload.siteId || null, frequency, recipientEmail, subject],
+       VALUES ($1, $2, $3, 'manual', 'processing', $4, $5, now(), null)`,
+      [runId, payload.siteId, frequency, recipientEmail, subject],
     );
 
+    try {
+      const report = await this.buildReportPayload(payload.siteId, recipientEmail, frequency);
+      const renderer = new ReportRendererService();
+
+      await this.reportMailer.send({
+        to: recipientEmail,
+        subject,
+        html: renderer.renderHtml(report),
+        text: renderer.renderText(report),
+      });
+
+      await this.db.query(
+        `UPDATE report_runs
+         SET status = 'sent',
+             completed_at = now(),
+             error_message = null
+         WHERE id = $1`,
+        [runId],
+      );
+
+      return {
+        ok: true,
+        triggered: true,
+        runId,
+        siteId: payload.siteId,
+        frequency,
+        recipientEmail,
+        message: 'Report sent successfully.',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown report error';
+      await this.db.query(
+        `UPDATE report_runs
+         SET status = 'failed',
+             completed_at = now(),
+             error_message = $2
+         WHERE id = $1`,
+        [runId, message],
+      );
+      throw error;
+    }
+  }
+
+  private async buildReportPayload(
+    siteId: string,
+    recipientEmail: string,
+    frequency: string,
+  ): Promise<ReportPayload> {
+    const [site, summary, optimization] = await Promise.all([
+      this.getSite(siteId),
+      this.getSummary(siteId),
+      this.getOptimization(siteId),
+    ]);
+
+    const reportFrequency = frequency === 'monthly' ? 'monthly' : 'weekly';
+
     return {
-      ok: true,
-      triggered: true,
-      runId,
-      siteId: payload.siteId || null,
-      frequency,
-      message: 'Report job accepted for processing.',
+      frequency: reportFrequency,
+      siteId,
+      siteName: site.companyName || site.name || siteId,
+      periodLabel: reportFrequency === 'weekly' ? 'Woche' : 'Monat',
+      recipientEmail,
+      metrics: {
+        widgetImpressions: Number(summary.widgetImpressions || 0),
+        widgetOpenings: Number(summary.widgetOpenings || 0),
+        startedChats: Number(summary.startedChats || 0),
+        sentMessages: Number(summary.sentMessages || 0),
+        aiAnswerRate: Number(summary.aiAnswerRate || 0),
+        fallbackAnswers: Number(summary.fallbackAnswers || 0),
+        leads: Number(summary.leads || 0),
+        leadRate: Number(summary.leadRate || 0),
+        averageConversationDurationSeconds: Number(summary.averageConversationDurationSeconds || 0),
+        estimatedSupportRelief: Number(summary.estimatedSupportRelief || 0),
+        topQuestions: Array.isArray(summary.topQuestions) ? summary.topQuestions : [],
+        mostActivePages: Array.isArray(summary.mostActivePages)
+          ? summary.mostActivePages.map((item) => ({
+              pageUrl: item.pageUrl,
+              impressions: Number(item.count || 0),
+              openings: Number(item.count || 0),
+            }))
+          : [],
+        unansweredQuestions: Array.isArray(optimization.unansweredQuestions)
+          ? optimization.unansweredQuestions.length
+          : 0,
+        dropOffRate:
+          Number(summary.startedChats || 0) > 0
+            ? Number(optimization.dropOffSessions || 0) / Number(summary.startedChats || 1)
+            : 0,
+      },
+      recommendations:
+        Array.isArray(optimization.recommendations) && optimization.recommendations.length > 0
+          ? optimization.recommendations.map((detail) => ({
+              title: 'Empfehlung',
+              detail,
+            }))
+          : [
+              {
+                title: 'Stabile Entwicklung',
+                detail: 'Aktuell sind keine kritischen Optimierungsauffaelligkeiten im Report vorhanden.',
+              },
+            ],
     };
   }
 }

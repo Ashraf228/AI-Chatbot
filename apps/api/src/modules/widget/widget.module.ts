@@ -14,6 +14,7 @@ import { WidgetLeadsService } from './services/widget-leads.service';
 import { WidgetAnalyticsService } from './services/widget-analytics.service';
 import { WidgetSecurityService } from './services/widget-security.service';
 import { WidgetAdminService } from './services/widget-admin.service';
+import { ReportMailerService } from './services/report-mailer.service';
 
 import { WidgetOriginGuard } from './guards/widget-origin.guard';
 import { WidgetRateLimitGuard } from './guards/widget-rate-limit.guard';
@@ -43,6 +44,7 @@ import { LlmService } from '../../vector/llm.service';
     WidgetAnalyticsService,
     WidgetSecurityService,
     WidgetAdminService,
+    ReportMailerService,
     WidgetOriginGuard,
     WidgetRateLimitGuard,
     WidgetSiteGuard,
