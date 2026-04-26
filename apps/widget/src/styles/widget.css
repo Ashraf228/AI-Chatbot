@@ -48,7 +48,7 @@
   display: grid;
   grid-template-rows: auto auto auto auto minmax(180px, 1fr) auto auto auto;
   overflow: hidden;
-  border-radius: var(--ssb-radius-xl);
+  border-radius: 28px;
   background: linear-gradient(180deg, #fffaf1 0%, #ffffff 100%);
   border: 1px solid var(--ssb-color-border);
   box-shadow: var(--ssb-shadow-lg);
@@ -302,7 +302,7 @@
 .ssb-input {
   width: 100%;
   border: 1px solid rgba(181, 84, 0, 0.2);
-  border-radius: var(--ssb-radius-md);
+  border-radius: 24px;
   padding: 11px 12px;
   background: #fff;
   color: var(--ssb-color-text);
