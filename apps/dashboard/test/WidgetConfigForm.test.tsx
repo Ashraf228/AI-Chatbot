@@ -47,10 +47,10 @@ describe("WidgetConfigForm", () => {
     await user.click(screen.getByRole("button", { name: "Vorlage anwenden" }));
 
     expect(
-      screen.getByDisplayValue(
-        "Geht es bei dir eher um ein akutes Problem, eine Rückfrage zu einem Vorgang oder allgemeine Hilfe?",
-      ),
-    ).toBeInTheDocument();
+      screen.getByLabelText("Einstiegsfrage"),
+    ).toHaveValue(
+      "Geht es bei dir eher um ein akutes Problem, eine Rückfrage zu einem Vorgang oder allgemeine Hilfe?",
+    );
 
     await user.click(
       screen.getByRole("button", { name: "Widget-Konfiguration speichern" }),
@@ -74,5 +74,13 @@ describe("WidgetConfigForm", () => {
       "Geht es bei dir eher um ein akutes Problem, eine Rückfrage zu einem Vorgang oder allgemeine Hilfe?",
     );
     expect(payload.conversationFlow.triggers.qualifiedNeed).toContain("problem");
+    expect(payload.conversationFlow.states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "contact-ready",
+          requiresAny: expect.arrayContaining(["contactIntent", "affirmedContactCta"]),
+        }),
+      ]),
+    );
   });
 });

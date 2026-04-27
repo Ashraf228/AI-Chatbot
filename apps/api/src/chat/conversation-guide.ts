@@ -24,45 +24,35 @@ function detectState(history: PromptMessage[], flow?: ConversationFlowConfig) {
   const latestUserMessage = userMessages[userMessages.length - 1]?.content || '';
   const latestAssistantMessage = assistantMessages[assistantMessages.length - 1]?.content || '';
   const wholeUserText = userMessages.map((message) => message.content).join('\n');
+  const signals = {
+    contactIntent: resolvedFlow.triggerPatterns.contactIntent.test(wholeUserText),
+    qualifiedNeed: resolvedFlow.triggerPatterns.qualifiedNeed.test(wholeUserText),
+    industry: resolvedFlow.triggerPatterns.industry.test(wholeUserText),
+    urgency: resolvedFlow.triggerPatterns.urgency.test(wholeUserText),
+    affirmedContactCta:
+      AFFIRMATION_PATTERN.test(compact(latestUserMessage)) &&
+      resolvedFlow.triggerPatterns.contactIntent.test(latestAssistantMessage),
+  };
 
-  const wantsContact =
-    resolvedFlow.triggerPatterns.contactIntent.test(wholeUserText) ||
-    (AFFIRMATION_PATTERN.test(compact(latestUserMessage)) &&
-      resolvedFlow.triggerPatterns.contactIntent.test(latestAssistantMessage));
-  const hasQualifiedNeed = resolvedFlow.triggerPatterns.qualifiedNeed.test(wholeUserText);
-  const hasIndustryContext = resolvedFlow.triggerPatterns.industry.test(wholeUserText);
-  const hasUrgencyContext = resolvedFlow.triggerPatterns.urgency.test(wholeUserText);
+  const matchedState =
+    resolvedFlow.states.find((state) => {
+      const requiresSatisfied = state.requires.every((signal) => signals[signal]);
+      const requiresAnySatisfied =
+        state.requiresAny.length === 0 || state.requiresAny.some((signal) => signals[signal]);
+      const forbidsSatisfied = state.forbids.every((signal) => !signals[signal]);
+      const textSatisfied = !state.matchPattern || state.matchPattern.test(wholeUserText);
 
-  if (wantsContact) {
-    return {
-      stage: 'contact-ready',
-      instruction: resolvedFlow.instructions.contactReady,
-    };
-  }
+      return requiresSatisfied && requiresAnySatisfied && forbidsSatisfied && textSatisfied;
+    }) || resolvedFlow.states[resolvedFlow.states.length - 1];
 
-  if (hasQualifiedNeed && userMessages.length >= 2) {
-    const missing = [];
-    if (!hasIndustryContext) {
-      missing.push('Branche oder Unternehmenskontext');
-    }
-    if (!hasUrgencyContext) {
-      missing.push('Dringlichkeit oder Umfang');
-    }
-
-    return {
-      stage: 'qualified',
-      instruction:
-        missing.length > 0
-          ? missing[0] === 'Branche oder Unternehmenskontext'
-            ? `${resolvedFlow.instructions.qualifiedMissingIndustry} Nutze dafuer bevorzugt diese Rueckfrage: "${resolvedFlow.questions.industry}"`
-            : `${resolvedFlow.instructions.qualifiedMissingUrgency} Nutze dafuer bevorzugt diese Rueckfrage: "${resolvedFlow.questions.urgency}"`
-          : resolvedFlow.instructions.qualifiedReady,
-    };
-  }
+  const preferredQuestion = matchedState?.preferredQuestion?.trim();
 
   return {
-    stage: 'clarify',
-    instruction: `${resolvedFlow.instructions.clarify} Nutze dafuer bevorzugt diese Rueckfrage: "${resolvedFlow.questions.opening}"`,
+    stage: matchedState?.id || 'clarify',
+    instruction:
+      preferredQuestion && preferredQuestion.length > 0
+        ? `${matchedState.instruction} Nutze dafuer bevorzugt diese Rueckfrage: "${preferredQuestion}"`
+        : matchedState.instruction,
   };
 }
 

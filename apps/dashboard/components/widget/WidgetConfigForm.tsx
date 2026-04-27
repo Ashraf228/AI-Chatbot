@@ -14,6 +14,27 @@ type WidgetConfigFormProps = {
   siteId: string;
 };
 
+const FLOW_SIGNAL_OPTIONS = [
+  { value: "contactIntent", label: "Kontaktwunsch erkannt" },
+  { value: "qualifiedNeed", label: "Bedarf erkannt" },
+  { value: "industry", label: "Branche / Kontext vorhanden" },
+  { value: "urgency", label: "Dringlichkeit / Umfang vorhanden" },
+  { value: "affirmedContactCta", label: "Zustimmung auf Kontakt-CTA" },
+] as const;
+
+type ConversationFlowSignal = (typeof FLOW_SIGNAL_OPTIONS)[number]["value"];
+
+type ConversationFlowStateForm = {
+  id: string;
+  label: string;
+  instruction: string;
+  preferredQuestion: string;
+  requires: ConversationFlowSignal[];
+  requiresAny: ConversationFlowSignal[];
+  forbids: ConversationFlowSignal[];
+  matchAny: string[];
+};
+
 type ConversationFlowForm = {
   questions: {
     opening: string;
@@ -33,6 +54,13 @@ type ConversationFlowForm = {
     industry: string[];
     urgency: string[];
   };
+  states: ConversationFlowStateForm[];
+};
+
+type ConversationFlowPreset = {
+  label: string;
+  description: string;
+  flow: Omit<ConversationFlowForm, "states"> & { states?: ConversationFlowStateForm[] };
 };
 
 const DEFAULT_CONVERSATION_FLOW: ConversationFlowForm = {
@@ -59,9 +87,10 @@ const DEFAULT_CONVERSATION_FLOW: ConversationFlowForm = {
     industry: ["unternehmen", "firma", "agentur", "shop", "kanzlei", "praxis"],
     urgency: ["sofort", "dringend", "zeitnah", "schnell"],
   },
+  states: [],
 };
 
-const FLOW_PRESETS: Record<string, { label: string; description: string; flow: ConversationFlowForm }> = {
+const FLOW_PRESETS: Record<string, ConversationFlowPreset> = {
   leadQualification: {
     label: "Lead-Qualifizierung",
     description: "Für Erstgespräche, Bedarf verstehen und zügig Richtung Kontakt leiten.",
@@ -341,78 +370,233 @@ function formatTriggerList(values: string[]) {
   return values.join(", ");
 }
 
+function createDefaultFlowStates(
+  questions: ConversationFlowForm["questions"],
+  instructions: ConversationFlowForm["instructions"],
+): ConversationFlowStateForm[] {
+  return [
+    {
+      id: "contact-ready",
+      label: "Kontaktbereit",
+      instruction: instructions.contactReady,
+      preferredQuestion: "",
+      requires: [],
+      requiresAny: ["contactIntent", "affirmedContactCta"],
+      forbids: [],
+      matchAny: [],
+    },
+    {
+      id: "qualified-missing-industry",
+      label: "Bedarf klar, Branche fehlt",
+      instruction: instructions.qualifiedMissingIndustry,
+      preferredQuestion: questions.industry,
+      requires: ["qualifiedNeed"],
+      requiresAny: [],
+      forbids: ["industry"],
+      matchAny: [],
+    },
+    {
+      id: "qualified-missing-urgency",
+      label: "Bedarf klar, Dringlichkeit fehlt",
+      instruction: instructions.qualifiedMissingUrgency,
+      preferredQuestion: questions.urgency,
+      requires: ["qualifiedNeed", "industry"],
+      requiresAny: [],
+      forbids: ["urgency"],
+      matchAny: [],
+    },
+    {
+      id: "qualified-ready",
+      label: "Genug Infos da",
+      instruction: instructions.qualifiedReady,
+      preferredQuestion: "",
+      requires: ["qualifiedNeed", "industry", "urgency"],
+      requiresAny: [],
+      forbids: [],
+      matchAny: [],
+    },
+    {
+      id: "clarify",
+      label: "Einstieg / Klärung",
+      instruction: instructions.clarify,
+      preferredQuestion: questions.opening,
+      requires: [],
+      requiresAny: [],
+      forbids: [],
+      matchAny: [],
+    },
+  ];
+}
+
+function deriveInstructionsFromStates(
+  states: ConversationFlowStateForm[],
+  fallback: ConversationFlowForm["instructions"],
+): ConversationFlowForm["instructions"] {
+  const byId = new Map(states.map((state) => [state.id, state]));
+
+  return {
+    clarify: byId.get("clarify")?.instruction || fallback.clarify,
+    qualifiedMissingIndustry:
+      byId.get("qualified-missing-industry")?.instruction || fallback.qualifiedMissingIndustry,
+    qualifiedMissingUrgency:
+      byId.get("qualified-missing-urgency")?.instruction || fallback.qualifiedMissingUrgency,
+    qualifiedReady: byId.get("qualified-ready")?.instruction || fallback.qualifiedReady,
+    contactReady: byId.get("contact-ready")?.instruction || fallback.contactReady,
+  };
+}
+
+function normalizeStateSignals(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const allowed = new Set(FLOW_SIGNAL_OPTIONS.map((option) => option.value));
+  return value.filter(
+    (entry): entry is ConversationFlowSignal =>
+      typeof entry === "string" && allowed.has(entry as ConversationFlowSignal),
+  );
+}
+
 function mergeConversationFlow(value: unknown): ConversationFlowForm {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return DEFAULT_CONVERSATION_FLOW;
+    return mergeConversationFlow(DEFAULT_CONVERSATION_FLOW);
   }
 
   const raw = value as Record<string, unknown>;
-  const questions =
+  const rawQuestions =
     raw.questions && typeof raw.questions === "object" && !Array.isArray(raw.questions)
       ? (raw.questions as Record<string, unknown>)
       : {};
-  const instructions =
+  const rawInstructions =
     raw.instructions && typeof raw.instructions === "object" && !Array.isArray(raw.instructions)
       ? (raw.instructions as Record<string, unknown>)
       : {};
-  const triggers =
+  const rawTriggers =
     raw.triggers && typeof raw.triggers === "object" && !Array.isArray(raw.triggers)
       ? (raw.triggers as Record<string, unknown>)
       : {};
+  const rawStates = Array.isArray(raw.states) ? raw.states : [];
+
+  const questions: ConversationFlowForm["questions"] = {
+    opening:
+      typeof rawQuestions.opening === "string" && rawQuestions.opening.trim().length > 0
+        ? rawQuestions.opening
+        : DEFAULT_CONVERSATION_FLOW.questions.opening,
+    industry:
+      typeof rawQuestions.industry === "string" && rawQuestions.industry.trim().length > 0
+        ? rawQuestions.industry
+        : DEFAULT_CONVERSATION_FLOW.questions.industry,
+    urgency:
+      typeof rawQuestions.urgency === "string" && rawQuestions.urgency.trim().length > 0
+        ? rawQuestions.urgency
+        : DEFAULT_CONVERSATION_FLOW.questions.urgency,
+  };
+
+  const instructions: ConversationFlowForm["instructions"] = {
+    clarify:
+      typeof rawInstructions.clarify === "string" && rawInstructions.clarify.trim().length > 0
+        ? rawInstructions.clarify
+        : DEFAULT_CONVERSATION_FLOW.instructions.clarify,
+    qualifiedMissingIndustry:
+      typeof rawInstructions.qualifiedMissingIndustry === "string" &&
+      rawInstructions.qualifiedMissingIndustry.trim().length > 0
+        ? rawInstructions.qualifiedMissingIndustry
+        : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedMissingIndustry,
+    qualifiedMissingUrgency:
+      typeof rawInstructions.qualifiedMissingUrgency === "string" &&
+      rawInstructions.qualifiedMissingUrgency.trim().length > 0
+        ? rawInstructions.qualifiedMissingUrgency
+        : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedMissingUrgency,
+    qualifiedReady:
+      typeof rawInstructions.qualifiedReady === "string" && rawInstructions.qualifiedReady.trim().length > 0
+        ? rawInstructions.qualifiedReady
+        : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedReady,
+    contactReady:
+      typeof rawInstructions.contactReady === "string" && rawInstructions.contactReady.trim().length > 0
+        ? rawInstructions.contactReady
+        : DEFAULT_CONVERSATION_FLOW.instructions.contactReady,
+  };
+
+  const states =
+    rawStates.length > 0
+      ? rawStates
+          .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+          .map((entry, index) => ({
+            id:
+              typeof entry.id === "string" && entry.id.trim().length > 0
+                ? entry.id
+                : `state-${index + 1}`,
+            label: typeof entry.label === "string" ? entry.label : `Schritt ${index + 1}`,
+            instruction: typeof entry.instruction === "string" ? entry.instruction : "",
+            preferredQuestion: typeof entry.preferredQuestion === "string" ? entry.preferredQuestion : "",
+            requires: normalizeStateSignals(entry.requires),
+            requiresAny: normalizeStateSignals(entry.requiresAny),
+            forbids: normalizeStateSignals(entry.forbids),
+            matchAny: Array.isArray(entry.matchAny)
+              ? entry.matchAny.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+              : [],
+          }))
+      : createDefaultFlowStates(questions, instructions);
 
   return {
-    questions: {
-      opening:
-        typeof questions.opening === "string" && questions.opening.trim().length > 0
-          ? questions.opening
-          : DEFAULT_CONVERSATION_FLOW.questions.opening,
-      industry:
-        typeof questions.industry === "string" && questions.industry.trim().length > 0
-          ? questions.industry
-          : DEFAULT_CONVERSATION_FLOW.questions.industry,
-      urgency:
-        typeof questions.urgency === "string" && questions.urgency.trim().length > 0
-          ? questions.urgency
-          : DEFAULT_CONVERSATION_FLOW.questions.urgency,
-    },
-    instructions: {
-      clarify:
-        typeof instructions.clarify === "string" && instructions.clarify.trim().length > 0
-          ? instructions.clarify
-          : DEFAULT_CONVERSATION_FLOW.instructions.clarify,
-      qualifiedMissingIndustry:
-        typeof instructions.qualifiedMissingIndustry === "string" &&
-        instructions.qualifiedMissingIndustry.trim().length > 0
-          ? instructions.qualifiedMissingIndustry
-          : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedMissingIndustry,
-      qualifiedMissingUrgency:
-        typeof instructions.qualifiedMissingUrgency === "string" &&
-        instructions.qualifiedMissingUrgency.trim().length > 0
-          ? instructions.qualifiedMissingUrgency
-          : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedMissingUrgency,
-      qualifiedReady:
-        typeof instructions.qualifiedReady === "string" && instructions.qualifiedReady.trim().length > 0
-          ? instructions.qualifiedReady
-          : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedReady,
-      contactReady:
-        typeof instructions.contactReady === "string" && instructions.contactReady.trim().length > 0
-          ? instructions.contactReady
-          : DEFAULT_CONVERSATION_FLOW.instructions.contactReady,
-    },
+    questions,
+    instructions: deriveInstructionsFromStates(states, instructions),
     triggers: {
-      contactIntent: Array.isArray(triggers.contactIntent)
-        ? triggers.contactIntent.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      contactIntent: Array.isArray(rawTriggers.contactIntent)
+        ? rawTriggers.contactIntent.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
         : DEFAULT_CONVERSATION_FLOW.triggers.contactIntent,
-      qualifiedNeed: Array.isArray(triggers.qualifiedNeed)
-        ? triggers.qualifiedNeed.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      qualifiedNeed: Array.isArray(rawTriggers.qualifiedNeed)
+        ? rawTriggers.qualifiedNeed.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
         : DEFAULT_CONVERSATION_FLOW.triggers.qualifiedNeed,
-      industry: Array.isArray(triggers.industry)
-        ? triggers.industry.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      industry: Array.isArray(rawTriggers.industry)
+        ? rawTriggers.industry.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
         : DEFAULT_CONVERSATION_FLOW.triggers.industry,
-      urgency: Array.isArray(triggers.urgency)
-        ? triggers.urgency.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+      urgency: Array.isArray(rawTriggers.urgency)
+        ? rawTriggers.urgency.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
         : DEFAULT_CONVERSATION_FLOW.triggers.urgency,
     },
+    states,
+  };
+}
+
+function updateFlowQuestion(
+  flow: ConversationFlowForm,
+  key: keyof ConversationFlowForm["questions"],
+  next: string,
+): ConversationFlowForm {
+  const stateQuestionTargets: Partial<Record<keyof ConversationFlowForm["questions"], string>> = {
+    opening: "clarify",
+    industry: "qualified-missing-industry",
+    urgency: "qualified-missing-urgency",
+  };
+
+  const targetStateId = stateQuestionTargets[key];
+  const states = targetStateId
+    ? flow.states.map((state) =>
+        state.id === targetStateId
+          ? {
+              ...state,
+              preferredQuestion: next,
+            }
+          : state,
+      )
+    : flow.states;
+
+  return {
+    ...flow,
+    questions: {
+      ...flow.questions,
+      [key]: next,
+    },
+    states,
+  };
+}
+
+function updateFlowStates(flow: ConversationFlowForm, states: ConversationFlowStateForm[]): ConversationFlowForm {
+  return {
+    ...flow,
+    states,
+    instructions: deriveInstructionsFromStates(states, flow.instructions),
   };
 }
 
@@ -428,7 +612,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     leadNotificationEmail: "",
     allowedDomains: "",
     suggestedQuestionsByPath: "{\n  \"/\": [\"Was kostet der Service?\"]\n}",
-    conversationFlow: DEFAULT_CONVERSATION_FLOW,
+    conversationFlow: mergeConversationFlow(DEFAULT_CONVERSATION_FLOW),
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -610,7 +794,7 @@ function ConversationFlowEditor({
         </div>
         <Button
           type="button"
-          onClick={() => onChange(DEFAULT_CONVERSATION_FLOW)}
+          onClick={() => onChange(mergeConversationFlow(DEFAULT_CONVERSATION_FLOW))}
           style={{ width: "auto", minWidth: 180 }}
         >
           Standard wiederherstellen
@@ -638,7 +822,11 @@ function ConversationFlowEditor({
             </div>
           </div>
           <div className="dashboard-inline" style={{ marginTop: 14 }}>
-            <Button type="button" onClick={() => onChange(selectedPreset.flow)} style={{ width: "auto", minWidth: 180 }}>
+            <Button
+              type="button"
+              onClick={() => onChange(mergeConversationFlow(selectedPreset.flow))}
+              style={{ width: "auto", minWidth: 180 }}
+            >
               Vorlage anwenden
             </Button>
             <p className="dashboard-copy" style={{ margin: 0 }}>
@@ -651,88 +839,98 @@ function ConversationFlowEditor({
         <TextareaField
           label="Einstiegsfrage"
           value={value.questions.opening}
-          onChange={(next) =>
-            onChange({
-              ...value,
-              questions: { ...value.questions, opening: next },
-            })
-          }
+          onChange={(next) => onChange(updateFlowQuestion(value, "opening", next))}
         />
         <TextareaField
           label="Branchenfrage"
           value={value.questions.industry}
-          onChange={(next) =>
-            onChange({
-              ...value,
-              questions: { ...value.questions, industry: next },
-            })
-          }
+          onChange={(next) => onChange(updateFlowQuestion(value, "industry", next))}
         />
         <TextareaField
           label="Dringlichkeitsfrage"
           value={value.questions.urgency}
-          onChange={(next) =>
-            onChange({
-              ...value,
-              questions: { ...value.questions, urgency: next },
-            })
-          }
+          onChange={(next) => onChange(updateFlowQuestion(value, "urgency", next))}
         />
 
         <SectionTitle
-          title="Gesprächsregeln"
-          text="Hier legst du fest, wie der Bot in jeder Phase kurz geführt werden soll."
+          title="Schrittzustände & Verzweigungen"
+          text="Diese Zustände werden in Reihenfolge geprüft. So bekommt der Bot feste Branches statt nur allgemeiner Heuristiken."
         />
-        <TextareaField
-          label="Wenn der Einstieg noch allgemein ist"
-          value={value.instructions.clarify}
-          onChange={(next) =>
-            onChange({
-              ...value,
-              instructions: { ...value.instructions, clarify: next },
-            })
-          }
-        />
-        <TextareaField
-          label="Wenn die Branche noch fehlt"
-          value={value.instructions.qualifiedMissingIndustry}
-          onChange={(next) =>
-            onChange({
-              ...value,
-              instructions: { ...value.instructions, qualifiedMissingIndustry: next },
-            })
-          }
-        />
-        <TextareaField
-          label="Wenn Dringlichkeit oder Umfang noch fehlt"
-          value={value.instructions.qualifiedMissingUrgency}
-          onChange={(next) =>
-            onChange({
-              ...value,
-              instructions: { ...value.instructions, qualifiedMissingUrgency: next },
-            })
-          }
-        />
-        <TextareaField
-          label="Wenn genug Infos da sind"
-          value={value.instructions.qualifiedReady}
-          onChange={(next) =>
-            onChange({
-              ...value,
-              instructions: { ...value.instructions, qualifiedReady: next },
-            })
-          }
-        />
-        <TextareaField
-          label="Wenn der Nutzer kontaktbereit ist"
-          value={value.instructions.contactReady}
-          onChange={(next) =>
-            onChange({
-              ...value,
-              instructions: { ...value.instructions, contactReady: next },
-            })
-          }
-        />
+        <div className="dashboard-stack" style={{ gap: 16 }}>
+          {value.states.map((state, index) => (
+            <ConversationStateCard
+              key={state.id}
+              state={state}
+              index={index}
+              canMoveUp={index > 0}
+              canMoveDown={index < value.states.length - 1}
+              onChange={(nextState) =>
+                onChange(
+                  updateFlowStates(
+                    value,
+                    value.states.map((entry, entryIndex) => (entryIndex === index ? nextState : entry)),
+                  ),
+                )
+              }
+              onRemove={
+                value.states.length > 1
+                  ? () =>
+                      onChange(updateFlowStates(value, value.states.filter((_, entryIndex) => entryIndex !== index)))
+                  : undefined
+              }
+              onMoveUp={
+                index > 0
+                  ? () => {
+                      const nextStates = value.states.slice();
+                      [nextStates[index - 1], nextStates[index]] = [nextStates[index], nextStates[index - 1]];
+                      onChange(updateFlowStates(value, nextStates));
+                    }
+                  : undefined
+              }
+              onMoveDown={
+                index < value.states.length - 1
+                  ? () => {
+                      const nextStates = value.states.slice();
+                      [nextStates[index], nextStates[index + 1]] = [nextStates[index + 1], nextStates[index]];
+                      onChange(updateFlowStates(value, nextStates));
+                    }
+                  : undefined
+              }
+            />
+          ))}
+          <div className="dashboard-inline">
+            <Button
+              type="button"
+              onClick={() =>
+                onChange(
+                  updateFlowStates(
+                    value,
+                    [
+                      ...value.states.filter((state) => state.id !== "clarify"),
+                      {
+                        id: `branch-${Date.now()}`,
+                        label: `Neuer Branch ${value.states.length + 1}`,
+                        instruction: "Beschreibe hier, wie der Bot in diesem Branch kurz reagieren soll.",
+                        preferredQuestion: "",
+                        requires: [],
+                        requiresAny: [],
+                        forbids: [],
+                        matchAny: [],
+                      },
+                      ...value.states.filter((state) => state.id === "clarify"),
+                    ],
+                  ),
+                )
+              }
+              style={{ width: "auto", minWidth: 180 }}
+            >
+              Branch hinzufügen
+            </Button>
+            <p className="dashboard-copy" style={{ margin: 0 }}>
+              Neue Branches werden vor dem allgemeinen Fallback eingefügt und können per Hoch/Runter sortiert werden.
+            </p>
+          </div>
+        </div>
 
         <SectionTitle
           title="Triggerwörter"
@@ -783,6 +981,96 @@ function ConversationFlowEditor({
   );
 }
 
+function ConversationStateCard({
+  state,
+  index,
+  canMoveUp,
+  canMoveDown,
+  onChange,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: {
+  state: ConversationFlowStateForm;
+  index: number;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onChange: (value: ConversationFlowStateForm) => void;
+  onRemove?: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+}) {
+  return (
+    <div className="dashboard-card dashboard-card--soft">
+      <div className="dashboard-inline" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <h4 className="dashboard-card-title" style={{ marginBottom: 6 }}>
+            Schritt {index + 1}
+          </h4>
+          <p className="dashboard-copy" style={{ marginTop: 0 }}>
+            Dieser Branch greift, wenn alle Muss-Signale passen und keine Ausschluss-Signale aktiv sind.
+          </p>
+        </div>
+        <div className="dashboard-inline" style={{ gap: 8 }}>
+          <Button type="button" onClick={onMoveUp} disabled={!canMoveUp} style={{ width: "auto", minWidth: 90 }}>
+            Hoch
+          </Button>
+          <Button type="button" onClick={onMoveDown} disabled={!canMoveDown} style={{ width: "auto", minWidth: 90 }}>
+            Runter
+          </Button>
+          {onRemove ? (
+            <Button type="button" onClick={onRemove} style={{ width: "auto", minWidth: 140 }}>
+              Branch löschen
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--split" style={{ gap: 14 }}>
+        <Field label="Branch-ID" value={state.id} onChange={(value) => onChange({ ...state, id: value })} />
+        <Field label="Titel" value={state.label} onChange={(value) => onChange({ ...state, label: value })} />
+      </div>
+
+      <TextareaField
+        label="Anweisung für diesen Zustand"
+        value={state.instruction}
+        onChange={(value) => onChange({ ...state, instruction: value })}
+      />
+      <TextareaField
+        label="Bevorzugte Rückfrage"
+        value={state.preferredQuestion}
+        onChange={(value) => onChange({ ...state, preferredQuestion: value })}
+      />
+
+      <div className="dashboard-grid dashboard-grid--split" style={{ gap: 14 }}>
+        <SignalChecklist
+          label="Muss vorhanden sein"
+          value={state.requires}
+          onChange={(value) => onChange({ ...state, requires: value })}
+        />
+        <SignalChecklist
+          label="Mindestens eines davon"
+          value={state.requiresAny}
+          onChange={(value) => onChange({ ...state, requiresAny: value })}
+        />
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--split" style={{ gap: 14 }}>
+        <SignalChecklist
+          label="Darf noch nicht vorhanden sein"
+          value={state.forbids}
+          onChange={(value) => onChange({ ...state, forbids: value })}
+        />
+        <TriggerField
+          label="Zusätzliche Triggerwörter (optional)"
+          value={state.matchAny}
+          onChange={(value) => onChange({ ...state, matchAny: value })}
+        />
+      </div>
+    </div>
+  );
+}
+
 function SectionTitle({ title, text }: { title: string; text: string }) {
   return (
     <div>
@@ -792,6 +1080,43 @@ function SectionTitle({ title, text }: { title: string; text: string }) {
       <p className="dashboard-copy" style={{ marginTop: 0 }}>
         {text}
       </p>
+    </div>
+  );
+}
+
+function SignalChecklist({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: ConversationFlowSignal[];
+  onChange: (value: ConversationFlowSignal[]) => void;
+}) {
+  return (
+    <div className="dashboard-field">
+      <span className="dashboard-field-label">{label}</span>
+      <div className="dashboard-stack" style={{ gap: 8 }}>
+        {FLOW_SIGNAL_OPTIONS.map((option) => {
+          const checked = value.includes(option.value);
+          return (
+            <label key={option.value} className="dashboard-checkbox">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) =>
+                  onChange(
+                    event.target.checked
+                      ? Array.from(new Set([...value, option.value]))
+                      : value.filter((entry) => entry !== option.value),
+                  )
+                }
+              />
+              <span>{option.label}</span>
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }
