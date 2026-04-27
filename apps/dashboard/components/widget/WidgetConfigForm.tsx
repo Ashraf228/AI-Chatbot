@@ -8,6 +8,7 @@ import { Button } from "../shared/Button";
 import { ErrorState } from "../shared/ErrorState";
 import { Input } from "../shared/Input";
 import { LoadingState } from "../shared/LoadingState";
+import { Select } from "../shared/Select";
 
 type WidgetConfigFormProps = {
   siteId: string;
@@ -57,6 +58,101 @@ const DEFAULT_CONVERSATION_FLOW: ConversationFlowForm = {
     qualifiedNeed: ["support", "kundenservice", "marketing", "prozesse", "automatisierung"],
     industry: ["unternehmen", "firma", "agentur", "shop", "kanzlei", "praxis"],
     urgency: ["sofort", "dringend", "zeitnah", "schnell"],
+  },
+};
+
+const FLOW_PRESETS: Record<string, { label: string; description: string; flow: ConversationFlowForm }> = {
+  leadQualification: {
+    label: "Lead-Qualifizierung",
+    description: "Für Erstgespräche, Bedarf verstehen und zügig Richtung Kontakt leiten.",
+    flow: DEFAULT_CONVERSATION_FLOW,
+  },
+  support: {
+    label: "Support",
+    description: "Für Support-Anliegen mit Fokus auf Problem, Kontext und anschließende Weiterleitung.",
+    flow: {
+      questions: {
+        opening: "Geht es bei dir eher um ein akutes Problem, eine Rückfrage zu einem Vorgang oder allgemeine Hilfe?",
+        industry: "Geht es um einen bestimmten Kundenfall, ein Produkt oder einen internen Ablauf?",
+        urgency: "Wie dringend ist das Thema gerade für dich?",
+      },
+      instructions: {
+        clarify:
+          "Wenn das Anliegen noch unklar ist, frage gezielt nach dem konkreten Supportfall und halte die Antwort ruhig und lösungsorientiert.",
+        qualifiedMissingIndustry:
+          "Wenn das Problem klar ist, aber der genaue Kontext fehlt, frage nach Produkt, Vorgang oder betroffenem Bereich.",
+        qualifiedMissingUrgency:
+          "Wenn das Problem klar ist, aber die Auswirkung fehlt, frage nach Dringlichkeit oder konkreter Einschränkung.",
+        qualifiedReady:
+          "Wenn das Support-Anliegen klar ist, gib eine kurze Einordnung und leite in Richtung Kontakt oder Übergabe an das Team.",
+        contactReady:
+          "Wenn der Nutzer Hilfe von einem Menschen möchte, bestätige kurz und leite direkt zur Kontaktaufnahme weiter.",
+      },
+      triggers: {
+        contactIntent: ["kontakt", "anruf", "rueckruf", "hilfe vom team", "weiterleiten", "termin"],
+        qualifiedNeed: ["support", "hilfe", "problem", "fehler", "funktioniert nicht", "störung", "frage"],
+        industry: ["kunde", "produkt", "bestellung", "auftrag", "rechnung", "konto", "vorgang"],
+        urgency: ["sofort", "dringend", "schnell", "akut", "heute", "jetzt"],
+      },
+    },
+  },
+  appointment: {
+    label: "Terminbuchung",
+    description: "Für Nutzer, die relativ früh einen Termin oder Rückruf wollen.",
+    flow: {
+      questions: {
+        opening: "Möchtest du eher einen kurzen Termin, einen Rückruf oder erst eine kurze Einschätzung?",
+        industry: "Worum geht es grob, damit wir den richtigen Ansprechpartner einplanen können?",
+        urgency: "Wann wäre es für dich am besten oder wie zeitnah soll sich jemand melden?",
+      },
+      instructions: {
+        clarify:
+          "Wenn der Einstieg noch offen ist, kläre schnell die gewünschte Kontaktart und halte das Gespräch kurz.",
+        qualifiedMissingIndustry:
+          "Wenn der Terminwunsch klar ist, aber das Thema fehlt, frage kurz nach dem Anlass des Gesprächs.",
+        qualifiedMissingUrgency:
+          "Wenn der Terminwunsch klar ist, aber der Zeithorizont fehlt, frage kurz nach der gewünschten Geschwindigkeit.",
+        qualifiedReady:
+          "Wenn Kontaktart und Anlass klar sind, leite direkt in die Termin- oder Kontaktaufnahme weiter.",
+        contactReady:
+          "Wenn der Nutzer bereits zustimmt, bestätige kurz und leite sofort zur Kontaktaufnahme weiter.",
+      },
+      triggers: {
+        contactIntent: ["termin", "rueckruf", "rückruf", "anrufen", "telefonat", "gespraech", "gespräch"],
+        qualifiedNeed: ["termin", "beratung", "rueckruf", "rückruf", "angebot", "kontakt"],
+        industry: ["projekt", "website", "support", "marketing", "ki", "automatisierung", "prozess"],
+        urgency: ["morgen", "heute", "diese woche", "zeitnah", "schnell", "sofort"],
+      },
+    },
+  },
+  sales: {
+    label: "Verkaufsgespräch",
+    description: "Für stärker vertriebsorientierte Einstiege mit Fokus auf Potenzial und Abschluss.",
+    flow: {
+      questions: {
+        opening: "Geht es bei dir eher um mehr Anfragen, effizientere Prozesse oder bessere Unterstützung im Tagesgeschäft?",
+        industry: "In welcher Branche oder in welchem Geschäftsmodell seid ihr unterwegs?",
+        urgency: "Wie stark drückt das Thema gerade oder wie schnell wollt ihr etwas verändern?",
+      },
+      instructions: {
+        clarify:
+          "Wenn der Einstieg allgemein ist, ordne das Potenzial kurz ein und stelle eine konkrete Bedarfsfrage.",
+        qualifiedMissingIndustry:
+          "Wenn der Bedarf klar ist, aber der Unternehmenskontext fehlt, frage gezielt nach Branche, Zielgruppe oder Geschäftsmodell.",
+        qualifiedMissingUrgency:
+          "Wenn der Bedarf klar ist, aber Priorität oder Druck fehlen, frage gezielt nach Tempo, Aufwand oder aktuellem Schmerz.",
+        qualifiedReady:
+          "Wenn Potenzial und Kontext klar sind, gib eine kurze Einschätzung und führe selbstbewusst Richtung Kontakt oder Termin.",
+        contactReady:
+          "Wenn der Nutzer offen für den nächsten Schritt ist, bestätige kurz und leite ohne Umweg zur Kontaktaufnahme weiter.",
+      },
+      triggers: {
+        contactIntent: ["kontakt", "anfrage", "angebot", "termin", "rueckruf", "rückruf", "sprechen"],
+        qualifiedNeed: ["leads", "kunden", "marketing", "vertrieb", "support", "prozesse", "automatisierung", "ki"],
+        industry: ["unternehmen", "agentur", "shop", "dienstleistung", "e-commerce", "praxis", "kanzlei"],
+        urgency: ["dringend", "zeitnah", "schnell", "dieses quartal", "sofort", "heute"],
+      },
+    },
   },
 };
 
@@ -324,6 +420,9 @@ function ConversationFlowEditor({
   value: ConversationFlowForm;
   onChange: (value: ConversationFlowForm) => void;
 }) {
+  const [presetKey, setPresetKey] = useState<keyof typeof FLOW_PRESETS>("leadQualification");
+  const selectedPreset = FLOW_PRESETS[presetKey];
+
   return (
     <div className="dashboard-card" style={{ padding: 20, background: "rgba(255,255,255,0.7)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
@@ -345,6 +444,35 @@ function ConversationFlowEditor({
       </div>
 
       <div className="dashboard-stack" style={{ marginTop: 20 }}>
+        <div className="dashboard-card dashboard-card--soft">
+          <div className="dashboard-grid dashboard-grid--split" style={{ gap: 14 }}>
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">Vorlage</span>
+              <Select value={presetKey} onChange={(e) => setPresetKey(e.target.value as keyof typeof FLOW_PRESETS)}>
+                {Object.entries(FLOW_PRESETS).map(([key, preset]) => (
+                  <option key={key} value={key}>
+                    {preset.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <div className="dashboard-field">
+              <span className="dashboard-field-label">Beschreibung</span>
+              <p className="dashboard-copy" style={{ margin: 0 }}>
+                {selectedPreset.description}
+              </p>
+            </div>
+          </div>
+          <div className="dashboard-inline" style={{ marginTop: 14 }}>
+            <Button type="button" onClick={() => onChange(selectedPreset.flow)} style={{ width: "auto", minWidth: 180 }}>
+              Vorlage anwenden
+            </Button>
+            <p className="dashboard-copy" style={{ margin: 0 }}>
+              Ueberschreibt die Felder unten mit der gewählten Vorlage.
+            </p>
+          </div>
+        </div>
+
         <SectionTitle title="Fragen" text="Diese Fragen nutzt der Bot bevorzugt in den jeweiligen Phasen." />
         <TextareaField
           label="Einstiegsfrage"
