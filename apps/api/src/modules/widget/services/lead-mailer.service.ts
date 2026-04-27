@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ReportMailerService } from './report-mailer.service';
+import { MailMessage, ReportMailerService } from './report-mailer.service';
 
 type LeadNotificationPayload = {
   recipientEmail: string;
@@ -18,15 +18,19 @@ type LeadNotificationPayload = {
 export class LeadMailerService {
   constructor(private readonly mailer: ReportMailerService) {}
 
-  async sendLeadNotification(payload: LeadNotificationPayload) {
+  buildLeadNotification(payload: LeadNotificationPayload): MailMessage {
     const subject = `Neuer Lead fuer ${payload.siteName || payload.siteId}`;
 
-    await this.mailer.send({
+    return {
       to: payload.recipientEmail,
       subject,
       html: this.renderHtml(payload),
       text: this.renderText(payload),
-    });
+    };
+  }
+
+  async sendLeadNotification(payload: LeadNotificationPayload) {
+    await this.mailer.send(this.buildLeadNotification(payload));
   }
 
   private renderHtml(payload: LeadNotificationPayload) {

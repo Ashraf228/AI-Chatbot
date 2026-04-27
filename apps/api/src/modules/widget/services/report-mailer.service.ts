@@ -20,9 +20,13 @@ export class ReportMailerService {
     return { host, port, user, pass, from };
   }
 
-  assertConfigured() {
+  isConfigured() {
     const { host, user, pass, from } = this.getConfig();
-    if (!host || !user || !pass || !from) {
+    return Boolean(host && user && pass && from);
+  }
+
+  assertConfigured() {
+    if (!this.isConfigured()) {
       throw new BadRequestException(
         'SMTP is not fully configured. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and REPORTS_FROM_EMAIL.',
       );

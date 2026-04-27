@@ -14,6 +14,7 @@ import { WidgetLeadsService } from './services/widget-leads.service';
 import { WidgetAnalyticsService } from './services/widget-analytics.service';
 import { WidgetSecurityService } from './services/widget-security.service';
 import { WidgetAdminService } from './services/widget-admin.service';
+import { EmailJobsService } from './services/email-jobs.service';
 import { ReportMailerService } from './services/report-mailer.service';
 import { LeadMailerService } from './services/lead-mailer.service';
 
@@ -45,6 +46,7 @@ import { LlmService } from '../../vector/llm.service';
     WidgetAnalyticsService,
     WidgetSecurityService,
     WidgetAdminService,
+    EmailJobsService,
     ReportMailerService,
     LeadMailerService,
     WidgetOriginGuard,

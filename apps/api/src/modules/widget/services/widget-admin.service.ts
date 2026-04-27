@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../../db/prisma.service';
+import { EmailJobsService } from './email-jobs.service';
 import { ReportMailerService } from './report-mailer.service';
 import { ReportPayload, ReportRendererService } from './report-renderer.service';
 
@@ -96,6 +97,7 @@ export class WidgetAdminService {
   constructor(
     private readonly db: PrismaService,
     private readonly reportMailer: ReportMailerService,
+    private readonly emailJobs: EmailJobsService,
   ) {}
 
   async getSite(siteId: string) {
@@ -615,7 +617,7 @@ export class WidgetAdminService {
       `INSERT INTO report_runs(
          id, site_id, frequency, trigger_source, status, recipient_email, report_subject, created_at, completed_at
        )
-       VALUES ($1, $2, $3, 'manual', 'processing', $4, $5, now(), null)`,
+       VALUES ($1, $2, $3, 'manual', 'queued', $4, $5, now(), null)`,
       [runId, payload.siteId, frequency, recipientEmail, subject],
     );
 
@@ -623,21 +625,18 @@ export class WidgetAdminService {
       const report = await this.buildReportPayload(payload.siteId, recipientEmail, frequency);
       const renderer = new ReportRendererService();
 
-      await this.reportMailer.send({
+      await this.emailJobs.enqueue({
+        kind: 'report',
         to: recipientEmail,
         subject,
         html: renderer.renderHtml(report),
         text: renderer.renderText(report),
+        metadata: {
+          reportRunId: runId,
+          siteId: payload.siteId,
+          frequency,
+        },
       });
-
-      await this.db.query(
-        `UPDATE report_runs
-         SET status = 'sent',
-             completed_at = now(),
-             error_message = null
-         WHERE id = $1`,
-        [runId],
-      );
 
       return {
         ok: true,
@@ -646,7 +645,7 @@ export class WidgetAdminService {
         siteId: payload.siteId,
         frequency,
         recipientEmail,
-        message: 'Report sent successfully.',
+        message: 'Report queued successfully.',
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown report error';

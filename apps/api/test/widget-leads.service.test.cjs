@@ -4,7 +4,7 @@ const { WidgetLeadsService } = require('../dist/modules/widget/services/widget-l
 
 function createService({ leadNotificationEmail = 'hello@soulesmartbusiness.com' } = {}) {
   const dbCalls = [];
-  const sentMails = [];
+  const queuedJobs = [];
 
   const service = new WidgetLeadsService(
     {
@@ -29,17 +29,32 @@ function createService({ leadNotificationEmail = 'hello@soulesmartbusiness.com' 
       async assertSessionBelongsToSite() {},
     },
     {
-      async sendLeadNotification(payload) {
-        sentMails.push(payload);
+      buildLeadNotification(payload) {
+        return {
+          to: payload.recipientEmail,
+          subject: 'Neuer Lead',
+          html: `<p>${payload.lead.email}</p>`,
+          text: payload.lead.email,
+        };
+      },
+    },
+    {
+      async enqueue(payload) {
+        queuedJobs.push(payload);
+      },
+    },
+    {
+      isConfigured() {
+        return true;
       },
     },
   );
 
-  return { service, dbCalls, sentMails };
+  return { service, dbCalls, queuedJobs };
 }
 
-test('WidgetLeadsService.capture stores lead and sends notification email when configured', async () => {
-  const { service, dbCalls, sentMails } = createService();
+test('WidgetLeadsService.capture stores lead and queues notification email when configured', async () => {
+  const { service, dbCalls, queuedJobs } = createService();
 
   const result = await service.capture({
     siteKey: 'soule-smart-business',
@@ -55,13 +70,14 @@ test('WidgetLeadsService.capture stores lead and sends notification email when c
   assert.equal(dbCalls.length, 2);
   assert.match(dbCalls[0].sql, /INSERT INTO widget_leads/i);
   assert.match(dbCalls[1].sql, /UPDATE widget_sessions/i);
-  assert.equal(sentMails.length, 1);
-  assert.equal(sentMails[0].recipientEmail, 'hello@soulesmartbusiness.com');
-  assert.equal(sentMails[0].lead.email, 'max@example.com');
+  assert.equal(queuedJobs.length, 1);
+  assert.equal(queuedJobs[0].kind, 'lead_notification');
+  assert.equal(queuedJobs[0].to, 'hello@soulesmartbusiness.com');
+  assert.equal(queuedJobs[0].metadata.leadEmail, 'max@example.com');
 });
 
 test('WidgetLeadsService.capture keeps working without notification email', async () => {
-  const { service, sentMails } = createService({ leadNotificationEmail: '' });
+  const { service, queuedJobs } = createService({ leadNotificationEmail: '' });
 
   await service.capture({
     siteKey: 'soule-smart-business',
@@ -70,5 +86,5 @@ test('WidgetLeadsService.capture keeps working without notification email', asyn
     email: 'max@example.com',
   });
 
-  assert.equal(sentMails.length, 0);
+  assert.equal(queuedJobs.length, 0);
 });

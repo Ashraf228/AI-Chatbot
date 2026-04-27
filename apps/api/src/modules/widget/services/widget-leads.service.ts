@@ -8,7 +8,9 @@ import { PrismaService } from '../../../db/prisma.service';
 import { WidgetConfigService } from './widget-config.service';
 import { WidgetSecurityService } from './widget-security.service';
 import { LeadMailerService } from './lead-mailer.service';
+import { EmailJobsService } from './email-jobs.service';
 import { logEvent } from '../../../utils/logger';
+import { ReportMailerService } from './report-mailer.service';
 
 @Injectable()
 export class WidgetLeadsService {
@@ -17,6 +19,8 @@ export class WidgetLeadsService {
     private readonly widgetConfigService: WidgetConfigService,
     private readonly widgetSecurityService: WidgetSecurityService,
     private readonly leadMailer: LeadMailerService,
+    private readonly emailJobs: EmailJobsService,
+    private readonly reportMailer: ReportMailerService,
   ) {}
 
   async capture(
@@ -44,8 +48,14 @@ export class WidgetLeadsService {
     );
 
     if (site.leadNotificationEmail) {
-      try {
-        await this.leadMailer.sendLeadNotification({
+      if (!this.reportMailer.isConfigured()) {
+        logEvent('lead_notification_skipped', {
+          siteId: site.id,
+          recipientEmail: site.leadNotificationEmail,
+          reason: 'smtp_not_configured',
+        });
+      } else {
+        const messagePayload = this.leadMailer.buildLeadNotification({
           recipientEmail: site.leadNotificationEmail,
           siteId: site.id,
           siteName: site.companyName || site.name,
@@ -57,11 +67,15 @@ export class WidgetLeadsService {
             message: dto.message,
           },
         });
-      } catch (error) {
-        logEvent('lead_notification_failed', {
-          siteId: site.id,
-          recipientEmail: site.leadNotificationEmail,
-          error: error instanceof Error ? error.message : 'Unknown mail error',
+
+        await this.emailJobs.enqueue({
+          kind: 'lead_notification',
+          ...messagePayload,
+          metadata: {
+            siteId: site.id,
+            sessionId: dto.sessionId,
+            leadEmail: dto.email,
+          },
         });
       }
     }
