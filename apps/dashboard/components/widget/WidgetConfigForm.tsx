@@ -23,6 +23,9 @@ const FLOW_SIGNAL_OPTIONS = [
 ] as const;
 
 type ConversationFlowSignal = (typeof FLOW_SIGNAL_OPTIONS)[number]["value"];
+type PreviewMessage = { role: "assistant" | "user"; content: string };
+
+const AFFIRMATION_PATTERN = /^(ja|jap|yes|bitte|gern|gerne|okay|ok|klingt gut|mach(en)? wir)\b/i;
 
 type ConversationFlowStateForm = {
   id: string;
@@ -62,6 +65,53 @@ type ConversationFlowPreset = {
   description: string;
   flow: Omit<ConversationFlowForm, "states"> & { states?: ConversationFlowStateForm[] };
 };
+
+const FLOW_PREVIEW_SCENARIOS: Array<{
+  id: string;
+  label: string;
+  description: string;
+  messages: PreviewMessage[];
+}> = [
+  {
+    id: "opening",
+    label: "Allgemeiner Einstieg",
+    description: "Der Nutzer startet noch sehr offen. Hier sollte normalerweise der Clarify-Branch greifen.",
+    messages: [
+      { role: "assistant", content: "Hi! Wie kann ich helfen?" },
+      { role: "user", content: "ich brauche eine ki" },
+    ],
+  },
+  {
+    id: "qualified",
+    label: "Bedarf klar, Branche fehlt",
+    description: "Der Use Case ist schon klarer, aber die Einordnung fehlt noch.",
+    messages: [
+      { role: "assistant", content: "Hi! Wie kann ich helfen?" },
+      { role: "user", content: "ich möchte meinen support automatisieren" },
+    ],
+  },
+  {
+    id: "qualified-ready",
+    label: "Fast kontaktbereit",
+    description: "Bedarf, Branche und Dringlichkeit sind da. Jetzt sollte der Flow Richtung Kontakt gehen.",
+    messages: [
+      { role: "assistant", content: "Hi! Wie kann ich helfen?" },
+      { role: "user", content: "wir wollen support-standardfragen in unserer agentur zeitnah automatisieren" },
+    ],
+  },
+  {
+    id: "contact-ready",
+    label: "Kontaktbestätigung",
+    description: "Der Nutzer bestätigt nach einer CTA. Hier sollte direkt der Kontakt-Branch greifen.",
+    messages: [
+      {
+        role: "assistant",
+        content: "Das klingt nach einem passenden Use Case. Möchtest du lieber einen Termin oder direkt eine Anfrage schicken?",
+      },
+      { role: "user", content: "ja bitte" },
+    ],
+  },
+];
 
 const DEFAULT_CONVERSATION_FLOW: ConversationFlowForm = {
   questions: {
@@ -457,6 +507,63 @@ function normalizeStateSignals(value: unknown) {
   );
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function toTriggerPattern(values: string[]) {
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  return new RegExp(`\\b(${values.map((value) => escapeRegExp(value)).join("|")})\\b`, "i");
+}
+
+function compactPreviewText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function evaluateFlowPreview(flow: ConversationFlowForm, history: PreviewMessage[]) {
+  const userMessages = history.filter((message) => message.role === "user");
+  const assistantMessages = history.filter((message) => message.role === "assistant");
+  const latestUserMessage = compactPreviewText(userMessages[userMessages.length - 1]?.content || "");
+  const latestAssistantMessage = compactPreviewText(assistantMessages[assistantMessages.length - 1]?.content || "");
+  const wholeUserText = userMessages.map((message) => compactPreviewText(message.content)).join("\n");
+
+  const patterns = {
+    contactIntent: toTriggerPattern(flow.triggers.contactIntent),
+    qualifiedNeed: toTriggerPattern(flow.triggers.qualifiedNeed),
+    industry: toTriggerPattern(flow.triggers.industry),
+    urgency: toTriggerPattern(flow.triggers.urgency),
+  };
+
+  const signals: Record<ConversationFlowSignal, boolean> = {
+    contactIntent: Boolean(patterns.contactIntent?.test(wholeUserText)),
+    qualifiedNeed: Boolean(patterns.qualifiedNeed?.test(wholeUserText)),
+    industry: Boolean(patterns.industry?.test(wholeUserText)),
+    urgency: Boolean(patterns.urgency?.test(wholeUserText)),
+    affirmedContactCta:
+      AFFIRMATION_PATTERN.test(latestUserMessage) && Boolean(patterns.contactIntent?.test(latestAssistantMessage)),
+  };
+
+  const matchedState =
+    flow.states.find((state) => {
+      const requiresSatisfied = state.requires.every((signal) => signals[signal]);
+      const requiresAnySatisfied =
+        state.requiresAny.length === 0 || state.requiresAny.some((signal) => signals[signal]);
+      const forbidsSatisfied = state.forbids.every((signal) => !signals[signal]);
+      const extraPattern = toTriggerPattern(state.matchAny);
+      const textSatisfied = !extraPattern || extraPattern.test(wholeUserText);
+
+      return requiresSatisfied && requiresAnySatisfied && forbidsSatisfied && textSatisfied;
+    }) || flow.states[flow.states.length - 1];
+
+  return {
+    matchedState,
+    signals,
+  };
+}
+
 function mergeConversationFlow(value: unknown): ConversationFlowForm {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return mergeConversationFlow(DEFAULT_CONVERSATION_FLOW);
@@ -779,7 +886,11 @@ function ConversationFlowEditor({
   onChange: (value: ConversationFlowForm) => void;
 }) {
   const [presetKey, setPresetKey] = useState<keyof typeof FLOW_PRESETS>("leadQualification");
+  const [previewScenarioId, setPreviewScenarioId] = useState(FLOW_PREVIEW_SCENARIOS[0]?.id || "opening");
   const selectedPreset = FLOW_PRESETS[presetKey];
+  const selectedScenario =
+    FLOW_PREVIEW_SCENARIOS.find((scenario) => scenario.id === previewScenarioId) || FLOW_PREVIEW_SCENARIOS[0];
+  const preview = evaluateFlowPreview(value, selectedScenario.messages);
 
   return (
     <div className="dashboard-card" style={{ padding: 20, background: "rgba(255,255,255,0.7)" }}>
@@ -976,6 +1087,85 @@ function ConversationFlowEditor({
             })
           }
         />
+
+        <SectionTitle
+          title="Live-Vorschau"
+          text="So kannst du direkt im Dashboard prüfen, welcher Branch bei einem Beispielgespräch greifen würde."
+        />
+        <div className="dashboard-card dashboard-card--soft">
+          <div className="dashboard-grid dashboard-grid--split" style={{ gap: 14 }}>
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">Beispielverlauf</span>
+              <Select value={previewScenarioId} onChange={(e) => setPreviewScenarioId(e.target.value)}>
+                {FLOW_PREVIEW_SCENARIOS.map((scenario) => (
+                  <option key={scenario.id} value={scenario.id}>
+                    {scenario.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <div className="dashboard-field">
+              <span className="dashboard-field-label">Einordnung</span>
+              <p className="dashboard-copy" style={{ margin: 0 }}>
+                {selectedScenario.description}
+              </p>
+            </div>
+          </div>
+
+          <div className="dashboard-stack" style={{ gap: 10, marginTop: 14 }}>
+            {selectedScenario.messages.map((message, index) => (
+              <div
+                key={`${message.role}-${index}`}
+                className="dashboard-card"
+                style={{
+                  padding: 12,
+                  background: message.role === "assistant" ? "rgba(255,255,255,0.9)" : "rgba(255,246,232,0.85)",
+                }}
+              >
+                <strong>{message.role === "assistant" ? "Assistent" : "Nutzer"}</strong>
+                <p className="dashboard-copy" style={{ margin: "6px 0 0" }}>
+                  {message.content}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="dashboard-grid dashboard-grid--split" style={{ gap: 14, marginTop: 16 }}>
+            <div className="dashboard-card">
+              <span className="dashboard-field-label">Aktiver Branch</span>
+              <h4 className="dashboard-card-title" style={{ margin: "8px 0 4px" }}>
+                {preview.matchedState?.label || "Kein Branch"}
+              </h4>
+              <p className="dashboard-copy" style={{ margin: 0 }}>
+                ID: {preview.matchedState?.id || "unbekannt"}
+              </p>
+              <p className="dashboard-copy" style={{ marginTop: 12 }}>
+                {preview.matchedState?.instruction || "Keine Anweisung hinterlegt."}
+              </p>
+              {preview.matchedState?.preferredQuestion ? (
+                <p className="dashboard-copy" style={{ marginTop: 12 }}>
+                  <strong>Bevorzugte Rückfrage:</strong> {preview.matchedState.preferredQuestion}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="dashboard-card">
+              <span className="dashboard-field-label">Erkannte Signale</span>
+              <div className="dashboard-stack" style={{ gap: 8, marginTop: 10 }}>
+                {FLOW_SIGNAL_OPTIONS.map((option) => (
+                  <div
+                    key={option.value}
+                    className="dashboard-inline"
+                    style={{ justifyContent: "space-between", gap: 12 }}
+                  >
+                    <span>{option.label}</span>
+                    <strong>{preview.signals[option.value] ? "Ja" : "Nein"}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

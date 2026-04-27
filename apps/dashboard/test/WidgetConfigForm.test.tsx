@@ -51,6 +51,8 @@ describe("WidgetConfigForm", () => {
     ).toHaveValue(
       "Geht es bei dir eher um ein akutes Problem, eine Rückfrage zu einem Vorgang oder allgemeine Hilfe?",
     );
+    expect(screen.getByText("Live-Vorschau")).toBeInTheDocument();
+    expect(screen.getByText("Einstieg / Klärung")).toBeInTheDocument();
 
     await user.click(
       screen.getByRole("button", { name: "Widget-Konfiguration speichern" }),
