@@ -154,6 +154,180 @@ const FLOW_PRESETS: Record<string, { label: string; description: string; flow: C
       },
     },
   },
+  localBusiness: {
+    label: "Lokales Unternehmen",
+    description: "Für lokale Betriebe mit Fokus auf Anfragen, Erreichbarkeit und Entlastung im Alltag.",
+    flow: {
+      questions: {
+        opening: "Geht es bei dir eher um mehr Anfragen, bessere Erreichbarkeit oder Entlastung im Tagesgeschäft?",
+        industry: "Was genau macht euer Betrieb oder in welchem Bereich seid ihr unterwegs?",
+        urgency: "Wie stark drückt das Thema gerade im Alltag bei euch?",
+      },
+      instructions: {
+        clarify:
+          "Wenn der Einstieg allgemein ist, ordne kurz ein, dass sich im lokalen Geschäft oft schnell Potenzial zeigt, und stelle eine klare Rückfrage.",
+        qualifiedMissingIndustry:
+          "Wenn das Ziel klar ist, aber der Betriebskontext fehlt, frage nach Branche, Teamgröße oder typischen Kundenanfragen.",
+        qualifiedMissingUrgency:
+          "Wenn das Ziel klar ist, aber die Priorität fehlt, frage nach Zeitdruck, Auslastung oder verlorenen Anfragen.",
+        qualifiedReady:
+          "Wenn Bedarf und Kontext klar sind, gib eine kurze Einschätzung und leite zügig in Richtung Kontakt oder Termin.",
+        contactReady:
+          "Wenn der Nutzer offen für Hilfe ist, bestätige kurz und leite direkt zur Kontaktaufnahme weiter.",
+      },
+      triggers: {
+        contactIntent: ["kontakt", "termin", "rueckruf", "rückruf", "anfrage", "sprechen"],
+        qualifiedNeed: ["anfragen", "kunden", "erreichbarkeit", "support", "prozesse", "entlastung", "ki"],
+        industry: ["betrieb", "lokal", "studio", "salon", "restaurant", "hotel", "praxis", "laden"],
+        urgency: ["sofort", "dringend", "schnell", "zeitnah", "heute", "diese woche"],
+      },
+    },
+  },
+  agency: {
+    label: "Agentur",
+    description: "Für Agenturen mit Fokus auf Auslastung, interne Effizienz und bessere Lead-Qualifizierung.",
+    flow: {
+      questions: {
+        opening: "Geht es bei euch eher um interne Entlastung, bessere Lead-Qualifizierung oder mehr Effizienz im Kundenprozess?",
+        industry: "Welche Art Agentur seid ihr genau und worauf liegt euer Schwerpunkt?",
+        urgency: "Wie stark belastet euch das Thema aktuell im Tagesgeschäft?",
+      },
+      instructions: {
+        clarify:
+          "Wenn der Einstieg allgemein ist, leite schnell auf Prozesse, Lead-Qualifizierung oder Support im Agenturalltag ein.",
+        qualifiedMissingIndustry:
+          "Wenn der Bedarf klar ist, aber die Agentur-Ausrichtung fehlt, frage nach Leistungen, Kundenstruktur oder Teamaufbau.",
+        qualifiedMissingUrgency:
+          "Wenn der Bedarf klar ist, aber Priorität oder Druck fehlen, frage nach Engpässen, Zeitverlust oder wiederkehrenden Aufgaben.",
+        qualifiedReady:
+          "Wenn Bedarf und Kontext klar sind, ordne das Potenzial kurz ein und führe Richtung Kontakt oder Termin.",
+        contactReady:
+          "Wenn der Nutzer gesprächsbereit ist, bestätige kurz und leite direkt weiter.",
+      },
+      triggers: {
+        contactIntent: ["kontakt", "anfrage", "termin", "call", "rueckruf", "rückruf"],
+        qualifiedNeed: ["agentur", "leads", "prozesse", "support", "automatisierung", "kundenanfragen", "team"],
+        industry: ["webdesign", "marketing", "seo", "ads", "branding", "social media", "agentur"],
+        urgency: ["dringend", "zeitnah", "schnell", "dieses quartal", "sofort"],
+      },
+    },
+  },
+  medicalPractice: {
+    label: "Arztpraxis",
+    description: "Für Praxen mit Fokus auf Entlastung am Empfang, Standardfragen und strukturierte Kontaktaufnahme.",
+    flow: {
+      questions: {
+        opening: "Geht es bei euch eher um Entlastung bei Anrufen, Standardfragen oder der allgemeinen Erreichbarkeit?",
+        industry: "Ist das für eine Arztpraxis, Zahnarztpraxis oder einen anderen medizinischen Bereich gedacht?",
+        urgency: "Wie stark merkt ihr die Belastung aktuell im Praxisalltag?",
+      },
+      instructions: {
+        clarify:
+          "Wenn der Einstieg allgemein ist, lenke das Gespräch ruhig auf Erreichbarkeit, Standardfragen oder Entlastung am Empfang.",
+        qualifiedMissingIndustry:
+          "Wenn der Bedarf klar ist, aber der Praxiskontext fehlt, frage nach Praxisart oder typischen Patientenanliegen.",
+        qualifiedMissingUrgency:
+          "Wenn der Bedarf klar ist, aber die Auswirkung fehlt, frage nach Wartezeiten, Anrufaufkommen oder Teamlast.",
+        qualifiedReady:
+          "Wenn Bedarf und Kontext klar sind, gib eine kurze Einschätzung und leite in Richtung Kontakt oder Termin weiter.",
+        contactReady:
+          "Wenn der Nutzer Kontakt möchte, bestätige kurz und leite direkt zur Kontaktaufnahme weiter.",
+      },
+      triggers: {
+        contactIntent: ["kontakt", "termin", "rueckruf", "rückruf", "anfrage"],
+        qualifiedNeed: ["praxis", "patienten", "anrufe", "erreichbarkeit", "standardfragen", "support", "entlastung"],
+        industry: ["arzt", "zahnarzt", "praxis", "physio", "therapie", "medizin"],
+        urgency: ["dringend", "zeitnah", "schnell", "akut", "sofort"],
+      },
+    },
+  },
+  lawFirm: {
+    label: "Kanzlei",
+    description: "Für Kanzleien mit Fokus auf Erstqualifizierung, Standardanfragen und sauberer Kontaktaufnahme.",
+    flow: {
+      questions: {
+        opening: "Geht es eher um Erstqualifizierung von Anfragen, Entlastung im Sekretariat oder bessere Erreichbarkeit?",
+        industry: "Ist das für eine Kanzlei oder einen anderen beratenden Bereich gedacht?",
+        urgency: "Wie stark belastet euch das Thema aktuell im Tagesgeschäft?",
+      },
+      instructions: {
+        clarify:
+          "Wenn der Einstieg allgemein ist, lenke das Gespräch auf Anfragen, Erreichbarkeit oder Entlastung in der ersten Kommunikation.",
+        qualifiedMissingIndustry:
+          "Wenn der Bedarf klar ist, aber der Kontext fehlt, frage nach Kanzleiart oder typischen Erstkontakten.",
+        qualifiedMissingUrgency:
+          "Wenn der Bedarf klar ist, aber die Priorität fehlt, frage nach Anfragevolumen, Rückrufen oder Zeitdruck.",
+        qualifiedReady:
+          "Wenn Bedarf und Kontext klar sind, gib eine kurze Einordnung und führe Richtung Kontakt oder Termin.",
+        contactReady:
+          "Wenn der Nutzer gesprächsbereit ist, bestätige kurz und leite sofort weiter.",
+      },
+      triggers: {
+        contactIntent: ["kontakt", "anfrage", "termin", "rueckruf", "rückruf", "gespräch"],
+        qualifiedNeed: ["kanzlei", "mandanten", "anfragen", "sekretariat", "erreichbarkeit", "support"],
+        industry: ["kanzlei", "anwalt", "steuerberater", "notar", "beratung"],
+        urgency: ["zeitnah", "dringend", "schnell", "sofort", "diese woche"],
+      },
+    },
+  },
+  trades: {
+    label: "Handwerk",
+    description: "Für Handwerksbetriebe mit Fokus auf Erreichbarkeit, Angebotsanfragen und Entlastung im Tagesgeschäft.",
+    flow: {
+      questions: {
+        opening: "Geht es bei euch eher um mehr Anfragen, weniger Telefonstress oder bessere Abläufe im Tagesgeschäft?",
+        industry: "In welchem Handwerksbereich seid ihr unterwegs?",
+        urgency: "Wie stark kostet euch das Thema aktuell Zeit oder Nerven?",
+      },
+      instructions: {
+        clarify:
+          "Wenn der Einstieg allgemein ist, führe auf Angebotsanfragen, Erreichbarkeit oder Entlastung im Alltag hin.",
+        qualifiedMissingIndustry:
+          "Wenn der Bedarf klar ist, aber der Betriebskontext fehlt, frage nach Gewerk oder typischen Kundenanfragen.",
+        qualifiedMissingUrgency:
+          "Wenn der Bedarf klar ist, aber die Auswirkung fehlt, frage nach Zeitverlust, verpassten Anrufen oder Auslastung.",
+        qualifiedReady:
+          "Wenn Bedarf und Kontext klar sind, gib eine kurze Einschätzung und leite in Richtung Kontakt oder Termin.",
+        contactReady:
+          "Wenn der Nutzer bereit ist, bestätige kurz und leite direkt weiter.",
+      },
+      triggers: {
+        contactIntent: ["kontakt", "angebot", "anfrage", "termin", "rueckruf", "rückruf"],
+        qualifiedNeed: ["handwerk", "angebote", "anfragen", "telefon", "erreichbarkeit", "support", "entlastung"],
+        industry: ["elektriker", "sanitär", "heizung", "maler", "dachdecker", "schreiner", "gartenbau"],
+        urgency: ["dringend", "schnell", "sofort", "zeitnah", "heute"],
+      },
+    },
+  },
+  ecommerce: {
+    label: "E-Commerce / Shop",
+    description: "Für Shops mit Fokus auf Support, Bestellfragen und Entlastung im Kundenservice.",
+    flow: {
+      questions: {
+        opening: "Geht es eher um Entlastung im Support, Bestellfragen oder mehr Effizienz im Shop-Alltag?",
+        industry: "Ist das für einen Online-Shop oder ein anderes E-Commerce-Modell gedacht?",
+        urgency: "Wie stark bremst euch das Thema aktuell im Tagesgeschäft aus?",
+      },
+      instructions: {
+        clarify:
+          "Wenn der Einstieg allgemein ist, lenke das Gespräch auf Support, Bestellstatus, Standardfragen oder Team-Entlastung.",
+        qualifiedMissingIndustry:
+          "Wenn der Bedarf klar ist, aber der Shop-Kontext fehlt, frage nach Shop-Modell, Produkten oder Supportaufkommen.",
+        qualifiedMissingUrgency:
+          "Wenn der Bedarf klar ist, aber die Auswirkung fehlt, frage nach Ticketvolumen, Reaktionszeit oder Belastung im Team.",
+        qualifiedReady:
+          "Wenn Bedarf und Kontext klar sind, gib eine kurze Einschätzung und leite in Richtung Kontakt oder Termin weiter.",
+        contactReady:
+          "Wenn der Nutzer Kontakt möchte, bestätige kurz und leite direkt weiter.",
+      },
+      triggers: {
+        contactIntent: ["kontakt", "anfrage", "termin", "rueckruf", "rückruf", "sprechen"],
+        qualifiedNeed: ["shop", "support", "bestellung", "kundenservice", "standardfragen", "tickets", "retouren"],
+        industry: ["shop", "e-commerce", "onlineshop", "produkte", "bestellungen", "retouren"],
+        urgency: ["dringend", "zeitnah", "schnell", "sofort", "peak", "heute"],
+      },
+    },
+  },
 };
 
 function normalizeTriggerList(value: string) {
