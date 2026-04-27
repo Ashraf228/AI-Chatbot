@@ -2,7 +2,8 @@ import { Button } from "../shared/Button";
 
 type EmbedSnippetCardProps = {
   loaderUrl: string;
-  siteId: string;
+  siteKey: string;
+  internalId: string;
   publicKey: string | null;
   embedCode: string;
   copied: string | null;
@@ -11,7 +12,8 @@ type EmbedSnippetCardProps = {
 
 export function EmbedSnippetCard({
   loaderUrl,
-  siteId,
+  siteKey,
+  internalId,
   publicKey,
   embedCode,
   copied,
@@ -34,7 +36,12 @@ export function EmbedSnippetCard({
 
       <div className="dashboard-info-row">
         <strong>Site-Key</strong>
-        <span className="dashboard-breakword dashboard-mono">{siteId}</span>
+        <span className="dashboard-breakword dashboard-mono">{siteKey}</span>
+      </div>
+
+      <div className="dashboard-info-row">
+        <strong>Technische ID</strong>
+        <span className="dashboard-breakword dashboard-mono">{internalId}</span>
       </div>
 
       <div className="dashboard-info-row">
@@ -45,7 +52,7 @@ export function EmbedSnippetCard({
       </div>
 
       <div className="dashboard-inline">
-        <Button type="button" variant="secondary" onClick={() => onCopy(siteId, "Site-Key")}>
+        <Button type="button" variant="secondary" onClick={() => onCopy(siteKey, "Site-Key")}>
           Site-Key kopieren
         </Button>
         {publicKey ? (

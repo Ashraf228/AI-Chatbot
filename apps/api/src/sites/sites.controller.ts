@@ -15,11 +15,14 @@ export class SitesController {
     }
 
     return this.sites.createSite(
-      dto.id,
-      dto.tenantId,
-      dto.name,
-      dto.allowedDomains,
-      dto.config ?? {},
+      {
+        id: dto.id,
+        siteKey: dto.siteKey,
+        tenantId: dto.tenantId,
+        name: dto.name,
+        allowedDomains: dto.allowedDomains,
+        config: dto.config ?? {},
+      },
     );
   }
 

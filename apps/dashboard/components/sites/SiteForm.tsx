@@ -3,7 +3,7 @@ import { Button } from "../shared/Button";
 import { Input } from "../shared/Input";
 
 type SiteFormValues = {
-  id: string;
+  siteKey: string;
   tenantId: string;
   name: string;
   domain: string;
@@ -19,14 +19,14 @@ export function SiteForm({ form, onChange, onSubmit }: SiteFormProps) {
   return (
     <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm">
       <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="site-id">
-          Site-ID
+        <label className="dashboard-field-label" htmlFor="site-key">
+          Site Key
         </label>
         <Input
-          id="site-id"
-          placeholder="kunde-4"
-          value={form.id}
-          onChange={(event) => onChange({ ...form, id: event.target.value })}
+          id="site-key"
+          placeholder="soule-smart-business"
+          value={form.siteKey}
+          onChange={(event) => onChange({ ...form, siteKey: event.target.value })}
         />
       </div>
 

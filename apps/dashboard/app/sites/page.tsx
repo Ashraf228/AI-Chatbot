@@ -11,6 +11,7 @@ import { SiteForm } from "../../components/sites/SiteForm";
 
 type Site = {
   id: string;
+  site_key: string;
   tenant_id: string | null;
   name: string;
   allowed_domains: string[];
@@ -47,7 +48,7 @@ export default function SitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState("");
   const [form, setForm] = useState({
-    id: "",
+    siteKey: "",
     tenantId: "t_default",
     name: "",
     domain: "localhost",
@@ -97,7 +98,7 @@ export default function SitesPage() {
   const embedCode = useMemo(() => {
     if (!selectedSite) return "";
 
-    return `<script src="${loaderUrl}" data-site-key="${selectedSite.id}" defer></script>`;
+    return `<script src="${loaderUrl}" data-site-key="${selectedSite.site_key}" defer></script>`;
   }, [loaderUrl, selectedSite]);
 
   useEffect(() => {
@@ -134,7 +135,7 @@ export default function SitesPage() {
     setMsg(null);
 
     const body = {
-      id: form.id.trim(),
+      siteKey: form.siteKey.trim(),
       tenantId: form.tenantId.trim(),
       name: form.name.trim(),
       allowedDomains: [form.domain.trim()].filter(Boolean),
@@ -158,7 +159,7 @@ export default function SitesPage() {
 
     setMsg("Site erfolgreich erstellt.");
     setForm({
-      id: "",
+      siteKey: "",
       tenantId: "t_default",
       name: "",
       domain: "localhost",
@@ -247,7 +248,7 @@ export default function SitesPage() {
                   >
                     {sites.map((site) => (
                       <option key={site.id} value={site.id}>
-                        {site.id} — {site.name}
+                        {site.name} — {site.site_key}
                       </option>
                     ))}
                   </Select>
@@ -255,6 +256,8 @@ export default function SitesPage() {
                   {selectedSite && (
                     <div className="dashboard-stack dashboard-stack--sm">
                       <InfoRow label="Name" value={selectedSite.name} />
+                      <InfoRow label="Site Key" value={selectedSite.site_key} />
+                      <InfoRow label="Technische ID" value={selectedSite.id} />
                       <InfoRow label="Tenant" value={selectedSite.tenant_id || "-"} />
                       <InfoRow
                         label="Domains"
@@ -288,7 +291,8 @@ export default function SitesPage() {
 
                       <EmbedSnippetCard
                         loaderUrl={loaderUrl}
-                        siteId={selectedSite.id}
+                        siteKey={selectedSite.site_key}
+                        internalId={selectedSite.id}
                         publicKey={selectedSite.public_key}
                         embedCode={embedCode}
                         copied={copied}
