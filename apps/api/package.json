@@ -6,6 +6,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "build": "nest build",
+    "migrate": "npm run build && node dist/db/run-migrations.js",
     "test:smoke": "npm run build && node --test test/*.test.cjs"
   },
   "dependencies": {

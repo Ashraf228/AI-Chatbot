@@ -16,6 +16,7 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { UsageModule } from './usage/usage.module';
 import { WidgetModule } from './modules/widget/widget.module';
 import { HealthController } from './health.controller';
+import { DatabaseMigrationsService } from './db/database-migrations.service';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { HealthController } from './health.controller';
   controllers: [HealthController],
   providers: [
     PrismaService,
+    DatabaseMigrationsService,
     VectorService,
     EmbeddingService,
     LlmService,
