@@ -7,6 +7,8 @@ import { WidgetLeadEntity } from '../entities/widget-lead.entity';
 import { PrismaService } from '../../../db/prisma.service';
 import { WidgetConfigService } from './widget-config.service';
 import { WidgetSecurityService } from './widget-security.service';
+import { LeadMailerService } from './lead-mailer.service';
+import { logEvent } from '../../../utils/logger';
 
 @Injectable()
 export class WidgetLeadsService {
@@ -14,6 +16,7 @@ export class WidgetLeadsService {
     private readonly db: PrismaService,
     private readonly widgetConfigService: WidgetConfigService,
     private readonly widgetSecurityService: WidgetSecurityService,
+    private readonly leadMailer: LeadMailerService,
   ) {}
 
   async capture(
@@ -39,6 +42,29 @@ export class WidgetLeadsService {
        WHERE site_id = $1 AND id = $2`,
       [site.id, dto.sessionId],
     );
+
+    if (site.leadNotificationEmail) {
+      try {
+        await this.leadMailer.sendLeadNotification({
+          recipientEmail: site.leadNotificationEmail,
+          siteId: site.id,
+          siteName: site.companyName || site.name,
+          submittedAt: new Date().toISOString(),
+          lead: {
+            name: dto.name,
+            email: dto.email,
+            phone: dto.phone,
+            message: dto.message,
+          },
+        });
+      } catch (error) {
+        logEvent('lead_notification_failed', {
+          siteId: site.id,
+          recipientEmail: site.leadNotificationEmail,
+          error: error instanceof Error ? error.message : 'Unknown mail error',
+        });
+      }
+    }
 
     return {
       id,

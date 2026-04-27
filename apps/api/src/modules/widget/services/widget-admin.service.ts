@@ -19,6 +19,7 @@ type SiteConfig = {
   widgetBundleUrl?: string;
   consentRequired?: boolean;
   leadCaptureEnabled?: boolean;
+  leadNotificationEmail?: string;
   suggestedQuestionsByPath?: Record<string, string[]>;
   systemPrompt?: string;
 };
@@ -138,6 +139,7 @@ export class WidgetAdminService {
       widgetBundleUrl: config.widgetBundleUrl || process.env.PUBLIC_WIDGET_BUNDLE_URL || '',
       consentRequired: config.consentRequired ?? true,
       leadCaptureEnabled: config.leadCaptureEnabled ?? true,
+      leadNotificationEmail: config.leadNotificationEmail || '',
       suggestedQuestionsByPath: config.suggestedQuestionsByPath || {},
       systemPrompt: config.systemPrompt || '',
       createdAt: row.created_at,
@@ -188,6 +190,7 @@ export class WidgetAdminService {
       widgetBundleUrl?: string;
       consentRequired?: boolean;
       leadCaptureEnabled?: boolean;
+      leadNotificationEmail?: string;
       suggestedQuestionsByPath?: Record<string, string[]>;
       systemPrompt?: string;
       allowedDomains?: string[];
@@ -208,6 +211,7 @@ export class WidgetAdminService {
       widgetBundleUrl: payload.widgetBundleUrl ?? site.widgetBundleUrl,
       consentRequired: payload.consentRequired ?? site.consentRequired,
       leadCaptureEnabled: payload.leadCaptureEnabled ?? site.leadCaptureEnabled,
+      leadNotificationEmail: payload.leadNotificationEmail ?? site.leadNotificationEmail,
       suggestedQuestionsByPath:
         payload.suggestedQuestionsByPath ?? site.suggestedQuestionsByPath,
       systemPrompt: payload.systemPrompt ?? site.systemPrompt,

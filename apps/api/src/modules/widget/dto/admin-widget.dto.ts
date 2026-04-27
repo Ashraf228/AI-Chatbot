@@ -130,6 +130,12 @@ export class UpdateWidgetConfigDto {
   leadCaptureEnabled?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsEmail({}, { message: 'leadNotificationEmail must be a valid email address' })
+  @MaxLength(200)
+  leadNotificationEmail?: string;
+
+  @IsOptional()
   @Transform(({ value }) => normalizeStringArray(value))
   @IsArray()
   @ArrayMaxSize(25)

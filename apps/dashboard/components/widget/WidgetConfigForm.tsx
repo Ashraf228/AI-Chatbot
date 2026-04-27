@@ -22,6 +22,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     isActive: true,
     consentRequired: true,
     leadCaptureEnabled: true,
+    leadNotificationEmail: "",
     allowedDomains: "",
     suggestedQuestionsByPath: "{\n  \"/\": [\"Was kostet der Service?\"]\n}",
   });
@@ -50,6 +51,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         isActive: data.isActive ?? true,
         consentRequired: data.consentRequired ?? true,
         leadCaptureEnabled: data.leadCaptureEnabled ?? true,
+        leadNotificationEmail: data.leadNotificationEmail || "",
         allowedDomains: (data.allowedDomains || []).join(", "),
         suggestedQuestionsByPath: JSON.stringify(data.suggestedQuestionsByPath || {}, null, 2),
       });
@@ -81,6 +83,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
       isActive: form.isActive,
       consentRequired: form.consentRequired,
       leadCaptureEnabled: form.leadCaptureEnabled,
+      leadNotificationEmail: form.leadNotificationEmail.trim() || undefined,
       allowedDomains: form.allowedDomains
         .split(",")
         .map((item) => item.trim())
@@ -152,6 +155,11 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         <LeadFlowSettings
           checked={form.leadCaptureEnabled}
           onChange={(value) => setForm({ ...form, leadCaptureEnabled: value })}
+        />
+        <Field
+          label="Lead-Benachrichtigung E-Mail"
+          value={form.leadNotificationEmail}
+          onChange={(value) => setForm({ ...form, leadNotificationEmail: value })}
         />
         <SuggestedQuestionsEditor
           value={form.suggestedQuestionsByPath}
