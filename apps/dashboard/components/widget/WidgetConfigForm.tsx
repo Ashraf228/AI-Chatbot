@@ -13,7 +13,28 @@ type WidgetConfigFormProps = {
   siteId: string;
 };
 
-const DEFAULT_CONVERSATION_FLOW = {
+type ConversationFlowForm = {
+  questions: {
+    opening: string;
+    industry: string;
+    urgency: string;
+  };
+  instructions: {
+    clarify: string;
+    qualifiedMissingIndustry: string;
+    qualifiedMissingUrgency: string;
+    qualifiedReady: string;
+    contactReady: string;
+  };
+  triggers: {
+    contactIntent: string[];
+    qualifiedNeed: string[];
+    industry: string[];
+    urgency: string[];
+  };
+};
+
+const DEFAULT_CONVERSATION_FLOW: ConversationFlowForm = {
   questions: {
     opening: "Geht es bei dir eher um Support, Prozesse, Marketing oder etwas anderes?",
     industry: "Für welches Unternehmen oder welche Branche ist das gedacht?",
@@ -39,12 +60,90 @@ const DEFAULT_CONVERSATION_FLOW = {
   },
 };
 
-function formatConversationFlow(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length === 0) {
-    return JSON.stringify(DEFAULT_CONVERSATION_FLOW, null, 2);
+function normalizeTriggerList(value: string) {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function formatTriggerList(values: string[]) {
+  return values.join(", ");
+}
+
+function mergeConversationFlow(value: unknown): ConversationFlowForm {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_CONVERSATION_FLOW;
   }
 
-  return JSON.stringify(value, null, 2);
+  const raw = value as Record<string, unknown>;
+  const questions =
+    raw.questions && typeof raw.questions === "object" && !Array.isArray(raw.questions)
+      ? (raw.questions as Record<string, unknown>)
+      : {};
+  const instructions =
+    raw.instructions && typeof raw.instructions === "object" && !Array.isArray(raw.instructions)
+      ? (raw.instructions as Record<string, unknown>)
+      : {};
+  const triggers =
+    raw.triggers && typeof raw.triggers === "object" && !Array.isArray(raw.triggers)
+      ? (raw.triggers as Record<string, unknown>)
+      : {};
+
+  return {
+    questions: {
+      opening:
+        typeof questions.opening === "string" && questions.opening.trim().length > 0
+          ? questions.opening
+          : DEFAULT_CONVERSATION_FLOW.questions.opening,
+      industry:
+        typeof questions.industry === "string" && questions.industry.trim().length > 0
+          ? questions.industry
+          : DEFAULT_CONVERSATION_FLOW.questions.industry,
+      urgency:
+        typeof questions.urgency === "string" && questions.urgency.trim().length > 0
+          ? questions.urgency
+          : DEFAULT_CONVERSATION_FLOW.questions.urgency,
+    },
+    instructions: {
+      clarify:
+        typeof instructions.clarify === "string" && instructions.clarify.trim().length > 0
+          ? instructions.clarify
+          : DEFAULT_CONVERSATION_FLOW.instructions.clarify,
+      qualifiedMissingIndustry:
+        typeof instructions.qualifiedMissingIndustry === "string" &&
+        instructions.qualifiedMissingIndustry.trim().length > 0
+          ? instructions.qualifiedMissingIndustry
+          : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedMissingIndustry,
+      qualifiedMissingUrgency:
+        typeof instructions.qualifiedMissingUrgency === "string" &&
+        instructions.qualifiedMissingUrgency.trim().length > 0
+          ? instructions.qualifiedMissingUrgency
+          : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedMissingUrgency,
+      qualifiedReady:
+        typeof instructions.qualifiedReady === "string" && instructions.qualifiedReady.trim().length > 0
+          ? instructions.qualifiedReady
+          : DEFAULT_CONVERSATION_FLOW.instructions.qualifiedReady,
+      contactReady:
+        typeof instructions.contactReady === "string" && instructions.contactReady.trim().length > 0
+          ? instructions.contactReady
+          : DEFAULT_CONVERSATION_FLOW.instructions.contactReady,
+    },
+    triggers: {
+      contactIntent: Array.isArray(triggers.contactIntent)
+        ? triggers.contactIntent.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+        : DEFAULT_CONVERSATION_FLOW.triggers.contactIntent,
+      qualifiedNeed: Array.isArray(triggers.qualifiedNeed)
+        ? triggers.qualifiedNeed.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+        : DEFAULT_CONVERSATION_FLOW.triggers.qualifiedNeed,
+      industry: Array.isArray(triggers.industry)
+        ? triggers.industry.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+        : DEFAULT_CONVERSATION_FLOW.triggers.industry,
+      urgency: Array.isArray(triggers.urgency)
+        ? triggers.urgency.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+        : DEFAULT_CONVERSATION_FLOW.triggers.urgency,
+    },
+  };
 }
 
 export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
@@ -59,7 +158,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     leadNotificationEmail: "",
     allowedDomains: "",
     suggestedQuestionsByPath: "{\n  \"/\": [\"Was kostet der Service?\"]\n}",
-    conversationFlow: JSON.stringify(DEFAULT_CONVERSATION_FLOW, null, 2),
+    conversationFlow: DEFAULT_CONVERSATION_FLOW,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -89,7 +188,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         leadNotificationEmail: data.leadNotificationEmail || "",
         allowedDomains: (data.allowedDomains || []).join(", "),
         suggestedQuestionsByPath: JSON.stringify(data.suggestedQuestionsByPath || {}, null, 2),
-        conversationFlow: formatConversationFlow(data.conversationFlow),
+        conversationFlow: mergeConversationFlow(data.conversationFlow),
       });
       setLoading(false);
     }
@@ -103,19 +202,10 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     setError(null);
 
     let suggestedQuestionsByPath: Record<string, string[]>;
-    let conversationFlow: Record<string, unknown>;
     try {
       suggestedQuestionsByPath = JSON.parse(form.suggestedQuestionsByPath || "{}");
     } catch {
       setError("Suggested Questions muessen gueltiges JSON sein.");
-      setSaving(false);
-      return;
-    }
-
-    try {
-      conversationFlow = JSON.parse(form.conversationFlow || "{}");
-    } catch {
-      setError("Conversation Flow muss gueltiges JSON sein.");
       setSaving(false);
       return;
     }
@@ -134,7 +224,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         .map((item) => item.trim())
         .filter(Boolean),
       suggestedQuestionsByPath,
-      conversationFlow,
+      conversationFlow: form.conversationFlow,
     };
 
     const res = await fetch(`/api/widget/config/${siteId}`, {
@@ -211,16 +301,11 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
           value={form.suggestedQuestionsByPath}
           onChange={(value) => setForm({ ...form, suggestedQuestionsByPath: value })}
         />
-        <label className="dashboard-field">
-          <span className="dashboard-field-label">Conversation Flow (JSON)</span>
-          <textarea
-            className="dashboard-textarea dashboard-mono"
-            value={form.conversationFlow}
-            onChange={(e) => setForm({ ...form, conversationFlow: e.target.value })}
-            placeholder="Optionaler Conversation Flow als JSON"
-            style={{ minHeight: 320 }}
-          />
-        </label>
+
+        <ConversationFlowEditor
+          value={form.conversationFlow}
+          onChange={(conversationFlow) => setForm({ ...form, conversationFlow })}
+        />
 
         <Button onClick={save} disabled={saving}>
           {saving ? "Speichert..." : "Widget-Konfiguration speichern"}
@@ -228,6 +313,183 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         {message && <p className="dashboard-status dashboard-status--success">{message}</p>}
         {error && <ErrorState message={error} />}
       </div>
+    </div>
+  );
+}
+
+function ConversationFlowEditor({
+  value,
+  onChange,
+}: {
+  value: ConversationFlowForm;
+  onChange: (value: ConversationFlowForm) => void;
+}) {
+  return (
+    <div className="dashboard-card" style={{ padding: 20, background: "rgba(255,255,255,0.7)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
+        <div>
+          <h3 className="dashboard-card-title" style={{ marginBottom: 6 }}>
+            Conversation Flow
+          </h3>
+          <p className="dashboard-copy" style={{ marginTop: 0 }}>
+            Steuere hier, welche Frage der Bot zuerst stellt, wann er nachhakt und ab wann er Richtung Kontakt geht.
+          </p>
+        </div>
+        <Button
+          type="button"
+          onClick={() => onChange(DEFAULT_CONVERSATION_FLOW)}
+          style={{ width: "auto", minWidth: 180 }}
+        >
+          Standard wiederherstellen
+        </Button>
+      </div>
+
+      <div className="dashboard-stack" style={{ marginTop: 20 }}>
+        <SectionTitle title="Fragen" text="Diese Fragen nutzt der Bot bevorzugt in den jeweiligen Phasen." />
+        <TextareaField
+          label="Einstiegsfrage"
+          value={value.questions.opening}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              questions: { ...value.questions, opening: next },
+            })
+          }
+        />
+        <TextareaField
+          label="Branchenfrage"
+          value={value.questions.industry}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              questions: { ...value.questions, industry: next },
+            })
+          }
+        />
+        <TextareaField
+          label="Dringlichkeitsfrage"
+          value={value.questions.urgency}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              questions: { ...value.questions, urgency: next },
+            })
+          }
+        />
+
+        <SectionTitle
+          title="Gesprächsregeln"
+          text="Hier legst du fest, wie der Bot in jeder Phase kurz geführt werden soll."
+        />
+        <TextareaField
+          label="Wenn der Einstieg noch allgemein ist"
+          value={value.instructions.clarify}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              instructions: { ...value.instructions, clarify: next },
+            })
+          }
+        />
+        <TextareaField
+          label="Wenn die Branche noch fehlt"
+          value={value.instructions.qualifiedMissingIndustry}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              instructions: { ...value.instructions, qualifiedMissingIndustry: next },
+            })
+          }
+        />
+        <TextareaField
+          label="Wenn Dringlichkeit oder Umfang noch fehlt"
+          value={value.instructions.qualifiedMissingUrgency}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              instructions: { ...value.instructions, qualifiedMissingUrgency: next },
+            })
+          }
+        />
+        <TextareaField
+          label="Wenn genug Infos da sind"
+          value={value.instructions.qualifiedReady}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              instructions: { ...value.instructions, qualifiedReady: next },
+            })
+          }
+        />
+        <TextareaField
+          label="Wenn der Nutzer kontaktbereit ist"
+          value={value.instructions.contactReady}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              instructions: { ...value.instructions, contactReady: next },
+            })
+          }
+        />
+
+        <SectionTitle
+          title="Triggerwörter"
+          text="Kommagetrennte Wörter oder Phrasen, an denen der Bot bestimmte Phasen erkennt."
+        />
+        <TriggerField
+          label="Kontaktwunsch"
+          value={value.triggers.contactIntent}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              triggers: { ...value.triggers, contactIntent: next },
+            })
+          }
+        />
+        <TriggerField
+          label="Klarer Bedarf"
+          value={value.triggers.qualifiedNeed}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              triggers: { ...value.triggers, qualifiedNeed: next },
+            })
+          }
+        />
+        <TriggerField
+          label="Branchenkontext"
+          value={value.triggers.industry}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              triggers: { ...value.triggers, industry: next },
+            })
+          }
+        />
+        <TriggerField
+          label="Dringlichkeit"
+          value={value.triggers.urgency}
+          onChange={(next) =>
+            onChange({
+              ...value,
+              triggers: { ...value.triggers, urgency: next },
+            })
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ title, text }: { title: string; text: string }) {
+  return (
+    <div>
+      <h3 className="dashboard-card-title" style={{ marginBottom: 6 }}>
+        {title}
+      </h3>
+      <p className="dashboard-copy" style={{ marginTop: 0 }}>
+        {text}
+      </p>
     </div>
   );
 }
@@ -245,6 +507,45 @@ function Field({
     <label className="dashboard-field">
       <span className="dashboard-field-label">{label}</span>
       <Input value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  );
+}
+
+function TextareaField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="dashboard-field">
+      <span className="dashboard-field-label">{label}</span>
+      <textarea
+        className="dashboard-textarea"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ minHeight: 110 }}
+      />
+    </label>
+  );
+}
+
+function TriggerField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  return (
+    <label className="dashboard-field">
+      <span className="dashboard-field-label">{label}</span>
+      <Input value={formatTriggerList(value)} onChange={(e) => onChange(normalizeTriggerList(e.target.value))} />
     </label>
   );
 }
