@@ -22,6 +22,7 @@ type WidgetConfigRow = {
   lead_capture_enabled: boolean;
   lead_notification_email: string;
   suggested_questions_by_path: Record<string, string[]>;
+  conversation_flow: Record<string, unknown>;
   system_prompt: string;
 };
 
@@ -75,6 +76,7 @@ export class WidgetConfigService {
       leadCaptureEnabled: boolean;
       leadNotificationEmail?: string;
       suggestedQuestionsByPath?: Record<string, string[]>;
+      conversationFlow?: unknown;
       systemPrompt?: string;
     }
   > {
@@ -82,7 +84,7 @@ export class WidgetConfigService {
       `SELECT id, tenant_id, name, domain, brand_color, accent_color, font_family, welcome_message,
               privacy_url, is_active, company_name, bot_name, logo_url, public_key,
               widget_bundle_url, consent_required, lead_capture_enabled, suggested_questions_by_path,
-              lead_notification_email, system_prompt
+              lead_notification_email, conversation_flow, system_prompt
        FROM (
          SELECT
            s.id,
@@ -104,6 +106,7 @@ export class WidgetConfigService {
            COALESCE((s.config->>'leadCaptureEnabled')::boolean, true) AS lead_capture_enabled,
            COALESCE(s.config->'suggestedQuestionsByPath', '{}'::jsonb) AS suggested_questions_by_path,
            COALESCE(s.config->>'leadNotificationEmail', '') AS lead_notification_email,
+           COALESCE(s.config->'conversationFlow', '{}'::jsonb) AS conversation_flow,
            COALESCE(s.config->>'systemPrompt', '') AS system_prompt
          FROM sites s
          WHERE COALESCE(s.config->>'siteKey', s.id) = $1
@@ -142,6 +145,7 @@ export class WidgetConfigService {
       leadCaptureEnabled: row.lead_capture_enabled,
       leadNotificationEmail: row.lead_notification_email || undefined,
       suggestedQuestionsByPath: row.suggested_questions_by_path,
+      conversationFlow: row.conversation_flow,
       systemPrompt: row.system_prompt || undefined,
     };
   }

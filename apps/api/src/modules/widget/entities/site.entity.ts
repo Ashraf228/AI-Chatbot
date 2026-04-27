@@ -12,4 +12,5 @@ export class SiteEntity {
   welcomeMessage!: string;
   privacyUrl!: string;
   isActive!: boolean;
+  conversationFlow?: unknown;
 }

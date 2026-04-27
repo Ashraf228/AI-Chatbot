@@ -21,3 +21,24 @@ test('conversation guide marks contact intent as contact-ready', () => {
   assert.match(guide, /Gesprächsphase: contact-ready/);
   assert.match(guide, /direkt zur Kontaktaufnahme weiter/i);
 });
+
+test('conversation guide uses customer-specific flow questions and instructions', () => {
+  const guide = buildConversationGuide(
+    [
+      { role: 'assistant', content: 'Hi! Wie kann ich helfen?' },
+      { role: 'user', content: 'ich brauche eine ki' },
+    ],
+    {
+      questions: {
+        opening: 'Geht es bei dir eher um Termine, Support oder interne Prozesse?',
+      },
+      instructions: {
+        clarify: 'Nutze im Einstieg immer zuerst die kundenspezifische Leitfrage.',
+      },
+    },
+  );
+
+  assert.match(guide, /Gesprächsphase: clarify/);
+  assert.match(guide, /kundenspezifische Leitfrage/i);
+  assert.match(guide, /Geht es bei dir eher um Termine, Support oder interne Prozesse\?/i);
+});

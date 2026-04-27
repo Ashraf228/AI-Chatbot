@@ -21,6 +21,7 @@ type SiteConfig = {
   leadCaptureEnabled?: boolean;
   leadNotificationEmail?: string;
   suggestedQuestionsByPath?: Record<string, string[]>;
+  conversationFlow?: Record<string, unknown>;
   systemPrompt?: string;
 };
 
@@ -141,6 +142,7 @@ export class WidgetAdminService {
       leadCaptureEnabled: config.leadCaptureEnabled ?? true,
       leadNotificationEmail: config.leadNotificationEmail || '',
       suggestedQuestionsByPath: config.suggestedQuestionsByPath || {},
+      conversationFlow: config.conversationFlow || {},
       systemPrompt: config.systemPrompt || '',
       createdAt: row.created_at,
     };
@@ -192,6 +194,7 @@ export class WidgetAdminService {
       leadCaptureEnabled?: boolean;
       leadNotificationEmail?: string;
       suggestedQuestionsByPath?: Record<string, string[]>;
+      conversationFlow?: Record<string, unknown>;
       systemPrompt?: string;
       allowedDomains?: string[];
     },
@@ -214,6 +217,7 @@ export class WidgetAdminService {
       leadNotificationEmail: payload.leadNotificationEmail ?? site.leadNotificationEmail,
       suggestedQuestionsByPath:
         payload.suggestedQuestionsByPath ?? site.suggestedQuestionsByPath,
+      conversationFlow: payload.conversationFlow ?? site.conversationFlow,
       systemPrompt: payload.systemPrompt ?? site.systemPrompt,
     };
 

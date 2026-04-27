@@ -16,6 +16,7 @@ import { VectorSearchRow, VectorService } from '../../../vector/vector.service';
 import { LlmService } from '../../../vector/llm.service';
 import { buildSystemPrompt } from '../../../chat/prompt';
 import { buildConversationGuide } from '../../../chat/conversation-guide';
+import { parseConversationFlow } from '../../../chat/flow-builder';
 import { redactPII } from '../../../utils/pii';
 import { sanitizeInput, sanitizeOutput } from '../../../utils/security';
 import { WidgetSecurityService } from './widget-security.service';
@@ -135,7 +136,7 @@ export class WidgetChatService {
       [conversation.id],
     );
     const history = historyRes.rows.slice().reverse();
-    const conversationGuide = buildConversationGuide(history);
+    const conversationGuide = buildConversationGuide(history, parseConversationFlow(site.conversationFlow));
 
     const qEmbedding = await this.embeddingService.embed(message);
     const hits = await this.vectorService.search(tenantId, site.id, qEmbedding, 6);

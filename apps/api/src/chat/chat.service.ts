@@ -10,6 +10,7 @@ import { SitesService } from '../sites/sites.service';
 import { isDomainAllowed } from '../utils/cors';
 import { buildSystemPrompt, getSiteSystemPrompt } from './prompt';
 import { buildConversationGuide } from './conversation-guide';
+import { parseConversationFlow } from './flow-builder';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { PrismaService } from '../db/prisma.service';
 import { redactPII } from '../utils/pii';
@@ -286,7 +287,10 @@ export class ChatService {
       [conversationId],
     );
     const history = historyRes.rows.slice().reverse();
-    const conversationGuide = buildConversationGuide(history);
+    const conversationGuide = buildConversationGuide(
+      history,
+      parseConversationFlow((site.config as Record<string, unknown> | undefined)?.conversationFlow),
+    );
 
     // 11) Retrieval
     const retrievalStart = Date.now();

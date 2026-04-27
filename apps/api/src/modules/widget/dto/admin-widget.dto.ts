@@ -149,6 +149,10 @@ export class UpdateWidgetConfigDto {
   suggestedQuestionsByPath?: Record<string, string[]>;
 
   @IsOptional()
+  @IsObject()
+  conversationFlow?: Record<string, unknown>;
+
+  @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))
   @IsString()
   @MaxLength(12000)

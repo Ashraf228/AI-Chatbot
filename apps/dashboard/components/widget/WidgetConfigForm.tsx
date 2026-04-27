@@ -13,6 +13,40 @@ type WidgetConfigFormProps = {
   siteId: string;
 };
 
+const DEFAULT_CONVERSATION_FLOW = {
+  questions: {
+    opening: "Geht es bei dir eher um Support, Prozesse, Marketing oder etwas anderes?",
+    industry: "Für welches Unternehmen oder welche Branche ist das gedacht?",
+    urgency: "Wie dringend oder wie groß ist das Thema aktuell bei euch?",
+  },
+  instructions: {
+    clarify:
+      "Wenn der Einstieg allgemein ist, stelle genau eine Qualifizierungsfrage und gehe noch nicht direkt auf Termin.",
+    qualifiedMissingIndustry:
+      "Wenn der Bedarf klar ist, aber die Branche fehlt, gib kurz eine Einordnung und frage gezielt nach der Branche.",
+    qualifiedMissingUrgency:
+      "Wenn der Bedarf klar ist, aber die Dringlichkeit fehlt, gib kurz eine Einordnung und frage gezielt nach Dringlichkeit oder Umfang.",
+    qualifiedReady:
+      "Wenn Bedarf und Kontext klar sind, gib eine kurze Einschätzung und leite direkt in Richtung Kontakt oder Termin.",
+    contactReady:
+      "Wenn der Nutzer Kontakt möchte oder zustimmt, bestätige kurz und leite direkt zur Kontaktaufnahme weiter.",
+  },
+  triggers: {
+    contactIntent: ["kontakt", "anfrage", "angebot", "termin", "rueckruf"],
+    qualifiedNeed: ["support", "kundenservice", "marketing", "prozesse", "automatisierung"],
+    industry: ["unternehmen", "firma", "agentur", "shop", "kanzlei", "praxis"],
+    urgency: ["sofort", "dringend", "zeitnah", "schnell"],
+  },
+};
+
+function formatConversationFlow(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length === 0) {
+    return JSON.stringify(DEFAULT_CONVERSATION_FLOW, null, 2);
+  }
+
+  return JSON.stringify(value, null, 2);
+}
+
 export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
   const [form, setForm] = useState({
     siteKey: "",
@@ -25,6 +59,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     leadNotificationEmail: "",
     allowedDomains: "",
     suggestedQuestionsByPath: "{\n  \"/\": [\"Was kostet der Service?\"]\n}",
+    conversationFlow: JSON.stringify(DEFAULT_CONVERSATION_FLOW, null, 2),
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,6 +89,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         leadNotificationEmail: data.leadNotificationEmail || "",
         allowedDomains: (data.allowedDomains || []).join(", "),
         suggestedQuestionsByPath: JSON.stringify(data.suggestedQuestionsByPath || {}, null, 2),
+        conversationFlow: formatConversationFlow(data.conversationFlow),
       });
       setLoading(false);
     }
@@ -67,10 +103,19 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     setError(null);
 
     let suggestedQuestionsByPath: Record<string, string[]>;
+    let conversationFlow: Record<string, unknown>;
     try {
       suggestedQuestionsByPath = JSON.parse(form.suggestedQuestionsByPath || "{}");
     } catch {
       setError("Suggested Questions muessen gueltiges JSON sein.");
+      setSaving(false);
+      return;
+    }
+
+    try {
+      conversationFlow = JSON.parse(form.conversationFlow || "{}");
+    } catch {
+      setError("Conversation Flow muss gueltiges JSON sein.");
       setSaving(false);
       return;
     }
@@ -89,6 +134,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         .map((item) => item.trim())
         .filter(Boolean),
       suggestedQuestionsByPath,
+      conversationFlow,
     };
 
     const res = await fetch(`/api/widget/config/${siteId}`, {
@@ -165,6 +211,16 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
           value={form.suggestedQuestionsByPath}
           onChange={(value) => setForm({ ...form, suggestedQuestionsByPath: value })}
         />
+        <label className="dashboard-field">
+          <span className="dashboard-field-label">Conversation Flow (JSON)</span>
+          <textarea
+            className="dashboard-textarea dashboard-mono"
+            value={form.conversationFlow}
+            onChange={(e) => setForm({ ...form, conversationFlow: e.target.value })}
+            placeholder="Optionaler Conversation Flow als JSON"
+            style={{ minHeight: 320 }}
+          />
+        </label>
 
         <Button onClick={save} disabled={saving}>
           {saving ? "Speichert..." : "Widget-Konfiguration speichern"}
