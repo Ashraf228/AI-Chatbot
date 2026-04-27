@@ -15,6 +15,7 @@ import { EmbeddingService } from '../../../vector/embedding.service';
 import { VectorSearchRow, VectorService } from '../../../vector/vector.service';
 import { LlmService } from '../../../vector/llm.service';
 import { buildSystemPrompt } from '../../../chat/prompt';
+import { buildConversationGuide } from '../../../chat/conversation-guide';
 import { redactPII } from '../../../utils/pii';
 import { sanitizeInput, sanitizeOutput } from '../../../utils/security';
 import { WidgetSecurityService } from './widget-security.service';
@@ -25,6 +26,11 @@ type MessageRow = {
   role: ConversationMessageRole;
   content: string;
   created_at: string;
+};
+
+type PromptHistoryRow = {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
 };
 
 @Injectable()
@@ -120,6 +126,17 @@ export class WidgetChatService {
       [randomUUID(), conversation.id, 'user', userContent],
     );
 
+    const historyRes = await this.db.query<PromptHistoryRow>(
+      `SELECT role, content
+       FROM messages
+       WHERE conversation_id = $1
+       ORDER BY created_at DESC
+       LIMIT 6`,
+      [conversation.id],
+    );
+    const history = historyRes.rows.slice().reverse();
+    const conversationGuide = buildConversationGuide(history);
+
     const qEmbedding = await this.embeddingService.embed(message);
     const hits = await this.vectorService.search(tenantId, site.id, qEmbedding, 6);
     const context = hits
@@ -130,6 +147,11 @@ export class WidgetChatService {
       .join('\n\n');
 
     const userPrompt = `
+Verlauf:
+${history
+  .map((entry) => `${entry.role === 'user' ? 'Nutzer' : 'Assistent'}: ${entry.content}`)
+  .join('\n') || '(kein Verlauf vorhanden)'}
+
 Nutzerfrage:
 ${message}
 
@@ -151,11 +173,15 @@ ${context || '(kein Kontext gefunden)'}
     let fullAnswer = '';
 
     try {
-      await this.llmService.streamAnswer(buildSystemPrompt(site.systemPrompt), userPrompt, async (chunk) => {
-        const safeChunk = sanitizeOutput(chunk);
-        fullAnswer += safeChunk;
-        writeEvent({ type: 'chunk', delta: safeChunk });
-      });
+      await this.llmService.streamAnswer(
+        buildSystemPrompt(site.systemPrompt, conversationGuide),
+        userPrompt,
+        async (chunk) => {
+          const safeChunk = sanitizeOutput(chunk);
+          fullAnswer += safeChunk;
+          writeEvent({ type: 'chunk', delta: safeChunk });
+        },
+      );
 
       const safeAnswer = sanitizeOutput(fullAnswer);
 

@@ -9,6 +9,7 @@ import { LlmService } from '../vector/llm.service';
 import { SitesService } from '../sites/sites.service';
 import { isDomainAllowed } from '../utils/cors';
 import { buildSystemPrompt, getSiteSystemPrompt } from './prompt';
+import { buildConversationGuide } from './conversation-guide';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { PrismaService } from '../db/prisma.service';
 import { redactPII } from '../utils/pii';
@@ -276,6 +277,17 @@ export class ChatService {
       [randomUUID(), conversationId, 'user', userMsg],
     );
 
+    const historyRes = await this.db.query<{ role: 'user' | 'assistant' | 'system'; content: string }>(
+      `SELECT role, content
+       FROM messages
+       WHERE conversation_id = $1
+       ORDER BY created_at DESC
+       LIMIT 6`,
+      [conversationId],
+    );
+    const history = historyRes.rows.slice().reverse();
+    const conversationGuide = buildConversationGuide(history);
+
     // 11) Retrieval
     const retrievalStart = Date.now();
 
@@ -300,6 +312,11 @@ export class ChatService {
       .join('\n\n');
 
     const userPrompt = `
+Verlauf:
+${history
+  .map((entry) => `${entry.role === 'user' ? 'Nutzer' : 'Assistent'}: ${entry.content}`)
+  .join('\n') || '(kein Verlauf vorhanden)'}
+
 Nutzerfrage:
 ${safeMessage}
 
@@ -310,7 +327,7 @@ ${context || '(kein Kontext gefunden)'}
     // 12) LLM Call
     const llmStart = Date.now();
     const llmRes = await this.llm.answer(
-      buildSystemPrompt(getSiteSystemPrompt(site.config)),
+      buildSystemPrompt(getSiteSystemPrompt(site.config), conversationGuide),
       userPrompt,
     );
     const llmTime = Date.now() - llmStart;
