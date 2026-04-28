@@ -13,7 +13,7 @@ export default async function SiteBrandingPage({
 
   return (
     <div>
-      <Topbar title={`Branding · ${siteId}`} />
+      <Topbar title={`Design · ${siteId}`} />
       <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <BrandingForm siteId={siteId} />

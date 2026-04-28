@@ -87,7 +87,7 @@ export function AnalyticsOverview({
         <MetricCard label="Impressions" value={data.widgetImpressions || 0} />
         <MetricCard label="Openings" value={data.widgetOpenings || 0} />
         <MetricCard label="Chats" value={data.startedChats || 0} />
-        <MetricCard label="Leads" value={data.leads || 0} />
+        <MetricCard label="Anfragen" value={data.leads || 0} />
       </div>
       <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16 }}>
         <MetricCard label="Nachrichten" value={data.sentMessages || 0} />

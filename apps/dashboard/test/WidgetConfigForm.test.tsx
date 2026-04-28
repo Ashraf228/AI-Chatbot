@@ -54,9 +54,7 @@ describe("WidgetConfigForm", () => {
     expect(screen.getByText("Live-Vorschau")).toBeInTheDocument();
     expect(screen.getByText("Einstieg / Klärung")).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: "Widget-Konfiguration speichern" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Verhalten speichern" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenNthCalledWith(

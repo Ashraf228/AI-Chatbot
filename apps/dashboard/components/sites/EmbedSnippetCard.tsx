@@ -25,7 +25,7 @@ export function EmbedSnippetCard({
         <h3 className="dashboard-card-title dashboard-card-title--sm">Einbindung</h3>
         <p className="dashboard-copy dashboard-copy--muted">
           Das Widget wird per Loader-Script eingebunden. Auf Kundenseiten reicht ein einzelner
-          Script-Tag mit der Site-ID.
+          Script-Tag mit dem Kundenschlüssel.
         </p>
       </div>
 
@@ -35,7 +35,7 @@ export function EmbedSnippetCard({
       </div>
 
       <div className="dashboard-info-row">
-        <strong>Site-Key</strong>
+        <strong>Kundenschlüssel</strong>
         <span className="dashboard-breakword dashboard-mono">{siteKey}</span>
       </div>
 
@@ -52,8 +52,12 @@ export function EmbedSnippetCard({
       </div>
 
       <div className="dashboard-inline">
-        <Button type="button" variant="secondary" onClick={() => onCopy(siteKey, "Site-Key")}>
-          Site-Key kopieren
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => onCopy(siteKey, "Kundenschlüssel")}
+        >
+          Kundenschlüssel kopieren
         </Button>
         {publicKey ? (
           <Button
@@ -64,8 +68,12 @@ export function EmbedSnippetCard({
             Public Key kopieren
           </Button>
         ) : null}
-        <Button type="button" variant="secondary" onClick={() => onCopy(embedCode, "Embed Code")}>
-          Embed Code kopieren
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => onCopy(embedCode, "Einbindungscode")}
+        >
+          Einbindungscode kopieren
         </Button>
       </div>
 

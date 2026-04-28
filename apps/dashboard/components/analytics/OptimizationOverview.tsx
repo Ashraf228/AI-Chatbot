@@ -34,7 +34,7 @@ export function OptimizationOverview({ siteId }: { siteId?: string }) {
         message?: string;
       };
       if (!res.ok) {
-        setError(json?.message || "Optimization-Daten konnten nicht geladen werden.");
+        setError(json?.message || "Verbesserungsdaten konnten nicht geladen werden.");
         return;
       }
       setData({
@@ -58,8 +58,8 @@ export function OptimizationOverview({ siteId }: { siteId?: string }) {
     <div className="dashboard-grid">
       <div className="dashboard-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 16 }}>
         <MetricCard label="Fallbacks" value={data.fallbackAnswers || 0} />
-        <MetricCard label="Drop-offs" value={data.dropOffSessions || 0} />
-        <MetricCard label="Lead-Rate" value={`${(Number(data.leadRate || 0) * 100).toFixed(1)}%`} />
+        <MetricCard label="Abbrüche" value={data.dropOffSessions || 0} />
+        <MetricCard label="Anfragequote" value={`${(Number(data.leadRate || 0) * 100).toFixed(1)}%`} />
       </div>
       <TopQuestionsTable items={data.unansweredQuestions || []} title="Unbeantwortete Fragen" />
       <div className="dashboard-card">

@@ -18,7 +18,7 @@ export function Sidebar() {
 
       <form action="/api/auth/logout" method="POST" style={{ marginTop: "auto" }}>
         <Button type="submit" variant="ghost" fullWidth className="dashboard-nav-link">
-          Logout
+          Abmelden
         </Button>
       </form>
     </aside>

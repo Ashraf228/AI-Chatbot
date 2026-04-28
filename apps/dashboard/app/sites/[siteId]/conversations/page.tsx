@@ -13,15 +13,15 @@ export default async function SiteConversationsPage({
 
   return (
     <div>
-      <Topbar title={`Conversations · ${siteId}`} />
+      <Topbar title={`Chats · ${siteId}`} />
       <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <div className="dashboard-card">
-          Diese Site nutzt die globale Conversation-Ansicht. Öffne sie mit gesetztem Filter für{" "}
+          Dieser Kunde nutzt die globale Chat-Ansicht. Öffne sie mit gesetztem Filter für{" "}
           <strong>{siteId}</strong>.
           <div className="dashboard-mt-14">
             <Link href={`/conversations`} className="dashboard-link-card">
-              Zur Conversation-Übersicht
+              Zur Chat-Übersicht
             </Link>
           </div>
         </div>

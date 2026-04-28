@@ -5,11 +5,18 @@ const colors: Record<string, { bg: string; fg: string }> = {
   lost: { bg: "#fee2e2", fg: "#991b1b" },
 };
 
+const labels: Record<string, string> = {
+  new: "Neu",
+  contacted: "Kontaktiert",
+  qualified: "Qualifiziert",
+  lost: "Verloren",
+};
+
 export function LeadStatusBadge({ status }: { status: string }) {
   const color = colors[status] || { bg: "#f3f4f6", fg: "#374151" };
   return (
     <span className="dashboard-badge" style={{ background: color.bg, color: color.fg }}>
-      {status}
+      {labels[status] || status}
     </span>
   );
 }

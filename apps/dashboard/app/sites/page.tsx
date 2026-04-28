@@ -8,6 +8,7 @@ import { ErrorState } from "../../components/shared/ErrorState";
 import { Select } from "../../components/shared/Select";
 import { EmbedSnippetCard } from "../../components/sites/EmbedSnippetCard";
 import { SiteForm } from "../../components/sites/SiteForm";
+import { encodeSiteId } from "../../lib/site-id";
 
 type Site = {
   id: string;
@@ -157,7 +158,7 @@ export default function SitesPage() {
       return;
     }
 
-    setMsg("Site erfolgreich erstellt.");
+    setMsg("Kunde erfolgreich angelegt.");
     setForm({
       siteKey: "",
       tenantId: "t_default",
@@ -218,13 +219,13 @@ export default function SitesPage() {
     }
   }
 
-  return (
+    return (
     <div>
-      <Topbar title="Sites" />
+      <Topbar title="Kunden" />
       <div className="dashboard-page dashboard-page--wide">
         <div className="dashboard-grid dashboard-grid--split">
           <div>
-            <h2 className="dashboard-section-title">Neue Site anlegen</h2>
+            <h2 className="dashboard-section-title">Neuen Kunden anlegen</h2>
 
             <SiteForm form={form} onChange={setForm} onSubmit={createSite} />
 
@@ -234,11 +235,11 @@ export default function SitesPage() {
           </div>
 
           <div>
-            <h2 className="dashboard-section-title">Vorhandene Sites</h2>
+            <h2 className="dashboard-section-title">Vorhandene Kunden</h2>
 
             <div className="dashboard-card">
               {sites.length === 0 ? (
-                <EmptyState title="Keine Sites vorhanden." />
+                <EmptyState title="Keine Kunden vorhanden." />
               ) : (
                 <>
                   <Select
@@ -256,9 +257,9 @@ export default function SitesPage() {
                   {selectedSite && (
                     <div className="dashboard-stack dashboard-stack--sm">
                       <InfoRow label="Name" value={selectedSite.name} />
-                      <InfoRow label="Site Key" value={selectedSite.site_key} />
-                      <InfoRow label="Technische ID" value={selectedSite.id} />
-                      <InfoRow label="Tenant" value={selectedSite.tenant_id || "-"} />
+                      <InfoRow label="Kundenschlüssel" value={selectedSite.site_key} />
+                      <InfoRow label="System-ID" value={selectedSite.id} />
+                      <InfoRow label="Tenant-ID" value={selectedSite.tenant_id || "-"} />
                       <InfoRow
                         label="Domains"
                         value={selectedSite.allowed_domains.join(", ") || "-"}
@@ -273,19 +274,19 @@ export default function SitesPage() {
                           type="button"
                           variant="primary"
                           onClick={() => {
-                            window.location.href = `/sites/${selectedSite.id}/branding`;
+                            window.location.href = `/sites/${encodeSiteId(selectedSite.id)}`;
                           }}
                         >
-                          Site öffnen
+                          Kunde öffnen
                         </Button>
                         <Button
                           type="button"
                           variant="ghost"
                           onClick={() => {
-                            window.location.href = `/sites/${selectedSite.id}/widget`;
+                            window.location.href = `/sites/${encodeSiteId(selectedSite.id)}/widget`;
                           }}
                         >
-                          Widget konfigurieren
+                          Verhalten öffnen
                         </Button>
                       </div>
 

@@ -13,7 +13,7 @@ export default async function SiteLeadsPage({
 
   return (
     <div>
-      <Topbar title={`Leads · ${siteId}`} />
+      <Topbar title={`Anfragen · ${siteId}`} />
       <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <LeadTable siteId={siteId} />

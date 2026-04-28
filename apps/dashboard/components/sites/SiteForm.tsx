@@ -20,7 +20,7 @@ export function SiteForm({ form, onChange, onSubmit }: SiteFormProps) {
     <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm">
       <div className="dashboard-field">
         <label className="dashboard-field-label" htmlFor="site-key">
-          Site Key
+          Kundenschlüssel
         </label>
         <Input
           id="site-key"
@@ -32,7 +32,7 @@ export function SiteForm({ form, onChange, onSubmit }: SiteFormProps) {
 
       <div className="dashboard-field">
         <label className="dashboard-field-label" htmlFor="tenant-id">
-          Tenant-ID
+          Tenant-ID (intern)
         </label>
         <Input
           id="tenant-id"
@@ -44,7 +44,7 @@ export function SiteForm({ form, onChange, onSubmit }: SiteFormProps) {
 
       <div className="dashboard-field">
         <label className="dashboard-field-label" htmlFor="site-name">
-          Anzeigename
+          Kundenname
         </label>
         <Input
           id="site-name"
@@ -66,7 +66,7 @@ export function SiteForm({ form, onChange, onSubmit }: SiteFormProps) {
         />
       </div>
 
-      <Button type="submit">Site erstellen</Button>
+      <Button type="submit">Kunde anlegen</Button>
     </form>
   );
 }

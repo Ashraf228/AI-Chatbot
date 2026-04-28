@@ -4,7 +4,7 @@ import { Topbar } from "../../components/layout/Topbar";
 export default function SettingsPage() {
   return (
     <div>
-      <Topbar title="Settings" />
+      <Topbar title="Einstellungen" />
       <div className="dashboard-page dashboard-page--md">
         <div className="dashboard-grid">
           <section className="dashboard-card dashboard-stack">
@@ -36,17 +36,17 @@ export default function SettingsPage() {
               <ul className="dashboard-list">
                 <li>Produktive Secrets setzen und alte Schlüssel rotieren</li>
                 <li>Domain, HTTPS und Reverse Proxy auf dem Server final verdrahten</li>
-                <li>SMTP testen und automatische Reports einmal manuell auslösen</li>
-                <li>Mindestens eine Test-Site mit echtem Widget-Snippet durchklicken</li>
+                <li>SMTP testen und automatische Berichte einmal manuell auslösen</li>
+                <li>Mindestens einen Test-Kunden mit echtem Widget-Snippet durchklicken</li>
               </ul>
             </div>
 
             <div className="dashboard-inline dashboard-wrap">
               <Link href="/reports" className="dashboard-button dashboard-button--primary">
-                Reports prüfen
+                Berichte prüfen
               </Link>
               <Link href="/sites" className="dashboard-button dashboard-button--secondary">
-                Zu den Sites
+                Zu den Kunden
               </Link>
             </div>
           </section>

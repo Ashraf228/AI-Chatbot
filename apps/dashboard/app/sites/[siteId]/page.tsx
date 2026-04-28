@@ -14,39 +14,39 @@ export default async function SiteDetailPage({
 
   return (
     <div>
-      <Topbar title={`Site ${siteId}`} />
+      <Topbar title={`Kunde · ${siteId}`} />
       <div className="dashboard-page dashboard-page--lg">
         <SiteTabs siteId={siteId} />
         <div className="dashboard-grid dashboard-grid--two">
           <section className="dashboard-card dashboard-stack">
             <div>
-              <h2 className="dashboard-card-title">Site-Setup</h2>
+              <h2 className="dashboard-card-title">Setup</h2>
               <p className="dashboard-copy">
-                Von hier aus erreichst du Branding, Widget-Konfiguration, Knowledge-Basis,
-                Konversationen, Analytics und Reports für diese Site.
+                Von hier aus richtest du Design, Verhalten, Wissen, Chats, Verbesserung und
+                Berichte für diesen Kunden ein.
               </p>
             </div>
 
             <div className="dashboard-hub-grid">
               <SiteHubLink
                 href={`/sites/${siteSlug}/branding`}
-                title="Branding"
-                description="Logo, Farben, Bot-Name und Begrüßung anpassen."
+                title="Design"
+                description="Logo, Farben, Schrift und Begrüßung anpassen."
               />
               <SiteHubLink
                 href={`/sites/${siteSlug}/widget`}
-                title="Widget"
-                description="Consent, Lead-Capture und Fragen pro Unterseite steuern."
+                title="Verhalten"
+                description="Ziel, Kontaktlogik und Chat-Ablauf des Bots steuern."
               />
               <SiteHubLink
                 href={`/sites/${siteSlug}/knowledge`}
-                title="Knowledge"
-                description="FAQ, PDFs und Trainingsdaten für die RAG-Basis pflegen."
+                title="Wissen"
+                description="FAQs, PDFs und weitere Inhalte für den Bot pflegen."
               />
               <SiteHubLink
                 href={`/sites/${siteSlug}/reports`}
-                title="Reports"
-                description="Empfänger, Versandfrequenz und Report-Historie prüfen."
+                title="Berichte"
+                description="Empfänger, Versand und bisherige Berichte prüfen."
               />
             </div>
           </section>
@@ -55,22 +55,22 @@ export default async function SiteDetailPage({
             <div>
               <h2 className="dashboard-card-title">Empfohlener Ablauf</h2>
               <ol className="dashboard-list">
-                <li>Branding und Bot-Auftritt prüfen</li>
-                <li>Widget-Verhalten und Consent konfigurieren</li>
-                <li>Knowledge-Basis mit FAQ und PDFs befüllen</li>
-                <li>Snippet einbauen und Live-Widget testen</li>
-                <li>Analytics und Reports nach dem ersten Einsatz kontrollieren</li>
+                <li>Design und Auftritt des Bots prüfen</li>
+                <li>Verhalten, Kontaktziel und Consent festlegen</li>
+                <li>Wissen mit FAQs und PDFs befüllen</li>
+                <li>Einbindung auf der Website testen</li>
+                <li>Anfragen, Chats und Berichte nach dem Start kontrollieren</li>
               </ol>
             </div>
 
             <div className="dashboard-card dashboard-card--soft">
               <h3 className="dashboard-card-title dashboard-card-title--sm">Kurzinfo</h3>
               <div className="dashboard-info-row">
-                <strong>Site-ID</strong>
+                <strong>Kunden-ID</strong>
                 <span className="dashboard-mono">{siteId}</span>
               </div>
               <p className="dashboard-copy dashboard-copy--muted dashboard-mt-14">
-                Nutze die Tabs oder die Schnelllinks oben, um die Site strukturiert aufzusetzen.
+                Nutze die Tabs oder die Schnelllinks oben, um den Kunden strukturiert einzurichten.
               </p>
             </div>
           </section>

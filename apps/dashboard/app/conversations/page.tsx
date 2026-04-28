@@ -130,26 +130,26 @@ export default function ConversationsPage() {
 
   return (
     <div>
-      <Topbar title="Conversations" />
+      <Topbar title="Chats" />
       <div className="dashboard-page dashboard-page--lg">
         <div className="dashboard-inline dashboard-gap-12 dashboard-mb-16">
           <Input
-            placeholder="Nach siteId filtern (z. B. kunde-1)"
+            placeholder="Nach Kundenschlüssel filtern (z. B. kunde-1)"
             value={siteId}
             onChange={(e) => setSiteId(e.target.value)}
             style={{ flex: 1 }}
           />
-          <Button onClick={loadConversations}>Laden</Button>
+          <Button onClick={loadConversations}>Aktualisieren</Button>
         </div>
 
         {err && <ErrorState message={err} />}
 
         <div className="dashboard-grid dashboard-grid--split">
           <div className="dashboard-card">
-            <h2 className="dashboard-card-title">Liste</h2>
+            <h2 className="dashboard-card-title">Chats</h2>
 
             {items.length === 0 ? (
-              <EmptyState title="Keine Conversations gefunden." />
+              <EmptyState title="Keine Chats gefunden." />
             ) : (
               <div className="dashboard-conversation-list">
                 {items.map((conv) => (
@@ -165,10 +165,10 @@ export default function ConversationsPage() {
                         session: {conv.session_id.slice(0, 8)}...
                       </div>
                       <div className="dashboard-meta">
-                        messages: {conv.message_count}
+                        Nachrichten: {conv.message_count}
                       </div>
                       <div className="dashboard-meta dashboard-meta--subtle">
-                        last active: {new Date(conv.last_active_at).toLocaleString()}
+                        zuletzt aktiv: {new Date(conv.last_active_at).toLocaleString()}
                       </div>
                     </button>
 
@@ -193,7 +193,7 @@ export default function ConversationsPage() {
             <h2 className="dashboard-card-title">Nachrichten</h2>
 
             {!selectedId ? (
-              <EmptyState title="Wähle links eine Conversation aus." />
+              <EmptyState title="Wähle links einen Chat aus." />
             ) : messages.length === 0 ? (
               <EmptyState title="Keine Nachrichten gefunden." />
             ) : (

@@ -39,7 +39,7 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
     const data = await res.json().catch(() => []);
 
     if (!res.ok) {
-      setError(data?.message || "Knowledge-Inhalte konnten nicht geladen werden.");
+      setError(data?.message || "Wissensinhalte konnten nicht geladen werden.");
       setLoading(false);
       return;
     }
@@ -133,7 +133,7 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
         {loading ? (
           <p className="dashboard-copy">Lade PDFs...</p>
         ) : pdfItems.length === 0 ? (
-          <EmptyState title="Keine PDFs für diese Site vorhanden." />
+          <EmptyState title="Keine PDFs für diesen Kunden vorhanden." />
         ) : (
           <div className="dashboard-stack dashboard-stack--sm">
             {pdfItems.map((item) => (
@@ -164,7 +164,7 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
         {loading ? (
           <p className="dashboard-copy">Lade FAQs...</p>
         ) : faqItems.length === 0 ? (
-          <EmptyState title="Keine FAQ-Einträge für diese Site vorhanden." />
+          <EmptyState title="Keine FAQ-Einträge für diesen Kunden vorhanden." />
         ) : (
           <div className="dashboard-stack dashboard-stack--sm">
             {faqItems.map((item) => (

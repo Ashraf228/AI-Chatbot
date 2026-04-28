@@ -95,16 +95,16 @@ export default function IngestPage() {
 
   return (
     <div>
-      <Topbar title="FAQ Ingest" />
+      <Topbar title="Wissen" />
       <div className="dashboard-page dashboard-page--md">
         {preselectedSiteId && (
           <div className="dashboard-copy dashboard-mb-16">
-            Site-Kontext aktiv: <strong>{preselectedSiteId}</strong>
+            Kunden-Kontext aktiv: <strong>{preselectedSiteId}</strong>
           </div>
         )}
         <form onSubmit={submitFaq} className="dashboard-card dashboard-stack dashboard-gap-12">
           <label className="dashboard-field">
-            <div>Site</div>
+            <div>Kunde</div>
             <Select
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}

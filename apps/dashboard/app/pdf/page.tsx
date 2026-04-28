@@ -58,7 +58,7 @@ export default function PdfUploadPage() {
     setMsg(null);
 
     if (!siteId) {
-      setErr("Bitte eine Site auswählen.");
+      setErr("Bitte einen Kunden auswählen.");
       return;
     }
 
@@ -97,16 +97,16 @@ export default function PdfUploadPage() {
 
   return (
     <div>
-      <Topbar title="PDF Upload" />
+      <Topbar title="PDFs" />
       <div className="dashboard-page dashboard-page--md">
         {preselectedSiteId && (
           <div className="dashboard-copy dashboard-mb-16">
-            Site-Kontext aktiv: <strong>{preselectedSiteId}</strong>
+            Kunden-Kontext aktiv: <strong>{preselectedSiteId}</strong>
           </div>
         )}
         <form onSubmit={submitPdf} className="dashboard-card dashboard-stack dashboard-gap-12">
           <label className="dashboard-field">
-            <div>Site</div>
+            <div>Kunde</div>
             <Select
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}

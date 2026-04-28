@@ -811,9 +811,13 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
 
   return (
     <div className="dashboard-card">
-      <h2 className="dashboard-card-title">Widget Setup</h2>
+      <h2 className="dashboard-card-title">Verhalten & Einbindung</h2>
       <div className="dashboard-stack">
-        <Field label="Site Key" value={form.siteKey} onChange={(value) => setForm({ ...form, siteKey: value })} />
+        <Field
+          label="Kundenschlüssel"
+          value={form.siteKey}
+          onChange={(value) => setForm({ ...form, siteKey: value })}
+        />
         <Field label="Primäre Domain" value={form.domain} onChange={(value) => setForm({ ...form, domain: value })} />
         <Field
           label="Erlaubte Domains (kommagetrennt)"
@@ -869,7 +873,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         />
 
         <Button onClick={save} disabled={saving}>
-          {saving ? "Speichert..." : "Widget-Konfiguration speichern"}
+          {saving ? "Speichert..." : "Verhalten speichern"}
         </Button>
         {message && <p className="dashboard-status dashboard-status--success">{message}</p>}
         {error && <ErrorState message={error} />}

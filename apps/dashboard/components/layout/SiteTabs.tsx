@@ -8,8 +8,12 @@ export function SiteTabs({ siteId }: { siteId: string }) {
   return (
     <div className="dashboard-tab-row">
       {siteTabs.map((tab) => (
-        <Link key={tab} href={`/sites/${siteSlug}/${tab}`} className="dashboard-tab-link">
-          {tab}
+        <Link
+          key={tab.slug || "setup"}
+          href={tab.slug ? `/sites/${siteSlug}/${tab.slug}` : `/sites/${siteSlug}`}
+          className="dashboard-tab-link"
+        >
+          {tab.label}
         </Link>
       ))}
     </div>

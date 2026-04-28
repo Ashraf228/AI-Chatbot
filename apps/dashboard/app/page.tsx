@@ -4,35 +4,40 @@ import { Topbar } from "../components/layout/Topbar";
 const cards = [
   {
     href: "/sites",
-    title: "Sites verwalten",
-    description: "Neue Kunden-Sites anlegen, Domains pflegen und Embed-Snippets kopieren.",
+    title: "Kunden",
+    description: "Kunden anlegen, Domains pflegen und Einbindungen vorbereiten.",
   },
   {
     href: "/ingest",
-    title: "FAQ Ingest",
-    description: "Fragen und Antworten schnell in die Wissensbasis laden.",
+    title: "Wissen",
+    description: "Fragen, Antworten und Website-Wissen für Kunden pflegen.",
   },
   {
     href: "/pdf",
-    title: "PDF Upload",
-    description: "Kundendokumente hochladen und für Retrieval aufbereiten.",
+    title: "PDFs",
+    description: "Dokumente hochladen und für den Chatbot nutzbar machen.",
+  },
+  {
+    href: "/leads",
+    title: "Anfragen",
+    description: "Neue Kontakte prüfen, sortieren und weiterbearbeiten.",
   },
   {
     href: "/usage",
-    title: "Usage & Kosten",
-    description: "Requests, Tokens, Kosten und Latenzen im Blick behalten.",
+    title: "Kosten",
+    description: "Nutzung, Tokens, Latenzen und Kosten im Blick behalten.",
   },
   {
     href: "/conversations",
-    title: "Conversations",
-    description: "Chats prüfen, Nachrichten lesen und problematische Verläufe bereinigen.",
+    title: "Chats",
+    description: "Verläufe prüfen, Nachrichten lesen und Auffälligkeiten erkennen.",
   },
 ];
 
 export default function DashboardHomePage() {
   return (
     <div>
-      <Topbar title="Overview" />
+      <Topbar title="Heute" />
       <div className="dashboard-page">
         <div
           style={{

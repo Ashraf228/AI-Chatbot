@@ -13,7 +13,7 @@ export default async function SiteWidgetPage({
 
   return (
     <div>
-      <Topbar title={`Widget · ${siteId}`} />
+      <Topbar title={`Verhalten · ${siteId}`} />
       <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <WidgetConfigForm siteId={siteId} />

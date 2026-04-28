@@ -117,17 +117,17 @@ export default function UsagePage() {
 
   return (
     <div>
-      <Topbar title="Usage & Kosten" />
+      <Topbar title="Kosten & Nutzung" />
       <div className="dashboard-page" style={{ maxWidth: 1300 }}>
         <div className="dashboard-inline" style={{ marginBottom: 16 }}>
           <Input
-            placeholder="tenantId filtern"
+            placeholder="Tenant-ID filtern"
             value={tenantId}
             onChange={(e) => setTenantId(e.target.value)}
             style={{ flex: 1 }}
           />
           <Input
-            placeholder="siteId filtern"
+            placeholder="Kunden-ID filtern"
             value={siteId}
             onChange={(e) => setSiteId(e.target.value)}
             style={{ flex: 1 }}
@@ -140,10 +140,10 @@ export default function UsagePage() {
         {summary && (
           <>
             <div className="dashboard-grid dashboard-grid--metrics-5" style={{ gap: 16, marginBottom: 16 }}>
-              <Card title="Total Requests" value={Number(summary.total_requests).toLocaleString()} />
-              <Card title="Total Tokens" value={Number(summary.total_tokens).toLocaleString()} />
-              <Card title="Input Tokens" value={Number(summary.total_input_tokens).toLocaleString()} />
-              <Card title="Output Tokens" value={Number(summary.total_output_tokens).toLocaleString()} />
+              <Card title="Anfragen gesamt" value={Number(summary.total_requests).toLocaleString()} />
+              <Card title="Tokens gesamt" value={Number(summary.total_tokens).toLocaleString()} />
+              <Card title="Eingabe-Tokens" value={Number(summary.total_input_tokens).toLocaleString()} />
+              <Card title="Ausgabe-Tokens" value={Number(summary.total_output_tokens).toLocaleString()} />
               <Card
                 title="Geschätzte Kosten"
                 value={`€${Number(summary.estimated_cost || 0).toFixed(4)}`}
@@ -152,19 +152,19 @@ export default function UsagePage() {
 
             <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16, marginBottom: 24 }}>
               <Card
-                title="User Messages"
+                title="Nutzer-Nachrichten"
                 value={Number(summary.total_user_messages).toLocaleString()}
               />
               <Card
-                title="Assistant Messages"
+                title="Bot-Nachrichten"
                 value={Number(summary.total_assistant_messages).toLocaleString()}
               />
               <Card
-                title="Avg Latency"
+                title="Durchschnittliche Latenz"
                 value={`${Number(summary.avg_latency_ms || 0).toFixed(0)} ms`}
               />
               <Card
-                title="Success Rate"
+                title="Erfolgsquote"
                 value={
                   Number(summary.total_success_count) + Number(summary.total_error_count) > 0
                     ? `${(
@@ -184,7 +184,7 @@ export default function UsagePage() {
           <h2 className="dashboard-card-title">Tägliche Nutzung</h2>
 
           {rows.length === 0 ? (
-            <EmptyState title="Keine Usage-Daten vorhanden." />
+            <EmptyState title="Keine Nutzungsdaten vorhanden." />
           ) : (
             <div className="dashboard-table-wrap">
               <table className="dashboard-table dashboard-table--usage">
@@ -192,16 +192,16 @@ export default function UsagePage() {
                   <tr>
                     <th className="dashboard-th">Tag</th>
                     <th className="dashboard-th">Tenant</th>
-                    <th className="dashboard-th">Site</th>
-                    <th className="dashboard-th dashboard-th--right">Requests</th>
-                    <th className="dashboard-th dashboard-th--right">User</th>
-                    <th className="dashboard-th dashboard-th--right">Assistant</th>
-                    <th className="dashboard-th dashboard-th--right">Input Tokens</th>
-                    <th className="dashboard-th dashboard-th--right">Output Tokens</th>
-                    <th className="dashboard-th dashboard-th--right">Total Tokens</th>
-                    <th className="dashboard-th dashboard-th--right">Success</th>
-                    <th className="dashboard-th dashboard-th--right">Errors</th>
-                    <th className="dashboard-th dashboard-th--right">Avg Latency</th>
+                    <th className="dashboard-th">Kunde</th>
+                    <th className="dashboard-th dashboard-th--right">Anfragen</th>
+                    <th className="dashboard-th dashboard-th--right">Nutzer</th>
+                    <th className="dashboard-th dashboard-th--right">Bot</th>
+                    <th className="dashboard-th dashboard-th--right">Eingabe-Tokens</th>
+                    <th className="dashboard-th dashboard-th--right">Ausgabe-Tokens</th>
+                    <th className="dashboard-th dashboard-th--right">Tokens gesamt</th>
+                    <th className="dashboard-th dashboard-th--right">Erfolge</th>
+                    <th className="dashboard-th dashboard-th--right">Fehler</th>
+                    <th className="dashboard-th dashboard-th--right">Ø Latenz</th>
                     <th className="dashboard-th dashboard-th--right">Kosten (€)</th>
                   </tr>
                 </thead>

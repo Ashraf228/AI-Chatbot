@@ -71,7 +71,7 @@ export default function LoginPage() {
         <p className="dashboard-eyebrow">Soulé Admin</p>
         <h1 className="dashboard-auth-title">Willkommen zurück</h1>
         <p className="dashboard-copy" style={{ marginTop: 0 }}>
-          Melde dich an, um Kunden-Sites, Leads, Reports und Widget-Einstellungen zu verwalten.
+          Melde dich an, um Kunden, Anfragen, Berichte und Chatbot-Einstellungen zu verwalten.
         </p>
 
         <form onSubmit={onLogin} className="dashboard-stack">

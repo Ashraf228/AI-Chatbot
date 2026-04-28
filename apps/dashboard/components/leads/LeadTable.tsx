@@ -39,7 +39,7 @@ export function LeadTable({ siteId }: LeadTableProps) {
     const res = await fetch(`/api/widget/leads?${params.toString()}`, { cache: "no-store" });
     const data = await res.json().catch(() => []);
     if (!res.ok) {
-      setError(data?.message || "Leads konnten nicht geladen werden.");
+      setError(data?.message || "Anfragen konnten nicht geladen werden.");
       setLoading(false);
       return;
     }
@@ -69,13 +69,13 @@ export function LeadTable({ siteId }: LeadTableProps) {
       ) : error ? (
         <ErrorState message={error} />
       ) : items.length === 0 ? (
-        <EmptyState title="Keine Leads gefunden." />
+        <EmptyState title="Keine Anfragen gefunden." />
       ) : (
         <div className="dashboard-table-wrap">
           <table className="dashboard-table" style={{ minWidth: 860 }}>
             <thead>
               <tr>
-                {["Lead", "Site", "Kontakt", "Status", "Nachricht", "Zeit"].map((cell) => (
+                {["Anfrage", "Kunde", "Kontakt", "Status", "Nachricht", "Zeit"].map((cell) => (
                   <th key={cell} className="dashboard-th">
                     {cell}
                   </th>
@@ -100,10 +100,10 @@ export function LeadTable({ siteId }: LeadTableProps) {
                         value={lead.status}
                         onChange={(e) => updateStatus(lead.id, e.target.value)}
                       >
-                        <option value="new">new</option>
-                        <option value="contacted">contacted</option>
-                        <option value="qualified">qualified</option>
-                        <option value="lost">lost</option>
+                        <option value="new">Neu</option>
+                        <option value="contacted">Kontaktiert</option>
+                        <option value="qualified">Qualifiziert</option>
+                        <option value="lost">Verloren</option>
                       </Select>
                     </div>
                   </td>

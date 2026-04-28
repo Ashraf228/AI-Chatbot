@@ -15,15 +15,15 @@ export default async function SiteKnowledgePage({
 
   return (
     <div>
-      <Topbar title={`Knowledge · ${siteId}`} />
+      <Topbar title={`Wissen · ${siteId}`} />
       <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <div className="dashboard-grid dashboard-grid--two dashboard-gap-16">
           <Link href={`/ingest?siteId=${siteSlug}`} className="dashboard-card dashboard-link-card">
-            FAQ-Inhalte bearbeiten
+            FAQs und Antworten pflegen
           </Link>
           <Link href={`/pdf?siteId=${siteSlug}`} className="dashboard-card dashboard-link-card">
-            PDFs für diese Site hochladen
+            PDFs für diesen Kunden hochladen
           </Link>
         </div>
         <KnowledgeManager siteId={siteId} />

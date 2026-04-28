@@ -89,7 +89,7 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
       return;
     }
 
-    setMessage("Branding gespeichert.");
+    setMessage("Design gespeichert.");
     setSaving(false);
   }
 
@@ -100,7 +100,7 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
   return (
     <div className="dashboard-grid dashboard-grid--form-preview">
       <div className="dashboard-card">
-        <h2 className="dashboard-card-title">Branding</h2>
+        <h2 className="dashboard-card-title">Design</h2>
         <div className="dashboard-stack">
           <Field
             label="Firmenname"
@@ -117,12 +117,12 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
             onChange={(value) => setForm({ ...form, logoUrl: value })}
           />
           <ColorPickerField
-            label="Brand Color"
+            label="Hauptfarbe"
             value={form.brandColor}
             onChange={(value) => setForm({ ...form, brandColor: value })}
           />
           <ColorPickerField
-            label="Accent Color"
+            label="Akzentfarbe"
             value={form.accentColor}
             onChange={(value) => setForm({ ...form, accentColor: value })}
           />
@@ -149,13 +149,13 @@ export function BrandingForm({ siteId }: BrandingFormProps) {
             />
           </label>
           <Field
-            label="Privacy URL"
+            label="Datenschutz-URL"
             value={form.privacyUrl}
             onChange={(value) => setForm({ ...form, privacyUrl: value })}
           />
 
           <Button onClick={save} disabled={saving}>
-            {saving ? "Speichert..." : "Branding speichern"}
+            {saving ? "Speichert..." : "Design speichern"}
           </Button>
 
           {message && <p className="dashboard-status dashboard-status--success">{message}</p>}
