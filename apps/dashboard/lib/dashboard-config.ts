@@ -1,12 +1,9 @@
 export const dashboardNav = [
   { href: "/", label: "Heute" },
   { href: "/sites", label: "Kunden" },
-  { href: "/ingest", label: "Wissen" },
-  { href: "/pdf", label: "PDFs" },
   { href: "/leads", label: "Anfragen" },
   { href: "/conversations", label: "Chats" },
   { href: "/usage", label: "Kosten" },
-  { href: "/optimization", label: "Verbesserung" },
   { href: "/reports", label: "Berichte" },
   { href: "/settings", label: "Einstellungen" },
 ];
