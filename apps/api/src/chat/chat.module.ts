@@ -6,13 +6,13 @@ import { PrismaService } from '../db/prisma.service';
 import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { LlmService } from '../vector/llm.service';
-import { SitesService } from '../sites/sites.service';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { ChatRoutingModule } from '../chat-routing/chat-routing.module';
 import { EcommerceProductAdvisorModule } from '../modules/ecommerce-product-advisor/ecommerce-product-advisor.module';
+import { SitesModule } from '../sites/sites.module';
 
 @Module({
-  imports: [ChatRoutingModule, EcommerceProductAdvisorModule],
+  imports: [ChatRoutingModule, EcommerceProductAdvisorModule, SitesModule],
   controllers: [ChatController],
   providers: [
     ChatService,
@@ -20,7 +20,6 @@ import { EcommerceProductAdvisorModule } from '../modules/ecommerce-product-advi
     EmbeddingService,
     VectorService,
     LlmService,
-    SitesService,
     RateLimitService,
   ],
 })

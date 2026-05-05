@@ -25,7 +25,6 @@ import { WidgetOriginGuard } from './guards/widget-origin.guard';
 import { WidgetRateLimitGuard } from './guards/widget-rate-limit.guard';
 import { WidgetSiteGuard } from './guards/widget-site.guard';
 import { PrismaService } from '../../db/prisma.service';
-import { SitesService } from '../../sites/sites.service';
 import { RateLimitService } from '../../utils/rate-limit.service';
 import { ChatService } from '../../chat/chat.service';
 import { ChatRoutingModule } from '../../chat-routing/chat-routing.module';
@@ -33,9 +32,10 @@ import { EmbeddingService } from '../../vector/embedding.service';
 import { VectorService } from '../../vector/vector.service';
 import { LlmService } from '../../vector/llm.service';
 import { EcommerceProductAdvisorModule } from '../ecommerce-product-advisor/ecommerce-product-advisor.module';
+import { SitesModule } from '../../sites/sites.module';
 
 @Module({
-  imports: [ChatRoutingModule, EcommerceProductAdvisorModule],
+  imports: [ChatRoutingModule, EcommerceProductAdvisorModule, SitesModule],
   controllers: [
     WidgetConfigController,
     WidgetSessionController,
@@ -62,7 +62,6 @@ import { EcommerceProductAdvisorModule } from '../ecommerce-product-advisor/ecom
     WidgetRateLimitGuard,
     WidgetSiteGuard,
     PrismaService,
-    SitesService,
     RateLimitService,
     ChatService,
     EmbeddingService,
