@@ -503,6 +503,27 @@ textarea {
   font-weight: 700;
 }
 
+.dashboard-chat-message {
+  display: grid;
+  gap: 6px;
+  max-width: 86%;
+  padding: 12px 14px;
+  border: 1px solid #e7e1d9;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.dashboard-chat-message--user {
+  justify-self: end;
+  background: #111;
+  color: #fff;
+}
+
+.dashboard-chat-message p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .dashboard-tab-row {
   display: flex;
   flex-wrap: wrap;

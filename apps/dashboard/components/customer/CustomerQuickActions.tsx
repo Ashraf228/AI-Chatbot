@@ -6,6 +6,7 @@ import { encodeSiteId } from "../../lib/site-id";
 import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
 import { Button } from "../shared/Button";
 import { ErrorState } from "../shared/ErrorState";
+import { CustomerTestChatPanel } from "./CustomerTestChatPanel";
 
 type CustomerQuickActionsProps = {
   siteId: string;
@@ -152,7 +153,7 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
           <Link href={`/sites/${siteSlug}/knowledge`} className="dashboard-button dashboard-button--secondary">
             Wissen hinzufügen
           </Link>
-          <Link href={`/sites/${siteSlug}/setup#setup-step-testing`} className="dashboard-button dashboard-button--secondary">
+          <Link href="#customer-test-chat" className="dashboard-button dashboard-button--secondary">
             Chat testen
           </Link>
           <Button type="button" variant="secondary" onClick={copyEmbedCode}>
@@ -233,6 +234,8 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
           </div>
         </div>
       </section>
+
+      <CustomerTestChatPanel siteId={siteId} />
     </div>
   );
 }
