@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminKeyGuard } from '../utils/admin.guard';
-import { CreateTenantUserDto, UpdateTenantUserDto } from './tenant-users.dto';
+import { AuthenticateTenantUserDto, CreateTenantUserDto, UpdateTenantUserDto } from './tenant-users.dto';
 import { TenantUsersService } from './tenant-users.service';
 
 @UseGuards(AdminKeyGuard)
@@ -16,6 +16,11 @@ export class TenantUsersController {
   @Post()
   async create(@Body() dto: CreateTenantUserDto) {
     return this.tenantUsers.create(dto);
+  }
+
+  @Post('authenticate')
+  async authenticate(@Body() dto: AuthenticateTenantUserDto) {
+    return this.tenantUsers.authenticate(dto);
   }
 
   @Patch(':id')

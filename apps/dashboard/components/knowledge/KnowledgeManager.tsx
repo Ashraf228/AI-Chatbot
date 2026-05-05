@@ -55,7 +55,7 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
   async function removeItem(documentId: string) {
     setDeletingId(documentId);
     setError(null);
-    const res = await fetch(`/api/knowledge/${documentId}`, {
+    const res = await fetch(`/api/knowledge/${documentId}?siteId=${encodeURIComponent(siteId)}`, {
       method: "DELETE",
     });
     const data = await res.json().catch(() => ({}));
@@ -88,6 +88,7 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        siteId,
         q: faqQuestionDraft,
         a: faqAnswerDraft,
       }),

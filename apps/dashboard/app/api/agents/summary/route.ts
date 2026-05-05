@@ -25,7 +25,7 @@ export async function GET() {
   if (auth) return auth;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
 
   if (!base) {
     return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
@@ -38,7 +38,7 @@ export async function GET() {
   const sitesRes = await fetch(`${base}/admin/sites`, {
     method: "GET",
     headers: {
-      "X-ADMIN-KEY": adminKey,
+      "X-DASHBOARD-TOKEN": adminKey,
     },
     cache: "no-store",
   });
@@ -59,7 +59,7 @@ export async function GET() {
       const response = await fetch(`${base}/admin/agents/${encodeURIComponent(site.id)}`, {
         method: "GET",
         headers: {
-          "X-ADMIN-KEY": adminKey,
+          "X-DASHBOARD-TOKEN": adminKey,
         },
         cache: "no-store",
       });

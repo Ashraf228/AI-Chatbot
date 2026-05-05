@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Sidebar } from "../components/layout/Sidebar";
 import "./globals.css";
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="de">
       <body>

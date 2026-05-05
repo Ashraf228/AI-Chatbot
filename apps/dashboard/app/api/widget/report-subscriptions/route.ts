@@ -1,62 +1,55 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import {
+  assertSiteAccess,
+  fetchDashboardBackend,
+  filterItemsBySiteAccess,
+  getAccessibleSiteIds,
+} from "@/lib/dashboard-api";
+import { requireSession } from "@/lib/require-auth";
 
 export async function GET(req: Request) {
-  const auth = await requireAuth();
-  if (auth) return auth;
-
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const auth = await requireSession({ allowCustomer: true });
+  if (auth.response) return auth.response;
   const url = new URL(req.url);
   const siteId = url.searchParams.get("siteId");
 
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
-  }
-
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const target = new URL(`${base}/admin/widget/report-subscriptions`);
+  const target = new URL("http://internal/admin/widget/report-subscriptions");
   if (siteId) target.searchParams.set("siteId", siteId);
 
-  const r = await fetch(target.toString(), {
+  const r = await fetchDashboardBackend(`${target.pathname}${target.search}`, {
     method: "GET",
-    headers: {
-      "X-ADMIN-KEY": adminKey,
-    },
     cache: "no-store",
   });
+  const data = (await r.json().catch(() => [])) as Record<string, unknown>[];
+  if (!r.ok) {
+    return NextResponse.json(data, { status: r.status });
+  }
 
-  const text = await r.text();
-  return new NextResponse(text || "[]", {
-    status: r.status,
-    headers: { "Content-Type": "application/json" },
-  });
+  if (auth.session.role !== "customer") {
+    return NextResponse.json(Array.isArray(data) ? data : []);
+  }
+
+  const allowedSiteIds = await getAccessibleSiteIds(auth.session);
+  return NextResponse.json(
+    filterItemsBySiteAccess(Array.isArray(data) ? data : [], allowedSiteIds)
+  );
 }
 
 export async function POST(req: Request) {
-  const auth = await requireAuth();
-  if (auth) return auth;
-
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const auth = await requireSession({ allowCustomer: true });
+  if (auth.response) return auth.response;
   const body = await req.json();
 
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
+  try {
+    await assertSiteAccess(auth.session, String(body?.siteId || ""));
+  } catch {
+    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const r = await fetch(`${base}/admin/widget/report-subscriptions`, {
+  const r = await fetchDashboardBackend("/admin/widget/report-subscriptions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-ADMIN-KEY": adminKey,
     },
     body: JSON.stringify(body),
   });

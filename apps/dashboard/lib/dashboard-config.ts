@@ -1,4 +1,6 @@
-export const dashboardNav = [
+import type { DashboardSessionRole } from "@/lib/auth";
+
+const DASHBOARD_NAV_ITEMS = [
   { href: "/", label: "Heute" },
   { href: "/sites", label: "Kunden" },
   { href: "/leads", label: "Anfragen" },
@@ -6,6 +8,16 @@ export const dashboardNav = [
   { href: "/reports", label: "Berichte" },
   { href: "/settings", label: "Einstellungen" },
 ];
+
+export function getDashboardNav(role: DashboardSessionRole = "admin") {
+  if (role === "customer") {
+    return DASHBOARD_NAV_ITEMS.filter((item) => item.href !== "/settings");
+  }
+
+  return DASHBOARD_NAV_ITEMS;
+}
+
+export const dashboardNav = DASHBOARD_NAV_ITEMS;
 
 export const siteTabs = [
   { slug: "", label: "Setup" },

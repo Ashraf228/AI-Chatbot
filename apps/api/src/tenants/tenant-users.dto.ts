@@ -24,6 +24,11 @@ export class CreateTenantUserDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  password?: string;
 }
 
 export class UpdateTenantUserDto {
@@ -44,4 +49,23 @@ export class UpdateTenantUserDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  password?: string;
+}
+
+export class AuthenticateTenantUserDto {
+  @IsString()
+  @MaxLength(120)
+  tenantId!: string;
+
+  @IsEmail()
+  @MaxLength(255)
+  email!: string;
+
+  @IsString()
+  @MaxLength(255)
+  password!: string;
 }

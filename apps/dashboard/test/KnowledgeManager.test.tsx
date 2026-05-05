@@ -73,6 +73,7 @@ describe("KnowledgeManager", () => {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            siteId: "Kunde 1",
             q: "Was macht ihr?",
             a: "KI, Automatisierung und smarte Prozesse.",
           }),

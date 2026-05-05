@@ -1,30 +1,23 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { assertSiteAccess, fetchDashboardBackend } from "@/lib/dashboard-api";
+import { requireSession } from "@/lib/require-auth";
 
 export async function GET(
   _req: Request,
   context: { params: Promise<{ siteId: string }> }
 ) {
-  const auth = await requireAuth();
-  if (auth) return auth;
-
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const auth = await requireSession({ allowCustomer: true });
+  if (auth.response) return auth.response;
   const { siteId } = await context.params;
 
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
+  try {
+    await assertSiteAccess(auth.session, siteId);
+  } catch {
+    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const r = await fetch(`${base}/admin/widget/sites/${siteId}`, {
+  const r = await fetchDashboardBackend(`/admin/widget/sites/${siteId}`, {
     method: "GET",
-    headers: {
-      "X-ADMIN-KEY": adminKey,
-    },
     cache: "no-store",
   });
 

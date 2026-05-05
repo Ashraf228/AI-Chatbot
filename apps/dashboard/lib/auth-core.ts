@@ -2,6 +2,17 @@ export const SESSION_COOKIE_NAME = "ssb_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 const MIN_SESSION_SECRET_LENGTH = 32;
 
+export type DashboardSessionRole = "admin" | "customer";
+export type DashboardSession = {
+  role: DashboardSessionRole;
+  sub: string;
+  exp: number;
+  iat: number;
+  tenantId?: string;
+  email?: string;
+  displayName?: string;
+};
+
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
   for (const byte of bytes) {
@@ -84,7 +95,7 @@ export function getSessionCookieOptions() {
   };
 }
 
-export async function createAdminSessionToken() {
+async function createSessionToken(payload: Omit<DashboardSession, "iat" | "exp">) {
   const secret = getSessionSecret();
   if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) {
     throw new Error(
@@ -93,40 +104,74 @@ export async function createAdminSessionToken() {
   }
 
   const randomBytes = crypto.getRandomValues(new Uint8Array(16));
-  const payload = base64UrlEncode(
+  const encodedPayload = base64UrlEncode(
     JSON.stringify({
-      role: "admin",
-      sub: "dashboard-admin",
+      ...payload,
       iat: Date.now(),
       exp: Date.now() + SESSION_TTL_SECONDS * 1000,
       jti: bytesToBase64(randomBytes),
     })
   );
-  const signature = await sign(payload, secret);
+  const signature = await sign(encodedPayload, secret);
 
-  return `${payload}.${signature}`;
+  return `${encodedPayload}.${signature}`;
 }
 
-export async function verifyAdminSessionToken(token?: string | null) {
-  if (!token) return false;
+export async function createAdminSessionToken() {
+  return createSessionToken({
+    role: "admin",
+    sub: "dashboard-admin",
+  });
+}
+
+export async function createCustomerSessionToken(input: {
+  tenantId: string;
+  email: string;
+  displayName: string;
+}) {
+  return createSessionToken({
+    role: "customer",
+    sub: `customer:${input.tenantId}:${input.email.toLowerCase()}`,
+    tenantId: input.tenantId,
+    email: input.email.toLowerCase(),
+    displayName: input.displayName,
+  });
+}
+
+export async function verifySessionToken(token?: string | null): Promise<DashboardSession | null> {
+  if (!token) return null;
 
   const secret = getSessionSecret();
-  if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) return false;
+  if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) return null;
 
   const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
+  if (!payload || !signature) return null;
 
   const expectedSignature = await sign(payload, secret);
-  if (!timingSafeEqual(signature, expectedSignature)) return false;
+  if (!timingSafeEqual(signature, expectedSignature)) return null;
 
   try {
     const parsed = JSON.parse(base64UrlDecode(payload));
-    return (
-      parsed?.role === "admin" &&
-      parsed?.sub === "dashboard-admin" &&
-      Number(parsed?.exp) > Date.now()
-    );
+    const role = parsed?.role;
+    if ((role !== "admin" && role !== "customer") || Number(parsed?.exp) <= Date.now()) {
+      return null;
+    }
+
+    return {
+      role,
+      sub: String(parsed?.sub || ""),
+      exp: Number(parsed?.exp),
+      iat: Number(parsed?.iat || 0),
+      tenantId: typeof parsed?.tenantId === "string" ? parsed.tenantId : undefined,
+      email: typeof parsed?.email === "string" ? parsed.email : undefined,
+      displayName: typeof parsed?.displayName === "string" ? parsed.displayName : undefined,
+    };
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function verifyAdminSessionToken(token?: string | null) {
+  const session = await verifySessionToken(token);
+  return session?.role === "admin";
 }

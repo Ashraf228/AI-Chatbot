@@ -15,15 +15,24 @@ function secureCompare(a: string, b: string) {
 export class AdminKeyGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
-    const key = request.headers['x-admin-key'];
-    const expected = process.env.ADMIN_KEY?.trim();
+    const adminKey = request.headers['x-admin-key'];
+    const dashboardToken = request.headers['x-dashboard-token'];
+    const expectedAdminKey = process.env.ADMIN_KEY?.trim();
+    const expectedDashboardToken = process.env.DASHBOARD_INTERNAL_TOKEN?.trim();
 
-    if (
-      typeof key !== 'string' ||
-      !expected ||
-      expected.length < 32 ||
-      !secureCompare(key, expected)
-    ) {
+    const hasAdminKey =
+      typeof adminKey === 'string' &&
+      !!expectedAdminKey &&
+      expectedAdminKey.length >= 32 &&
+      secureCompare(adminKey, expectedAdminKey);
+
+    const hasDashboardToken =
+      typeof dashboardToken === 'string' &&
+      !!expectedDashboardToken &&
+      expectedDashboardToken.length >= 32 &&
+      secureCompare(dashboardToken, expectedDashboardToken);
+
+    if (!hasAdminKey && !hasDashboardToken) {
       throw new UnauthorizedException('admin key required');
     }
 

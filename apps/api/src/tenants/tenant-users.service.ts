@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'crypto';
 import { DatabaseService } from '../db/database.service';
 import { resolveSiteKey } from '../sites/site-key';
 import { TENANT_USER_ROLES, TenantUserRole } from './tenant-users.dto';
@@ -25,6 +25,36 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+const MIN_PASSWORD_LENGTH = 12;
+const PASSWORD_HASH_PREFIX = 'scrypt';
+
+function sanitizeMetadata(value: Record<string, unknown>) {
+  const { passwordHash: _passwordHash, ...rest } = value;
+  return rest;
+}
+
+function hashPassword(password: string) {
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    throw new BadRequestException(`password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+  }
+
+  const salt = randomBytes(16);
+  const hash = scryptSync(password, salt, 64);
+  return `${PASSWORD_HASH_PREFIX}$${salt.toString('hex')}$${hash.toString('hex')}`;
+}
+
+function verifyPasswordHash(password: string, passwordHash: string) {
+  const [algorithm, saltHex, hashHex] = passwordHash.split('$');
+  if (algorithm !== PASSWORD_HASH_PREFIX || !saltHex || !hashHex) {
+    return false;
+  }
+
+  const salt = Buffer.from(saltHex, 'hex');
+  const expectedHash = Buffer.from(hashHex, 'hex');
+  const derived = scryptSync(password, salt, expectedHash.length);
+  return timingSafeEqual(derived, expectedHash);
+}
+
 @Injectable()
 export class TenantUsersService {
   constructor(
@@ -39,6 +69,22 @@ export class TenantUsersService {
     }
 
     return 'editor';
+  }
+
+  private normalizeTenantUser(row: TenantUserRow) {
+    const metadata = normalizeRecord(row.metadata);
+
+    return {
+      id: row.id,
+      tenantId: row.tenant_id,
+      email: row.email,
+      displayName: row.display_name,
+      role: this.normalizeRole(row.role),
+      isActive: row.is_active,
+      metadata: sanitizeMetadata(metadata),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
   }
 
   async listForTenant(tenantId: string) {
@@ -60,17 +106,7 @@ export class TenantUsersService {
       [normalizedTenantId],
     );
 
-    return res.rows.map((row) => ({
-      id: row.id,
-      tenantId: row.tenant_id,
-      email: row.email,
-      displayName: row.display_name,
-      role: this.normalizeRole(row.role),
-      isActive: row.is_active,
-      metadata: normalizeRecord(row.metadata),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    return res.rows.map((row) => this.normalizeTenantUser(row));
   }
 
   async create(input: {
@@ -79,6 +115,7 @@ export class TenantUsersService {
     displayName: string;
     role?: TenantUserRole;
     metadata?: Record<string, unknown>;
+    password?: string;
   }) {
     const tenantId = await this.tenants.ensureTenantExists(input.tenantId);
     const email = normalizeEmail(input.email);
@@ -93,6 +130,11 @@ export class TenantUsersService {
 
     const role = this.normalizeRole(input.role);
     const id = randomUUID();
+    const metadata = normalizeRecord(input.metadata);
+
+    if (typeof input.password === 'string' && input.password.trim()) {
+      metadata.passwordHash = hashPassword(input.password.trim());
+    }
 
     await this.db.query(
       `INSERT INTO tenant_users(
@@ -111,7 +153,7 @@ export class TenantUsersService {
          role = EXCLUDED.role,
          metadata = EXCLUDED.metadata,
          updated_at = now()`,
-      [id, tenantId, email, displayName, role, JSON.stringify(normalizeRecord(input.metadata))],
+      [id, tenantId, email, displayName, role, JSON.stringify(metadata)],
     );
 
     const users = await this.listForTenant(tenantId);
@@ -128,6 +170,7 @@ export class TenantUsersService {
     role?: TenantUserRole;
     isActive?: boolean;
     metadata?: Record<string, unknown>;
+    password?: string;
   }) {
     const normalizedId = resolveSiteKey(id, id);
     if (!normalizedId) {
@@ -162,6 +205,10 @@ export class TenantUsersService {
     const nextMetadata =
       input.metadata !== undefined ? normalizeRecord(input.metadata) : normalizeRecord(row.metadata);
 
+    if (typeof input.password === 'string' && input.password.trim()) {
+      nextMetadata.passwordHash = hashPassword(input.password.trim());
+    }
+
     await this.db.query(
       `UPDATE tenant_users
        SET display_name = $2,
@@ -180,5 +227,57 @@ export class TenantUsersService {
     }
 
     return updated;
+  }
+
+  async authenticate(input: {
+    tenantId: string;
+    email: string;
+    password: string;
+  }) {
+    const tenantId = await this.tenants.ensureTenantExists(input.tenantId);
+    const email = normalizeEmail(input.email);
+
+    if (!email || typeof input.password !== 'string' || !input.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const res = await this.db.query<TenantUserRow>(
+      `SELECT
+         id,
+         tenant_id,
+         email,
+         display_name,
+         role,
+         is_active,
+         metadata,
+         created_at,
+         updated_at
+       FROM tenant_users
+       WHERE tenant_id = $1
+         AND email = $2
+       LIMIT 1`,
+      [tenantId, email],
+    );
+
+    const row = res.rows[0];
+    if (!row || !row.is_active) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const metadata = normalizeRecord(row.metadata);
+    const passwordHash = typeof metadata.passwordHash === 'string' ? metadata.passwordHash : '';
+    if (!passwordHash || !verifyPasswordHash(input.password, passwordHash)) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const user = this.normalizeTenantUser(row);
+    return {
+      id: user.id,
+      tenantId: user.tenantId,
+      email: user.email,
+      displayName: user.displayName,
+      role: user.role,
+      isActive: user.isActive,
+    };
   }
 }

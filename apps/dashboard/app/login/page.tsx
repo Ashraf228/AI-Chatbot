@@ -7,6 +7,9 @@ import { Input } from "../../components/shared/Input";
 import { ErrorState } from "../../components/shared/ErrorState";
 
 export default function LoginPage() {
+  const [mode, setMode] = useState<"admin" | "customer">("admin");
+  const [tenantId, setTenantId] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -29,7 +32,12 @@ export default function LoginPage() {
           "Content-Type": "application/json",
         },
         credentials: "same-origin",
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({
+          mode,
+          tenantId,
+          email,
+          password,
+        }),
         signal: controller.signal,
       });
       window.clearTimeout(timeout);
@@ -71,10 +79,48 @@ export default function LoginPage() {
         <p className="dashboard-eyebrow">Soulé Admin</p>
         <h1 className="dashboard-auth-title">Willkommen zurück</h1>
         <p className="dashboard-copy" style={{ marginTop: 0 }}>
-          Melde dich an, um Kunden, Anfragen, Berichte und Chatbot-Einstellungen zu verwalten.
+          Melde dich als interner Admin oder als Kunde für deinen eigenen Bereich an.
         </p>
 
         <form onSubmit={onLogin} className="dashboard-stack">
+          <div className="dashboard-inline" style={{ gap: 10 }}>
+            <Button
+              type="button"
+              variant={mode === "admin" ? "primary" : "secondary"}
+              onClick={() => setMode("admin")}
+              fullWidth
+            >
+              Admin
+            </Button>
+            <Button
+              type="button"
+              variant={mode === "customer" ? "primary" : "secondary"}
+              onClick={() => setMode("customer")}
+              fullWidth
+            >
+              Kunde
+            </Button>
+          </div>
+
+          {mode === "customer" ? (
+            <>
+              <Input
+                type="text"
+                placeholder="Mandant / Tenant ID"
+                value={tenantId}
+                autoComplete="organization"
+                onChange={(e) => setTenantId(e.target.value)}
+              />
+              <Input
+                type="email"
+                placeholder="E-Mail"
+                value={email}
+                autoComplete="email"
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </>
+          ) : null}
+
           <Input
             type="password"
             placeholder="Passwort"
@@ -84,7 +130,7 @@ export default function LoginPage() {
           />
 
           <Button type="submit" fullWidth disabled={isSubmitting}>
-            {isSubmitting ? "Einloggen..." : "Login"}
+            {isSubmitting ? "Einloggen..." : mode === "admin" ? "Admin-Login" : "Kunden-Login"}
           </Button>
         </form>
 

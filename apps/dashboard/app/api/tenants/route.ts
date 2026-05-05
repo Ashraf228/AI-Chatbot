@@ -6,7 +6,7 @@ export async function GET() {
   if (auth) return auth;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
 
   if (!base) {
     return NextResponse.json(
@@ -25,7 +25,7 @@ export async function GET() {
   const r = await fetch(`${base}/admin/tenants`, {
     method: "GET",
     headers: {
-      "X-ADMIN-KEY": adminKey,
+      "X-DASHBOARD-TOKEN": adminKey,
     },
     cache: "no-store",
   });
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   if (auth) return auth;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
   const body = await req.json();
 
   if (!base) {
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-ADMIN-KEY": adminKey,
+      "X-DASHBOARD-TOKEN": adminKey,
     },
     body: JSON.stringify(body),
   });

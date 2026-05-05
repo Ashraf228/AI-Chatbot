@@ -9,7 +9,7 @@ export async function POST(
   if (auth) return auth;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
   const { jobId } = await context.params;
 
   if (!base) {
@@ -23,7 +23,7 @@ export async function POST(
   const r = await fetch(`${base}/admin/agents/webhooks/${jobId}/retry`, {
     method: "POST",
     headers: {
-      "X-ADMIN-KEY": adminKey,
+      "X-DASHBOARD-TOKEN": adminKey,
     },
     cache: "no-store",
   });

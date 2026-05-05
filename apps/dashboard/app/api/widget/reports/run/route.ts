@@ -1,27 +1,22 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { assertSiteAccess, fetchDashboardBackend } from "@/lib/dashboard-api";
+import { requireSession } from "@/lib/require-auth";
 
 export async function POST(req: Request) {
-  const auth = await requireAuth();
-  if (auth) return auth;
-
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const auth = await requireSession({ allowCustomer: true });
+  if (auth.response) return auth.response;
   const body = await req.json();
 
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
+  try {
+    await assertSiteAccess(auth.session, String(body?.siteId || ""));
+  } catch {
+    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const r = await fetch(`${base}/admin/widget/reports/run`, {
+  const r = await fetchDashboardBackend("/admin/widget/reports/run", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-ADMIN-KEY": adminKey,
     },
     body: JSON.stringify(body),
   });

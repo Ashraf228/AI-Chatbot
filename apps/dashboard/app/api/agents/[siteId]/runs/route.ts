@@ -9,7 +9,7 @@ export async function POST(
   if (auth) return auth;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
   const body = await req.json();
   const { siteId } = await context.params;
 
@@ -25,7 +25,7 @@ export async function POST(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-ADMIN-KEY": adminKey,
+      "X-DASHBOARD-TOKEN": adminKey,
     },
     body: JSON.stringify(body),
   });

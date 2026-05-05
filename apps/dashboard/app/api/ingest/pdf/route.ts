@@ -1,26 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { assertSiteAccess, fetchDashboardBackend } from "@/lib/dashboard-api";
+import { requireSession } from "@/lib/require-auth";
 
 export async function POST(req: Request) {
-  const auth = await requireAuth();
-  if (auth) return auth;
-
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
-
-  if (!base) {
-    return NextResponse.json(
-      { message: "BACKEND_BASE_URL missing in dashboard/.env.local" },
-      { status: 500 }
-    );
-  }
-
-  if (!adminKey) {
-    return NextResponse.json(
-      { message: "ADMIN_KEY missing in dashboard/.env.local" },
-      { status: 500 }
-    );
-  }
+  const auth = await requireSession({ allowCustomer: true });
+  if (auth.response) return auth.response;
 
   const incomingForm = await req.formData();
   const siteId = incomingForm.get("siteId");
@@ -34,15 +18,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: "file missing" }, { status: 400 });
   }
 
+  try {
+    await assertSiteAccess(auth.session, siteId);
+  } catch {
+    return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+  }
+
   const forwardForm = new FormData();
   forwardForm.append("siteId", siteId);
   forwardForm.append("file", file, file.name);
 
-  const r = await fetch(`${base}/admin/ingest/pdf`, {
+  const r = await fetchDashboardBackend("/admin/ingest/pdf", {
     method: "POST",
-    headers: {
-      "X-ADMIN-KEY": adminKey,
-    },
     body: forwardForm,
   });
 

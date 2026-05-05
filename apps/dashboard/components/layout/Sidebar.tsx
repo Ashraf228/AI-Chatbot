@@ -1,15 +1,23 @@
 import { BrandLogo } from "./BrandLogo";
 import Link from "next/link";
-import { dashboardNav } from "../../lib/dashboard-config";
+import { getDashboardNav } from "../../lib/dashboard-config";
 import { Button } from "../shared/Button";
+import { getDashboardSession } from "@/lib/auth";
 
-export function Sidebar() {
+export async function Sidebar() {
+  const session = await getDashboardSession();
+  const navigation = getDashboardNav(session?.role ?? "admin");
+
+  if (!session) {
+    return null;
+  }
+
   return (
     <aside className="dashboard-sidebar">
       <BrandLogo size={56} />
 
       <nav className="dashboard-sidebar-nav">
-        {dashboardNav.map((item) => (
+        {navigation.map((item) => (
           <Link key={item.href} href={item.href} className="dashboard-nav-link">
             {item.label}
           </Link>

@@ -1,41 +1,24 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireAuth, requireSession } from "@/lib/require-auth";
+import { fetchDashboardBackend, filterSitesForSession } from "@/lib/dashboard-api";
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (auth) return auth;
+  const auth = await requireSession({ allowCustomer: true });
+  if (auth.response) return auth.response;
 
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
-
-  if (!base) {
-    return NextResponse.json(
-      { message: "BACKEND_BASE_URL missing in dashboard/.env.local" },
-      { status: 500 }
-    );
-  }
-
-  if (!adminKey) {
-    return NextResponse.json(
-      { message: "ADMIN_KEY missing in dashboard/.env.local" },
-      { status: 500 }
-    );
-  }
-
-  const r = await fetch(`${base}/admin/sites`, {
+  const r = await fetchDashboardBackend("/admin/sites", {
     method: "GET",
-    headers: {
-      "X-ADMIN-KEY": adminKey,
-    },
     cache: "no-store",
   });
 
-  const text = await r.text();
+  const data = await r.json().catch(() => []);
+  if (!r.ok) {
+    return NextResponse.json(data, { status: r.status });
+  }
 
-  return new NextResponse(text, {
-    status: r.status,
-    headers: { "Content-Type": "application/json" },
-  });
+  return NextResponse.json(
+    filterSitesForSession(auth.session, Array.isArray(data) ? data : [])
+  );
 }
 
 export async function POST(req: Request) {
@@ -43,7 +26,7 @@ export async function POST(req: Request) {
   if (auth) return auth;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
   const body = await req.json();
 
   if (!base) {
@@ -64,7 +47,7 @@ export async function POST(req: Request) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-ADMIN-KEY": adminKey,
+      "X-DASHBOARD-TOKEN": adminKey,
     },
     body: JSON.stringify(body),
   });

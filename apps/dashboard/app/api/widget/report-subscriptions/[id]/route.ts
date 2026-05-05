@@ -1,31 +1,38 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { fetchDashboardBackend, getAccessibleSiteIds } from "@/lib/dashboard-api";
+import { requireSession } from "@/lib/require-auth";
 
 export async function PATCH(
   req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAuth();
-  if (auth) return auth;
-
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const auth = await requireSession({ allowCustomer: true });
+  if (auth.response) return auth.response;
   const body = await req.json();
   const { id } = await context.params;
 
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
+  if (auth.session.role === "customer") {
+    const allowedSiteIds = await getAccessibleSiteIds(auth.session);
+    const lookup = await fetchDashboardBackend("/admin/widget/report-subscriptions", {
+      method: "GET",
+      cache: "no-store",
+    });
+    const subscriptions = (await lookup.json().catch(() => [])) as Array<{
+      id?: string;
+      siteId?: string;
+    }>;
+    const subscription = Array.isArray(subscriptions)
+      ? subscriptions.find((entry) => entry.id === id)
+      : null;
+    if (!subscription?.siteId || !allowedSiteIds.has(subscription.siteId)) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
   }
 
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const r = await fetch(`${base}/admin/widget/report-subscriptions/${id}`, {
+  const r = await fetchDashboardBackend(`/admin/widget/report-subscriptions/${id}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      "X-ADMIN-KEY": adminKey,
     },
     body: JSON.stringify(body),
   });
@@ -41,26 +48,30 @@ export async function DELETE(
   _req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAuth();
-  if (auth) return auth;
-
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.ADMIN_KEY?.trim();
+  const auth = await requireSession({ allowCustomer: true });
+  if (auth.response) return auth.response;
   const { id } = await context.params;
 
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
+  if (auth.session.role === "customer") {
+    const allowedSiteIds = await getAccessibleSiteIds(auth.session);
+    const lookup = await fetchDashboardBackend("/admin/widget/report-subscriptions", {
+      method: "GET",
+      cache: "no-store",
+    });
+    const subscriptions = (await lookup.json().catch(() => [])) as Array<{
+      id?: string;
+      siteId?: string;
+    }>;
+    const subscription = Array.isArray(subscriptions)
+      ? subscriptions.find((entry) => entry.id === id)
+      : null;
+    if (!subscription?.siteId || !allowedSiteIds.has(subscription.siteId)) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
   }
 
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const r = await fetch(`${base}/admin/widget/report-subscriptions/${id}`, {
+  const r = await fetchDashboardBackend(`/admin/widget/report-subscriptions/${id}`, {
     method: "DELETE",
-    headers: {
-      "X-ADMIN-KEY": adminKey,
-    },
   });
 
   const text = await r.text();

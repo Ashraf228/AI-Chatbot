@@ -7,7 +7,7 @@ export async function GET(req: Request) {
     if (auth) return auth;
 
     const base = process.env.BACKEND_BASE_URL?.trim();
-    const adminKey = process.env.ADMIN_KEY?.trim();
+    const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
 
     if (!base) {
       return NextResponse.json(
@@ -39,7 +39,7 @@ export async function GET(req: Request) {
     const r = await fetch(targetUrl.toString(), {
       method: "GET",
       headers: {
-        "X-ADMIN-KEY": adminKey,
+        "X-DASHBOARD-TOKEN": adminKey,
       },
       cache: "no-store",
     });
