@@ -11,10 +11,9 @@ import { Select } from "../shared/Select";
 import { CustomerStatusBadge } from "./CustomerStatusBadge";
 import {
   mapOverallStatusToTone,
-  resolveCustomerOverallStatus,
-  type CustomerSetupSnapshot,
+  type CustomerOverallStatus,
 } from "./customer-status";
-import { CUSTOMER_TEMPLATES } from "../../lib/customer-templates";
+import { type IndustryTemplate, templatesByKey } from "../../lib/industry-templates";
 
 type CustomerSetupWizardProps = {
   siteId: string;
@@ -41,17 +40,6 @@ type KnowledgeItem = {
   type: string;
 };
 
-const INDUSTRY_OPTIONS = [
-  { value: "", label: "Bitte wählen" },
-  { value: "local-services", label: "Lokaler Dienstleister" },
-  { value: "ecommerce-shopify", label: "E-Commerce / Shopify" },
-  { value: "property-management", label: "Immobilienverwaltung" },
-  { value: "it-support", label: "IT-Support" },
-  { value: "medical-practice", label: "Arztpraxis" },
-  { value: "fitness-studio", label: "Fitnessstudio" },
-  { value: "cleaning-trades", label: "Reinigung / Handwerk" },
-];
-
 const GOAL_OPTIONS = [
   { value: "", label: "Bitte wählen" },
   { value: "lead_capture", label: "Leads sammeln" },
@@ -72,23 +60,37 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   const siteSlug = encodeSiteId(siteId);
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
+  const [templates, setTemplates] = useState<IndustryTemplate[]>([]);
+  const [overallStatus, setOverallStatus] = useState<CustomerOverallStatus>("Setup unvollständig");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [basicsForm, setBasicsForm] = useState({ name: "", domain: "" });
 
+  async function refreshStatus() {
+    const response = await fetch(`/api/sites/${siteId}/status`, { cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data?.status) {
+      setOverallStatus(data.status);
+    }
+  }
+
   async function load() {
     setLoading(true);
     setError(null);
 
-    const [siteRes, knowledgeRes] = await Promise.all([
+    const [siteRes, knowledgeRes, templatesRes, statusRes] = await Promise.all([
       fetch(`/api/widget/sites/${siteId}`, { cache: "no-store" }),
       fetch(`/api/knowledge?siteId=${encodeURIComponent(siteId)}`, { cache: "no-store" }),
+      fetch("/api/industry-templates", { cache: "no-store" }),
+      fetch(`/api/sites/${siteId}/status`, { cache: "no-store" }),
     ]);
 
     const siteData = await siteRes.json().catch(() => ({}));
     const knowledgeData = await knowledgeRes.json().catch(() => []);
+    const templatesData = await templatesRes.json().catch(() => []);
+    const statusData = await statusRes.json().catch(() => ({}));
 
     if (!siteRes.ok) {
       setError(siteData?.message || "Kundendaten konnten nicht geladen werden.");
@@ -119,6 +121,10 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     };
 
     setSite(nextSite);
+    setTemplates(Array.isArray(templatesData) ? templatesData : []);
+    if (statusRes.ok && statusData?.status) {
+      setOverallStatus(statusData.status);
+    }
     setBasicsForm({
       name: nextSite.name,
       domain: nextSite.allowedDomains[0] || "",
@@ -180,29 +186,6 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     };
   }, [counts.total, site]);
 
-  const overallStatus = useMemo(() => {
-    if (!site) {
-      return "Setup unvollständig" as const;
-    }
-
-    const snapshot: CustomerSetupSnapshot = {
-      name: site.name,
-      allowedDomains: site.allowedDomains,
-      industry: site.industry,
-      setupGoal: site.setupGoal,
-      siteKey: site.siteKey,
-      logoUrl: site.logoUrl,
-      brandColor: site.brandColor,
-      welcomeMessage: site.welcomeMessage,
-      knowledgeCount: counts.total,
-      lastTestedAt: site.lastTestedAt,
-      goLiveAt: site.goLiveAt,
-      hasError: false,
-    };
-
-    return resolveCustomerOverallStatus(snapshot);
-  }, [counts.total, site]);
-
   async function saveBasics() {
     setSavingKey("basics");
     setError(null);
@@ -235,6 +218,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     );
     setMessage("Basisdaten gespeichert.");
     setSavingKey(null);
+    await refreshStatus();
   }
 
   async function patchSetup(values: Record<string, unknown>, successMessage: string, key: string) {
@@ -268,6 +252,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     );
     setMessage(successMessage);
     setSavingKey(null);
+    await refreshStatus();
   }
 
   async function applyIndustryTemplate() {
@@ -275,7 +260,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       return;
     }
 
-    const template = CUSTOMER_TEMPLATES[site.industry];
+    const template = templatesByKey(templates)[site.industry];
     if (!template) {
       setError("Für diese Branche ist noch keine Vorlage hinterlegt.");
       return;
@@ -286,36 +271,14 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     setMessage(null);
 
     try {
-      const [configResponse, brandingResponse, modulesResponse] = await Promise.all([
-        fetch(`/api/widget/config/${siteId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            industry: template.key,
-            setupGoal: template.setupGoal,
-            systemPrompt: template.systemPrompt,
-            suggestedQuestionsByPath: template.recommendedQuestions,
-          }),
-        }),
-        fetch(`/api/widget/branding/${siteId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            welcomeMessage: template.welcomeMessage,
-          }),
-        }),
-        fetch(`/api/site-modules/${siteId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(template.modules),
-        }),
-      ]);
+      const response = await fetch(`/api/industry-templates/${siteId}/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateKey: template.key }),
+      });
 
-      const responses = [configResponse, brandingResponse, modulesResponse];
-      const failed = responses.find((response) => !response.ok);
-
-      if (failed) {
-        const data = await failed.json().catch(() => ({}));
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
         setError(data?.message || "Vorlage konnte nicht vollständig angewendet werden.");
         setSavingKey(null);
         return;
@@ -429,8 +392,9 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
               setSite((current) => (current ? { ...current, industry: event.target.value } : current))
             }
           >
-            {INDUSTRY_OPTIONS.map((option) => (
-              <option key={option.value || "empty"} value={option.value}>
+            <option value="">Bitte wählen</option>
+            {templates.map((option) => (
+              <option key={option.key} value={option.key}>
                 {option.label}
               </option>
             ))}
@@ -452,7 +416,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             type="button"
             variant="secondary"
             onClick={applyIndustryTemplate}
-            disabled={savingKey === "template" || !site.industry || !CUSTOMER_TEMPLATES[site.industry]}
+            disabled={savingKey === "template" || !site.industry || !templatesByKey(templates)[site.industry]}
           >
             {savingKey === "template" ? "Vorlage wird angewendet..." : "Vorlage anwenden"}
           </Button>

@@ -9,13 +9,11 @@ import { ErrorState } from "../../components/shared/ErrorState";
 import { Input } from "../../components/shared/Input";
 import { Select } from "../../components/shared/Select";
 import { SiteForm } from "../../components/sites/SiteForm";
-import { CUSTOMER_TEMPLATES } from "../../lib/customer-templates";
+import { type IndustryTemplate, templatesByKey } from "../../lib/industry-templates";
 import { encodeSiteId } from "../../lib/site-id";
 import {
   mapOverallStatusToTone,
-  resolveCustomerOverallStatus,
   type CustomerOverallStatus,
-  type CustomerSetupSnapshot,
 } from "../../components/customer/customer-status";
 
 type Site = {
@@ -25,6 +23,7 @@ type Site = {
   name: string;
   allowed_domains: string[];
   public_key: string | null;
+  setupStatus?: SiteStatusSummary;
 };
 
 type SiteStatusSummary = {
@@ -41,6 +40,7 @@ type Tenant = {
 export default function SitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [templates, setTemplates] = useState<IndustryTemplate[]>([]);
   const [siteStatusById, setSiteStatusById] = useState<Record<string, SiteStatusSummary>>({});
   const [form, setForm] = useState({
     siteKey: "",
@@ -56,6 +56,7 @@ export default function SitesPage() {
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [tenantSaving, setTenantSaving] = useState(false);
+  const templateLabels = templatesByKey(templates);
 
   async function loadSites() {
     setErr(null);
@@ -70,6 +71,20 @@ export default function SitesPage() {
 
     const items = Array.isArray(data) ? data : [];
     setSites(items);
+    setSiteStatusById(
+      Object.fromEntries(
+        items
+          .filter((site) => site.setupStatus)
+          .map((site) => [
+            site.id,
+            {
+              status: site.setupStatus!.status,
+              industry: site.setupStatus!.industry,
+              setupGoal: site.setupStatus!.setupGoal,
+            },
+          ]),
+      ),
+    );
   }
 
   async function loadTenants() {
@@ -98,78 +113,16 @@ export default function SitesPage() {
   useEffect(() => {
     loadTenants();
     loadSites();
+    loadTemplates();
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadStatuses() {
-      const entries = await Promise.all(
-        sites.map(async (site) => {
-          try {
-            const [siteRes, knowledgeRes] = await Promise.all([
-              fetch(`/api/widget/sites/${site.id}`, { cache: "no-store" }),
-              fetch(`/api/knowledge?siteId=${encodeURIComponent(site.id)}`, { cache: "no-store" }),
-            ]);
-
-            const siteData = await siteRes.json().catch(() => ({}));
-            const knowledgeData = await knowledgeRes.json().catch(() => []);
-            const knowledgeCount = Array.isArray(knowledgeData) ? knowledgeData.length : 0;
-
-            const snapshot: CustomerSetupSnapshot = {
-              name: siteData.name || site.name,
-              allowedDomains: Array.isArray(siteData.allowedDomains)
-                ? siteData.allowedDomains
-                : site.allowed_domains,
-              industry: siteData.industry || "",
-              setupGoal: siteData.setupGoal || "",
-              siteKey: siteData.siteKey || site.site_key,
-              logoUrl: siteData.logoUrl || "",
-              brandColor: siteData.brandColor || "#b55400",
-              welcomeMessage: siteData.welcomeMessage || "",
-              knowledgeCount,
-              lastTestedAt: siteData.lastTestedAt || "",
-              goLiveAt: siteData.goLiveAt || "",
-              hasError: !siteRes.ok || !knowledgeRes.ok,
-            };
-
-            return [
-              site.id,
-              {
-                status: resolveCustomerOverallStatus(snapshot),
-                industry: siteData.industry || "",
-                setupGoal: siteData.setupGoal || "",
-              },
-            ] as const;
-          } catch {
-            return [
-              site.id,
-              {
-                status: "Fehler" as const,
-                industry: "",
-                setupGoal: "",
-              },
-            ] as const;
-          }
-        }),
-      );
-
-      if (!cancelled) {
-        setSiteStatusById(Object.fromEntries(entries));
-      }
+  async function loadTemplates() {
+    const response = await fetch("/api/industry-templates", { cache: "no-store" });
+    const data = await response.json().catch(() => []);
+    if (response.ok && Array.isArray(data)) {
+      setTemplates(data);
     }
-
-    if (sites.length === 0) {
-      setSiteStatusById({});
-      return;
-    }
-
-    loadStatuses();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sites]);
+  }
 
   async function createSite(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -204,40 +157,18 @@ export default function SitesPage() {
       return;
     }
 
-    if (data?.id && form.industry && CUSTOMER_TEMPLATES[form.industry]) {
-      const template = CUSTOMER_TEMPLATES[form.industry];
-      const [configResponse, brandingResponse, modulesResponse] = await Promise.all([
-        fetch(`/api/widget/config/${data.id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            industry: template.key,
-            setupGoal: template.setupGoal,
-            systemPrompt: template.systemPrompt,
-            suggestedQuestionsByPath: template.recommendedQuestions,
-          }),
-        }),
-        fetch(`/api/widget/branding/${data.id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            welcomeMessage: template.welcomeMessage,
-          }),
-        }),
-        fetch(`/api/site-modules/${data.id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(template.modules),
-        }),
-      ]);
+    const templateMap = templatesByKey(templates);
+    if (data?.id && form.industry && templateMap[form.industry]) {
+      const template = templateMap[form.industry];
+      const response = await fetch(`/api/industry-templates/${data.id}/apply`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ templateKey: template.key }),
+      });
 
-      if (!configResponse.ok || !brandingResponse.ok || !modulesResponse.ok) {
+      if (!response.ok) {
         setErr("Kunde wurde angelegt, aber die Branchenvorlage konnte nicht vollständig angewendet werden.");
       } else {
         setMsg(`Kunde erfolgreich angelegt. Vorlage „${template.label}“ wurde angewendet.`);
@@ -308,7 +239,7 @@ export default function SitesPage() {
             <SiteForm
               form={form}
               tenantOptions={tenants}
-              industryOptions={Object.values(CUSTOMER_TEMPLATES).map((template) => ({
+              industryOptions={templates.map((template) => ({
                 value: template.key,
                 label: template.label,
                 description: `${formatGoal(template.setupGoal)} als Startziel`,
@@ -385,7 +316,7 @@ export default function SitesPage() {
                         />
                       </div>
                       {status?.industry ? (
-                        <InfoRow label="Branche" value={formatIndustry(status.industry)} />
+                        <InfoRow label="Branche" value={templateLabels[status.industry]?.label || status.industry} />
                       ) : null}
                       {status?.setupGoal ? <InfoRow label="Bot-Ziel" value={formatGoal(status.setupGoal)} /> : null}
                       <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
@@ -456,8 +387,4 @@ function formatGoal(goal: string) {
   }
 
   return goal;
-}
-
-function formatIndustry(industry: string) {
-  return CUSTOMER_TEMPLATES[industry]?.label || industry;
 }

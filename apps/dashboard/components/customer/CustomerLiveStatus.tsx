@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CustomerStatusBadge } from "./CustomerStatusBadge";
 import {
   mapOverallStatusToTone,
-  resolveCustomerOverallStatus,
-  type CustomerSetupSnapshot,
+  type CustomerOverallStatus,
 } from "./customer-status";
 import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
@@ -54,6 +53,7 @@ function formatDate(value: string) {
 export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [knowledgeCount, setKnowledgeCount] = useState(0);
+  const [overallStatus, setOverallStatus] = useState<CustomerOverallStatus>("Setup unvollständig");
   const [eventSummary, setEventSummary] = useState<EventSummary>({
     startedChats: 0,
     leads: 0,
@@ -69,16 +69,18 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
       setLoading(true);
       setError(null);
 
-      const [siteRes, knowledgeRes, eventRes, conversationsRes, reportsRes] = await Promise.all([
+      const [siteRes, statusRes, knowledgeRes, eventRes, conversationsRes, reportsRes] = await Promise.all([
         fetch(`/api/widget/sites/${siteId}`, { cache: "no-store" }),
+        fetch(`/api/sites/${siteId}/status`, { cache: "no-store" }),
         fetch(`/api/knowledge?siteId=${encodeURIComponent(siteId)}`, { cache: "no-store" }),
         fetch(`/api/widget/events/summary?siteId=${encodeURIComponent(siteId)}`, { cache: "no-store" }),
         fetch(`/api/conversations?siteId=${encodeURIComponent(siteId)}`, { cache: "no-store" }),
         fetch(`/api/widget/reports/history?siteId=${encodeURIComponent(siteId)}`, { cache: "no-store" }),
       ]);
 
-      const [siteData, knowledgeData, eventData, conversationsData, reportsData] = await Promise.all([
+      const [siteData, statusData, knowledgeData, eventData, conversationsData, reportsData] = await Promise.all([
         siteRes.json().catch(() => ({})),
+        statusRes.json().catch(() => ({})),
         knowledgeRes.json().catch(() => []),
         eventRes.json().catch(() => ({})),
         conversationsRes.json().catch(() => []),
@@ -105,6 +107,9 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
         goLiveAt: siteData.goLiveAt || "",
       });
       setKnowledgeCount(Array.isArray(knowledgeData) ? knowledgeData.length : 0);
+      if (statusRes.ok && statusData?.status) {
+        setOverallStatus(statusData.status);
+      }
       setEventSummary({
         startedChats: Number(eventData?.startedChats || 0),
         leads: Number(eventData?.leads || 0),
@@ -132,36 +137,13 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
     load();
   }, [siteId]);
 
-  const snapshot = useMemo<CustomerSetupSnapshot | null>(() => {
-    if (!site) {
-      return null;
-    }
-
-    return {
-      name: site.name,
-      allowedDomains: site.allowedDomains,
-      industry: site.industry,
-      setupGoal: site.setupGoal,
-      siteKey: site.siteKey,
-      logoUrl: site.logoUrl,
-      brandColor: site.brandColor,
-      welcomeMessage: site.welcomeMessage,
-      knowledgeCount,
-      lastTestedAt: site.lastTestedAt,
-      goLiveAt: site.goLiveAt,
-      hasError: false,
-    };
-  }, [knowledgeCount, site]);
-
   if (loading) {
     return <LoadingState />;
   }
 
-  if (error || !site || !snapshot) {
+  if (error || !site) {
     return <ErrorState message={error || "Kundenstatus konnte nicht geladen werden."} />;
   }
-
-  const overallStatus = resolveCustomerOverallStatus(snapshot);
 
   return (
     <section className="dashboard-card dashboard-stack">

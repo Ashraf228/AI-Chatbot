@@ -2,11 +2,15 @@ import { BadRequestException, Body, Controller, Get, Param, Patch, Post, UseGuar
 import { SitesService } from './sites.service';
 import { CreateSiteDto, UpdateSiteDto } from './dto';
 import { AdminKeyGuard } from '../utils/admin.guard';
+import { SiteStatusService } from './site-status.service';
 
 @UseGuards(AdminKeyGuard)
 @Controller('admin/sites')
 export class SitesController {
-  constructor(private sites: SitesService) {}
+  constructor(
+    private sites: SitesService,
+    private statuses: SiteStatusService,
+  ) {}
 
   @Post()
   async create(@Body() dto: CreateSiteDto) {
@@ -28,7 +32,35 @@ export class SitesController {
 
   @Get()
   async list() {
-    return this.sites.listSites();
+    const sites = await this.sites.listSites();
+    const statuses = await Promise.all(
+      sites.map(async (site) => {
+        try {
+          return await this.statuses.resolveStatus(site.id);
+        } catch {
+          return {
+            siteId: site.id,
+            status: 'Fehler',
+            knowledgeCount: 0,
+            industry: '',
+            setupGoal: '',
+            lastTestedAt: '',
+            goLiveAt: '',
+          };
+        }
+      }),
+    );
+    const statusBySiteId = new Map(statuses.map((status) => [status.siteId, status]));
+
+    return sites.map((site) => ({
+      ...site,
+      setupStatus: statusBySiteId.get(site.id),
+    }));
+  }
+
+  @Get(':siteId/status')
+  async status(@Param('siteId') siteId: string) {
+    return this.statuses.resolveStatus(siteId);
   }
 
   @Patch(':siteId')

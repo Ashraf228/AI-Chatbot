@@ -25,6 +25,7 @@ import { ToolsModule } from './tools/tools.module';
 import { LeadSalesModule } from './modules/lead-sales/lead-sales.module';
 import { EcommerceProductAdvisorModule } from './modules/ecommerce-product-advisor/ecommerce-product-advisor.module';
 import { PropertyTicketingModule } from './modules/property-ticketing/property-ticketing.module';
+import { IndustryTemplatesModule } from './industry-templates/industry-templates.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { PropertyTicketingModule } from './modules/property-ticketing/property-t
     LeadSalesModule,
     EcommerceProductAdvisorModule,
     PropertyTicketingModule,
+    IndustryTemplatesModule,
   ],
   controllers: [HealthController],
   providers: [
