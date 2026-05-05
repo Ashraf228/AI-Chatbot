@@ -22,26 +22,15 @@ export default async function SiteDetailPage({
             <div>
               <h2 className="dashboard-card-title">Setup</h2>
               <p className="dashboard-copy">
-                Von hier aus richtest du Design, Verhalten, Wissen, Chats, Verbesserung und
-                Berichte für diesen Kunden ein.
+                Diese Bereiche brauchst du für die eigentliche Einrichtung des Kunden.
               </p>
             </div>
 
             <div className="dashboard-hub-grid">
               <SiteHubLink
-                href={`/sites/${siteSlug}/modules`}
-                title="Funktionen"
-                description="Aktive Faehigkeiten und Branchenfunktionen fuer diesen Kunden festlegen."
-              />
-              <SiteHubLink
-                href={`/sites/${siteSlug}/agents`}
-                title="Automationen"
-                description="Verfuegbare Automationen, Voraussetzungen und spaetere Ablauflogs pruefen."
-              />
-              <SiteHubLink
-                href={`/sites/${siteSlug}/integrations`}
-                title="Verbindungen"
-                description="Shopify, Webhooks und weitere externe Systeme fuer diesen Kunden verwalten."
+                href={`/sites/${siteSlug}/knowledge`}
+                title="Wissen"
+                description="FAQs, PDFs und weitere Inhalte für den Bot pflegen."
               />
               <SiteHubLink
                 href={`/sites/${siteSlug}/branding`}
@@ -54,9 +43,9 @@ export default async function SiteDetailPage({
                 description="Ziel, Kontaktlogik und Chat-Ablauf des Bots steuern."
               />
               <SiteHubLink
-                href={`/sites/${siteSlug}/knowledge`}
-                title="Wissen"
-                description="FAQs, PDFs und weitere Inhalte für den Bot pflegen."
+                href={`/sites/${siteSlug}/embedding`}
+                title="Einbindung"
+                description="Widget-Code, Kundenschlüssel und Einbau auf der Kundenseite prüfen."
               />
               <SiteHubLink
                 href={`/sites/${siteSlug}/reports`}
@@ -70,23 +59,42 @@ export default async function SiteDetailPage({
             <div>
               <h2 className="dashboard-card-title">Empfohlener Ablauf</h2>
               <ol className="dashboard-list">
-                <li>Design und Auftritt des Bots prüfen</li>
-                <li>Verhalten, Kontaktziel und Consent festlegen</li>
                 <li>Wissen mit FAQs und PDFs befüllen</li>
+                <li>Design und Auftritt des Bots prüfen</li>
+                <li>Verhalten, Ziel und Kontaktlogik festlegen</li>
+                <li>Einbindung auf der Website hinterlegen</li>
                 <li>Einbindung auf der Website testen</li>
                 <li>Anfragen, Chats und Berichte nach dem Start kontrollieren</li>
               </ol>
             </div>
 
             <div className="dashboard-card dashboard-card--soft">
-              <h3 className="dashboard-card-title dashboard-card-title--sm">Kurzinfo</h3>
-              <div className="dashboard-info-row">
-                <strong>Kunden-ID</strong>
-                <span className="dashboard-mono">{siteId}</span>
-              </div>
-              <p className="dashboard-copy dashboard-copy--muted dashboard-mt-14">
-                Nutze die Tabs oder die Schnelllinks oben, um den Kunden strukturiert einzurichten.
+              <h3 className="dashboard-card-title dashboard-card-title--sm">Technik & Admin</h3>
+              <p className="dashboard-copy dashboard-copy--muted">
+                Diese Bereiche werden seltener gebraucht und sind bewusst vom eigentlichen Setup getrennt.
               </p>
+              <div className="dashboard-hub-grid">
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/modules`}
+                  title="Funktionen"
+                  description="Aktive Faehigkeiten und Branchenfunktionen fuer diesen Kunden festlegen."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/agents`}
+                  title="Automationen"
+                  description="Ablauflogs, Tickets, Webhooks und weitere Automationsschritte prüfen."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/integrations`}
+                  title="Verbindungen"
+                  description="Shopify, Webhooks und weitere externe Systeme verwalten."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/analytics`}
+                  title="Verbesserung"
+                  description="Top-Fragen, Conversion und Optimierungshinweise für diesen Kunden prüfen."
+                />
+              </div>
             </div>
           </section>
         </div>
