@@ -13,7 +13,7 @@ export default async function SiteModulesPage({
 
   return (
     <div>
-      <Topbar title={`Module · ${siteId}`} />
+      <Topbar title={`Funktionen · ${siteId}`} />
       <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <SiteModulesForm siteId={siteId} />

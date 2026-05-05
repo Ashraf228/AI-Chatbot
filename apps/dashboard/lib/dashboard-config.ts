@@ -3,16 +3,15 @@ export const dashboardNav = [
   { href: "/sites", label: "Kunden" },
   { href: "/leads", label: "Anfragen" },
   { href: "/conversations", label: "Chats" },
-  { href: "/usage", label: "Kosten" },
   { href: "/reports", label: "Berichte" },
   { href: "/settings", label: "Einstellungen" },
 ];
 
 export const siteTabs = [
   { slug: "", label: "Setup" },
-  { slug: "modules", label: "Module" },
-  { slug: "agents", label: "Agenten" },
-  { slug: "integrations", label: "Integrationen" },
+  { slug: "modules", label: "Funktionen" },
+  { slug: "agents", label: "Automationen" },
+  { slug: "integrations", label: "Verbindungen" },
   { slug: "knowledge", label: "Wissen" },
   { slug: "branding", label: "Design" },
   { slug: "widget", label: "Verhalten" },

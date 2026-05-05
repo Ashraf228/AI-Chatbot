@@ -25,9 +25,9 @@ const cards = [
     description: "Verläufe prüfen, Nachrichten lesen und Auffälligkeiten erkennen.",
   },
   {
-    href: "/usage",
-    title: "Kosten",
-    description: "Nutzung, Tokens, Latenzen und Kosten im Blick behalten.",
+    href: "/reports",
+    title: "Berichte",
+    description: "Report-Historie prüfen und Auswertungen für laufende Kunden einsehen.",
   },
 ];
 

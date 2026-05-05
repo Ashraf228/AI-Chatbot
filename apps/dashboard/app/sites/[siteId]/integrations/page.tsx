@@ -13,7 +13,7 @@ export default async function SiteIntegrationsPage({
 
   return (
     <div>
-      <Topbar title={`Integrationen · ${siteId}`} />
+      <Topbar title={`Verbindungen · ${siteId}`} />
       <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <SiteIntegrationsForm siteId={siteId} />

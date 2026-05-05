@@ -30,18 +30,18 @@ export default async function SiteDetailPage({
             <div className="dashboard-hub-grid">
               <SiteHubLink
                 href={`/sites/${siteSlug}/modules`}
-                title="Module"
-                description="Aktive Branchen- und Agenten-Module pro Kunde festlegen."
+                title="Funktionen"
+                description="Aktive Faehigkeiten und Branchenfunktionen fuer diesen Kunden festlegen."
               />
               <SiteHubLink
                 href={`/sites/${siteSlug}/agents`}
-                title="Agenten"
-                description="Verfuegbare Agenten, Voraussetzungen und spaetere Agentenlaeufe pro Kunde pruefen."
+                title="Automationen"
+                description="Verfuegbare Automationen, Voraussetzungen und spaetere Ablauflogs pruefen."
               />
               <SiteHubLink
                 href={`/sites/${siteSlug}/integrations`}
-                title="Integrationen"
-                description="Shopify, Webhooks und spaetere Systemanbindungen pro Kunde verwalten."
+                title="Verbindungen"
+                description="Shopify, Webhooks und weitere externe Systeme fuer diesen Kunden verwalten."
               />
               <SiteHubLink
                 href={`/sites/${siteSlug}/branding`}

@@ -13,7 +13,7 @@ export default async function SiteAgentsPage({
 
   return (
     <div>
-      <Topbar title={`Agenten · ${siteId}`} />
+      <Topbar title={`Automationen · ${siteId}`} />
       <div className="dashboard-page">
         <SiteTabs siteId={siteId} />
         <SiteAgentsForm siteId={siteId} />

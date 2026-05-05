@@ -7,7 +7,6 @@ import { EmptyState } from "../../components/shared/EmptyState";
 import { ErrorState } from "../../components/shared/ErrorState";
 import { Input } from "../../components/shared/Input";
 import { Select } from "../../components/shared/Select";
-import { EmbedSnippetCard } from "../../components/sites/EmbedSnippetCard";
 import { SiteForm } from "../../components/sites/SiteForm";
 import { encodeSiteId } from "../../lib/site-id";
 
@@ -25,32 +24,6 @@ type Tenant = {
   name: string;
 };
 
-function resolveLoaderUrl() {
-  const configured = process.env.NEXT_PUBLIC_WIDGET_LOADER_URL?.trim();
-  const hasUsableConfiguredUrl =
-    configured && !configured.includes("localhost") && !configured.includes("127.0.0.1");
-
-  if (hasUsableConfiguredUrl) {
-    return configured;
-  }
-
-  if (typeof window === "undefined") {
-    return configured || "http://localhost:8080/loader.js";
-  }
-
-  const { protocol, hostname } = window.location;
-
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return configured || "http://localhost:8080/loader.js";
-  }
-
-  const widgetHost = hostname.startsWith("app.")
-    ? hostname.replace(/^app\./, "widget.")
-    : `widget.${hostname}`;
-
-  return `${protocol}//${widgetHost}/loader.js`;
-}
-
 export default function SitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -67,18 +40,7 @@ export default function SitesPage() {
   });
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [promptLoading, setPromptLoading] = useState(false);
-  const [promptSaving, setPromptSaving] = useState(false);
   const [tenantSaving, setTenantSaving] = useState(false);
-  const [loaderUrl, setLoaderUrl] = useState(
-    process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js"
-  );
-
-  useEffect(() => {
-    setLoaderUrl(resolveLoaderUrl());
-  }, []);
 
   async function loadSites() {
     setErr(null);
@@ -131,40 +93,6 @@ export default function SitesPage() {
     () => sites.find((site) => site.id === selectedSiteId) || null,
     [sites, selectedSiteId]
   );
-
-  const embedCode = useMemo(() => {
-    if (!selectedSite) return "";
-
-    return `<script src="${loaderUrl}" data-site-key="${selectedSite.site_key}" defer></script>`;
-  }, [loaderUrl, selectedSite]);
-
-  useEffect(() => {
-    async function loadSelectedSiteConfig() {
-      if (!selectedSiteId) {
-        setSystemPrompt("");
-        return;
-      }
-
-      setPromptLoading(true);
-
-      try {
-        const r = await fetch(`/api/widget/sites/${selectedSiteId}`, { cache: "no-store" });
-        const data = await r.json().catch(() => ({}));
-
-        if (!r.ok) {
-          setErr(data?.message || "System Prompt konnte nicht geladen werden.");
-          setSystemPrompt("");
-          return;
-        }
-
-        setSystemPrompt(data.systemPrompt || "");
-      } finally {
-        setPromptLoading(false);
-      }
-    }
-
-    loadSelectedSiteConfig();
-  }, [selectedSiteId]);
 
   async function createSite(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -251,53 +179,7 @@ export default function SitesPage() {
     }
   }
 
-  async function copyText(value: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(label);
-      setErr(null);
-
-      setTimeout(() => {
-        setCopied(null);
-      }, 2000);
-    } catch {
-      setErr(`${label} konnte nicht kopiert werden.`);
-    }
-  }
-
-  async function saveSystemPrompt() {
-    if (!selectedSite) return;
-
-    setPromptSaving(true);
-    setErr(null);
-    setMsg(null);
-
-    try {
-      const r = await fetch(`/api/widget/config/${selectedSite.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          systemPrompt,
-        }),
-      });
-
-      const data = await r.json().catch(() => ({}));
-
-      if (!r.ok) {
-        setErr(data?.message || "System Prompt konnte nicht gespeichert werden.");
-        return;
-      }
-
-      setSystemPrompt(data.systemPrompt || systemPrompt);
-      setMsg("System Prompt gespeichert.");
-    } finally {
-      setPromptSaving(false);
-    }
-  }
-
-    return (
+  return (
     <div>
       <Topbar title="Kunden" />
       <div className="dashboard-page dashboard-page--wide">
@@ -374,17 +256,16 @@ export default function SitesPage() {
 
                   {selectedSite && (
                     <div className="dashboard-stack dashboard-stack--sm">
+                      <p className="dashboard-copy dashboard-copy--muted">
+                        Die Einrichtung passiert im Kundenbereich. Die globale Kundenliste dient nur
+                        zum Anlegen, Auswählen und Öffnen.
+                      </p>
+
                       <InfoRow label="Name" value={selectedSite.name} />
-                      <InfoRow label="Kundenschlüssel" value={selectedSite.site_key} />
-                      <InfoRow label="System-ID" value={selectedSite.id} />
-                      <InfoRow label="Tenant-ID" value={selectedSite.tenant_id || "-"} />
+                      <InfoRow label="Einbindungsschlüssel" value={selectedSite.site_key} />
                       <InfoRow
                         label="Domains"
                         value={selectedSite.allowed_domains.join(", ") || "-"}
-                      />
-                      <InfoRow
-                        label="Public Key"
-                        value={selectedSite.public_key || "nicht vorhanden"}
                       />
 
                       <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
@@ -399,56 +280,21 @@ export default function SitesPage() {
                         </Button>
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="secondary"
+                          onClick={() => {
+                            window.location.href = `/sites/${encodeSiteId(selectedSite.id)}/knowledge`;
+                          }}
+                        >
+                          Wissen öffnen
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
                           onClick={() => {
                             window.location.href = `/sites/${encodeSiteId(selectedSite.id)}/widget`;
                           }}
                         >
                           Verhalten öffnen
-                        </Button>
-                      </div>
-
-                      <EmbedSnippetCard
-                        loaderUrl={loaderUrl}
-                        siteKey={selectedSite.site_key}
-                        internalId={selectedSite.id}
-                        publicKey={selectedSite.public_key}
-                        embedCode={embedCode}
-                        copied={copied}
-                        onCopy={copyText}
-                      />
-
-                      <div className="dashboard-card dashboard-stack dashboard-stack--sm">
-                        <div>
-                          <h3 className="dashboard-card-title dashboard-card-title--sm">
-                            Kunden-Systemprompt
-                          </h3>
-                          <p className="dashboard-copy dashboard-copy--muted">
-                            Dieser Prompt gilt nur für den ausgewählten Kunden. Leer lassen =
-                            globaler Standardprompt.
-                          </p>
-                        </div>
-
-                        <textarea
-                          className="dashboard-textarea dashboard-mono"
-                          value={systemPrompt}
-                          onChange={(e) => setSystemPrompt(e.target.value)}
-                          placeholder="Optionaler kundenspezifischer Systemprompt"
-                          style={{ minHeight: 220 }}
-                          disabled={promptLoading || promptSaving}
-                        />
-
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          onClick={saveSystemPrompt}
-                          disabled={promptLoading || promptSaving}
-                        >
-                          {promptLoading
-                            ? "Lade..."
-                            : promptSaving
-                              ? "Speichert..."
-                              : "System Prompt speichern"}
                         </Button>
                       </div>
                     </div>
