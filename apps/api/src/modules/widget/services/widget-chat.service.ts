@@ -17,9 +17,12 @@ import { LlmService } from '../../../vector/llm.service';
 import { buildSystemPrompt } from '../../../chat/prompt';
 import { buildConversationGuide } from '../../../chat/conversation-guide';
 import { parseConversationFlow } from '../../../chat/flow-builder';
+import { buildResponseParts } from '../../../chat/response-parts';
+import { ChatRoutingService } from '../../../chat-routing/chat-routing.service';
 import { redactPII } from '../../../utils/pii';
 import { sanitizeInput, sanitizeOutput } from '../../../utils/security';
 import { WidgetSecurityService } from './widget-security.service';
+import { EcommerceProductAdvisorService } from '../../ecommerce-product-advisor/ecommerce-product-advisor.service';
 
 type MessageRow = {
   id: string;
@@ -47,7 +50,9 @@ export class WidgetChatService {
     private readonly embeddingService: EmbeddingService,
     private readonly vectorService: VectorService,
     private readonly llmService: LlmService,
+    private readonly chatRoutingService: ChatRoutingService,
     private readonly widgetSecurityService: WidgetSecurityService,
+    private readonly ecommerceProductAdvisor: EcommerceProductAdvisorService,
   ) {}
 
   async sendMessage(dto: SendMessageDto, origin?: string, req?: Request) {
@@ -90,6 +95,8 @@ export class WidgetChatService {
     return {
       sessionId: reply.sessionId,
       answer: reply.answer,
+      parts: reply.parts || [],
+      sources: reply.sources || [],
       messages,
     };
   }
@@ -136,7 +143,17 @@ export class WidgetChatService {
       [conversation.id],
     );
     const history = historyRes.rows.slice().reverse();
+    const routeDecision = await this.chatRoutingService.resolveForSite({
+      siteId: site.id,
+      message,
+      history,
+    });
     const conversationGuide = buildConversationGuide(history, parseConversationFlow(site.conversationFlow));
+    const routingGuide = `
+Routing-Pfad: ${routeDecision.route}
+Routing-Grund: ${routeDecision.reason}
+${routeDecision.guide}
+    `.trim();
 
     const qEmbedding = await this.embeddingService.embed(message);
     const hits = await this.vectorService.search(tenantId, site.id, qEmbedding, 6);
@@ -146,6 +163,37 @@ export class WidgetChatService {
           `# Kontext ${idx + 1} (score ${Number(h.score).toFixed(3)})\n${h.content}`,
       )
       .join('\n\n');
+    const advisorContext =
+      routeDecision.route === 'advisor'
+        ? await this.ecommerceProductAdvisor.buildRecommendationContextForSite({
+            siteId: site.id,
+            query: message,
+            limit: 3,
+            history,
+          })
+        : {
+            products: [],
+            collections: [],
+            clarificationQuestion: undefined,
+            effectiveQuery: message,
+            state: 'ready_to_recommend',
+            stateGuide: '',
+          };
+    const catalogContext =
+      advisorContext.products.length > 0 || advisorContext.collections.length > 0
+        ? [
+            ...advisorContext.products.map(
+              (product, idx) =>
+                `# Produkt ${idx + 1}\nTitel: ${product.title}\nURL: ${product.url}\nAnbieter: ${product.vendor || '-'}\nTyp: ${product.productType || '-'}`,
+            ),
+            ...advisorContext.collections.map(
+              (collection, idx) =>
+                `# Kategorie ${idx + 1}\nTitel: ${collection.title}\nURL: ${collection.url}`,
+            ),
+          ].join('\n\n')
+        : '';
+    const shouldClarifyAdvisor =
+      routeDecision.route === 'advisor' && Boolean(advisorContext.clarificationQuestion);
 
     const userPrompt = `
 Verlauf:
@@ -158,6 +206,8 @@ ${message}
 
 Kontext:
 ${context || '(kein Kontext gefunden)'}
+${catalogContext ? `\n\nProduktkatalog:\n${catalogContext}` : ''}
+${advisorContext.stateGuide ? `\n\nAdvisor-Zustand:\n${advisorContext.stateGuide}` : ''}
 `.trim();
 
     res.status(200);
@@ -174,17 +224,37 @@ ${context || '(kein Kontext gefunden)'}
     let fullAnswer = '';
 
     try {
-      await this.llmService.streamAnswer(
-        buildSystemPrompt(site.systemPrompt, conversationGuide),
-        userPrompt,
-        async (chunk) => {
-          const safeChunk = sanitizeOutput(chunk);
-          fullAnswer += safeChunk;
-          writeEvent({ type: 'chunk', delta: safeChunk });
-        },
-      );
+      let safeAnswer = '';
+      if (shouldClarifyAdvisor) {
+        safeAnswer = sanitizeOutput(advisorContext.clarificationQuestion || '');
+      } else {
+        await this.llmService.streamAnswer(
+          buildSystemPrompt(site.systemPrompt, [routingGuide, conversationGuide].join('\n\n')),
+          userPrompt,
+          async (chunk) => {
+            const safeChunk = sanitizeOutput(chunk);
+            fullAnswer += safeChunk;
+            writeEvent({ type: 'chunk', delta: safeChunk });
+          },
+        );
 
-      const safeAnswer = sanitizeOutput(fullAnswer);
+        safeAnswer = sanitizeOutput(fullAnswer);
+      }
+
+      const sources = hits.map((h: VectorSearchRow) => ({
+        title: h.title || undefined,
+        url: h.source_url || undefined,
+        score: Number(h.score),
+        metadata: h.metadata,
+      }));
+      const parts = buildResponseParts({
+        answer: safeAnswer,
+        route: routeDecision.route,
+        sources,
+        products: advisorContext.products,
+        collections: advisorContext.collections,
+        cta: shouldClarifyAdvisor ? undefined : routeDecision.cta,
+      });
 
       await this.db.query(
         `INSERT INTO messages(id, conversation_id, role, content)
@@ -210,6 +280,8 @@ ${context || '(kein Kontext gefunden)'}
         type: 'done',
         answer: safeAnswer,
         sessionId,
+        parts,
+        sources,
       });
     } catch (error: unknown) {
       writeEvent({

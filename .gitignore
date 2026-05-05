@@ -11,6 +11,7 @@ dist/
 coverage/
 .next/
 .vite/
+*.tsbuildinfo
 
 # logs
 *.log

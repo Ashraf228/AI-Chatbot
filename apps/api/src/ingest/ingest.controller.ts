@@ -64,6 +64,11 @@ export class IngestController {
     return this.ingest.listKnowledge(siteId);
   }
 
+  @Get('sources')
+  async listSources(@Query('siteId') siteId: string) {
+    return this.ingest.listSources(siteId);
+  }
+
   @Delete('knowledge/:documentId')
   async deleteKnowledge(@Param('documentId') documentId: string) {
     return this.ingest.deleteKnowledge(documentId);

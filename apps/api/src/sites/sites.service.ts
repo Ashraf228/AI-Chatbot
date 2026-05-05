@@ -2,9 +2,12 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
 import { randomBytes, randomUUID } from 'crypto';
 import { SiteConfigInput } from './dto';
+import { resolveSiteKey } from './site-key';
+import { TenantsService } from '../tenants/tenants.service';
 
 type SiteRow = {
   id: string;
+  site_key: string;
   tenant_id: string | null;
   name: string;
   allowed_domains: string[];
@@ -21,20 +24,12 @@ function parseSiteConfig(config: Record<string, unknown> | null | undefined) {
   return config && typeof config === 'object' && !Array.isArray(config) ? config : {};
 }
 
-function slugifySiteKey(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-{2,}/g, '-');
-}
-
 @Injectable()
 export class SitesService {
-  constructor(private db: PrismaService) {}
+  constructor(
+    private db: PrismaService,
+    private readonly tenants: TenantsService,
+  ) {}
 
   private normalizeSite(row: SiteRow | null): NormalizedSiteRow | null {
     if (!row) {
@@ -42,7 +37,12 @@ export class SitesService {
     }
 
     const config = parseSiteConfig(row.config);
-    const configuredSiteKey = typeof config.siteKey === 'string' ? config.siteKey.trim() : '';
+    const configuredSiteKey =
+      typeof row.site_key === 'string' && row.site_key.trim().length > 0
+        ? row.site_key.trim()
+        : typeof config.siteKey === 'string'
+          ? config.siteKey.trim()
+          : '';
 
     return {
       ...row,
@@ -56,7 +56,7 @@ export class SitesService {
     let query = `
       SELECT id
       FROM sites
-      WHERE COALESCE(config->>'siteKey', id) = $1
+      WHERE site_key = $1
     `;
 
     if (excludeId) {
@@ -81,31 +81,30 @@ export class SitesService {
     config?: SiteConfigInput;
   }) {
     const name = params.name.trim();
-    const tenantId = params.tenantId.trim();
+    const tenantId = await this.tenants.ensureTenantExists(params.tenantId.trim());
     const id = params.id?.trim() || randomUUID();
     const config = parseSiteConfig(params.config);
     const resolvedSiteKey =
-      slugifySiteKey(params.siteKey || '') ||
-      slugifySiteKey(name) ||
+      resolveSiteKey(params.siteKey, name) ||
       `site-${id.slice(0, 8)}`;
 
     await this.assertUniqueSiteKey(resolvedSiteKey, id);
 
     const publicKey = 'pk_' + randomBytes(32).toString('hex');
-    const nextConfig = {
-      ...config,
-      siteKey: resolvedSiteKey,
+    const { siteKey: _legacySiteKey, ...nextConfig } = config as SiteConfigInput & {
+      siteKey?: unknown;
     };
 
     await this.db.query(
-      `INSERT INTO sites(id, tenant_id, name, allowed_domains, public_key, config)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO sites(id, site_key, tenant_id, name, allowed_domains, public_key, config)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (id) DO UPDATE SET
+         site_key=EXCLUDED.site_key,
          tenant_id=EXCLUDED.tenant_id,
          name=EXCLUDED.name,
          allowed_domains=EXCLUDED.allowed_domains,
-         config=sites.config || EXCLUDED.config`,
-      [id, tenantId, name, params.allowedDomains, publicKey, nextConfig],
+         config=(sites.config - 'siteKey') || EXCLUDED.config`,
+      [id, resolvedSiteKey, tenantId, name, params.allowedDomains, publicKey, nextConfig],
     );
 
     return this.getSite(id);

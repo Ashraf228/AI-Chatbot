@@ -4,6 +4,7 @@ import { SiteEntity } from '../entities/site.entity';
 
 type WidgetConfigRow = {
   id: string;
+  site_key: string;
   tenant_id: string | null;
   name: string;
   domain: string;
@@ -82,12 +83,14 @@ export class WidgetConfigService {
   > {
     const res = await this.db.query<WidgetConfigRow>(
       `SELECT id, tenant_id, name, domain, brand_color, accent_color, font_family, welcome_message,
+              site_key,
               privacy_url, is_active, company_name, bot_name, logo_url, public_key,
               widget_bundle_url, consent_required, lead_capture_enabled, suggested_questions_by_path,
               lead_notification_email, conversation_flow, system_prompt
        FROM (
          SELECT
            s.id,
+           s.site_key,
            s.tenant_id,
            s.name,
            COALESCE(s.config->>'domain', s.allowed_domains[1], '') AS domain,
@@ -109,7 +112,7 @@ export class WidgetConfigService {
            COALESCE(s.config->'conversationFlow', '{}'::jsonb) AS conversation_flow,
            COALESCE(s.config->>'systemPrompt', '') AS system_prompt
          FROM sites s
-         WHERE COALESCE(s.config->>'siteKey', s.id) = $1
+         WHERE s.site_key = $1
          LIMIT 1
        ) site`,
       [siteKey],
@@ -127,7 +130,7 @@ export class WidgetConfigService {
     return {
       id: row.id,
       name: row.name,
-      siteKey,
+      siteKey: row.site_key,
       domain: row.domain,
       companyName: row.company_name,
       botName: row.bot_name,

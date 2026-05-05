@@ -9,6 +9,7 @@ test('WidgetConfigService.getPublicConfig maps runtime-safe widget config', asyn
         rows: [
           {
             id: 'site-1',
+            site_key: 'soule-smart-business',
             tenant_id: 'tenant-1',
             name: 'SouleSmartBusiness',
             domain: 'soulesmartbusiness.com',

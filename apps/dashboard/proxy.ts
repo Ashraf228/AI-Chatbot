@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 const LOGIN_PATH = "/login";
 const PUBLIC_PATHS = new Set([
   LOGIN_PATH,
+  "/healthz",
   "/api/auth/login",
   "/api/auth/logout",
 ]);

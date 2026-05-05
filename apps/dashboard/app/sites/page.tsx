@@ -5,6 +5,7 @@ import { Topbar } from "../../components/layout/Topbar";
 import { Button } from "../../components/shared/Button";
 import { EmptyState } from "../../components/shared/EmptyState";
 import { ErrorState } from "../../components/shared/ErrorState";
+import { Input } from "../../components/shared/Input";
 import { Select } from "../../components/shared/Select";
 import { EmbedSnippetCard } from "../../components/sites/EmbedSnippetCard";
 import { SiteForm } from "../../components/sites/SiteForm";
@@ -17,6 +18,11 @@ type Site = {
   name: string;
   allowed_domains: string[];
   public_key: string | null;
+};
+
+type Tenant = {
+  id: string;
+  name: string;
 };
 
 function resolveLoaderUrl() {
@@ -47,6 +53,7 @@ function resolveLoaderUrl() {
 
 export default function SitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState("");
   const [form, setForm] = useState({
     siteKey: "",
@@ -54,12 +61,17 @@ export default function SitesPage() {
     name: "",
     domain: "localhost",
   });
+  const [tenantForm, setTenantForm] = useState({
+    id: "",
+    name: "",
+  });
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [promptLoading, setPromptLoading] = useState(false);
   const [promptSaving, setPromptSaving] = useState(false);
+  const [tenantSaving, setTenantSaving] = useState(false);
   const [loaderUrl, setLoaderUrl] = useState(
     process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js"
   );
@@ -87,7 +99,31 @@ export default function SitesPage() {
     }
   }
 
+  async function loadTenants() {
+    const r = await fetch("/api/tenants", { cache: "no-store" });
+    const data = await r.json().catch(() => []);
+
+    if (!r.ok) {
+      setErr(data?.message || "Mandanten konnten nicht geladen werden.");
+      return;
+    }
+
+    const items = Array.isArray(data) ? data : [];
+    setTenants(items);
+
+    if (items.length > 0) {
+      setForm((current) => ({
+        ...current,
+        tenantId:
+          current.tenantId && items.some((tenant) => tenant.id === current.tenantId)
+            ? current.tenantId
+            : items[0].id,
+      }));
+    }
+  }
+
   useEffect(() => {
+    loadTenants();
     loadSites();
   }, []);
 
@@ -143,6 +179,11 @@ export default function SitesPage() {
       config: {},
     };
 
+    if (!body.tenantId) {
+      setErr("Bitte zuerst einen Mandanten auswählen oder anlegen.");
+      return;
+    }
+
     const r = await fetch("/api/sites", {
       method: "POST",
       headers: {
@@ -170,6 +211,43 @@ export default function SitesPage() {
 
     if (data?.id) {
       setSelectedSiteId(data.id);
+    }
+  }
+
+  async function createTenant(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setTenantSaving(true);
+    setErr(null);
+    setMsg(null);
+
+    try {
+      const r = await fetch("/api/tenants", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: tenantForm.id.trim(),
+          name: tenantForm.name.trim() || undefined,
+        }),
+      });
+
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok) {
+        setErr(data?.message || "Mandant konnte nicht angelegt werden.");
+        return;
+      }
+
+      setTenantForm({ id: "", name: "" });
+      setMsg("Mandant erfolgreich angelegt.");
+      await loadTenants();
+      setForm((current) => ({
+        ...current,
+        tenantId: data.id || current.tenantId,
+      }));
+    } finally {
+      setTenantSaving(false);
     }
   }
 
@@ -227,7 +305,47 @@ export default function SitesPage() {
           <div>
             <h2 className="dashboard-section-title">Neuen Kunden anlegen</h2>
 
-            <SiteForm form={form} onChange={setForm} onSubmit={createSite} />
+            <SiteForm
+              form={form}
+              tenantOptions={tenants}
+              onChange={setForm}
+              onSubmit={createSite}
+            />
+
+            <div className="dashboard-card dashboard-stack dashboard-stack--sm" style={{ marginTop: 16 }}>
+              <h3 className="dashboard-card-title">Neuen Mandanten anlegen</h3>
+              <div className="dashboard-field">
+                <label className="dashboard-field-label" htmlFor="tenant-create-id">
+                  Mandanten-ID
+                </label>
+                <Input
+                  id="tenant-create-id"
+                  placeholder="hausverwaltung-nord"
+                  value={tenantForm.id}
+                  onChange={(event) =>
+                    setTenantForm((current) => ({ ...current, id: event.target.value }))
+                  }
+                />
+              </div>
+              <div className="dashboard-field">
+                <label className="dashboard-field-label" htmlFor="tenant-create-name">
+                  Anzeigename
+                </label>
+                <Input
+                  id="tenant-create-name"
+                  placeholder="Hausverwaltung Nord"
+                  value={tenantForm.name}
+                  onChange={(event) =>
+                    setTenantForm((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+              </div>
+              <form onSubmit={createTenant}>
+                <Button type="submit" disabled={tenantSaving}>
+                  {tenantSaving ? "Mandant wird angelegt..." : "Mandant anlegen"}
+                </Button>
+              </form>
+            </div>
 
             {err && <ErrorState message={err} />}
 

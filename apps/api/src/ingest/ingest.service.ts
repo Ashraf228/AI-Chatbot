@@ -8,6 +8,7 @@ import { PrismaService } from '../db/prisma.service';
 import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { SitesService } from '../sites/sites.service';
+import { KnowledgeSourcesService } from '../knowledge-sources/knowledge-sources.service';
 import { chunkText } from '../utils/chunk';
 import { sha256 } from '../utils/hash';
 import { randomUUID } from 'crypto';
@@ -16,6 +17,10 @@ const { PDFParse } = require('pdf-parse');
 
 type KnowledgeDocumentRow = {
   id: string;
+  source_id: string | null;
+  source_type: string | null;
+  source_label: string | null;
+  source_sync_status: string | null;
   type: string;
   title: string | null;
   source_url: string | null;
@@ -43,6 +48,7 @@ export class IngestService {
     private embedder: EmbeddingService,
     private vector: VectorService,
     private sites: SitesService,
+    private knowledgeSources: KnowledgeSourcesService,
   ) {}
 
   async ingestFaq(siteId: string, title: string, items: Array<{ q: string; a: string }>) {
@@ -64,13 +70,23 @@ export class IngestService {
     }
 
     const tenantId = site.tenant_id;
+    const sourceId = await this.knowledgeSources.createForSite({
+      tenantId,
+      siteId,
+      sourceType: 'faq_manual',
+      label: title || 'FAQ',
+      config: {
+        documentType: 'faq',
+        itemCount: items.length,
+      },
+    });
 
     const docId = randomUUID();
 
     try {
       await this.db.query(
-        `INSERT INTO documents(id, tenant_id, site_id, type, title) VALUES ($1,$2,$3,$4,$5)`,
-        [docId, tenantId, siteId, 'faq', title],
+        `INSERT INTO documents(id, source_id, tenant_id, site_id, type, title) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [docId, sourceId, tenantId, siteId, 'faq', title],
       );
     } catch (error) {
       console.error('Failed to create FAQ document', error);
@@ -129,6 +145,16 @@ export class IngestService {
       throw new BadRequestException('Selected site has no tenantId');
     }
     const tenantId = site.tenant_id;
+    const sourceId = await this.knowledgeSources.createForSite({
+      tenantId,
+      siteId,
+      sourceType: 'pdf_upload',
+      label: file.originalname,
+      config: {
+        documentType: 'pdf',
+        filename: file.originalname,
+      },
+    });
 
     let text = '';
     let parser: InstanceType<typeof PDFParse> | null = null;
@@ -153,9 +179,9 @@ export class IngestService {
 
     try {
       await this.db.query(
-        `INSERT INTO documents(id, tenant_id, site_id, type, title)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [docId, tenantId, siteId, 'pdf', file.originalname],
+        `INSERT INTO documents(id, source_id, tenant_id, site_id, type, title)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [docId, sourceId, tenantId, siteId, 'pdf', file.originalname],
       );
     } catch (error) {
       console.error('Failed to create PDF document', error);
@@ -215,15 +241,20 @@ export class IngestService {
     const docs = await this.db.query<KnowledgeDocumentRow>(
       `SELECT
          d.id,
+         d.source_id,
+         ks.source_type,
+         ks.label AS source_label,
+         ks.sync_status AS source_sync_status,
          d.type,
          d.title,
          d.source_url,
          d.created_at,
          COUNT(c.id)::int AS chunk_count
        FROM documents d
+       LEFT JOIN knowledge_sources ks ON ks.id = d.source_id
        LEFT JOIN chunks c ON c.document_id = d.id
        WHERE d.site_id = $1
-       GROUP BY d.id
+       GROUP BY d.id, ks.id
        ORDER BY d.created_at DESC`,
       [siteId],
     );
@@ -261,6 +292,15 @@ export class IngestService {
 
     return docs.rows.map((row) => ({
       id: row.id,
+      sourceId: row.source_id || '',
+      source: row.source_id
+        ? {
+            id: row.source_id,
+            type: row.source_type || '',
+            label: row.source_label || row.title || '',
+            syncStatus: row.source_sync_status || 'ready',
+          }
+        : null,
       type: row.type,
       title: row.title || '',
       sourceUrl: row.source_url || '',
@@ -275,8 +315,8 @@ export class IngestService {
       throw new BadRequestException('documentId missing');
     }
 
-    const existing = await this.db.query<{ id: string; site_id: string }>(
-      `SELECT id, site_id
+    const existing = await this.db.query<{ id: string; site_id: string; source_id: string | null }>(
+      `SELECT id, site_id, source_id
        FROM documents
        WHERE id = $1
        LIMIT 1`,
@@ -289,6 +329,7 @@ export class IngestService {
     }
 
     await this.db.query(`DELETE FROM documents WHERE id = $1`, [documentId]);
+    await this.knowledgeSources.deleteIfUnused(row.source_id || '');
 
     return {
       ok: true,
@@ -360,6 +401,10 @@ export class IngestService {
       question: q,
       answer: a,
     };
+  }
+
+  async listSources(siteId: string) {
+    return this.knowledgeSources.listForSite(siteId);
   }
 }
 

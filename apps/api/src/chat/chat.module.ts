@@ -8,8 +8,11 @@ import { VectorService } from '../vector/vector.service';
 import { LlmService } from '../vector/llm.service';
 import { SitesService } from '../sites/sites.service';
 import { RateLimitService } from '../utils/rate-limit.service';
+import { ChatRoutingModule } from '../chat-routing/chat-routing.module';
+import { EcommerceProductAdvisorModule } from '../modules/ecommerce-product-advisor/ecommerce-product-advisor.module';
 
 @Module({
+  imports: [ChatRoutingModule, EcommerceProductAdvisorModule],
   controllers: [ChatController],
   providers: [
     ChatService,

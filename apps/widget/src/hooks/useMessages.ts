@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ChatMessage, MessageSource } from "../types/chat";
+import type { ChatMessage, ChatMessagePart, MessageSource } from "../types/chat";
 
 function createId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -12,12 +12,18 @@ function createId() {
 function createMessage(
   role: ChatMessage["role"],
   content: string,
-  options?: { pending?: boolean; error?: boolean; sources?: MessageSource[] },
+  options?: {
+    pending?: boolean;
+    error?: boolean;
+    sources?: MessageSource[];
+    parts?: ChatMessagePart[];
+  },
 ): ChatMessage {
   return {
     id: createId(),
     role,
     content,
+    parts: options?.parts,
     sources: options?.sources,
     pending: options?.pending,
     error: options?.error,
@@ -42,8 +48,12 @@ export function useMessages(greeting: string) {
     return message;
   }
 
-  function appendAssistantMessage(content: string, sources?: MessageSource[]) {
-    const message = createMessage("assistant", content, { sources });
+  function appendAssistantMessage(
+    content: string,
+    sources?: MessageSource[],
+    parts?: ChatMessagePart[],
+  ) {
+    const message = createMessage("assistant", content, { sources, parts });
     setMessages((current) => [...current, message]);
     return message;
   }
@@ -64,11 +74,16 @@ export function useMessages(greeting: string) {
     );
   }
 
-  function resolveAssistantMessage(messageId: string, content: string, sources?: MessageSource[]) {
+  function resolveAssistantMessage(
+    messageId: string,
+    content: string,
+    sources?: MessageSource[],
+    parts?: ChatMessagePart[],
+  ) {
     setMessages((current) =>
       current.map((message) =>
         message.id === messageId
-          ? { ...message, content, sources, pending: false, error: false }
+          ? { ...message, content, parts, sources, pending: false, error: false }
           : message,
       ),
     );

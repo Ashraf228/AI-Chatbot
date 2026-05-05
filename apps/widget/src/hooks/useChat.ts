@@ -67,7 +67,12 @@ export function useChat() {
         setSessionId(reply.sessionId);
       }
 
-      resolveAssistantMessage(placeholderId, reply.answer || "(keine Antwort)", reply.sources);
+      resolveAssistantMessage(
+        placeholderId,
+        reply.answer || "(keine Antwort)",
+        reply.sources,
+        reply.parts,
+      );
       await track("message_received", { sources: reply.sources?.length ?? 0 });
     } catch {
       rejectAssistantMessage(placeholderId);

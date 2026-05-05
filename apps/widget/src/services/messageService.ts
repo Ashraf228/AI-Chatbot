@@ -78,6 +78,7 @@ export async function streamChatMessage(params: {
         finalReply = {
           answer: event.answer || answer,
           sessionId: event.sessionId || finalReply.sessionId,
+          parts: event.parts || [],
           sources: event.sources || [],
         };
         onDone?.(finalReply);

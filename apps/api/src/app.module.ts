@@ -17,6 +17,14 @@ import { UsageModule } from './usage/usage.module';
 import { WidgetModule } from './modules/widget/widget.module';
 import { HealthController } from './health.controller';
 import { DatabaseMigrationsService } from './db/database-migrations.service';
+import { TenantsModule } from './tenants/tenants.module';
+import { SiteModulesModule } from './site-modules/site-modules.module';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { AgentsModule } from './agents/agents.module';
+import { ToolsModule } from './tools/tools.module';
+import { LeadSalesModule } from './modules/lead-sales/lead-sales.module';
+import { EcommerceProductAdvisorModule } from './modules/ecommerce-product-advisor/ecommerce-product-advisor.module';
+import { PropertyTicketingModule } from './modules/property-ticketing/property-ticketing.module';
 
 @Module({
   imports: [
@@ -28,6 +36,14 @@ import { DatabaseMigrationsService } from './db/database-migrations.service';
     WidgetModule,
     ConversationsModule,
     UsageModule,
+    TenantsModule,
+    SiteModulesModule,
+    IntegrationsModule,
+    AgentsModule,
+    ToolsModule,
+    LeadSalesModule,
+    EcommerceProductAdvisorModule,
+    PropertyTicketingModule,
   ],
   controllers: [HealthController],
   providers: [

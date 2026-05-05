@@ -5,9 +5,17 @@ import { PrismaService } from '../db/prisma.service';
 import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { SitesService } from '../sites/sites.service';
+import { KnowledgeSourcesModule } from '../knowledge-sources/knowledge-sources.module';
 
 @Module({
+  imports: [KnowledgeSourcesModule],
   controllers: [IngestController],
-  providers: [IngestService, PrismaService, EmbeddingService, VectorService, SitesService],
+  providers: [
+    IngestService,
+    PrismaService,
+    EmbeddingService,
+    VectorService,
+    SitesService,
+  ],
 })
 export class IngestModule {}

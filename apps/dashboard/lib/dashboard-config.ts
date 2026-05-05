@@ -10,6 +10,9 @@ export const dashboardNav = [
 
 export const siteTabs = [
   { slug: "", label: "Setup" },
+  { slug: "modules", label: "Module" },
+  { slug: "agents", label: "Agenten" },
+  { slug: "integrations", label: "Integrationen" },
   { slug: "knowledge", label: "Wissen" },
   { slug: "branding", label: "Design" },
   { slug: "widget", label: "Verhalten" },

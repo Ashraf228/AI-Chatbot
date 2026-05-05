@@ -11,12 +11,15 @@ import { isDomainAllowed } from '../utils/cors';
 import { buildSystemPrompt, getSiteSystemPrompt } from './prompt';
 import { buildConversationGuide } from './conversation-guide';
 import { parseConversationFlow } from './flow-builder';
+import { buildResponseParts } from './response-parts';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { PrismaService } from '../db/prisma.service';
+import { ChatRoutingService } from '../chat-routing/chat-routing.service';
 import { redactPII } from '../utils/pii';
 import { sanitizeInput, sanitizeOutput } from '../utils/security';
 import { logEvent } from '../utils/logger';
 import { estimateOpenAICost } from '../usage/costs';
+import { EcommerceProductAdvisorService } from '../modules/ecommerce-product-advisor/ecommerce-product-advisor.service';
 
 @Injectable()
 export class ChatService {
@@ -31,6 +34,8 @@ export class ChatService {
     private sites: SitesService,
     private rateLimit: RateLimitService,
     private db: PrismaService,
+    private routing: ChatRoutingService,
+    private ecommerceProductAdvisor: EcommerceProductAdvisorService,
   ) {}
 
   private async insertUsageEvent(params: {
@@ -287,10 +292,30 @@ export class ChatService {
       [conversationId],
     );
     const history = historyRes.rows.slice().reverse();
+    const routeDecision = await this.routing.resolveForSite({
+      siteId: dto.siteId,
+      message: safeMessage,
+      history,
+    });
     const conversationGuide = buildConversationGuide(
       history,
       parseConversationFlow((site.config as Record<string, unknown> | undefined)?.conversationFlow),
     );
+    const routingGuide = `
+Routing-Pfad: ${routeDecision.route}
+Routing-Grund: ${routeDecision.reason}
+${routeDecision.guide}
+    `.trim();
+
+    logEvent('chat_route_resolved', {
+      siteId: dto.siteId,
+      tenantId,
+      conversationId,
+      route: routeDecision.route,
+      reason: routeDecision.reason,
+      agentKey: routeDecision.agentKey || null,
+      moduleKey: routeDecision.moduleKey || null,
+    });
 
     // 11) Retrieval
     const retrievalStart = Date.now();
@@ -314,6 +339,37 @@ export class ChatService {
           `# Kontext ${idx + 1} (score ${Number(h.score).toFixed(3)})\n${h.content}`,
       )
       .join('\n\n');
+    const advisorContext =
+      routeDecision.route === 'advisor'
+        ? await this.ecommerceProductAdvisor.buildRecommendationContextForSite({
+            siteId: dto.siteId,
+            query: safeMessage,
+            limit: 3,
+            history,
+          })
+        : {
+            products: [],
+            collections: [],
+            clarificationQuestion: undefined,
+            effectiveQuery: safeMessage,
+            state: 'ready_to_recommend',
+            stateGuide: '',
+          };
+    const catalogContext =
+      advisorContext.products.length > 0 || advisorContext.collections.length > 0
+        ? [
+            ...advisorContext.products.map(
+              (product, idx) =>
+                `# Produkt ${idx + 1}\nTitel: ${product.title}\nURL: ${product.url}\nAnbieter: ${product.vendor || '-'}\nTyp: ${product.productType || '-'}`,
+            ),
+            ...advisorContext.collections.map(
+              (collection, idx) =>
+                `# Kategorie ${idx + 1}\nTitel: ${collection.title}\nURL: ${collection.url}`,
+            ),
+          ].join('\n\n')
+        : '';
+    const shouldClarifyAdvisor =
+      routeDecision.route === 'advisor' && Boolean(advisorContext.clarificationQuestion);
 
     const userPrompt = `
 Verlauf:
@@ -326,15 +382,34 @@ ${safeMessage}
 
 Kontext:
 ${context || '(kein Kontext gefunden)'}
+${catalogContext ? `\n\nProduktkatalog:\n${catalogContext}` : ''}
+${advisorContext.stateGuide ? `\n\nAdvisor-Zustand:\n${advisorContext.stateGuide}` : ''}
 `.trim();
 
     // 12) LLM Call
-    const llmStart = Date.now();
-    const llmRes = await this.llm.answer(
-      buildSystemPrompt(getSiteSystemPrompt(site.config), conversationGuide),
-      userPrompt,
-    );
-    const llmTime = Date.now() - llmStart;
+    let llmTime = 0;
+    let llmRes = {
+      text: advisorContext.clarificationQuestion || '',
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      },
+      model: 'rule-based-advisor',
+      latencyMs: 0,
+    };
+
+    if (!shouldClarifyAdvisor) {
+      const llmStart = Date.now();
+      llmRes = await this.llm.answer(
+        buildSystemPrompt(
+          getSiteSystemPrompt(site.config),
+          [routingGuide, conversationGuide].filter(Boolean).join('\n\n'),
+        ),
+        userPrompt,
+      );
+      llmTime = Date.now() - llmStart;
+    }
 
     // 13) Kosten schätzen
     const estimatedCost = estimateOpenAICost({
@@ -393,11 +468,19 @@ ${context || '(kein Kontext gefunden)'}
     );
 
     const sources = hits.map((h: VectorSearchRow) => ({
-      title: h.title,
-      url: h.source_url,
+      title: h.title || undefined,
+      url: h.source_url || undefined,
       score: Number(h.score),
       metadata: h.metadata,
     }));
+    const parts = buildResponseParts({
+      answer: safeAnswer,
+      route: routeDecision.route,
+      sources,
+      products: advisorContext.products,
+      collections: advisorContext.collections,
+      cta: shouldClarifyAdvisor ? undefined : routeDecision.cta,
+    });
 
     // 19) Erfolgs-Logging
     logEvent('chat_success', {
@@ -413,6 +496,7 @@ ${context || '(kein Kontext gefunden)'}
 
     return {
       answer: safeAnswer,
+      parts,
       sources,
       sessionId,
     };

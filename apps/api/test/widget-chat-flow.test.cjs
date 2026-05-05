@@ -81,6 +81,8 @@ test('widget chat flow can create a session and return an assistant reply', asyn
         return {
           sessionId: dto.sessionId,
           answer: 'Wir koennen euch im Support gut entlasten.',
+          parts: [{ kind: 'text', text: 'Wir koennen euch im Support gut entlasten.' }],
+          sources: [],
         };
       },
     },
@@ -90,11 +92,25 @@ test('widget chat flow can create a session and return an assistant reply', asyn
     {},
     {},
     {
+      async resolveForSite() {
+        return {
+          route: 'faq',
+          reason: 'default_faq',
+          guide: 'FAQ route',
+        };
+      },
+    },
+    {
       async enforceOrigin() {},
       async assertSessionBelongsToSite() {},
       async enforceRateLimit() {},
       getClientIp() {
         return '127.0.0.1';
+      },
+    },
+    {
+      async buildRecommendationContextForSite() {
+        return { products: [], collections: [] };
       },
     },
   );

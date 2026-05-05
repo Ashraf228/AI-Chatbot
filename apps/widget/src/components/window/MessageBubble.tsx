@@ -1,4 +1,6 @@
 import type { ChatMessage } from "../../types/chat";
+import { buildMessageParts } from "../../renderers/messageParts";
+import { MessageRichContent } from "../rich-content/MessageRichContent";
 
 type MessageBubbleProps = {
   message: ChatMessage;
@@ -12,6 +14,10 @@ export function MessageBubble({
   onLeadLinkClick,
 }: MessageBubbleProps) {
   const isAssistant = message.role === "assistant";
+  const parts = buildMessageParts(message);
+  const hasLeadCtaPart = parts.some(
+    (part) => part.kind === "cta" && part.action === "lead_capture",
+  );
 
   if (message.pending && !message.content.trim()) {
     return null;
@@ -19,8 +25,10 @@ export function MessageBubble({
 
   return (
     <div className={`ssb-message ssb-message--${message.role}`}>
-      <div className="ssb-message-bubble">{message.content}</div>
-      {isAssistant && showLeadLink ? (
+      <div className="ssb-message-bubble">
+        <MessageRichContent parts={parts} onLeadCapture={onLeadLinkClick} />
+      </div>
+      {isAssistant && showLeadLink && !hasLeadCtaPart ? (
         <div className="ssb-message-cta">
           <button
             type="button"

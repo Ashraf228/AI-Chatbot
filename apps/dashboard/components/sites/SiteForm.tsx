@@ -1,6 +1,7 @@
 import type { FormEvent } from "react";
 import { Button } from "../shared/Button";
 import { Input } from "../shared/Input";
+import { Select } from "../shared/Select";
 
 type SiteFormValues = {
   siteKey: string;
@@ -11,11 +12,12 @@ type SiteFormValues = {
 
 type SiteFormProps = {
   form: SiteFormValues;
+  tenantOptions: Array<{ id: string; name: string }>;
   onChange: (next: SiteFormValues) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
 };
 
-export function SiteForm({ form, onChange, onSubmit }: SiteFormProps) {
+export function SiteForm({ form, tenantOptions, onChange, onSubmit }: SiteFormProps) {
   return (
     <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm">
       <div className="dashboard-field">
@@ -32,14 +34,23 @@ export function SiteForm({ form, onChange, onSubmit }: SiteFormProps) {
 
       <div className="dashboard-field">
         <label className="dashboard-field-label" htmlFor="tenant-id">
-          Tenant-ID (intern)
+          Mandant
         </label>
-        <Input
+        <Select
           id="tenant-id"
-          placeholder="t_default"
           value={form.tenantId}
           onChange={(event) => onChange({ ...form, tenantId: event.target.value })}
-        />
+          disabled={tenantOptions.length === 0}
+        >
+          {tenantOptions.length === 0 ? (
+            <option value="">Keine Mandanten vorhanden</option>
+          ) : null}
+          {tenantOptions.map((tenant) => (
+            <option key={tenant.id} value={tenant.id}>
+              {tenant.name} ({tenant.id})
+            </option>
+          ))}
+        </Select>
       </div>
 
       <div className="dashboard-field">
