@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Button } from "../shared/Button";
 import { EmptyState } from "../shared/EmptyState";
 import { ErrorState } from "../shared/ErrorState";
@@ -20,7 +20,14 @@ type KnowledgeItem = {
   }>;
 };
 
-export function KnowledgeManager({ siteId }: { siteId: string }) {
+export type KnowledgeManagerHandle = {
+  reload: () => void;
+};
+
+export const KnowledgeManager = forwardRef<KnowledgeManagerHandle, { siteId: string }>(function KnowledgeManager(
+  { siteId },
+  ref,
+) {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +58,10 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
   useEffect(() => {
     load();
   }, [siteId]);
+
+  useImperativeHandle(ref, () => ({
+    reload: load,
+  }));
 
   async function removeItem(documentId: string) {
     setDeletingId(documentId);
@@ -242,4 +253,4 @@ export function KnowledgeManager({ siteId }: { siteId: string }) {
       </div>
     </div>
   );
-}
+});

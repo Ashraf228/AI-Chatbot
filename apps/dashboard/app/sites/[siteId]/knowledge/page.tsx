@@ -1,8 +1,7 @@
-import Link from "next/link";
+import { KnowledgeWorkspace } from "../../../../components/knowledge/KnowledgeWorkspace";
 import { SiteTabs } from "../../../../components/layout/SiteTabs";
 import { Topbar } from "../../../../components/layout/Topbar";
-import { KnowledgeManager } from "../../../../components/knowledge/KnowledgeManager";
-import { decodeSiteId, encodeSiteId } from "../../../../lib/site-id";
+import { decodeSiteId } from "../../../../lib/site-id";
 
 export default async function SiteKnowledgePage({
   params,
@@ -11,7 +10,6 @@ export default async function SiteKnowledgePage({
 }) {
   const { siteId: rawSiteId } = await params;
   const siteId = decodeSiteId(rawSiteId);
-  const siteSlug = encodeSiteId(siteId);
 
   return (
     <div>
@@ -27,15 +25,7 @@ export default async function SiteKnowledgePage({
             </p>
           </div>
         </div>
-        <div className="dashboard-grid dashboard-grid--two dashboard-gap-16">
-          <Link href={`/ingest?siteId=${siteSlug}`} className="dashboard-card dashboard-link-card">
-            Website, FAQs und Antworten pflegen
-          </Link>
-          <Link href={`/pdf?siteId=${siteSlug}`} className="dashboard-card dashboard-link-card">
-            PDFs und Dateien für diesen Kunden hochladen
-          </Link>
-        </div>
-        <KnowledgeManager siteId={siteId} />
+        <KnowledgeWorkspace siteId={siteId} />
       </div>
     </div>
   );
