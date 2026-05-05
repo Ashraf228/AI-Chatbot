@@ -201,3 +201,57 @@ test('IntegrationsService.rotateSecretsForSite re-encrypts legacy or plaintext s
   const encryptedSecrets = JSON.parse(updateCall.params[1]);
   assert.match(encryptedSecrets.adminApiToken, /^enc:v2:/);
 });
+
+test('IntegrationsService.updateForSite persists the tenant context from the selected site', async () => {
+  process.env.INTEGRATION_SECRET_KEY = TEST_SECRET_KEY;
+  const queries = [];
+
+  const db = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+
+      if (sql.includes('FROM integration_connections') && sql.includes('LIMIT 1')) {
+        return { rows: [] };
+      }
+
+      if (sql.includes('FROM integration_connections')) {
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    },
+  };
+
+  const sites = {
+    async getSite(id) {
+      return {
+        id,
+        tenant_id: 'tenant-2',
+      };
+    },
+  };
+
+  const service = new IntegrationsService(db, sites, new IntegrationSecretsService());
+  await service.updateForSite('site-2', [
+    {
+      providerKey: 'shopify',
+      connectionKey: 'primary',
+      status: 'connected',
+      config: {
+        values: {
+          shopDomain: 'shop.example.myshopify.com',
+        },
+      },
+      secrets: {
+        values: {
+          adminApiToken: 'token-2',
+        },
+      },
+    },
+  ]);
+
+  const insertCall = queries.find((entry) => /INSERT INTO integration_connections/i.test(entry.sql));
+  assert.ok(insertCall);
+  assert.equal(insertCall.params[1], 'tenant-2');
+  assert.equal(insertCall.params[2], 'site-2');
+});

@@ -222,6 +222,7 @@ test('ToolDispatcherService search_catalog returns Shopify product matches', asy
 });
 
 test('ToolDispatcherService query_knowledge returns vector hits', async () => {
+  const vectorCalls = [];
   const service = createDispatcher({
     db: {
       async query(sql) {
@@ -262,7 +263,8 @@ test('ToolDispatcherService query_knowledge returns vector hits', async () => {
       },
     },
     vector: {
-      async search() {
+      async search(tenantId, siteId) {
+        vectorCalls.push({ tenantId, siteId });
         return [
           {
             id: 'chunk-1',
@@ -287,6 +289,73 @@ test('ToolDispatcherService query_knowledge returns vector hits', async () => {
   assert.equal(result.status, 'completed');
   assert.equal(result.outputPayload.resultCount, 1);
   assert.equal(result.outputPayload.hits[0].title, 'FAQ');
+  assert.equal(vectorCalls[0].tenantId, 'tenant-1');
+  assert.equal(vectorCalls[0].siteId, 'site-1');
+});
+
+test('ToolDispatcherService query_knowledge prefers the agent run tenant over a mismatching site tenant', async () => {
+  const vectorCalls = [];
+  const service = createDispatcher({
+    db: {
+      async query(sql) {
+        if (/SELECT id, tenant_id, site_id, status\s+FROM agent_runs/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'run-tenant-scope',
+                tenant_id: 'tenant-run',
+                site_id: 'site-9',
+                status: 'queued',
+              },
+            ],
+          };
+        }
+
+        if (/SELECT\s+id,\s+agent_run_id,/i.test(sql) && /FROM tool_invocations/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'invocation-tenant-scope',
+                agent_run_id: 'run-tenant-scope',
+                tenant_id: 'tenant-run',
+                site_id: 'site-9',
+                tool_key: 'query_knowledge',
+                status: 'completed',
+                input_payload: { query: 'Mandantenfrage' },
+                output_payload: { resultCount: 0, hits: [] },
+                error_message: null,
+                created_at: '2026-05-05T10:00:00.000Z',
+                completed_at: '2026-05-05T10:00:01.000Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      },
+    },
+    sites: {
+      async getSite(id) {
+        return { id, name: 'Other Tenant Site', tenant_id: 'tenant-site' };
+      },
+    },
+    vector: {
+      async search(tenantId, siteId) {
+        vectorCalls.push({ tenantId, siteId });
+        return [];
+      },
+    },
+  });
+
+  await service.execute('run-tenant-scope', {
+    toolKey: 'query_knowledge',
+    inputPayload: {
+      query: 'Mandantenfrage',
+    },
+  });
+
+  assert.equal(vectorCalls[0].tenantId, 'tenant-run');
+  assert.equal(vectorCalls[0].siteId, 'site-9');
 });
 
 test('ToolDispatcherService create_ticket stores a structured ticket', async () => {
