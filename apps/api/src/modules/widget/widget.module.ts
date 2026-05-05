@@ -75,6 +75,7 @@ import { SitesModule } from '../../sites/sites.module';
     WidgetLeadsService,
     WidgetAnalyticsService,
     WidgetSecurityService,
+    WidgetAdminSiteService,
     EmailJobsService,
     ReportMailerService,
     LeadMailerService,
