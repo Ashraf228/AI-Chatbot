@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 export {
   createAdminSessionToken,
+  createOperatorSessionToken,
   createCustomerSessionToken,
   type DashboardSession,
   type DashboardSessionRole,

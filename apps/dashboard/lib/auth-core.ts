@@ -2,7 +2,7 @@ export const SESSION_COOKIE_NAME = "ssb_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 const MIN_SESSION_SECRET_LENGTH = 32;
 
-export type DashboardSessionRole = "admin" | "customer";
+export type DashboardSessionRole = "admin" | "operator" | "customer";
 export type DashboardSession = {
   role: DashboardSessionRole;
   sub: string;
@@ -124,6 +124,13 @@ export async function createAdminSessionToken() {
   });
 }
 
+export async function createOperatorSessionToken() {
+  return createSessionToken({
+    role: "operator",
+    sub: "dashboard-operator",
+  });
+}
+
 export async function createCustomerSessionToken(input: {
   tenantId: string;
   email: string;
@@ -153,7 +160,10 @@ export async function verifySessionToken(token?: string | null): Promise<Dashboa
   try {
     const parsed = JSON.parse(base64UrlDecode(payload));
     const role = parsed?.role;
-    if ((role !== "admin" && role !== "customer") || Number(parsed?.exp) <= Date.now()) {
+    if (
+      (role !== "admin" && role !== "operator" && role !== "customer") ||
+      Number(parsed?.exp) <= Date.now()
+    ) {
       return null;
     }
 

@@ -22,6 +22,26 @@ const CUSTOMER_BLOCKED_PREFIXES = [
 ];
 
 const CUSTOMER_BLOCKED_SITE_SEGMENTS = new Set([
+  "advanced",
+  "agents",
+  "integrations",
+  "modules",
+  "optimization",
+]);
+
+const OPERATOR_BLOCKED_PREFIXES = [
+  "/settings",
+  "/usage",
+  "/api/usage",
+  "/api/tenants",
+  "/api/agents",
+  "/api/integrations",
+  "/api/site-modules",
+  "/api/widget/optimization",
+];
+
+const OPERATOR_BLOCKED_SITE_SEGMENTS = new Set([
+  "advanced",
   "agents",
   "integrations",
   "modules",
@@ -56,6 +76,21 @@ export default async function proxy(request: NextRequest) {
 
       const siteMatch = pathname.match(/^\/sites\/([^/]+)\/([^/]+)(?:\/|$)/);
       if (siteMatch && CUSTOMER_BLOCKED_SITE_SEGMENTS.has(siteMatch[2] || "")) {
+        return pathname.startsWith("/api/")
+          ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
+          : NextResponse.redirect(new URL(`/sites/${siteMatch[1]}`, request.url));
+      }
+    }
+
+    if (session.role === "operator") {
+      if (OPERATOR_BLOCKED_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+        return pathname.startsWith("/api/")
+          ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
+          : NextResponse.redirect(new URL("/sites", request.url));
+      }
+
+      const siteMatch = pathname.match(/^\/sites\/([^/]+)\/([^/]+)(?:\/|$)/);
+      if (siteMatch && OPERATOR_BLOCKED_SITE_SEGMENTS.has(siteMatch[2] || "")) {
         return pathname.startsWith("/api/")
           ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
           : NextResponse.redirect(new URL(`/sites/${siteMatch[1]}`, request.url));

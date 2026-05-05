@@ -7,7 +7,7 @@ import { Input } from "../../components/shared/Input";
 import { ErrorState } from "../../components/shared/ErrorState";
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<"admin" | "customer">("admin");
+  const [mode, setMode] = useState<"admin" | "operator" | "customer">("admin");
   const [tenantId, setTenantId] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -79,7 +79,7 @@ export default function LoginPage() {
         <p className="dashboard-eyebrow">Soulé Admin</p>
         <h1 className="dashboard-auth-title">Willkommen zurück</h1>
         <p className="dashboard-copy" style={{ marginTop: 0 }}>
-          Melde dich als interner Admin oder als Kunde für deinen eigenen Bereich an.
+          Melde dich als Admin, Mitarbeiter oder Kunde an.
         </p>
 
         <form onSubmit={onLogin} className="dashboard-stack">
@@ -91,6 +91,14 @@ export default function LoginPage() {
               fullWidth
             >
               Admin
+            </Button>
+            <Button
+              type="button"
+              variant={mode === "operator" ? "primary" : "secondary"}
+              onClick={() => setMode("operator")}
+              fullWidth
+            >
+              Mitarbeiter
             </Button>
             <Button
               type="button"
@@ -130,7 +138,13 @@ export default function LoginPage() {
           />
 
           <Button type="submit" fullWidth disabled={isSubmitting}>
-            {isSubmitting ? "Einloggen..." : mode === "admin" ? "Admin-Login" : "Kunden-Login"}
+            {isSubmitting
+              ? "Einloggen..."
+              : mode === "admin"
+                ? "Admin-Login"
+                : mode === "operator"
+                  ? "Mitarbeiter-Login"
+                  : "Kunden-Login"}
           </Button>
         </form>
 

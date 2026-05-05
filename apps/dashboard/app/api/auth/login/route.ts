@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import {
   createAdminSessionToken,
+  createOperatorSessionToken,
   createCustomerSessionToken,
   getSessionCookieOptions,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth";
-import { isAdminPasswordConfigured, verifyAdminPassword } from "@/lib/auth-password";
+import {
+  isAdminPasswordConfigured,
+  isOperatorPasswordConfigured,
+  verifyAdminPassword,
+  verifyOperatorPassword,
+} from "@/lib/auth-password";
 import { fetchDashboardBackend } from "@/lib/dashboard-api";
 import {
   clearLoginFailures,
@@ -38,27 +44,33 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => null);
-  const mode = body?.mode === "customer" ? "customer" : "admin";
+  const mode =
+    body?.mode === "customer" ? "customer" : body?.mode === "operator" ? "operator" : "admin";
   const password = typeof body?.password === "string" ? body.password : "";
 
-  if (mode === "admin") {
-    if (!isAdminPasswordConfigured()) {
+  if (mode === "admin" || mode === "operator") {
+    const isConfigured =
+      mode === "admin" ? isAdminPasswordConfigured() : isOperatorPasswordConfigured();
+    const isValid =
+      mode === "admin" ? verifyAdminPassword(password) : verifyOperatorPassword(password);
+
+    if (!isConfigured) {
       return NextResponse.json(
-        { message: "Admin auth misconfigured" },
+        { message: mode === "admin" ? "Admin auth misconfigured" : "Operator auth misconfigured" },
         { status: 500 }
       );
     }
 
-    if (!verifyAdminPassword(password)) {
+    if (!isValid) {
       await registerLoginFailure(ip);
       return NextResponse.json({ message: "Invalid credentials" }, { status: 401 });
     }
 
     await clearLoginFailures(ip);
-    const res = NextResponse.json({ ok: true, role: "admin" });
+    const res = NextResponse.json({ ok: true, role: mode });
     res.cookies.set(
       SESSION_COOKIE_NAME,
-      await createAdminSessionToken(),
+      mode === "admin" ? await createAdminSessionToken() : await createOperatorSessionToken(),
       getSessionCookieOptions()
     );
 

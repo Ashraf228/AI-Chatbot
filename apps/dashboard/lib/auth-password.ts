@@ -31,11 +31,31 @@ function parsePasswordHash(value: string) {
 }
 
 export function verifyAdminPassword(password: string) {
+  return verifyPasswordWithEnv(password, {
+    hashEnv: "ADMIN_PANEL_PASSWORD_HASH",
+    fallbackEnv: "ADMIN_PANEL_PASSWORD",
+  });
+}
+
+export function verifyOperatorPassword(password: string) {
+  return verifyPasswordWithEnv(password, {
+    hashEnv: "OPERATOR_PANEL_PASSWORD_HASH",
+    fallbackEnv: "OPERATOR_PANEL_PASSWORD",
+  });
+}
+
+function verifyPasswordWithEnv(
+  password: string,
+  env: {
+    hashEnv: string;
+    fallbackEnv: string;
+  },
+) {
   if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
     return false;
   }
 
-  const passwordHash = process.env.ADMIN_PANEL_PASSWORD_HASH?.trim();
+  const passwordHash = process.env[env.hashEnv]?.trim();
   if (passwordHash) {
     const parsed = parsePasswordHash(passwordHash);
     if (!parsed) {
@@ -46,7 +66,7 @@ export function verifyAdminPassword(password: string) {
     return timingSafeBufferEqual(derived, parsed.hash);
   }
 
-  const fallbackPassword = process.env.ADMIN_PANEL_PASSWORD?.trim();
+  const fallbackPassword = process.env[env.fallbackEnv]?.trim();
   if (!fallbackPassword) {
     return false;
   }
@@ -62,5 +82,12 @@ export function isAdminPasswordConfigured() {
   return Boolean(
     process.env.ADMIN_PANEL_PASSWORD_HASH?.trim() ||
       process.env.ADMIN_PANEL_PASSWORD?.trim()
+  );
+}
+
+export function isOperatorPasswordConfigured() {
+  return Boolean(
+    process.env.OPERATOR_PANEL_PASSWORD_HASH?.trim() ||
+      process.env.OPERATOR_PANEL_PASSWORD?.trim()
   );
 }

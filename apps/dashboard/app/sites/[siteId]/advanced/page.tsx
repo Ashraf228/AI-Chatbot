@@ -16,7 +16,7 @@ export default async function SiteAdvancedPage({
   searchParams: Promise<{ section?: string }>;
 }) {
   const session = await getDashboardSession();
-  if (session?.role === "customer") {
+  if (session?.role !== "admin") {
     redirect("/sites");
   }
   const { siteId: rawSiteId } = await params;

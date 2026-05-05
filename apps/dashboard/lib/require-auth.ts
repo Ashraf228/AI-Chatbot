@@ -3,7 +3,27 @@ import { getDashboardSession, type DashboardSession } from "@/lib/auth";
 
 type RequireAuthOptions = {
   allowCustomer?: boolean;
+  adminOnly?: boolean;
 };
+
+function isAllowedRole(
+  role: DashboardSession["role"],
+  options: RequireAuthOptions,
+) {
+  if (role === "admin") {
+    return true;
+  }
+
+  if (options.adminOnly) {
+    return false;
+  }
+
+  if (role === "operator") {
+    return true;
+  }
+
+  return Boolean(options.allowCustomer);
+}
 
 export async function requireAuth(options: RequireAuthOptions = {}) {
   const session = await getDashboardSession();
@@ -12,7 +32,7 @@ export async function requireAuth(options: RequireAuthOptions = {}) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  if (!options.allowCustomer && session.role !== "admin") {
+  if (!isAllowedRole(session.role, options)) {
     return NextResponse.json({ message: "Forbidden" }, { status: 403 });
   }
 
@@ -40,7 +60,7 @@ export async function requireSession(
     };
   }
 
-  if (!options.allowCustomer && session.role !== "admin") {
+  if (!isAllowedRole(session.role, options)) {
     return {
       session: null,
       response: NextResponse.json({ message: "Forbidden" }, { status: 403 }),
