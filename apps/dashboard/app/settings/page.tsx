@@ -48,6 +48,9 @@ export default function SettingsPage() {
               <Link href="/sites" className="dashboard-button dashboard-button--secondary">
                 Zu den Kunden
               </Link>
+              <Link href="/usage" className="dashboard-button dashboard-button--secondary">
+                Kosten & Nutzung
+              </Link>
             </div>
           </section>
 
