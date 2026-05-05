@@ -574,7 +574,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </Link>
       </section>
 
-      <section className="dashboard-card dashboard-stack">
+      <section id="setup-step-testing" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
             <strong>7. Testen</strong>
@@ -588,9 +588,21 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
           <strong>Letzter Test</strong>
           <span>{formatDate(site.lastTestedAt)}</span>
         </div>
+        <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+          <strong>Test-Checkliste</strong>
+          <p className="dashboard-copy dashboard-copy--muted">
+            Prüfe mindestens Begrüßung, zwei bis drei typische Fragen, den Kontakt-CTA und die erlaubte Domain.
+          </p>
+        </div>
         <div className="dashboard-inline dashboard-wrap">
+          <Link href={`/sites/${siteSlug}/knowledge`} className="dashboard-button dashboard-button--secondary">
+            Wissen prüfen
+          </Link>
+          <Link href={`/sites/${siteSlug}/widget`} className="dashboard-button dashboard-button--secondary">
+            Verhalten prüfen
+          </Link>
           <Link href={`/sites/${siteSlug}/embedding`} className="dashboard-button dashboard-button--secondary">
-            Test vorbereiten
+            Einbindung prüfen
           </Link>
           <Button
             type="button"

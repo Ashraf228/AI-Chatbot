@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
+import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
 import { EmbedSnippetCard } from "./EmbedSnippetCard";
 
 type SiteEmbeddingPanelProps = {
@@ -17,32 +18,6 @@ type SiteDetails = {
   widgetBundleUrl?: string;
 };
 
-function resolveLoaderUrl() {
-  const configured = process.env.NEXT_PUBLIC_WIDGET_LOADER_URL?.trim();
-  const hasUsableConfiguredUrl =
-    configured && !configured.includes("localhost") && !configured.includes("127.0.0.1");
-
-  if (hasUsableConfiguredUrl) {
-    return configured;
-  }
-
-  if (typeof window === "undefined") {
-    return configured || "http://localhost:8080/loader.js";
-  }
-
-  const { protocol, hostname } = window.location;
-
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return configured || "http://localhost:8080/loader.js";
-  }
-
-  const widgetHost = hostname.startsWith("app.")
-    ? hostname.replace(/^app\./, "widget.")
-    : `widget.${hostname}`;
-
-  return `${protocol}//${widgetHost}/loader.js`;
-}
-
 export function SiteEmbeddingPanel({ siteId }: SiteEmbeddingPanelProps) {
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -53,7 +28,7 @@ export function SiteEmbeddingPanel({ siteId }: SiteEmbeddingPanelProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoaderUrl(resolveLoaderUrl());
+    setLoaderUrl(resolveWidgetLoaderUrl(process.env.NEXT_PUBLIC_WIDGET_LOADER_URL));
   }, []);
 
   useEffect(() => {
