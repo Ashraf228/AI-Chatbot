@@ -1,4 +1,7 @@
-import { CustomerAdvancedPanel } from "../../../../components/customer/CustomerAdvancedPanel";
+import {
+  CustomerAdvancedPanel,
+  type CustomerAdvancedSection,
+} from "../../../../components/customer/CustomerAdvancedPanel";
 import { SiteTabs } from "../../../../components/layout/SiteTabs";
 import { Topbar } from "../../../../components/layout/Topbar";
 import { getDashboardSession } from "../../../../lib/auth";
@@ -7,23 +10,39 @@ import { redirect } from "next/navigation";
 
 export default async function SiteAdvancedPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ siteId: string }>;
+  searchParams: Promise<{ section?: string }>;
 }) {
   const session = await getDashboardSession();
   if (session?.role === "customer") {
     redirect("/sites");
   }
   const { siteId: rawSiteId } = await params;
+  const { section: rawSection } = await searchParams;
   const siteId = decodeSiteId(rawSiteId);
+  const section = normalizeAdvancedSection(rawSection);
 
   return (
     <div>
       <Topbar title={`Erweiterte Einstellungen · ${siteId}`} />
       <div className="dashboard-page dashboard-page--lg">
         <SiteTabs siteId={siteId} />
-        <CustomerAdvancedPanel siteId={siteId} role={session?.role || "admin"} />
+        <CustomerAdvancedPanel
+          siteId={siteId}
+          role={session?.role || "admin"}
+          section={section}
+        />
       </div>
     </div>
   );
+}
+
+function normalizeAdvancedSection(section?: string): CustomerAdvancedSection {
+  if (section === "features" || section === "connections" || section === "automations") {
+    return section;
+  }
+
+  return "overview";
 }

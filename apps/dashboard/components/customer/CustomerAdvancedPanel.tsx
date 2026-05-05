@@ -1,14 +1,25 @@
 import Link from "next/link";
+import { SiteAgentsForm } from "../agents/SiteAgentsForm";
+import { SiteIntegrationsForm } from "../integrations/SiteIntegrationsForm";
+import { SiteModulesForm } from "../modules/SiteModulesForm";
 import type { DashboardSessionRole } from "../../lib/auth";
 import { encodeSiteId } from "../../lib/site-id";
+
+export type CustomerAdvancedSection = "overview" | "features" | "connections" | "automations";
 
 type CustomerAdvancedPanelProps = {
   siteId: string;
   role: DashboardSessionRole;
+  section?: CustomerAdvancedSection;
 };
 
-export function CustomerAdvancedPanel({ siteId, role }: CustomerAdvancedPanelProps) {
+export function CustomerAdvancedPanel({
+  siteId,
+  role,
+  section = "overview",
+}: CustomerAdvancedPanelProps) {
   const siteSlug = encodeSiteId(siteId);
+  const activeSection = section === "overview" ? null : section;
 
   return (
     <div className="dashboard-stack">
@@ -25,19 +36,22 @@ export function CustomerAdvancedPanel({ siteId, role }: CustomerAdvancedPanelPro
           <h3 className="dashboard-card-title dashboard-card-title--sm">Erweitert</h3>
           <div className="dashboard-hub-grid">
             <AdvancedLink
-              href={`/sites/${siteSlug}/modules`}
+              href={`/sites/${siteSlug}/advanced?section=features`}
               title="Funktionen"
               description="Aktive Fähigkeiten und Branchenmodule festlegen."
+              isActive={activeSection === "features"}
             />
             <AdvancedLink
-              href={`/sites/${siteSlug}/integrations`}
+              href={`/sites/${siteSlug}/advanced?section=connections`}
               title="Verbindungen"
               description="Shopify, Webhooks und weitere externe Systeme verwalten."
+              isActive={activeSection === "connections"}
             />
             <AdvancedLink
-              href={`/sites/${siteSlug}/agents`}
+              href={`/sites/${siteSlug}/advanced?section=automations`}
               title="Automationen"
               description="Abläufe, Tickets, Webhooks und Automationsschritte einsehen."
+              isActive={activeSection === "automations"}
             />
           </div>
         </div>
@@ -47,9 +61,10 @@ export function CustomerAdvancedPanel({ siteId, role }: CustomerAdvancedPanelPro
             <h3 className="dashboard-card-title dashboard-card-title--sm">Admin & Debug</h3>
             <div className="dashboard-hub-grid">
               <AdvancedLink
-                href={`/sites/${siteSlug}/agents`}
+                href={`/sites/${siteSlug}/advanced?section=automations`}
                 title="Automationsprotokoll"
                 description="Agent Runs, Tool Calls, Tickets und Webhook-Status prüfen."
+                isActive={activeSection === "automations"}
               />
               <AdvancedLink
                 href={`/sites/${siteSlug}/analytics`}
@@ -63,6 +78,26 @@ export function CustomerAdvancedPanel({ siteId, role }: CustomerAdvancedPanelPro
             </div>
           </div>
         ) : null}
+
+        {section !== "overview" ? (
+          <section className="dashboard-card dashboard-stack">
+            <div className="dashboard-section-heading">
+              <div>
+                <p className="dashboard-eyebrow">Erweiterte Einstellungen</p>
+                <h2 className="dashboard-card-title">{getSectionTitle(section)}</h2>
+              </div>
+              <Link
+                href={`/sites/${siteSlug}/advanced`}
+                className="dashboard-button dashboard-button--secondary"
+              >
+                Zur Übersicht
+              </Link>
+            </div>
+            {section === "features" ? <SiteModulesForm siteId={siteId} /> : null}
+            {section === "connections" ? <SiteIntegrationsForm siteId={siteId} /> : null}
+            {section === "automations" ? <SiteAgentsForm siteId={siteId} /> : null}
+          </section>
+        ) : null}
       </section>
     </div>
   );
@@ -72,15 +107,33 @@ function AdvancedLink({
   href,
   title,
   description,
+  isActive,
 }: {
   href: string;
   title: string;
   description: string;
+  isActive?: boolean;
 }) {
   return (
-    <Link href={href} className="dashboard-hub-link">
+    <Link
+      href={href}
+      className={isActive ? "dashboard-hub-link dashboard-hub-link--active" : "dashboard-hub-link"}
+    >
       <strong>{title}</strong>
       <span>{description}</span>
     </Link>
   );
+}
+
+function getSectionTitle(section: CustomerAdvancedSection) {
+  switch (section) {
+    case "features":
+      return "Funktionen";
+    case "connections":
+      return "Verbindungen";
+    case "automations":
+      return "Automationen";
+    default:
+      return "Übersicht";
+  }
 }

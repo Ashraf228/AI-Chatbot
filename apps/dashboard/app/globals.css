@@ -453,9 +453,22 @@ textarea {
   background: #fff;
 }
 
+.dashboard-hub-link--active {
+  border-color: rgba(17, 17, 17, 0.55);
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(17, 17, 17, 0.06);
+}
+
 .dashboard-hub-link span {
   color: var(--dash-text-soft);
   line-height: 1.5;
+}
+
+.dashboard-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
 }
 
 .dashboard-tab-row {
