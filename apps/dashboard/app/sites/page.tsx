@@ -301,6 +301,9 @@ export default function SitesPage() {
         <div className="dashboard-grid dashboard-grid--split">
           <div>
             <h2 className="dashboard-section-title">Neuen Kunden anlegen</h2>
+            <p className="dashboard-copy dashboard-copy--muted">
+              Starte mit Kundenname, Domain und Branche. Interne Technikangaben bleiben bewusst im Hintergrund.
+            </p>
 
             <SiteForm
               form={form}
@@ -314,8 +317,11 @@ export default function SitesPage() {
               onSubmit={createSite}
             />
 
-            <div className="dashboard-card dashboard-stack dashboard-stack--sm" style={{ marginTop: 16 }}>
-              <h3 className="dashboard-card-title">Neuen Mandanten anlegen</h3>
+            <details className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm" style={{ marginTop: 16 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Interne Mandantenverwaltung</summary>
+              <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                Nur für interne Strukturen nötig. Für normale Kundenanlage wird dieser Bereich in der Regel nicht gebraucht.
+              </p>
               <div className="dashboard-field">
                 <label className="dashboard-field-label" htmlFor="tenant-create-id">
                   Mandanten-ID
@@ -347,7 +353,7 @@ export default function SitesPage() {
                   {tenantSaving ? "Mandant wird angelegt..." : "Mandant anlegen"}
                 </Button>
               </form>
-            </div>
+            </details>
 
             {err && <ErrorState message={err} />}
 
@@ -378,7 +384,6 @@ export default function SitesPage() {
                           label={status?.status || "Wird geladen"}
                         />
                       </div>
-                      <InfoRow label="Einbindungsschlüssel" value={site.site_key} />
                       {status?.industry ? (
                         <InfoRow label="Branche" value={formatIndustry(status.industry)} />
                       ) : null}
@@ -391,7 +396,7 @@ export default function SitesPage() {
                             window.location.href = `/sites/${encodeSiteId(site.id)}`;
                           }}
                         >
-                          Kunde öffnen
+                          Übersicht öffnen
                         </Button>
                         <Button
                           type="button"

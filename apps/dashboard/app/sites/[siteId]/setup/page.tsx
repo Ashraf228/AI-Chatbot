@@ -1,9 +1,9 @@
-import { ConversationPanel } from "../../../../components/conversations/ConversationPanel";
+import { CustomerSetupWizard } from "../../../../components/customer/CustomerSetupWizard";
 import { SiteTabs } from "../../../../components/layout/SiteTabs";
 import { Topbar } from "../../../../components/layout/Topbar";
 import { decodeSiteId } from "../../../../lib/site-id";
 
-export default async function SiteConversationsPage({
+export default async function SiteSetupPage({
   params,
 }: {
   params: Promise<{ siteId: string }>;
@@ -13,10 +13,10 @@ export default async function SiteConversationsPage({
 
   return (
     <div>
-      <Topbar title={`Chats · ${siteId}`} />
+      <Topbar title={`Setup · ${siteId}`} />
       <div className="dashboard-page dashboard-page--lg">
         <SiteTabs siteId={siteId} />
-        <ConversationPanel initialSiteId={siteId} lockedSiteId={siteId} />
+        <CustomerSetupWizard siteId={siteId} />
       </div>
     </div>
   );

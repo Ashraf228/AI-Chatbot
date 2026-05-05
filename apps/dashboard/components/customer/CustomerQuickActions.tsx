@@ -27,6 +27,18 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString("de-DE");
 }
 
+function toPreviewUrl(domain: string) {
+  if (!domain) {
+    return "";
+  }
+
+  if (domain.startsWith("http://") || domain.startsWith("https://")) {
+    return domain;
+  }
+
+  return `https://${domain}`;
+}
+
 export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
   const siteSlug = encodeSiteId(siteId);
   const [site, setSite] = useState<SiteDetails | null>(null);
@@ -71,6 +83,7 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
 
     return `<script src="${loaderUrl}" data-site-key="${site.siteKey}" defer></script>`;
   }, [loaderUrl, site?.siteKey]);
+  const previewUrl = site?.allowedDomains[0] ? toPreviewUrl(site.allowedDomains[0]) : "";
 
   async function copyEmbedCode() {
     if (!embedCode) {
@@ -139,7 +152,7 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
           <Link href={`/sites/${siteSlug}/knowledge`} className="dashboard-button dashboard-button--secondary">
             Wissen hinzufügen
           </Link>
-          <Link href={`/sites/${siteSlug}#setup-step-testing`} className="dashboard-button dashboard-button--secondary">
+          <Link href={`/sites/${siteSlug}/setup#setup-step-testing`} className="dashboard-button dashboard-button--secondary">
             Chat testen
           </Link>
           <Button type="button" variant="secondary" onClick={copyEmbedCode}>
@@ -155,6 +168,16 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
           >
             {site?.goLiveAt ? "Bereits live" : saving === "live" ? "Schaltet live..." : "Kunde live schalten"}
           </Button>
+          {previewUrl ? (
+            <a
+              href={previewUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="dashboard-button dashboard-button--secondary"
+            >
+              Vorschau öffnen
+            </a>
+          ) : null}
         </div>
 
         {site ? (

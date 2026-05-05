@@ -69,6 +69,7 @@ export default function DashboardHomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [widgetSummary, setWidgetSummary] = useState<WidgetSummary>({ startedChats: 0, leads: 0 });
+  const [showAutomationOverview, setShowAutomationOverview] = useState(false);
   const [runStatusFilter, setRunStatusFilter] = useState("all");
   const [runSearch, setRunSearch] = useState("");
   const [agentSummary, setAgentSummary] = useState<AgentSummary>({
@@ -165,7 +166,7 @@ export default function DashboardHomePage() {
     <div>
       <Topbar title="Heute" />
       <div className="dashboard-page dashboard-stack">
-        <div className="dashboard-grid dashboard-grid--metrics-5" style={{ gap: 16 }}>
+        <div className="dashboard-grid dashboard-grid--two" style={{ gap: 16 }}>
           <div className="dashboard-card dashboard-card--soft">
             <strong>{widgetSummary.startedChats}</strong>
             <p className="dashboard-copy dashboard-copy--muted">Gestartete Chats</p>
@@ -173,18 +174,6 @@ export default function DashboardHomePage() {
           <div className="dashboard-card dashboard-card--soft">
             <strong>{widgetSummary.leads}</strong>
             <p className="dashboard-copy dashboard-copy--muted">Anfragen</p>
-          </div>
-          <div className="dashboard-card dashboard-card--soft">
-            <strong>{agentSummary.totalRuns}</strong>
-            <p className="dashboard-copy dashboard-copy--muted">Agentenläufe</p>
-          </div>
-          <div className="dashboard-card dashboard-card--soft">
-            <strong>{agentSummary.completedRuns}</strong>
-            <p className="dashboard-copy dashboard-copy--muted">Erfolgreich</p>
-          </div>
-          <div className="dashboard-card dashboard-card--soft">
-            <strong>{agentSummary.failedRuns}</strong>
-            <p className="dashboard-copy dashboard-copy--muted">Fehlgeschlagen</p>
           </div>
         </div>
 
@@ -225,64 +214,102 @@ export default function DashboardHomePage() {
 
           <div className="dashboard-card dashboard-stack">
             <div>
-              <h2 className="dashboard-card-title">Letzte Agentenläufe</h2>
+              <h2 className="dashboard-card-title">Erweiterte Automationsübersicht</h2>
               <p className="dashboard-copy">
-                Verdichtete Sicht auf die letzten Agentenaktionen über alle Kunden hinweg.
+                Für technische Rückfragen und spätere Diagnosefälle. Im normalen Tagesgeschäft wird
+                dieser Bereich seltener benötigt.
               </p>
             </div>
 
-            <div className="dashboard-grid dashboard-grid--two" style={{ gap: 12 }}>
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Status filtern</span>
-                <Select value={runStatusFilter} onChange={(event) => setRunStatusFilter(event.target.value)}>
-                  <option value="all">Alle</option>
-                  <option value="completed">Abgeschlossen</option>
-                  <option value="failed">Fehlgeschlagen</option>
-                  <option value="processing">In Bearbeitung</option>
-                  <option value="queued">Queued</option>
-                </Select>
-              </label>
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Suche</span>
-                <Input
-                  placeholder="Agent, Kunde, Eingabe"
-                  value={runSearch}
-                  onChange={(event) => setRunSearch(event.target.value)}
-                />
-              </label>
+            <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
+              <button
+                type="button"
+                className="dashboard-button dashboard-button--secondary"
+                onClick={() => setShowAutomationOverview((current) => !current)}
+              >
+                {showAutomationOverview ? "Automationsübersicht ausblenden" : "Automationsübersicht anzeigen"}
+              </button>
             </div>
 
-            {filteredRecentRuns.length === 0 ? (
-              <p className="dashboard-copy dashboard-copy--muted">Noch keine Agentenläufe vorhanden.</p>
+            {showAutomationOverview ? (
+              <>
+                <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16 }}>
+                  <div className="dashboard-card dashboard-card--soft">
+                    <strong>{agentSummary.totalRuns}</strong>
+                    <p className="dashboard-copy dashboard-copy--muted">Automationen gesamt</p>
+                  </div>
+                  <div className="dashboard-card dashboard-card--soft">
+                    <strong>{agentSummary.completedRuns}</strong>
+                    <p className="dashboard-copy dashboard-copy--muted">Erfolgreich</p>
+                  </div>
+                  <div className="dashboard-card dashboard-card--soft">
+                    <strong>{agentSummary.failedRuns}</strong>
+                    <p className="dashboard-copy dashboard-copy--muted">Fehlgeschlagen</p>
+                  </div>
+                  <div className="dashboard-card dashboard-card--soft">
+                    <strong>{agentSummary.processingRuns}</strong>
+                    <p className="dashboard-copy dashboard-copy--muted">In Bearbeitung</p>
+                  </div>
+                </div>
+
+                <div className="dashboard-grid dashboard-grid--two" style={{ gap: 12 }}>
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Status filtern</span>
+                    <Select value={runStatusFilter} onChange={(event) => setRunStatusFilter(event.target.value)}>
+                      <option value="all">Alle</option>
+                      <option value="completed">Abgeschlossen</option>
+                      <option value="failed">Fehlgeschlagen</option>
+                      <option value="processing">In Bearbeitung</option>
+                      <option value="queued">Queued</option>
+                    </Select>
+                  </label>
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Suche</span>
+                    <Input
+                      placeholder="Automation, Kunde, Eingabe"
+                      value={runSearch}
+                      onChange={(event) => setRunSearch(event.target.value)}
+                    />
+                  </label>
+                </div>
+
+                {filteredRecentRuns.length === 0 ? (
+                  <p className="dashboard-copy dashboard-copy--muted">Noch keine Automationen vorhanden.</p>
+                ) : (
+                  <div className="dashboard-stack dashboard-stack--sm">
+                    {filteredRecentRuns.map((run) => (
+                      <Link
+                        key={run.id}
+                        href={`/sites/${encodeURIComponent(run.siteId)}/agents`}
+                        className="dashboard-card dashboard-card--soft"
+                        style={{ textDecoration: "none", color: "inherit" }}
+                      >
+                        <div className="dashboard-info-row">
+                          <strong>{run.agentLabel}</strong>
+                          <span className={statusTone(run.status)}>{run.status}</span>
+                        </div>
+                        <div className="dashboard-copy dashboard-copy--muted">
+                          {run.siteName} · {new Date(run.createdAt).toLocaleString("de-DE")}
+                        </div>
+                        {run.inputSummary ? (
+                          <div className="dashboard-copy">
+                            <strong>Eingabe:</strong> {run.inputSummary}
+                          </div>
+                        ) : null}
+                        {run.outputSummary ? (
+                          <div className="dashboard-copy">
+                            <strong>Ergebnis:</strong> {run.outputSummary}
+                          </div>
+                        ) : null}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
-              <div className="dashboard-stack dashboard-stack--sm">
-                {filteredRecentRuns.map((run) => (
-                  <Link
-                    key={run.id}
-                    href={`/sites/${encodeURIComponent(run.siteId)}/agents`}
-                    className="dashboard-card dashboard-card--soft"
-                    style={{ textDecoration: "none", color: "inherit" }}
-                  >
-                    <div className="dashboard-info-row">
-                      <strong>{run.agentLabel}</strong>
-                      <span className={statusTone(run.status)}>{run.status}</span>
-                    </div>
-                    <div className="dashboard-copy dashboard-copy--muted">
-                      {run.siteName} · {new Date(run.createdAt).toLocaleString("de-DE")}
-                    </div>
-                    {run.inputSummary ? (
-                      <div className="dashboard-copy">
-                        <strong>Eingabe:</strong> {run.inputSummary}
-                      </div>
-                    ) : null}
-                    {run.outputSummary ? (
-                      <div className="dashboard-copy">
-                        <strong>Ergebnis:</strong> {run.outputSummary}
-                      </div>
-                    ) : null}
-                  </Link>
-                ))}
-              </div>
+              <p className="dashboard-copy dashboard-copy--muted">
+                Eingeklappt, damit der Fokus auf Kundenanlage, Anfragen und Betrieb liegt.
+              </p>
             )}
           </div>
         </div>

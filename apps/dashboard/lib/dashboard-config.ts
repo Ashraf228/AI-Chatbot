@@ -20,10 +20,11 @@ export function getDashboardNav(role: DashboardSessionRole = "admin") {
 export const dashboardNav = DASHBOARD_NAV_ITEMS;
 
 export const siteTabs = [
-  { slug: "", label: "Setup" },
+  { slug: "", label: "Übersicht" },
+  { slug: "setup", label: "Setup" },
   { slug: "knowledge", label: "Wissen" },
-  { slug: "branding", label: "Design" },
   { slug: "widget", label: "Verhalten" },
+  { slug: "branding", label: "Design" },
   { slug: "embedding", label: "Einbindung" },
   { slug: "leads", label: "Anfragen" },
   { slug: "conversations", label: "Chats" },

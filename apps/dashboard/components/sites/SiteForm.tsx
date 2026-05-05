@@ -23,39 +23,6 @@ export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSub
   return (
     <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm">
       <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="site-key">
-          Kundenschlüssel
-        </label>
-        <Input
-          id="site-key"
-          placeholder="soule-smart-business"
-          value={form.siteKey}
-          onChange={(event) => onChange({ ...form, siteKey: event.target.value })}
-        />
-      </div>
-
-      <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="tenant-id">
-          Mandant
-        </label>
-        <Select
-          id="tenant-id"
-          value={form.tenantId}
-          onChange={(event) => onChange({ ...form, tenantId: event.target.value })}
-          disabled={tenantOptions.length === 0}
-        >
-          {tenantOptions.length === 0 ? (
-            <option value="">Keine Mandanten vorhanden</option>
-          ) : null}
-          {tenantOptions.map((tenant) => (
-            <option key={tenant.id} value={tenant.id}>
-              {tenant.name} ({tenant.id})
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      <div className="dashboard-field">
         <label className="dashboard-field-label" htmlFor="site-name">
           Kundenname
         </label>
@@ -69,7 +36,7 @@ export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSub
 
       <div className="dashboard-field">
         <label className="dashboard-field-label" htmlFor="site-domain">
-          Domain
+          Website oder Hauptdomain
         </label>
         <Input
           id="site-domain"
@@ -101,6 +68,56 @@ export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSub
           </div>
         ) : null}
       </div>
+
+      <details className="dashboard-card dashboard-card--soft">
+        <summary
+          style={{
+            cursor: "pointer",
+            fontWeight: 600,
+            listStyle: "none",
+          }}
+        >
+          Erweiterte Angaben
+        </summary>
+        <div className="dashboard-stack dashboard-stack--sm" style={{ marginTop: 14 }}>
+          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+            Diese Angaben werden nur selten direkt benötigt und können später angepasst werden.
+          </p>
+
+          <div className="dashboard-field">
+            <label className="dashboard-field-label" htmlFor="site-key">
+              Einbindungscode
+            </label>
+            <Input
+              id="site-key"
+              placeholder="soule-smart-business"
+              value={form.siteKey}
+              onChange={(event) => onChange({ ...form, siteKey: event.target.value })}
+            />
+          </div>
+
+          <div className="dashboard-field">
+            <label className="dashboard-field-label" htmlFor="tenant-id">
+              Mandant (intern)
+            </label>
+            <Select
+              id="tenant-id"
+              value={form.tenantId}
+              onChange={(event) => onChange({ ...form, tenantId: event.target.value })}
+              disabled={tenantOptions.length === 0}
+            >
+              {tenantOptions.length === 0 ? (
+                <option value="">Keine Mandanten vorhanden</option>
+              ) : null}
+              {tenantOptions.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        </div>
+      </details>
 
       <Button type="submit">Kunde anlegen</Button>
     </form>

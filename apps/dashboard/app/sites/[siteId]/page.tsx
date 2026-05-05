@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { CustomerAdvancedPanel } from "../../../components/customer/CustomerAdvancedPanel";
+import { CustomerLiveStatus } from "../../../components/customer/CustomerLiveStatus";
 import { CustomerQuickActions } from "../../../components/customer/CustomerQuickActions";
-import { CustomerSetupWizard } from "../../../components/customer/CustomerSetupWizard";
 import { SiteTabs } from "../../../components/layout/SiteTabs";
 import { Topbar } from "../../../components/layout/Topbar";
+import { getDashboardSession } from "../../../lib/auth";
 import { decodeSiteId, encodeSiteId } from "../../../lib/site-id";
 
 export default async function SiteDetailPage({
@@ -10,18 +12,55 @@ export default async function SiteDetailPage({
 }: {
   params: Promise<{ siteId: string }>;
 }) {
+  const session = await getDashboardSession();
   const { siteId: rawSiteId } = await params;
   const siteId = decodeSiteId(rawSiteId);
   const siteSlug = encodeSiteId(siteId);
 
   return (
     <div>
-      <Topbar title={`Kunde · ${siteId}`} />
+      <Topbar title={`Übersicht · ${siteId}`} />
       <div className="dashboard-page dashboard-page--lg">
         <SiteTabs siteId={siteId} />
         <div className="dashboard-grid dashboard-grid--two">
           <section className="dashboard-stack">
-            <CustomerSetupWizard siteId={siteId} />
+            <CustomerLiveStatus siteId={siteId} />
+
+            <section className="dashboard-card dashboard-stack">
+              <div>
+                <h2 className="dashboard-card-title">Einrichtung</h2>
+                <p className="dashboard-copy">
+                  Führe neue Kunden Schritt für Schritt durch Setup, Wissen, Verhalten, Design und Einbindung.
+                </p>
+              </div>
+              <div className="dashboard-hub-grid">
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/setup`}
+                  title="Setup öffnen"
+                  description="Geführten Einrichtungsablauf starten oder fortsetzen."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/knowledge`}
+                  title="Wissen pflegen"
+                  description="FAQs, PDFs und weitere Wissensquellen für diesen Kunden verwalten."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/widget`}
+                  title="Verhalten festlegen"
+                  description="Ziel, Gesprächslogik und Antwortverhalten des Bots anpassen."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/branding`}
+                  title="Design anpassen"
+                  description="Logo, Farben, Begrüßung und sichtbare Texte für das Widget prüfen."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/embedding`}
+                  title="Einbindung vorbereiten"
+                  description="Widget-Code kopieren und erlaubte Domains sauber hinterlegen."
+                />
+              </div>
+            </section>
           </section>
 
           <section className="dashboard-stack">
@@ -29,15 +68,13 @@ export default async function SiteDetailPage({
 
             <section className="dashboard-card dashboard-stack">
               <div>
-                <h2 className="dashboard-card-title">Betrieb & Technik</h2>
+                <h2 className="dashboard-card-title">Betrieb</h2>
                 <p className="dashboard-copy">
-                  Nach der Einrichtung arbeitest du je nach Aufgabe entweder im laufenden Betrieb oder
-                  in den erweiterten technischen Bereichen.
+                  Nach dem Go-live wird dieser Bereich zum täglichen Arbeitsort für Auswertung und Nachverfolgung.
                 </p>
               </div>
 
               <div className="dashboard-card dashboard-card--soft">
-                <h3 className="dashboard-card-title dashboard-card-title--sm">Betrieb</h3>
                 <div className="dashboard-hub-grid">
                   <SiteHubLink
                     href={`/sites/${siteSlug}/leads`}
@@ -52,40 +89,23 @@ export default async function SiteDetailPage({
                   <SiteHubLink
                     href={`/sites/${siteSlug}/reports`}
                     title="Berichte"
-                    description="Report-Empfänger, Historie und laufende Auswertungen einsehen."
-                  />
-                </div>
-              </div>
-
-              <div className="dashboard-card dashboard-card--soft">
-                <h3 className="dashboard-card-title dashboard-card-title--sm">Technik & Admin</h3>
-                <p className="dashboard-copy dashboard-copy--muted">
-                  Diese Bereiche werden seltener gebraucht und sind bewusst vom eigentlichen Setup getrennt.
-                </p>
-                <div className="dashboard-hub-grid">
-                  <SiteHubLink
-                    href={`/sites/${siteSlug}/modules`}
-                    title="Funktionen"
-                    description="Aktive Faehigkeiten und Branchenfunktionen fuer diesen Kunden festlegen."
-                  />
-                  <SiteHubLink
-                    href={`/sites/${siteSlug}/agents`}
-                    title="Automationen"
-                    description="Ablauflogs, Tickets, Webhooks und weitere Automationsschritte prüfen."
-                  />
-                  <SiteHubLink
-                    href={`/sites/${siteSlug}/integrations`}
-                    title="Verbindungen"
-                    description="Shopify, Webhooks und weitere externe Systeme verwalten."
-                  />
-                  <SiteHubLink
-                    href={`/sites/${siteSlug}/analytics`}
-                    title="Verbesserung"
-                    description="Top-Fragen, Conversion und Optimierungshinweise für diesen Kunden prüfen."
+                    description="Empfänger, Historie und laufende Auswertungen für diesen Kunden einsehen."
                   />
                 </div>
               </div>
             </section>
+
+            {session?.role === "admin" ? (
+              <details className="dashboard-card dashboard-stack">
+                <summary
+                  className="dashboard-card-title"
+                  style={{ cursor: "pointer", listStyle: "none" }}
+                >
+                  Erweiterte Einstellungen
+                </summary>
+                <CustomerAdvancedPanel siteId={siteId} role={session.role} />
+              </details>
+            ) : null}
           </section>
         </div>
       </div>
