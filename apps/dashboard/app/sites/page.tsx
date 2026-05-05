@@ -9,6 +9,7 @@ import { ErrorState } from "../../components/shared/ErrorState";
 import { Input } from "../../components/shared/Input";
 import { Select } from "../../components/shared/Select";
 import { SiteForm } from "../../components/sites/SiteForm";
+import { CUSTOMER_TEMPLATES } from "../../lib/customer-templates";
 import { encodeSiteId } from "../../lib/site-id";
 import {
   mapOverallStatusToTone,
@@ -46,6 +47,7 @@ export default function SitesPage() {
     tenantId: "t_default",
     name: "",
     domain: "localhost",
+    industry: "",
   });
   const [tenantForm, setTenantForm] = useState({
     id: "",
@@ -202,12 +204,54 @@ export default function SitesPage() {
       return;
     }
 
-    setMsg("Kunde erfolgreich angelegt.");
+    if (data?.id && form.industry && CUSTOMER_TEMPLATES[form.industry]) {
+      const template = CUSTOMER_TEMPLATES[form.industry];
+      const [configResponse, brandingResponse, modulesResponse] = await Promise.all([
+        fetch(`/api/widget/config/${data.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            industry: template.key,
+            setupGoal: template.setupGoal,
+            systemPrompt: template.systemPrompt,
+            suggestedQuestionsByPath: template.recommendedQuestions,
+          }),
+        }),
+        fetch(`/api/widget/branding/${data.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            welcomeMessage: template.welcomeMessage,
+          }),
+        }),
+        fetch(`/api/site-modules/${data.id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(template.modules),
+        }),
+      ]);
+
+      if (!configResponse.ok || !brandingResponse.ok || !modulesResponse.ok) {
+        setErr("Kunde wurde angelegt, aber die Branchenvorlage konnte nicht vollständig angewendet werden.");
+      } else {
+        setMsg(`Kunde erfolgreich angelegt. Vorlage „${template.label}“ wurde angewendet.`);
+      }
+    } else {
+      setMsg("Kunde erfolgreich angelegt.");
+    }
+
     setForm({
       siteKey: "",
       tenantId: "t_default",
       name: "",
       domain: "localhost",
+      industry: "",
     });
 
     await loadSites();
@@ -261,6 +305,11 @@ export default function SitesPage() {
             <SiteForm
               form={form}
               tenantOptions={tenants}
+              industryOptions={Object.values(CUSTOMER_TEMPLATES).map((template) => ({
+                value: template.key,
+                label: template.label,
+                description: `${formatGoal(template.setupGoal)} als Startziel`,
+              }))}
               onChange={setForm}
               onSubmit={createSite}
             />
@@ -330,7 +379,9 @@ export default function SitesPage() {
                         />
                       </div>
                       <InfoRow label="Einbindungsschlüssel" value={site.site_key} />
-                      {status?.industry ? <InfoRow label="Branche" value={status.industry} /> : null}
+                      {status?.industry ? (
+                        <InfoRow label="Branche" value={formatIndustry(status.industry)} />
+                      ) : null}
                       {status?.setupGoal ? <InfoRow label="Bot-Ziel" value={formatGoal(status.setupGoal)} /> : null}
                       <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
                         <Button
@@ -400,4 +451,8 @@ function formatGoal(goal: string) {
   }
 
   return goal;
+}
+
+function formatIndustry(industry: string) {
+  return CUSTOMER_TEMPLATES[industry]?.label || industry;
 }

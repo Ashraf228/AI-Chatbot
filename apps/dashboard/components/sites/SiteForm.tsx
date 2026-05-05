@@ -8,16 +8,18 @@ type SiteFormValues = {
   tenantId: string;
   name: string;
   domain: string;
+  industry: string;
 };
 
 type SiteFormProps = {
   form: SiteFormValues;
   tenantOptions: Array<{ id: string; name: string }>;
+  industryOptions: Array<{ value: string; label: string; description?: string }>;
   onChange: (next: SiteFormValues) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
 };
 
-export function SiteForm({ form, tenantOptions, onChange, onSubmit }: SiteFormProps) {
+export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSubmit }: SiteFormProps) {
   return (
     <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm">
       <div className="dashboard-field">
@@ -75,6 +77,29 @@ export function SiteForm({ form, tenantOptions, onChange, onSubmit }: SiteFormPr
           value={form.domain}
           onChange={(event) => onChange({ ...form, domain: event.target.value })}
         />
+      </div>
+
+      <div className="dashboard-field">
+        <label className="dashboard-field-label" htmlFor="site-industry">
+          Branche
+        </label>
+        <Select
+          id="site-industry"
+          value={form.industry}
+          onChange={(event) => onChange({ ...form, industry: event.target.value })}
+        >
+          <option value="">Ohne Vorlage starten</option>
+          {industryOptions.map((industry) => (
+            <option key={industry.value} value={industry.value}>
+              {industry.label}
+            </option>
+          ))}
+        </Select>
+        {form.industry ? (
+          <div className="dashboard-copy dashboard-copy--muted" style={{ marginTop: 6 }}>
+            {industryOptions.find((option) => option.value === form.industry)?.description || ""}
+          </div>
+        ) : null}
       </div>
 
       <Button type="submit">Kunde anlegen</Button>
