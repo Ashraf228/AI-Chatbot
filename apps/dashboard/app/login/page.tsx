@@ -83,7 +83,7 @@ export default function LoginPage() {
         </p>
 
         <form onSubmit={onLogin} className="dashboard-stack">
-          <div className="dashboard-inline" style={{ gap: 10 }}>
+          <div className="dashboard-auth-mode-grid">
             <Button
               type="button"
               variant={mode === "admin" ? "primary" : "secondary"}
