@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { CustomerStatusBadge } from "../../components/customer/CustomerStatusBadge";
 import { Topbar } from "../../components/layout/Topbar";
 import { Button } from "../../components/shared/Button";
 import { EmptyState } from "../../components/shared/EmptyState";
@@ -9,6 +10,12 @@ import { Input } from "../../components/shared/Input";
 import { Select } from "../../components/shared/Select";
 import { SiteForm } from "../../components/sites/SiteForm";
 import { encodeSiteId } from "../../lib/site-id";
+import {
+  mapOverallStatusToTone,
+  resolveCustomerOverallStatus,
+  type CustomerOverallStatus,
+  type CustomerSetupSnapshot,
+} from "../../components/customer/customer-status";
 
 type Site = {
   id: string;
@@ -19,6 +26,12 @@ type Site = {
   public_key: string | null;
 };
 
+type SiteStatusSummary = {
+  status: CustomerOverallStatus;
+  industry: string;
+  setupGoal: string;
+};
+
 type Tenant = {
   id: string;
   name: string;
@@ -27,7 +40,7 @@ type Tenant = {
 export default function SitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [selectedSiteId, setSelectedSiteId] = useState("");
+  const [siteStatusById, setSiteStatusById] = useState<Record<string, SiteStatusSummary>>({});
   const [form, setForm] = useState({
     siteKey: "",
     tenantId: "t_default",
@@ -55,10 +68,6 @@ export default function SitesPage() {
 
     const items = Array.isArray(data) ? data : [];
     setSites(items);
-
-    if (!selectedSiteId && items.length > 0) {
-      setSelectedSiteId(items[0].id);
-    }
   }
 
   async function loadTenants() {
@@ -89,10 +98,76 @@ export default function SitesPage() {
     loadSites();
   }, []);
 
-  const selectedSite = useMemo(
-    () => sites.find((site) => site.id === selectedSiteId) || null,
-    [sites, selectedSiteId]
-  );
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStatuses() {
+      const entries = await Promise.all(
+        sites.map(async (site) => {
+          try {
+            const [siteRes, knowledgeRes] = await Promise.all([
+              fetch(`/api/widget/sites/${site.id}`, { cache: "no-store" }),
+              fetch(`/api/knowledge?siteId=${encodeURIComponent(site.id)}`, { cache: "no-store" }),
+            ]);
+
+            const siteData = await siteRes.json().catch(() => ({}));
+            const knowledgeData = await knowledgeRes.json().catch(() => []);
+            const knowledgeCount = Array.isArray(knowledgeData) ? knowledgeData.length : 0;
+
+            const snapshot: CustomerSetupSnapshot = {
+              name: siteData.name || site.name,
+              allowedDomains: Array.isArray(siteData.allowedDomains)
+                ? siteData.allowedDomains
+                : site.allowed_domains,
+              industry: siteData.industry || "",
+              setupGoal: siteData.setupGoal || "",
+              siteKey: siteData.siteKey || site.site_key,
+              logoUrl: siteData.logoUrl || "",
+              brandColor: siteData.brandColor || "#b55400",
+              welcomeMessage: siteData.welcomeMessage || "",
+              knowledgeCount,
+              lastTestedAt: siteData.lastTestedAt || "",
+              goLiveAt: siteData.goLiveAt || "",
+              hasError: !siteRes.ok || !knowledgeRes.ok,
+            };
+
+            return [
+              site.id,
+              {
+                status: resolveCustomerOverallStatus(snapshot),
+                industry: siteData.industry || "",
+                setupGoal: siteData.setupGoal || "",
+              },
+            ] as const;
+          } catch {
+            return [
+              site.id,
+              {
+                status: "Fehler" as const,
+                industry: "",
+                setupGoal: "",
+              },
+            ] as const;
+          }
+        }),
+      );
+
+      if (!cancelled) {
+        setSiteStatusById(Object.fromEntries(entries));
+      }
+    }
+
+    if (sites.length === 0) {
+      setSiteStatusById({});
+      return;
+    }
+
+    loadStatuses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sites]);
 
   async function createSite(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -136,10 +211,6 @@ export default function SitesPage() {
     });
 
     await loadSites();
-
-    if (data?.id) {
-      setSelectedSiteId(data.id);
-    }
   }
 
   async function createTenant(e: React.FormEvent<HTMLFormElement>) {
@@ -237,43 +308,36 @@ export default function SitesPage() {
           <div>
             <h2 className="dashboard-section-title">Vorhandene Kunden</h2>
 
-            <div className="dashboard-card">
+            <div className="dashboard-card dashboard-stack dashboard-stack--sm">
               {sites.length === 0 ? (
                 <EmptyState title="Keine Kunden vorhanden." />
               ) : (
-                <>
-                  <Select
-                    value={selectedSiteId}
-                    onChange={(e) => setSelectedSiteId(e.target.value)}
-                    style={{ marginBottom: 16 }}
-                  >
-                    {sites.map((site) => (
-                      <option key={site.id} value={site.id}>
-                        {site.name} — {site.site_key}
-                      </option>
-                    ))}
-                  </Select>
+                sites.map((site) => {
+                  const status = siteStatusById[site.id];
 
-                  {selectedSite && (
-                    <div className="dashboard-stack dashboard-stack--sm">
-                      <p className="dashboard-copy dashboard-copy--muted">
-                        Die Einrichtung passiert im Kundenbereich. Die globale Kundenliste dient nur
-                        zum Anlegen, Auswählen und Öffnen.
-                      </p>
-
-                      <InfoRow label="Name" value={selectedSite.name} />
-                      <InfoRow label="Einbindungsschlüssel" value={selectedSite.site_key} />
-                      <InfoRow
-                        label="Domains"
-                        value={selectedSite.allowed_domains.join(", ") || "-"}
-                      />
-
+                  return (
+                    <div key={site.id} className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+                      <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
+                        <div>
+                          <strong>{site.name}</strong>
+                          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                            {site.allowed_domains.join(", ") || "Keine Domain hinterlegt"}
+                          </p>
+                        </div>
+                        <CustomerStatusBadge
+                          status={status ? mapOverallStatusToTone(status.status) : "pending"}
+                          label={status?.status || "Wird geladen"}
+                        />
+                      </div>
+                      <InfoRow label="Einbindungsschlüssel" value={site.site_key} />
+                      {status?.industry ? <InfoRow label="Branche" value={status.industry} /> : null}
+                      {status?.setupGoal ? <InfoRow label="Bot-Ziel" value={formatGoal(status.setupGoal)} /> : null}
                       <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
                         <Button
                           type="button"
                           variant="primary"
                           onClick={() => {
-                            window.location.href = `/sites/${encodeSiteId(selectedSite.id)}`;
+                            window.location.href = `/sites/${encodeSiteId(site.id)}`;
                           }}
                         >
                           Kunde öffnen
@@ -282,7 +346,7 @@ export default function SitesPage() {
                           type="button"
                           variant="secondary"
                           onClick={() => {
-                            window.location.href = `/sites/${encodeSiteId(selectedSite.id)}/knowledge`;
+                            window.location.href = `/sites/${encodeSiteId(site.id)}/knowledge`;
                           }}
                         >
                           Wissen öffnen
@@ -291,15 +355,15 @@ export default function SitesPage() {
                           type="button"
                           variant="secondary"
                           onClick={() => {
-                            window.location.href = `/sites/${encodeSiteId(selectedSite.id)}/widget`;
+                            window.location.href = `/sites/${encodeSiteId(site.id)}/embedding`;
                           }}
                         >
-                          Verhalten öffnen
+                          Einbindung öffnen
                         </Button>
                       </div>
                     </div>
-                  )}
-                </>
+                  );
+                })
               )}
             </div>
           </div>
@@ -316,4 +380,24 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <span className="dashboard-breakword">{value}</span>
     </div>
   );
+}
+
+function formatGoal(goal: string) {
+  if (goal === "lead_capture") {
+    return "Leads sammeln";
+  }
+
+  if (goal === "support") {
+    return "Support beantworten";
+  }
+
+  if (goal === "product_advice") {
+    return "Produkte empfehlen";
+  }
+
+  if (goal === "appointments") {
+    return "Termine vorbereiten";
+  }
+
+  return goal;
 }

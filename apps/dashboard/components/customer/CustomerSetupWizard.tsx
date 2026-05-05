@@ -9,6 +9,12 @@ import { Input } from "../shared/Input";
 import { LoadingState } from "../shared/LoadingState";
 import { Select } from "../shared/Select";
 import { CustomerStatusBadge } from "./CustomerStatusBadge";
+import {
+  mapOverallStatusToTone,
+  resolveCustomerOverallStatus,
+  type CustomerSetupSnapshot,
+} from "./customer-status";
+import { CUSTOMER_TEMPLATES } from "../../lib/customer-templates";
 
 type CustomerSetupWizardProps = {
   siteId: string;
@@ -60,14 +66,6 @@ function formatDate(value: string) {
   }
 
   return new Date(value).toLocaleString("de-DE");
-}
-
-function isDesignConfigured(site: SiteDetails) {
-  return Boolean(
-    site.logoUrl ||
-      (site.brandColor && site.brandColor !== "#b55400") ||
-      (site.welcomeMessage && site.welcomeMessage !== "Hi! Wie kann ich helfen?"),
-  );
 }
 
 export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
@@ -148,7 +146,11 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     const industryDone = Boolean(site.industry);
     const knowledgeDone = counts.total > 0;
     const goalDone = Boolean(site.setupGoal);
-    const designDone = isDesignConfigured(site);
+    const designDone = Boolean(
+      site.logoUrl ||
+        (site.brandColor && site.brandColor !== "#b55400") ||
+        (site.welcomeMessage && site.welcomeMessage !== "Hi! Wie kann ich helfen?"),
+    );
     const embeddingDone = Boolean(site.siteKey && site.allowedDomains.length > 0);
     const testingDone = Boolean(site.lastTestedAt);
     const liveDone = Boolean(site.goLiveAt);
@@ -176,6 +178,29 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       testingDone,
       liveDone,
     };
+  }, [counts.total, site]);
+
+  const overallStatus = useMemo(() => {
+    if (!site) {
+      return "Setup unvollständig" as const;
+    }
+
+    const snapshot: CustomerSetupSnapshot = {
+      name: site.name,
+      allowedDomains: site.allowedDomains,
+      industry: site.industry,
+      setupGoal: site.setupGoal,
+      siteKey: site.siteKey,
+      logoUrl: site.logoUrl,
+      brandColor: site.brandColor,
+      welcomeMessage: site.welcomeMessage,
+      knowledgeCount: counts.total,
+      lastTestedAt: site.lastTestedAt,
+      goLiveAt: site.goLiveAt,
+      hasError: false,
+    };
+
+    return resolveCustomerOverallStatus(snapshot);
   }, [counts.total, site]);
 
   async function saveBasics() {
@@ -245,6 +270,64 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     setSavingKey(null);
   }
 
+  async function applyIndustryTemplate() {
+    if (!site) {
+      return;
+    }
+
+    const template = CUSTOMER_TEMPLATES[site.industry];
+    if (!template) {
+      setError("Für diese Branche ist noch keine Vorlage hinterlegt.");
+      return;
+    }
+
+    setSavingKey("template");
+    setError(null);
+    setMessage(null);
+
+    try {
+      const [configResponse, brandingResponse, modulesResponse] = await Promise.all([
+        fetch(`/api/widget/config/${siteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            industry: template.key,
+            setupGoal: template.setupGoal,
+            systemPrompt: template.systemPrompt,
+            suggestedQuestionsByPath: template.recommendedQuestions,
+          }),
+        }),
+        fetch(`/api/widget/branding/${siteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            welcomeMessage: template.welcomeMessage,
+          }),
+        }),
+        fetch(`/api/site-modules/${siteId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(template.modules),
+        }),
+      ]);
+
+      const responses = [configResponse, brandingResponse, modulesResponse];
+      const failed = responses.find((response) => !response.ok);
+
+      if (failed) {
+        const data = await failed.json().catch(() => ({}));
+        setError(data?.message || "Vorlage konnte nicht vollständig angewendet werden.");
+        setSavingKey(null);
+        return;
+      }
+
+      await load();
+      setMessage(`Vorlage „${template.label}“ angewendet.`);
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
   if (loading) {
     return <LoadingState />;
   }
@@ -277,13 +360,19 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
               Einbindung, Test und Live-Schaltung.
             </p>
           </div>
-          <div className="dashboard-card dashboard-card--soft">
-            <strong>
-              {progress.completed} / {progress.total} Schritte
-            </strong>
-            <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-              Aktueller Fortschritt
-            </p>
+          <div className="dashboard-stack dashboard-stack--sm">
+            <div className="dashboard-card dashboard-card--soft">
+              <strong>
+                {progress.completed} / {progress.total} Schritte
+              </strong>
+              <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                Aktueller Fortschritt
+              </p>
+            </div>
+            <CustomerStatusBadge
+              status={mapOverallStatusToTone(overallStatus)}
+              label={overallStatus}
+            />
           </div>
         </div>
 
@@ -354,6 +443,20 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         >
           {savingKey === "industry" ? "Speichert..." : "Branche speichern"}
         </Button>
+        <div className="dashboard-card dashboard-card--soft">
+          <strong>Branchenvorlage</strong>
+          <p className="dashboard-copy dashboard-copy--muted">
+            Wendet Standardziel, Begrüßung, Fragen und empfohlene Funktionen für diese Branche an.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={applyIndustryTemplate}
+            disabled={savingKey === "template" || !site.industry || !CUSTOMER_TEMPLATES[site.industry]}
+          >
+            {savingKey === "template" ? "Vorlage wird angewendet..." : "Vorlage anwenden"}
+          </Button>
+        </div>
       </section>
 
       <section className="dashboard-card dashboard-stack">
