@@ -50,3 +50,19 @@ test('TenantsService.ensureTenantExists rejects unknown tenant ids', async () =>
     (error) => error instanceof BadRequestException && error.message === 'tenantId not found',
   );
 });
+
+test('TenantsService.ensureTenantExists accepts legacy underscore tenant ids', async () => {
+  const calls = [];
+  const db = {
+    async query(sql, params = []) {
+      calls.push({ sql, params });
+      return { rows: [{ id: 't_default' }] };
+    },
+  };
+
+  const service = new TenantsService(db);
+  const tenantId = await service.ensureTenantExists('t_default');
+
+  assert.equal(tenantId, 't_default');
+  assert.deepEqual(calls[0].params[0], ['t_default', 't-default']);
+});

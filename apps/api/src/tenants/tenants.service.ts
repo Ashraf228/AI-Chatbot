@@ -25,6 +25,12 @@ export class TenantsService {
     return normalized;
   }
 
+  private getTenantLookupCandidates(id: string) {
+    const raw = id.trim();
+    const normalized = this.normalizeTenantId(id);
+    return Array.from(new Set([raw, normalized].filter(Boolean)));
+  }
+
   async listTenants() {
     const res = await this.db.query<TenantRow>(
       `SELECT id, name, created_at
@@ -55,13 +61,13 @@ export class TenantsService {
   }
 
   async getTenant(id: string) {
-    const normalizedId = this.normalizeTenantId(id);
+    const candidates = this.getTenantLookupCandidates(id);
     const res = await this.db.query<TenantRow>(
       `SELECT id, name, created_at
        FROM tenants
-       WHERE id = $1
+       WHERE id = ANY($1::text[])
        LIMIT 1`,
-      [normalizedId],
+      [candidates],
     );
 
     const row = res.rows[0];
@@ -77,19 +83,19 @@ export class TenantsService {
   }
 
   async ensureTenantExists(id: string) {
-    const normalizedId = this.normalizeTenantId(id);
+    const candidates = this.getTenantLookupCandidates(id);
     const res = await this.db.query<{ id: string }>(
       `SELECT id
        FROM tenants
-       WHERE id = $1
+       WHERE id = ANY($1::text[])
        LIMIT 1`,
-      [normalizedId],
+      [candidates],
     );
 
     if (!res.rows[0]) {
       throw new BadRequestException('tenantId not found');
     }
 
-    return normalizedId;
+    return res.rows[0].id;
   }
 }
