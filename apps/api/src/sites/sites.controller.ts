@@ -1,6 +1,6 @@
-import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { SitesService } from './sites.service';
-import { CreateSiteDto } from './dto';
+import { CreateSiteDto, UpdateSiteDto } from './dto';
 import { AdminKeyGuard } from '../utils/admin.guard';
 
 @UseGuards(AdminKeyGuard)
@@ -29,5 +29,10 @@ export class SitesController {
   @Get()
   async list() {
     return this.sites.listSites();
+  }
+
+  @Patch(':siteId')
+  async update(@Param('siteId') siteId: string, @Body() dto: UpdateSiteDto) {
+    return this.sites.updateSite(siteId, dto);
   }
 }

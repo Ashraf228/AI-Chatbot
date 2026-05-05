@@ -10,3 +10,9 @@ export class CreateSiteDto {
   @IsArray() allowedDomains!: string[];
   @IsOptional() @IsObject() config?: SiteConfigInput;
 }
+
+export class UpdateSiteDto {
+  @IsOptional() @IsString() siteKey?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsArray() allowedDomains?: string[];
+}

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CustomerSetupWizard } from "../../../components/customer/CustomerSetupWizard";
 import { SiteTabs } from "../../../components/layout/SiteTabs";
 import { Topbar } from "../../../components/layout/Topbar";
 import { decodeSiteId, encodeSiteId } from "../../../lib/site-id";
@@ -18,54 +19,38 @@ export default async function SiteDetailPage({
       <div className="dashboard-page dashboard-page--lg">
         <SiteTabs siteId={siteId} />
         <div className="dashboard-grid dashboard-grid--two">
-          <section className="dashboard-card dashboard-stack">
-            <div>
-              <h2 className="dashboard-card-title">Setup</h2>
-              <p className="dashboard-copy">
-                Diese Bereiche brauchst du für die eigentliche Einrichtung des Kunden.
-              </p>
-            </div>
-
-            <div className="dashboard-hub-grid">
-              <SiteHubLink
-                href={`/sites/${siteSlug}/knowledge`}
-                title="Wissen"
-                description="FAQs, PDFs und weitere Inhalte für den Bot pflegen."
-              />
-              <SiteHubLink
-                href={`/sites/${siteSlug}/branding`}
-                title="Design"
-                description="Logo, Farben, Schrift und Begrüßung anpassen."
-              />
-              <SiteHubLink
-                href={`/sites/${siteSlug}/widget`}
-                title="Verhalten"
-                description="Ziel, Kontaktlogik und Chat-Ablauf des Bots steuern."
-              />
-              <SiteHubLink
-                href={`/sites/${siteSlug}/embedding`}
-                title="Einbindung"
-                description="Widget-Code, Kundenschlüssel und Einbau auf der Kundenseite prüfen."
-              />
-              <SiteHubLink
-                href={`/sites/${siteSlug}/reports`}
-                title="Berichte"
-                description="Empfänger, Versand und bisherige Berichte prüfen."
-              />
-            </div>
+          <section className="dashboard-stack">
+            <CustomerSetupWizard siteId={siteId} />
           </section>
 
           <section className="dashboard-card dashboard-stack">
             <div>
-              <h2 className="dashboard-card-title">Empfohlener Ablauf</h2>
-              <ol className="dashboard-list">
-                <li>Wissen mit FAQs und PDFs befüllen</li>
-                <li>Design und Auftritt des Bots prüfen</li>
-                <li>Verhalten, Ziel und Kontaktlogik festlegen</li>
-                <li>Einbindung auf der Website hinterlegen</li>
-                <li>Einbindung auf der Website testen</li>
-                <li>Anfragen, Chats und Berichte nach dem Start kontrollieren</li>
-              </ol>
+              <h2 className="dashboard-card-title">Betrieb & Technik</h2>
+              <p className="dashboard-copy">
+                Nach der Einrichtung arbeitest du je nach Aufgabe entweder im laufenden Betrieb oder
+                in den erweiterten technischen Bereichen.
+              </p>
+            </div>
+
+            <div className="dashboard-card dashboard-card--soft">
+              <h3 className="dashboard-card-title dashboard-card-title--sm">Betrieb</h3>
+              <div className="dashboard-hub-grid">
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/leads`}
+                  title="Anfragen"
+                  description="Neue Kontakte, Status und Nachverfolgung im Blick behalten."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/conversations`}
+                  title="Chats"
+                  description="Verläufe prüfen und auffällige Gespräche nachvollziehen."
+                />
+                <SiteHubLink
+                  href={`/sites/${siteSlug}/reports`}
+                  title="Berichte"
+                  description="Report-Empfänger, Historie und laufende Auswertungen einsehen."
+                />
+              </div>
             </div>
 
             <div className="dashboard-card dashboard-card--soft">

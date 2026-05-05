@@ -121,4 +121,41 @@ export class SitesService {
       .map((row) => this.normalizeSite(row))
       .filter((row): row is NormalizedSiteRow => row !== null);
   }
+
+  async updateSite(
+    siteId: string,
+    params: {
+      siteKey?: string;
+      name?: string;
+      allowedDomains?: string[];
+    },
+  ) {
+    const site = await this.getSite(siteId);
+    if (!site) {
+      throw new BadRequestException('site not found');
+    }
+
+    const nextName = typeof params.name === 'string' && params.name.trim() ? params.name.trim() : site.name;
+    const nextSiteKey =
+      typeof params.siteKey === 'string' && params.siteKey.trim()
+        ? resolveSiteKey(params.siteKey, site.site_key) || site.site_key
+        : site.site_key;
+    const nextAllowedDomains =
+      Array.isArray(params.allowedDomains) && params.allowedDomains.length > 0
+        ? params.allowedDomains.map((entry) => entry.trim()).filter(Boolean)
+        : site.allowed_domains;
+
+    await this.assertUniqueSiteKey(nextSiteKey, siteId);
+
+    await this.db.query(
+      `UPDATE sites
+       SET name = $2,
+           site_key = $3,
+           allowed_domains = $4
+       WHERE id = $1`,
+      [siteId, nextName, nextSiteKey, nextAllowedDomains],
+    );
+
+    return this.getSite(siteId);
+  }
 }

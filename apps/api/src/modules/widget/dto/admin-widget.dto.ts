@@ -157,6 +157,29 @@ export class UpdateWidgetConfigDto {
   @IsString()
   @MaxLength(12000)
   systemPrompt?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(120)
+  industry?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['lead_capture', 'support', 'product_advice', 'appointments'])
+  setupGoal?: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(100)
+  lastTestedAt?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(100)
+  goLiveAt?: string;
 }
 
 export class ListLeadsQueryDto {

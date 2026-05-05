@@ -20,6 +20,10 @@ type SiteConfig = {
   suggestedQuestionsByPath?: Record<string, string[]>;
   conversationFlow?: Record<string, unknown>;
   systemPrompt?: string;
+  industry?: string;
+  setupGoal?: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+  lastTestedAt?: string;
+  goLiveAt?: string;
 };
 
 type SiteRow = {
@@ -113,6 +117,10 @@ export class WidgetAdminSiteService {
       suggestedQuestionsByPath: config.suggestedQuestionsByPath || {},
       conversationFlow: config.conversationFlow || {},
       systemPrompt: config.systemPrompt || '',
+      industry: config.industry || '',
+      setupGoal: config.setupGoal || '',
+      lastTestedAt: config.lastTestedAt || '',
+      goLiveAt: config.goLiveAt || '',
       createdAt: row.created_at,
     };
   }
@@ -165,6 +173,10 @@ export class WidgetAdminSiteService {
       suggestedQuestionsByPath?: Record<string, string[]>;
       conversationFlow?: Record<string, unknown>;
       systemPrompt?: string;
+      industry?: string;
+      setupGoal?: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+      lastTestedAt?: string;
+      goLiveAt?: string;
       allowedDomains?: string[];
     },
   ) {
@@ -189,6 +201,10 @@ export class WidgetAdminSiteService {
         payload.suggestedQuestionsByPath ?? site.suggestedQuestionsByPath,
       conversationFlow: payload.conversationFlow ?? site.conversationFlow,
       systemPrompt: payload.systemPrompt ?? site.systemPrompt,
+      industry: payload.industry ?? site.industry,
+      setupGoal: payload.setupGoal ?? site.setupGoal,
+      lastTestedAt: payload.lastTestedAt ?? site.lastTestedAt,
+      goLiveAt: payload.goLiveAt ?? site.goLiveAt,
     };
 
     await this.db.query(
