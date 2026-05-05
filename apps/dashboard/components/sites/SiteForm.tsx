@@ -1,4 +1,5 @@
 import type { FormEvent } from "react";
+import type { IndustryTemplate } from "../../lib/industry-templates";
 import { Button } from "../shared/Button";
 import { Input } from "../shared/Input";
 import { Select } from "../shared/Select";
@@ -14,12 +15,17 @@ type SiteFormValues = {
 type SiteFormProps = {
   form: SiteFormValues;
   tenantOptions: Array<{ id: string; name: string }>;
-  industryOptions: Array<{ value: string; label: string; description?: string }>;
+  industryOptions: IndustryTemplate[];
   onChange: (next: SiteFormValues) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
 };
 
 export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSubmit }: SiteFormProps) {
+  const selectedTemplate = industryOptions.find((industry) => industry.key === form.industry);
+  const enabledModules =
+    selectedTemplate?.modules.filter((module) => module.isEnabled).map((module) => module.key) || [];
+  const recommendedQuestions = Object.values(selectedTemplate?.recommendedQuestions || {}).flat();
+
   return (
     <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm">
       <div className="dashboard-field">
@@ -54,20 +60,48 @@ export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSub
           id="site-industry"
           value={form.industry}
           onChange={(event) => onChange({ ...form, industry: event.target.value })}
+          required
         >
-          <option value="">Ohne Vorlage starten</option>
+          <option value="">Bitte Branche wählen</option>
           {industryOptions.map((industry) => (
-            <option key={industry.value} value={industry.value}>
+            <option key={industry.key} value={industry.key}>
               {industry.label}
             </option>
           ))}
         </Select>
-        {form.industry ? (
-          <div className="dashboard-copy dashboard-copy--muted" style={{ marginTop: 6 }}>
-            {industryOptions.find((option) => option.value === form.industry)?.description || ""}
-          </div>
-        ) : null}
       </div>
+
+      {selectedTemplate ? (
+        <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+          <strong>Vorlage wird direkt angewendet</strong>
+          <div className="dashboard-info-row">
+            <span>Startziel</span>
+            <span>{formatGoal(selectedTemplate.setupGoal)}</span>
+          </div>
+          <div className="dashboard-info-row">
+            <span>Begrüßung</span>
+            <span>{selectedTemplate.welcomeMessage}</span>
+          </div>
+          {recommendedQuestions.length > 0 ? (
+            <div className="dashboard-info-row">
+              <span>Typische Fragen</span>
+              <span>{recommendedQuestions.slice(0, 2).join(" · ")}</span>
+            </div>
+          ) : null}
+          {enabledModules.length > 0 ? (
+            <div className="dashboard-info-row">
+              <span>Aktive Funktionen</span>
+              <span>{enabledModules.map(formatModule).join(", ")}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="dashboard-card dashboard-card--soft">
+          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+            Wähle eine Branche aus. Danach werden Ziel, Begrüßung, Standardfragen und empfohlene Funktionen automatisch vorbereitet.
+          </p>
+        </div>
+      )}
 
       <details className="dashboard-card dashboard-card--soft">
         <summary
@@ -119,7 +153,51 @@ export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSub
         </div>
       </details>
 
-      <Button type="submit">Kunde anlegen</Button>
+      <Button type="submit">Kunde mit Vorlage anlegen</Button>
     </form>
   );
+}
+
+function formatGoal(goal: string) {
+  if (goal === "lead_capture") {
+    return "Leads sammeln";
+  }
+
+  if (goal === "support") {
+    return "Support beantworten";
+  }
+
+  if (goal === "product_advice") {
+    return "Produkte empfehlen";
+  }
+
+  if (goal === "appointments") {
+    return "Termine vorbereiten";
+  }
+
+  return goal;
+}
+
+function formatModule(moduleKey: string) {
+  if (moduleKey === "lead-sales") {
+    return "Lead/Sales";
+  }
+
+  if (moduleKey === "knowledge-faq") {
+    return "Wissen/FAQ";
+  }
+
+  if (moduleKey === "ecommerce-product-advisor") {
+    return "Produktberater";
+  }
+
+  if (moduleKey === "property-ticketing") {
+    return "Ticket-Erstellung";
+  }
+
+  if (moduleKey === "reporting-insights") {
+    return "Berichte";
+  }
+
+  return moduleKey;
 }

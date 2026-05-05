@@ -136,9 +136,15 @@ export default function SitesPage() {
       allowedDomains: [form.domain.trim()].filter(Boolean),
       config: {},
     };
+    const templateMap = templatesByKey(templates);
 
     if (!body.tenantId) {
       setErr("Bitte zuerst einen Mandanten auswählen oder anlegen.");
+      return;
+    }
+
+    if (!form.industry || !templateMap[form.industry]) {
+      setErr("Bitte eine Branche auswählen. Die passende Vorlage wird beim Anlegen automatisch angewendet.");
       return;
     }
 
@@ -157,8 +163,7 @@ export default function SitesPage() {
       return;
     }
 
-    const templateMap = templatesByKey(templates);
-    if (data?.id && form.industry && templateMap[form.industry]) {
+    if (data?.id) {
       const template = templateMap[form.industry];
       const response = await fetch(`/api/industry-templates/${data.id}/apply`, {
         method: "POST",
@@ -172,9 +177,9 @@ export default function SitesPage() {
         setErr("Kunde wurde angelegt, aber die Branchenvorlage konnte nicht vollständig angewendet werden.");
       } else {
         setMsg(`Kunde erfolgreich angelegt. Vorlage „${template.label}“ wurde angewendet.`);
+        window.location.href = `/sites/${encodeSiteId(data.id)}/setup`;
+        return;
       }
-    } else {
-      setMsg("Kunde erfolgreich angelegt.");
     }
 
     setForm({
@@ -239,11 +244,7 @@ export default function SitesPage() {
             <SiteForm
               form={form}
               tenantOptions={tenants}
-              industryOptions={templates.map((template) => ({
-                value: template.key,
-                label: template.label,
-                description: `${formatGoal(template.setupGoal)} als Startziel`,
-              }))}
+              industryOptions={templates}
               onChange={setForm}
               onSubmit={createSite}
             />
