@@ -471,6 +471,38 @@ textarea {
   align-items: flex-start;
 }
 
+.dashboard-setup-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.dashboard-setup-step {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #e7e1d9;
+  border-radius: 14px;
+  background: #fcfbf8;
+  color: inherit;
+  text-decoration: none;
+}
+
+.dashboard-setup-step__number {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .dashboard-tab-row {
   display: flex;
   flex-wrap: wrap;

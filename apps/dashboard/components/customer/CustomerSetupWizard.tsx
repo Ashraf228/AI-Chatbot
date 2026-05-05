@@ -29,6 +29,8 @@ type SiteDetails = {
   logoUrl: string;
   brandColor: string;
   welcomeMessage: string;
+  systemPrompt: string;
+  privacyUrl: string;
   industry: string;
   setupGoal: "" | "lead_capture" | "support" | "product_advice" | "appointments";
   lastTestedAt: string;
@@ -46,6 +48,33 @@ const GOAL_OPTIONS = [
   { value: "support", label: "Support beantworten" },
   { value: "product_advice", label: "Produkte empfehlen" },
   { value: "appointments", label: "Termine vorbereiten" },
+];
+
+type SetupStepKey =
+  | "basics"
+  | "industry"
+  | "template"
+  | "knowledge"
+  | "goal"
+  | "behavior"
+  | "design"
+  | "embedding"
+  | "testing"
+  | "live";
+
+type SetupStepState = Record<SetupStepKey, boolean>;
+
+const SETUP_STEPS: Array<{ key: SetupStepKey; label: string; anchor: string }> = [
+  { key: "basics", label: "Firma & Domain", anchor: "setup-step-basics" },
+  { key: "industry", label: "Branche", anchor: "setup-step-industry" },
+  { key: "template", label: "Vorlage", anchor: "setup-step-template" },
+  { key: "knowledge", label: "Wissen", anchor: "setup-step-knowledge" },
+  { key: "goal", label: "Bot-Ziel", anchor: "setup-step-goal" },
+  { key: "behavior", label: "Verhalten", anchor: "setup-step-behavior" },
+  { key: "design", label: "Design", anchor: "setup-step-design" },
+  { key: "embedding", label: "Einbindung", anchor: "setup-step-embedding" },
+  { key: "testing", label: "Testen", anchor: "setup-step-testing" },
+  { key: "live", label: "Live", anchor: "setup-step-live" },
 ];
 
 function formatDate(value: string) {
@@ -67,6 +96,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [basicsForm, setBasicsForm] = useState({ name: "", domain: "" });
+  const [behaviorForm, setBehaviorForm] = useState({ systemPrompt: "" });
 
   async function refreshStatus() {
     const response = await fetch(`/api/sites/${siteId}/status`, { cache: "no-store" });
@@ -114,6 +144,8 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       logoUrl: siteData.logoUrl || "",
       brandColor: siteData.brandColor || "#b55400",
       welcomeMessage: siteData.welcomeMessage || "",
+      systemPrompt: siteData.systemPrompt || "",
+      privacyUrl: siteData.privacyUrl || "",
       industry: siteData.industry || "",
       setupGoal: siteData.setupGoal || "",
       lastTestedAt: siteData.lastTestedAt || "",
@@ -128,6 +160,9 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     setBasicsForm({
       name: nextSite.name,
       domain: nextSite.allowedDomains[0] || "",
+    });
+    setBehaviorForm({
+      systemPrompt: nextSite.systemPrompt,
     });
     setKnowledge(Array.isArray(knowledgeData) ? knowledgeData : []);
     setLoading(false);
@@ -145,13 +180,15 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
 
   const progress = useMemo(() => {
     if (!site) {
-      return { completed: 0, total: 8 };
+      return { completed: 0, total: SETUP_STEPS.length, steps: {} as SetupStepState };
     }
 
     const basicsDone = Boolean(site.name.trim() && site.allowedDomains.length > 0);
     const industryDone = Boolean(site.industry);
+    const templateDone = Boolean(site.industry && site.setupGoal && (site.systemPrompt || site.welcomeMessage));
     const knowledgeDone = counts.total > 0;
     const goalDone = Boolean(site.setupGoal);
+    const behaviorDone = Boolean(site.systemPrompt || site.welcomeMessage);
     const designDone = Boolean(
       site.logoUrl ||
         (site.brandColor && site.brandColor !== "#b55400") ||
@@ -160,25 +197,31 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     const embeddingDone = Boolean(site.siteKey && site.allowedDomains.length > 0);
     const testingDone = Boolean(site.lastTestedAt);
     const liveDone = Boolean(site.goLiveAt);
+    const steps: SetupStepState = {
+      basics: basicsDone,
+      industry: industryDone,
+      template: templateDone,
+      knowledge: knowledgeDone,
+      goal: goalDone,
+      behavior: behaviorDone,
+      design: designDone,
+      embedding: embeddingDone,
+      testing: testingDone,
+      live: liveDone,
+    };
 
-    const completed = [
-      basicsDone,
-      industryDone,
-      knowledgeDone,
-      goalDone,
-      designDone,
-      embeddingDone,
-      testingDone,
-      liveDone,
-    ].filter(Boolean).length;
+    const completed = Object.values(steps).filter(Boolean).length;
 
     return {
       completed,
-      total: 8,
+      total: SETUP_STEPS.length,
+      steps,
       basicsDone,
       industryDone,
+      templateDone,
       knowledgeDone,
       goalDone,
+      behaviorDone,
       designDone,
       embeddingDone,
       testingDone,
@@ -245,6 +288,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             ...current,
             industry: data.industry ?? current.industry,
             setupGoal: data.setupGoal ?? current.setupGoal,
+            systemPrompt: data.systemPrompt ?? current.systemPrompt,
             lastTestedAt: data.lastTestedAt ?? current.lastTestedAt,
             goLiveAt: data.goLiveAt ?? current.goLiveAt,
           }
@@ -306,8 +350,10 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   const canGoLive =
     progress.basicsDone &&
     progress.industryDone &&
+    progress.templateDone &&
     progress.knowledgeDone &&
     progress.goalDone &&
+    progress.behaviorDone &&
     progress.designDone &&
     progress.embeddingDone &&
     progress.testingDone;
@@ -341,9 +387,19 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
 
         {message ? <p className="dashboard-status dashboard-status--success">{message}</p> : null}
         {error ? <ErrorState message={error} /> : null}
+
+        <div className="dashboard-setup-steps">
+          {SETUP_STEPS.map((step, index) => (
+            <a key={step.key} href={`#${step.anchor}`} className="dashboard-setup-step">
+              <span className="dashboard-setup-step__number">{index + 1}</span>
+              <span>{step.label}</span>
+              <CustomerStatusBadge status={progress.steps[step.key] ? "done" : "pending"} />
+            </a>
+          ))}
+        </div>
       </section>
 
-      <section className="dashboard-card dashboard-stack">
+      <section id="setup-step-basics" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
             <strong>1. Firma & Domain</strong>
@@ -374,7 +430,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </Button>
       </section>
 
-      <section className="dashboard-card dashboard-stack">
+      <section id="setup-step-industry" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
             <strong>2. Branche auswählen</strong>
@@ -407,10 +463,22 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         >
           {savingKey === "industry" ? "Speichert..." : "Branche speichern"}
         </Button>
+      </section>
+
+      <section id="setup-step-template" className="dashboard-card dashboard-stack">
+        <div className="dashboard-info-row">
+          <div>
+            <strong>3. Vorlage anwenden</strong>
+            <p className="dashboard-copy dashboard-copy--muted">
+              Setzt Standardziel, Begrüßung, typische Fragen und empfohlene Funktionen für diese Branche.
+            </p>
+          </div>
+          <CustomerStatusBadge status={progress.templateDone ? "done" : "pending"} />
+        </div>
         <div className="dashboard-card dashboard-card--soft">
-          <strong>Branchenvorlage</strong>
+          <strong>{templatesByKey(templates)[site.industry]?.label || "Keine Branche ausgewählt"}</strong>
           <p className="dashboard-copy dashboard-copy--muted">
-            Wendet Standardziel, Begrüßung, Fragen und empfohlene Funktionen für diese Branche an.
+            Nach dem Anwenden kann ein Mitarbeiter nur noch die Abweichungen prüfen, statt alles manuell einzustellen.
           </p>
           <Button
             type="button"
@@ -423,10 +491,10 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section className="dashboard-card dashboard-stack">
+      <section id="setup-step-knowledge" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
-            <strong>3. Wissen importieren</strong>
+            <strong>4. Wissen importieren</strong>
             <p className="dashboard-copy dashboard-copy--muted">
               Hinterlege FAQs und PDFs, damit der Bot fachlich sauber antworten kann.
             </p>
@@ -454,10 +522,10 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section className="dashboard-card dashboard-stack">
+      <section id="setup-step-goal" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
-            <strong>4. Bot-Ziel festlegen</strong>
+            <strong>5. Bot-Ziel festlegen</strong>
             <p className="dashboard-copy dashboard-copy--muted">
               Lege fest, worauf der Bot im Gespräch hauptsächlich hinausarbeiten soll.
             </p>
@@ -497,10 +565,52 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section className="dashboard-card dashboard-stack">
+      <section id="setup-step-behavior" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
-            <strong>5. Design einstellen</strong>
+            <strong>6. Verhalten festlegen</strong>
+            <p className="dashboard-copy dashboard-copy--muted">
+              Beschreibe in normalen Worten, wie der Bot sprechen und führen soll. Das bleibt bewusst getrennt vom Design.
+            </p>
+          </div>
+          <CustomerStatusBadge status={progress.behaviorDone ? "done" : "pending"} />
+        </div>
+        <label className="dashboard-field">
+          <span className="dashboard-field-label">Gesprächsanweisung</span>
+          <textarea
+            className="dashboard-textarea"
+            rows={5}
+            value={behaviorForm.systemPrompt}
+            onChange={(event) =>
+              setBehaviorForm((current) => ({ ...current, systemPrompt: event.target.value }))
+            }
+            placeholder="Beispiel: Antworte professionell, stelle maximal eine Rückfrage und leite bei konkretem Bedarf zur Kontaktaufnahme."
+          />
+        </label>
+        <div className="dashboard-inline dashboard-wrap">
+          <Button
+            type="button"
+            onClick={() =>
+              patchSetup(
+                { systemPrompt: behaviorForm.systemPrompt.trim() },
+                "Verhalten gespeichert.",
+                "behavior",
+              )
+            }
+            disabled={savingKey === "behavior"}
+          >
+            {savingKey === "behavior" ? "Speichert..." : "Verhalten speichern"}
+          </Button>
+          <Link href={`/sites/${siteSlug}/widget`} className="dashboard-button dashboard-button--secondary">
+            Detailseite öffnen
+          </Link>
+        </div>
+      </section>
+
+      <section id="setup-step-design" className="dashboard-card dashboard-stack">
+        <div className="dashboard-info-row">
+          <div>
+            <strong>7. Design einstellen</strong>
             <p className="dashboard-copy dashboard-copy--muted">
               Logo, Farben und Begrüßung anpassen, damit der Bot zum Kundenauftritt passt.
             </p>
@@ -519,10 +629,10 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </Link>
       </section>
 
-      <section className="dashboard-card dashboard-stack">
+      <section id="setup-step-embedding" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
-            <strong>6. Einbindung</strong>
+            <strong>8. Einbindung</strong>
             <p className="dashboard-copy dashboard-copy--muted">
               Prüfe Einbindungsschlüssel, Script-Tag und erlaubte Domain für die Kundenseite.
             </p>
@@ -541,7 +651,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       <section id="setup-step-testing" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
-            <strong>7. Testen</strong>
+            <strong>9. Testen</strong>
             <p className="dashboard-copy dashboard-copy--muted">
               Prüfe den Bot einmal im Test und markiere die Einrichtung anschließend als geprüft.
             </p>
@@ -584,10 +694,10 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section className="dashboard-card dashboard-stack">
+      <section id="setup-step-live" className="dashboard-card dashboard-stack">
         <div className="dashboard-info-row">
           <div>
-            <strong>8. Live schalten</strong>
+            <strong>10. Live schalten</strong>
             <p className="dashboard-copy dashboard-copy--muted">
               Schalte den Kunden live, sobald Einrichtung, Einbindung und Test abgeschlossen sind.
             </p>
