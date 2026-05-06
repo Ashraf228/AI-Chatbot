@@ -329,6 +329,43 @@ export class WidgetAdminReportsService {
     return { ok: true, deletedId: id };
   }
 
+  async deleteReportRun(id: string, actor: { actorId?: string; actorRole?: string } = {}) {
+    const deleted = await this.db.query<{ id: string; site_id: string | null }>(
+      `DELETE FROM report_runs WHERE id = $1 RETURNING id, site_id`,
+      [id],
+    );
+    const row = deleted.rows[0];
+    if (!row) {
+      throw new NotFoundException('Report run not found');
+    }
+
+    if (row.site_id) {
+      const site = await this.db.query<{ tenant_id: string | null }>(
+        `SELECT tenant_id FROM sites WHERE id = $1 LIMIT 1`,
+        [row.site_id],
+      );
+      await this.db.query(
+        `INSERT INTO audit_logs(
+           id, site_id, tenant_id, actor_id, actor_role, action, resource_type, resource_id, metadata, created_at
+         )
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())`,
+        [
+          randomUUID(),
+          row.site_id,
+          site.rows[0]?.tenant_id || null,
+          actor.actorId || 'dashboard',
+          actor.actorRole || 'admin',
+          'report.deleted',
+          'report',
+          id,
+          JSON.stringify({}),
+        ],
+      );
+    }
+
+    return { ok: true, deletedReportRunId: id };
+  }
+
   async runReport(payload: { siteId?: string; frequency?: string }) {
     if (!payload.siteId) {
       throw new BadRequestException('siteId is required to run a report manually.');

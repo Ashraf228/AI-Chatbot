@@ -1,6 +1,8 @@
-import { Controller, Delete, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../db/prisma.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
+import { toCsv } from '../utils/csv';
 
 type ConversationListRow = {
   id: string;
@@ -26,6 +28,18 @@ type ConversationMessageRow = {
   role: string;
   content: string;
   created_at: string;
+};
+
+type ConversationExportRow = {
+  conversation_id: string;
+  tenant_id: string;
+  site_id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  message_created_at: string;
+  conversation_created_at: string;
+  last_active_at: string;
 };
 
 @UseGuards(AdminKeyGuard)
@@ -66,6 +80,80 @@ export class ConversationsController {
     return res.rows;
   }
 
+  @Get('export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="chats.csv"')
+  async export(
+    @Query('siteId') siteId?: string,
+    @Query('actorId') actorId?: string,
+    @Query('actorRole') actorRole?: string,
+  ) {
+    const params: string[] = [];
+    const where: string[] = [];
+
+    if (siteId) {
+      params.push(siteId);
+      where.push(`c.site_id = $${params.length}`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const res = await this.db.query<ConversationExportRow>(
+      `SELECT
+         c.id AS conversation_id,
+         c.tenant_id,
+         c.site_id,
+         c.session_id,
+         m.role,
+         m.content,
+         m.created_at AS message_created_at,
+         c.created_at AS conversation_created_at,
+         c.last_active_at
+       FROM conversations c
+       JOIN messages m ON m.conversation_id = c.id
+       ${whereSql}
+       ORDER BY c.last_active_at DESC, m.created_at ASC
+       LIMIT 5000`,
+      params,
+    );
+
+    if (siteId) {
+      await this.writeAuditLog({
+        siteId,
+        actorId,
+        actorRole,
+        action: 'conversations.exported',
+        resourceType: 'conversation',
+        resourceId: siteId,
+        metadata: { rows: res.rows.length },
+      });
+    }
+
+    return toCsv([
+      [
+        'conversationId',
+        'tenantId',
+        'siteId',
+        'sessionId',
+        'role',
+        'content',
+        'messageCreatedAt',
+        'conversationCreatedAt',
+        'lastActiveAt',
+      ],
+      ...res.rows.map((row) => [
+        row.conversation_id,
+        row.tenant_id,
+        row.site_id,
+        row.session_id,
+        row.role,
+        row.content,
+        row.message_created_at,
+        row.conversation_created_at,
+        row.last_active_at,
+      ]),
+    ]);
+  }
+
   @Get(':id')
   async detail(@Param('id') id: string) {
     const conv = await this.db.query<ConversationRow>(
@@ -92,26 +180,100 @@ export class ConversationsController {
   }
 
   @Delete(':id')
-  async deleteOne(@Param('id') id: string) {
+  async deleteOne(
+    @Param('id') id: string,
+    @Query('actorId') actorId?: string,
+    @Query('actorRole') actorRole?: string,
+  ) {
+    const existing = await this.db.query<{ site_id: string; tenant_id: string }>(
+      `SELECT site_id, tenant_id FROM conversations WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+
     await this.db.query(
       `DELETE FROM conversations WHERE id = $1`,
       [id],
     );
 
+    if (existing.rows[0]) {
+      await this.writeAuditLog({
+        siteId: existing.rows[0].site_id,
+        tenantId: existing.rows[0].tenant_id,
+        actorId,
+        actorRole,
+        action: 'conversation.deleted',
+        resourceType: 'conversation',
+        resourceId: id,
+        metadata: {},
+      });
+    }
+
     return { ok: true, deletedConversationId: id };
   }
 
   @Delete()
-  async deleteBySite(@Query('siteId') siteId?: string) {
+  async deleteBySite(
+    @Query('siteId') siteId?: string,
+    @Query('actorId') actorId?: string,
+    @Query('actorRole') actorRole?: string,
+  ) {
     if (!siteId) {
       return { message: 'siteId missing' };
     }
 
-    await this.db.query(
-      `DELETE FROM conversations WHERE site_id = $1`,
+    const deleted = await this.db.query<{ id: string; tenant_id: string }>(
+      `DELETE FROM conversations WHERE site_id = $1 RETURNING id, tenant_id`,
       [siteId],
     );
 
+    await this.writeAuditLog({
+      siteId,
+      actorId,
+      actorRole,
+      action: 'conversations.deleted',
+      resourceType: 'conversation',
+      resourceId: siteId,
+      metadata: { count: deleted.rows.length },
+    });
+
     return { ok: true, deletedSiteId: siteId };
+  }
+
+  private async writeAuditLog(input: {
+    siteId: string;
+    tenantId?: string;
+    actorId?: string;
+    actorRole?: string;
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    metadata: Record<string, unknown>;
+  }) {
+    let tenantId = input.tenantId;
+    if (!tenantId) {
+      const site = await this.db.query<{ tenant_id: string | null }>(
+        `SELECT tenant_id FROM sites WHERE id = $1 LIMIT 1`,
+        [input.siteId],
+      );
+      tenantId = site.rows[0]?.tenant_id || undefined;
+    }
+
+    await this.db.query(
+      `INSERT INTO audit_logs(
+         id, site_id, tenant_id, actor_id, actor_role, action, resource_type, resource_id, metadata, created_at
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())`,
+      [
+        randomUUID(),
+        input.siteId,
+        tenantId || null,
+        input.actorId || 'dashboard',
+        input.actorRole || 'admin',
+        input.action,
+        input.resourceType,
+        input.resourceId,
+        JSON.stringify(input.metadata),
+      ],
+    );
   }
 }

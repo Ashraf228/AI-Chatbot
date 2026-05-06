@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ReportSubscriptionForm } from "./ReportSubscriptionForm";
 import { EmptyState } from "../shared/EmptyState";
 import { ErrorState } from "../shared/ErrorState";
+import { Button } from "../shared/Button";
 
 type ReportHistoryTableProps = {
   siteId?: string;
@@ -28,22 +29,40 @@ export function ReportHistoryTable({ siteId }: ReportHistoryTableProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function load() {
-      const params = new URLSearchParams();
-      if (siteId) params.set("siteId", siteId);
-      const res = await fetch(`/api/widget/reports/history?${params.toString()}`, {
-        cache: "no-store",
-      });
-      const data = await res.json().catch(() => []);
-      if (!res.ok) {
-        setError(data?.message || "Report-Historie konnte nicht geladen werden.");
-        return;
-      }
-      setRuns(Array.isArray(data) ? data : []);
-    }
-
     load();
   }, [siteId]);
+
+  async function load() {
+    const params = new URLSearchParams();
+    if (siteId) params.set("siteId", siteId);
+    const res = await fetch(`/api/widget/reports/history?${params.toString()}`, {
+      cache: "no-store",
+    });
+    const data = await res.json().catch(() => []);
+    if (!res.ok) {
+      setError(data?.message || "Report-Historie konnte nicht geladen werden.");
+      return;
+    }
+    setRuns(Array.isArray(data) ? data : []);
+  }
+
+  async function deleteReportRun(id: string) {
+    const confirmed = window.confirm("Diesen Bericht wirklich löschen?");
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await fetch(`/api/widget/reports/history/${id}`, {
+      method: "DELETE",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setError(data?.message || "Bericht konnte nicht gelöscht werden.");
+      return;
+    }
+
+    await load();
+  }
 
   return (
     <div className="dashboard-grid">
@@ -60,7 +79,7 @@ export function ReportHistoryTable({ siteId }: ReportHistoryTableProps) {
             <table className="dashboard-table dashboard-table--wide">
               <thead>
                 <tr>
-                  {["Zeit", "Site", "Frequenz", "Status", "Empfänger", "Betreff"].map((label) => (
+                  {["Zeit", "Site", "Frequenz", "Status", "Empfänger", "Betreff", "Aktionen"].map((label) => (
                     <th key={label} className="dashboard-th">
                       {label}
                     </th>
@@ -84,6 +103,11 @@ export function ReportHistoryTable({ siteId }: ReportHistoryTableProps) {
                           {run.errorMessage}
                         </div>
                       )}
+                    </td>
+                    <td className="dashboard-td">
+                      <Button type="button" variant="secondary" onClick={() => deleteReportRun(run.id)}>
+                        Löschen
+                      </Button>
                     </td>
                   </tr>
                 ))}

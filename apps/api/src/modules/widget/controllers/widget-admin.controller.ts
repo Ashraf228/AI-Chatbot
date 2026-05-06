@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminKeyGuard } from '../../../utils/admin.guard';
 import { WidgetAdminService } from '../services/widget-admin.service';
 import {
@@ -43,9 +43,33 @@ export class WidgetAdminController {
     return this.widgetAdminService.listLeads(query);
   }
 
+  @Get('leads/export')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="anfragen.csv"')
+  async exportLeads(
+    @Query() query: ListLeadsQueryDto,
+    @Query('actorId') actorId?: string,
+    @Query('actorRole') actorRole?: string,
+  ) {
+    return this.widgetAdminService.exportLeads({
+      ...query,
+      actorId,
+      actorRole,
+    });
+  }
+
   @Patch('leads/:id')
   async updateLead(@Param('id') id: string, @Body() body: UpdateLeadDto) {
     return this.widgetAdminService.updateLead(id, body);
+  }
+
+  @Delete('leads/:id')
+  async deleteLead(
+    @Param('id') id: string,
+    @Query('actorId') actorId?: string,
+    @Query('actorRole') actorRole?: string,
+  ) {
+    return this.widgetAdminService.deleteLead(id, { actorId, actorRole });
   }
 
   @Get('events/summary')
@@ -66,6 +90,15 @@ export class WidgetAdminController {
   @Get('reports/history')
   async listReportRuns(@Query() query: ListSiteScopedQueryDto) {
     return this.widgetAdminService.listReportRuns(query.siteId);
+  }
+
+  @Delete('reports/history/:id')
+  async deleteReportRun(
+    @Param('id') id: string,
+    @Query('actorId') actorId?: string,
+    @Query('actorRole') actorRole?: string,
+  ) {
+    return this.widgetAdminService.deleteReportRun(id, { actorId, actorRole });
   }
 
   @Post('report-subscriptions')

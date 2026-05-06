@@ -40,7 +40,12 @@ export default async function SiteAdvancedPage({
 }
 
 function normalizeAdvancedSection(section?: string): CustomerAdvancedSection {
-  if (section === "features" || section === "connections" || section === "automations") {
+  if (
+    section === "features" ||
+    section === "connections" ||
+    section === "automations" ||
+    section === "privacy"
+  ) {
     return section;
   }
 

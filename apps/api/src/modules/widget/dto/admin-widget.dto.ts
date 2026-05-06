@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsInt,
   IsIn,
   IsObject,
   IsOptional,
@@ -11,6 +12,8 @@ import {
   IsUrl,
   Matches,
   MaxLength,
+  Max,
+  Min,
 } from 'class-validator';
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -205,6 +208,27 @@ export class UpdateWidgetConfigDto {
   @IsString()
   @MaxLength(100)
   goLiveAt?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  chatRetentionDays?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  leadRetentionDays?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  reportRetentionDays?: number;
 }
 
 export class ListLeadsQueryDto {

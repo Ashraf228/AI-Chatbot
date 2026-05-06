@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchDashboardBackend, getAccessibleSiteIds } from "@/lib/dashboard-api";
-import { requireAuth, requireSession } from "@/lib/require-auth";
+import { requireSession } from "@/lib/require-auth";
 
 export async function GET(
   _req: Request,
@@ -54,25 +54,8 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireAuth();
-    if (auth) return auth;
-
-    const base = process.env.BACKEND_BASE_URL?.trim();
-    const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
-
-    if (!base) {
-      return NextResponse.json(
-        { message: "BACKEND_BASE_URL missing" },
-        { status: 500 }
-      );
-    }
-
-    if (!adminKey) {
-      return NextResponse.json(
-        { message: "ADMIN_KEY missing" },
-        { status: 500 }
-      );
-    }
+    const auth = await requireSession();
+    if (auth.response) return auth.response;
 
     const { id } = await context.params;
     if (!id) {
@@ -82,11 +65,12 @@ export async function DELETE(
       );
     }
 
-    const r = await fetch(`${base}/admin/conversations/${id}`, {
+    const params = new URLSearchParams({
+      actorId: auth.session.sub,
+      actorRole: auth.session.role,
+    });
+    const r = await fetchDashboardBackend(`/admin/conversations/${id}?${params.toString()}`, {
       method: "DELETE",
-      headers: {
-        "X-DASHBOARD-TOKEN": adminKey,
-      },
     });
 
     const text = await r.text();

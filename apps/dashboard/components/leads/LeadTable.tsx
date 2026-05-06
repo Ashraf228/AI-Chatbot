@@ -7,6 +7,7 @@ import { EmptyState } from "../shared/EmptyState";
 import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
 import { Select } from "../shared/Select";
+import { Button } from "../shared/Button";
 
 type LeadTableProps = {
   siteId?: string;
@@ -60,9 +61,38 @@ export function LeadTable({ siteId }: LeadTableProps) {
     load();
   }
 
+  async function deleteLead(id: string) {
+    const confirmed = window.confirm("Diese Anfrage wirklich löschen?");
+    if (!confirmed) {
+      return;
+    }
+
+    const res = await fetch(`/api/widget/leads/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data?.message || "Anfrage konnte nicht gelöscht werden.");
+      return;
+    }
+    load();
+  }
+
+  function exportLeads() {
+    const params = new URLSearchParams();
+    if (siteId) params.set("siteId", siteId);
+    if (status) params.set("status", status);
+    window.location.href = `/api/widget/leads/export?${params.toString()}`;
+  }
+
   return (
     <div className="dashboard-card">
-      <LeadFilters status={status} onStatusChange={setStatus} />
+      <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
+        <LeadFilters status={status} onStatusChange={setStatus} />
+        <Button type="button" variant="secondary" onClick={exportLeads}>
+          Anfragen exportieren
+        </Button>
+      </div>
 
       {loading ? (
         <LoadingState />
@@ -75,7 +105,7 @@ export function LeadTable({ siteId }: LeadTableProps) {
           <table className="dashboard-table" style={{ minWidth: 860 }}>
             <thead>
               <tr>
-                {["Anfrage", "Kunde", "Kontakt", "Status", "Nachricht", "Zeit"].map((cell) => (
+                {["Anfrage", "Kunde", "Kontakt", "Status", "Nachricht", "Zeit", "Aktionen"].map((cell) => (
                   <th key={cell} className="dashboard-th">
                     {cell}
                   </th>
@@ -103,12 +133,17 @@ export function LeadTable({ siteId }: LeadTableProps) {
                         <option value="new">Neu</option>
                         <option value="contacted">Kontaktiert</option>
                         <option value="qualified">Qualifiziert</option>
-                        <option value="lost">Verloren</option>
+                        <option value="closed">Abgeschlossen</option>
                       </Select>
                     </div>
                   </td>
                   <td className="dashboard-td">{lead.message || "-"}</td>
                   <td className="dashboard-td">{new Date(lead.createdAt).toLocaleString()}</td>
+                  <td className="dashboard-td">
+                    <Button type="button" variant="secondary" onClick={() => deleteLead(lead.id)}>
+                      Löschen
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>

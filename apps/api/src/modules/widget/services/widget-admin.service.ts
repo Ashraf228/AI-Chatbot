@@ -37,6 +37,17 @@ export class WidgetAdminService {
     return this.leadAdmin.updateLead(id, payload);
   }
 
+  exportLeads(params: Parameters<WidgetAdminLeadsService['exportLeads']>[0]) {
+    return this.leadAdmin.exportLeads(params);
+  }
+
+  deleteLead(
+    id: string,
+    actor: Parameters<WidgetAdminLeadsService['deleteLead']>[1],
+  ) {
+    return this.leadAdmin.deleteLead(id, actor);
+  }
+
   getSummary(siteId?: string) {
     return this.reportsAdmin.getSummary(siteId);
   }
@@ -68,6 +79,13 @@ export class WidgetAdminService {
 
   deleteReportSubscription(id: string) {
     return this.reportsAdmin.deleteReportSubscription(id);
+  }
+
+  deleteReportRun(
+    id: string,
+    actor: Parameters<WidgetAdminReportsService['deleteReportRun']>[1],
+  ) {
+    return this.reportsAdmin.deleteReportRun(id, actor);
   }
 
   runReport(payload: Parameters<WidgetAdminReportsService['runReport']>[0]) {

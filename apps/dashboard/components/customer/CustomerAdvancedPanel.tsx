@@ -2,10 +2,12 @@ import Link from "next/link";
 import { SiteAgentsForm } from "../agents/SiteAgentsForm";
 import { SiteIntegrationsForm } from "../integrations/SiteIntegrationsForm";
 import { SiteModulesForm } from "../modules/SiteModulesForm";
+import { CustomerAuditLogTable } from "./CustomerAuditLogTable";
+import { CustomerRetentionSettings } from "./CustomerRetentionSettings";
 import type { DashboardSessionRole } from "../../lib/auth";
 import { encodeSiteId } from "../../lib/site-id";
 
-export type CustomerAdvancedSection = "overview" | "features" | "connections" | "automations";
+export type CustomerAdvancedSection = "overview" | "features" | "connections" | "automations" | "privacy";
 
 type CustomerAdvancedPanelProps = {
   siteId: string;
@@ -53,6 +55,12 @@ export function CustomerAdvancedPanel({
               description="Abläufe, Tickets, Webhooks und Automationsschritte einsehen."
               isActive={activeSection === "automations"}
             />
+            <AdvancedLink
+              href={`/sites/${siteSlug}/advanced?section=privacy`}
+              title="Datenschutz"
+              description="Datenaufbewahrung für Chats, Anfragen und Berichte festlegen."
+              isActive={activeSection === "privacy"}
+            />
           </div>
         </div>
 
@@ -96,6 +104,12 @@ export function CustomerAdvancedPanel({
             {section === "features" ? <SiteModulesForm siteId={siteId} /> : null}
             {section === "connections" ? <SiteIntegrationsForm siteId={siteId} /> : null}
             {section === "automations" ? <SiteAgentsForm siteId={siteId} /> : null}
+            {section === "privacy" ? (
+              <>
+                <CustomerRetentionSettings siteId={siteId} />
+                {role === "admin" ? <CustomerAuditLogTable siteId={siteId} /> : null}
+              </>
+            ) : null}
           </section>
         ) : null}
       </section>
@@ -133,6 +147,8 @@ function getSectionTitle(section: CustomerAdvancedSection) {
       return "Verbindungen";
     case "automations":
       return "Automationen";
+    case "privacy":
+      return "Datenschutz";
     default:
       return "Übersicht";
   }

@@ -131,6 +131,13 @@ export function ConversationPanel({
     await loadConversations(lockedSiteId || siteId);
   }
 
+  function exportConversations() {
+    const currentSiteId = lockedSiteId || siteId;
+    const params = new URLSearchParams();
+    if (currentSiteId) params.set("siteId", currentSiteId);
+    window.location.href = `/api/conversations/export?${params.toString()}`;
+  }
+
   useEffect(() => {
     if (lockedSiteId) {
       setSiteId(lockedSiteId);
@@ -153,6 +160,9 @@ export function ConversationPanel({
             disabled={Boolean(lockedSiteId)}
           />
           <Button onClick={() => loadConversations(lockedSiteId || siteId)}>Aktualisieren</Button>
+          <Button type="button" variant="secondary" onClick={exportConversations}>
+            Chats exportieren
+          </Button>
         </div>
 
         {lockedSiteId ? (

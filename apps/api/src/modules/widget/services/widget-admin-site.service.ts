@@ -36,6 +36,9 @@ type SiteConfig = {
   lastTestFeedback?: string;
   lastTestedAt?: string;
   goLiveAt?: string;
+  chatRetentionDays?: number;
+  leadRetentionDays?: number;
+  reportRetentionDays?: number;
 };
 
 type SiteRow = {
@@ -145,6 +148,9 @@ export class WidgetAdminSiteService {
       lastTestFeedback: config.lastTestFeedback || '',
       lastTestedAt: config.lastTestedAt || '',
       goLiveAt: config.goLiveAt || '',
+      chatRetentionDays: Number(config.chatRetentionDays || 90),
+      leadRetentionDays: Number(config.leadRetentionDays || 365),
+      reportRetentionDays: Number(config.reportRetentionDays || 365),
       createdAt: row.created_at,
     };
   }
@@ -213,6 +219,9 @@ export class WidgetAdminSiteService {
       lastTestFeedback?: string;
       lastTestedAt?: string;
       goLiveAt?: string;
+      chatRetentionDays?: number;
+      leadRetentionDays?: number;
+      reportRetentionDays?: number;
       allowedDomains?: string[];
     },
   ) {
@@ -253,6 +262,9 @@ export class WidgetAdminSiteService {
       lastTestFeedback: payload.lastTestFeedback ?? site.lastTestFeedback,
       lastTestedAt: payload.lastTestedAt ?? site.lastTestedAt,
       goLiveAt: payload.goLiveAt ?? site.goLiveAt,
+      chatRetentionDays: payload.chatRetentionDays ?? site.chatRetentionDays,
+      leadRetentionDays: payload.leadRetentionDays ?? site.leadRetentionDays,
+      reportRetentionDays: payload.reportRetentionDays ?? site.reportRetentionDays,
     };
 
     await this.db.query(

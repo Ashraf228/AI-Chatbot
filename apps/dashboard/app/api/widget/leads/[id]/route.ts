@@ -41,3 +41,26 @@ export async function PATCH(
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export async function DELETE(
+  _req: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireSession();
+  if (auth.response) return auth.response;
+  const { id } = await context.params;
+
+  const params = new URLSearchParams({
+    actorId: auth.session.sub,
+    actorRole: auth.session.role,
+  });
+  const r = await fetchDashboardBackend(`/admin/widget/leads/${id}?${params.toString()}`, {
+    method: "DELETE",
+  });
+
+  const text = await r.text();
+  return new NextResponse(text || "{}", {
+    status: r.status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
