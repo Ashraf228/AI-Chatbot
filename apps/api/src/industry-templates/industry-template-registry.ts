@@ -4,6 +4,13 @@ export type SiteModulePatch = {
   config?: Record<string, unknown>;
 };
 
+export type BrandingDefaults = {
+  brandColor: string;
+  accentColor: string;
+  fontFamily: 'system' | 'inter' | 'avenir' | 'georgia' | 'times' | 'trebuchet' | 'verdana' | 'monospace';
+  botName?: string;
+};
+
 export type IndustryTemplate = {
   key: string;
   version: number;
@@ -16,6 +23,7 @@ export type IndustryTemplate = {
   recommendedQuestions: Record<string, string[]>;
   topTestQuestions: string[];
   reportKpis: string[];
+  brandingDefaults: BrandingDefaults;
   modules: SiteModulePatch[];
 };
 
@@ -50,6 +58,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     },
     topTestQuestions: ['Was bietet ihr an?', 'Wie schnell kann ich Kontakt bekommen?', 'Was kostet eine Beratung?'],
     reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
+    brandingDefaults: {
+      brandColor: '#b55400',
+      accentColor: '#fff0d9',
+      fontFamily: 'system',
+      botName: 'Service-Assistent',
+    },
     modules: baseModules({}),
   },
   'ecommerce-shopify': {
@@ -70,6 +84,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     },
     topTestQuestions: ['Welche Produkte passen zu mir?', 'Gibt es passende Kategorien?', 'Kannst du mir Produkte verlinken?'],
     reportKpis: ['startedChats', 'productClicks', 'leads', 'topQuestions'],
+    brandingDefaults: {
+      brandColor: '#1f7a4d',
+      accentColor: '#e8f5ee',
+      fontFamily: 'system',
+      botName: 'Shop-Assistent',
+    },
     modules: baseModules({
       'ecommerce-product-advisor': {
         key: 'ecommerce-product-advisor',
@@ -99,6 +119,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     },
     topTestQuestions: ['Ich habe einen Wasserschaden, was tun?', 'Wie melde ich einen Schaden?', 'Wer ist mein Ansprechpartner?'],
     reportKpis: ['startedChats', 'tickets', 'handoffs', 'topQuestions'],
+    brandingDefaults: {
+      brandColor: '#1f4f73',
+      accentColor: '#e9f2f8',
+      fontFamily: 'system',
+      botName: 'Mieter-Assistent',
+    },
     modules: baseModules({
       'lead-sales': { key: 'lead-sales', isEnabled: false },
       'property-ticketing': {
@@ -129,6 +155,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     },
     topTestQuestions: ['Ich habe eine Störung, was soll ich tun?', 'Wie erreiche ich den Support?', 'Kannst du mein Problem eingrenzen?'],
     reportKpis: ['startedChats', 'supportHandoffs', 'fallbackAnswers', 'topQuestions'],
+    brandingDefaults: {
+      brandColor: '#2563eb',
+      accentColor: '#e0ecff',
+      fontFamily: 'system',
+      botName: 'Support-Assistent',
+    },
     modules: baseModules({}),
   },
   'medical-practice': {
@@ -149,6 +181,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     },
     topTestQuestions: ['Wie kann ich einen Termin vereinbaren?', 'Welche Öffnungszeiten habt ihr?', 'Was soll ich bei Beschwerden tun?'],
     reportKpis: ['startedChats', 'appointmentIntents', 'leads', 'topQuestions'],
+    brandingDefaults: {
+      brandColor: '#0f766e',
+      accentColor: '#ddf7f4',
+      fontFamily: 'system',
+      botName: 'Praxis-Assistent',
+    },
     modules: baseModules({
       'lead-sales': {
         key: 'lead-sales',
@@ -177,6 +215,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     },
     topTestQuestions: ['Gibt es ein Probetraining?', 'Welche Mitgliedschaften gibt es?', 'Was passt zu meinem Ziel?'],
     reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
+    brandingDefaults: {
+      brandColor: '#111827',
+      accentColor: '#f3f4f6',
+      fontFamily: 'system',
+      botName: 'Fitness-Assistent',
+    },
     modules: baseModules({}),
   },
   'cleaning-trades': {
@@ -197,6 +241,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     },
     topTestQuestions: ['Ich brauche ein Angebot, was braucht ihr?', 'Wie schnell könnt ihr helfen?', 'Welche Leistungen bietet ihr an?'],
     reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
+    brandingDefaults: {
+      brandColor: '#0f766e',
+      accentColor: '#ddf7f4',
+      fontFamily: 'system',
+      botName: 'Anfrage-Assistent',
+    },
     modules: baseModules({}),
   },
 };

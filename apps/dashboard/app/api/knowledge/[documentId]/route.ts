@@ -20,6 +20,7 @@ export async function DELETE(
 
   const r = await fetchDashboardBackend(`/admin/ingest/knowledge/${documentId}`, {
     method: "DELETE",
+    session: auth.session,
   });
 
   const text = await r.text();

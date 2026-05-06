@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AdminKeyGuard } from '../../../utils/admin.guard';
 import { RequireDashboardRoles } from '../../../utils/dashboard-rbac';
 import { WidgetAdminService } from '../services/widget-admin.service';
+import { AuditLogService } from '../../../audit-logs/audit-log.service';
 import {
   CreateReportSubscriptionDto,
   ListLeadsQueryDto,
@@ -16,7 +17,10 @@ import {
 @UseGuards(AdminKeyGuard)
 @Controller('admin/widget')
 export class WidgetAdminController {
-  constructor(private readonly widgetAdminService: WidgetAdminService) {}
+  constructor(
+    private readonly widgetAdminService: WidgetAdminService,
+    private readonly auditLogs: AuditLogService,
+  ) {}
 
   @Get('sites/:siteId')
   async getSite(@Param('siteId') siteId: string) {
@@ -24,19 +28,65 @@ export class WidgetAdminController {
   }
 
   @Patch('branding/:siteId')
-  async updateBranding(@Param('siteId') siteId: string, @Body() body: UpdateBrandingDto) {
-    return this.widgetAdminService.updateBranding(siteId, body);
+  async updateBranding(
+    @Param('siteId') siteId: string,
+    @Body() body: UpdateBrandingDto,
+    @Req() req: { dashboardAuth?: { actorId?: string; role?: string } },
+  ) {
+    const result = await this.widgetAdminService.updateBranding(siteId, body);
+    await this.auditLogs.record({
+      siteId,
+      actorId: req.dashboardAuth?.actorId,
+      actorRole: req.dashboardAuth?.role,
+      action: 'branding.updated',
+      resourceType: 'site_branding',
+      resourceId: siteId,
+      metadata: {
+        changedFields: Object.keys(body),
+      },
+    });
+    return result;
   }
 
   @Patch('config/:siteId')
-  async updateConfig(@Param('siteId') siteId: string, @Body() body: UpdateWidgetConfigDto) {
+  async updateConfig(
+    @Param('siteId') siteId: string,
+    @Body() body: UpdateWidgetConfigDto,
+    @Req() req: { dashboardAuth?: { actorId?: string; role?: string } },
+  ) {
     if (body.goLiveAt) {
       throw new BadRequestException(
         'Live-Schaltung läuft über /admin/sites/:siteId/go-live, damit alle Pflichtbedingungen serverseitig geprüft werden.',
       );
     }
 
-    return this.widgetAdminService.updateWidgetConfig(siteId, body);
+    const result = await this.widgetAdminService.updateWidgetConfig(siteId, body);
+    const behaviorFields = [
+      'systemPrompt',
+      'industry',
+      'setupGoal',
+      'tone',
+      'ctaText',
+      'suggestedQuestionsByPath',
+      'conversationFlow',
+      'topTestQuestions',
+    ].filter((field) => Object.prototype.hasOwnProperty.call(body, field));
+
+    if (behaviorFields.length > 0) {
+      await this.auditLogs.record({
+        siteId,
+        actorId: req.dashboardAuth?.actorId,
+        actorRole: req.dashboardAuth?.role,
+        action: 'behavior.updated',
+        resourceType: 'site_config',
+        resourceId: siteId,
+        metadata: {
+          changedFields: behaviorFields,
+        },
+      });
+    }
+
+    return result;
   }
 
   @Get('leads')

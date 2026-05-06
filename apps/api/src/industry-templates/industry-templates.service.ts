@@ -55,10 +55,7 @@ export class IndustryTemplatesService {
     );
 
     await this.widgetSites.updateBranding(siteId, {
-      welcomeMessage:
-        mode === 'fill_missing_only' && site.welcomeMessage && site.welcomeMessage !== 'Hi! Wie kann ich helfen?'
-          ? site.welcomeMessage
-          : template.welcomeMessage,
+      ...this.buildBrandingPatch(site, template, mode),
     });
 
     await this.siteModules.updateForSite(
@@ -147,6 +144,38 @@ export class IndustryTemplatesService {
             : templateConfig,
       };
     });
+  }
+
+  private buildBrandingPatch(
+    site: Awaited<ReturnType<WidgetAdminSiteService['getSite']>>,
+    template: IndustryTemplate,
+    mode: 'fill_missing_only' | 'overwrite',
+  ) {
+    const fillMissingOnly = mode === 'fill_missing_only';
+    const defaults = template.brandingDefaults;
+
+    return {
+      brandColor:
+        fillMissingOnly && site.brandColor && site.brandColor !== '#b55400'
+          ? site.brandColor
+          : defaults.brandColor,
+      accentColor:
+        fillMissingOnly && site.accentColor && site.accentColor !== '#fff0d9'
+          ? site.accentColor
+          : defaults.accentColor,
+      fontFamily:
+        fillMissingOnly && site.fontFamily && site.fontFamily !== 'system'
+          ? site.fontFamily
+          : defaults.fontFamily,
+      botName:
+        fillMissingOnly && site.botName && site.botName !== 'Service-Assistent'
+          ? site.botName
+          : defaults.botName || site.botName,
+      welcomeMessage:
+        fillMissingOnly && site.welcomeMessage && site.welcomeMessage !== 'Hi! Wie kann ich helfen?'
+          ? site.welcomeMessage
+          : template.welcomeMessage,
+    };
   }
 
   private async writeAuditLog(input: {

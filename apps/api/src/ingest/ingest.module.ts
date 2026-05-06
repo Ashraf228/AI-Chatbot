@@ -6,9 +6,10 @@ import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { KnowledgeSourcesModule } from '../knowledge-sources/knowledge-sources.module';
 import { SitesModule } from '../sites/sites.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 
 @Module({
-  imports: [KnowledgeSourcesModule, SitesModule],
+  imports: [KnowledgeSourcesModule, SitesModule, AuditLogsModule],
   controllers: [IngestController],
   providers: [
     IngestService,

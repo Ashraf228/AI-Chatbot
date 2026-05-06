@@ -21,7 +21,14 @@ export type CustomerApiStatus = {
   status: CustomerOverallStatus | string;
   severity: CustomerStatusSeverity;
   progress: number;
-  lifecycleStatus: "draft" | "setup_incomplete" | "ready_for_test" | "live" | "paused" | "error";
+  lifecycleStatus:
+    | "draft"
+    | "setup_incomplete"
+    | "ready_for_test"
+    | "ready_for_live"
+    | "live"
+    | "paused"
+    | "error";
   isLiveReady: boolean;
   missingSteps: string[];
   nextAction?: {

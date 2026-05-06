@@ -30,6 +30,7 @@ export async function POST(req: Request) {
 
   const r = await fetchDashboardBackend("/admin/ingest/pdf", {
     method: "POST",
+    session: auth.session,
     body: forwardForm,
   });
 

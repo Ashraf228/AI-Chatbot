@@ -182,6 +182,54 @@ export class UpdateWidgetConfigDto {
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['professional', 'friendly', 'consultative'])
+  tone?: 'professional' | 'friendly' | 'consultative';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(255)
+  ctaText?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(120)
+  templateId?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => Number(value))
+  @IsInt()
+  @Min(1)
+  @Max(1000)
+  templateVersion?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(100)
+  templateAppliedAt?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(120)
+  templateAppliedBy?: string;
+
+  @IsOptional()
+  @IsIn(['fill_missing_only', 'overwrite'])
+  templateApplyMode?: 'fill_missing_only' | 'overwrite';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeStringArray(value))
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  reportKpis?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsString()
   @MaxLength(100)
   lastTestedAt?: string;

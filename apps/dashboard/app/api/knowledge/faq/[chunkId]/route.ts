@@ -22,6 +22,7 @@ export async function PATCH(
 
   const r = await fetchDashboardBackend(`/admin/ingest/faq/${chunkId}`, {
     method: "PATCH",
+    session: auth.session,
     headers: {
       "Content-Type": "application/json",
     },

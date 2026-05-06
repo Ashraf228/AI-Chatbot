@@ -4,6 +4,13 @@ export type SiteModulePatch = {
   config?: Record<string, unknown>;
 };
 
+export type BrandingDefaults = {
+  brandColor: string;
+  accentColor: string;
+  fontFamily: "system" | "inter" | "avenir" | "georgia" | "times" | "trebuchet" | "verdana" | "monospace";
+  botName?: string;
+};
+
 export type IndustryTemplate = {
   key: string;
   version: number;
@@ -16,6 +23,7 @@ export type IndustryTemplate = {
   recommendedQuestions: Record<string, string[]>;
   topTestQuestions?: string[];
   reportKpis?: string[];
+  brandingDefaults?: BrandingDefaults;
   modules: SiteModulePatch[];
 };
 

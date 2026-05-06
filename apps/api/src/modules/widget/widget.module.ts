@@ -33,9 +33,10 @@ import { VectorService } from '../../vector/vector.service';
 import { LlmService } from '../../vector/llm.service';
 import { EcommerceProductAdvisorModule } from '../ecommerce-product-advisor/ecommerce-product-advisor.module';
 import { SitesModule } from '../../sites/sites.module';
+import { AuditLogsModule } from '../../audit-logs/audit-logs.module';
 
 @Module({
-  imports: [ChatRoutingModule, EcommerceProductAdvisorModule, SitesModule],
+  imports: [ChatRoutingModule, EcommerceProductAdvisorModule, SitesModule, AuditLogsModule],
   controllers: [
     WidgetConfigController,
     WidgetSessionController,

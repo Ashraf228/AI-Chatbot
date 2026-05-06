@@ -19,6 +19,7 @@ export async function PATCH(
 
   const r = await fetchDashboardBackend(`/admin/widget/config/${siteId}`, {
     method: "PATCH",
+    session: auth.session,
     headers: {
       "Content-Type": "application/json",
     },

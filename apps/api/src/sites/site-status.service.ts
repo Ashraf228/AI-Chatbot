@@ -28,6 +28,7 @@ export type LifecycleStatus =
   | 'draft'
   | 'setup_incomplete'
   | 'ready_for_test'
+  | 'ready_for_live'
   | 'live'
   | 'paused'
   | 'error';
@@ -242,7 +243,7 @@ export class SiteStatusService {
       label: 'Bereit für Live',
       severity: 'success',
       progress,
-      lifecycleStatus: 'ready_for_test',
+      lifecycleStatus: 'ready_for_live',
       isLiveReady,
       missingSteps,
     });
