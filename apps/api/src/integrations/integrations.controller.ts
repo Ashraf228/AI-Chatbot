@@ -2,8 +2,10 @@ import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/co
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { UpdateIntegrationConnectionsDto } from './dto';
 import { IntegrationsService } from './integrations.service';
+import { RequireDashboardRoles } from '../utils/dashboard-rbac';
 
 @UseGuards(AdminKeyGuard)
+@RequireDashboardRoles('admin')
 @Controller('admin/integrations')
 export class IntegrationsController {
   constructor(private readonly integrations: IntegrationsService) {}

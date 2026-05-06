@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireSession } from "@/lib/require-auth";
 
 export async function GET(
   _req: Request,
   context: { params: Promise<{ siteId: string }> }
 ) {
-  const auth = await requireAuth();
-  if (auth) return auth;
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.response) return auth.response;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
   const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
@@ -24,6 +24,8 @@ export async function GET(
     method: "GET",
     headers: {
       "X-DASHBOARD-TOKEN": adminKey,
+      "X-DASHBOARD-ROLE": auth.session.role,
+      "X-DASHBOARD-ACTOR": auth.session.sub,
     },
     cache: "no-store",
   });
@@ -39,8 +41,8 @@ export async function PATCH(
   req: Request,
   context: { params: Promise<{ siteId: string }> }
 ) {
-  const auth = await requireAuth();
-  if (auth) return auth;
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.response) return auth.response;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
   const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
@@ -60,6 +62,8 @@ export async function PATCH(
     headers: {
       "Content-Type": "application/json",
       "X-DASHBOARD-TOKEN": adminKey,
+      "X-DASHBOARD-ROLE": auth.session.role,
+      "X-DASHBOARD-ACTOR": auth.session.sub,
     },
     body: JSON.stringify(body),
   });

@@ -6,7 +6,7 @@ export async function DELETE(
   _req: Request,
   context: { params: Promise<{ id: string }> },
 ) {
-  const auth = await requireSession();
+  const auth = await requireSession({ adminOnly: true });
   if (auth.response) return auth.response;
 
   const { id } = await context.params;
@@ -17,6 +17,7 @@ export async function DELETE(
 
   const response = await fetchDashboardBackend(`/admin/widget/reports/history/${id}?${params.toString()}`, {
     method: "DELETE",
+    session: auth.session,
   });
   const data = await response.json().catch(() => ({}));
 

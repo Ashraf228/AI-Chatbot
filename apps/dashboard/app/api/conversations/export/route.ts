@@ -3,7 +3,7 @@ import { assertSiteAccess, fetchDashboardBackend } from "@/lib/dashboard-api";
 import { requireSession } from "@/lib/require-auth";
 
 export async function GET(req: Request) {
-  const auth = await requireSession({ allowCustomer: true });
+  const auth = await requireSession({ adminOnly: true });
   if (auth.response) return auth.response;
 
   const url = new URL(req.url);
@@ -29,6 +29,7 @@ export async function GET(req: Request) {
   const response = await fetchDashboardBackend(`/admin/conversations/export?${params.toString()}`, {
     method: "GET",
     cache: "no-store",
+    session: auth.session,
   });
   const text = await response.text();
 

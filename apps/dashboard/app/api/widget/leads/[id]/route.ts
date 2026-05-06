@@ -46,7 +46,7 @@ export async function DELETE(
   _req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireSession();
+  const auth = await requireSession({ adminOnly: true });
   if (auth.response) return auth.response;
   const { id } = await context.params;
 
@@ -56,6 +56,7 @@ export async function DELETE(
   });
   const r = await fetchDashboardBackend(`/admin/widget/leads/${id}?${params.toString()}`, {
     method: "DELETE",
+    session: auth.session,
   });
 
   const text = await r.text();

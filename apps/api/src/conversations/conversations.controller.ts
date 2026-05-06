@@ -2,6 +2,7 @@ import { Controller, Delete, Get, Header, Param, Query, UseGuards } from '@nestj
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../db/prisma.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
+import { RequireDashboardRoles } from '../utils/dashboard-rbac';
 import { toCsv } from '../utils/csv';
 
 type ConversationListRow = {
@@ -81,6 +82,7 @@ export class ConversationsController {
   }
 
   @Get('export')
+  @RequireDashboardRoles('admin')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="chats.csv"')
   async export(
@@ -180,6 +182,7 @@ export class ConversationsController {
   }
 
   @Delete(':id')
+  @RequireDashboardRoles('admin')
   async deleteOne(
     @Param('id') id: string,
     @Query('actorId') actorId?: string,
@@ -212,6 +215,7 @@ export class ConversationsController {
   }
 
   @Delete()
+  @RequireDashboardRoles('admin')
   async deleteBySite(
     @Query('siteId') siteId?: string,
     @Query('actorId') actorId?: string,

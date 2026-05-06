@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Header, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminKeyGuard } from '../../../utils/admin.guard';
+import { RequireDashboardRoles } from '../../../utils/dashboard-rbac';
 import { WidgetAdminService } from '../services/widget-admin.service';
 import {
   CreateReportSubscriptionDto,
@@ -44,6 +45,7 @@ export class WidgetAdminController {
   }
 
   @Get('leads/export')
+  @RequireDashboardRoles('admin')
   @Header('Content-Type', 'text/csv; charset=utf-8')
   @Header('Content-Disposition', 'attachment; filename="anfragen.csv"')
   async exportLeads(
@@ -64,6 +66,7 @@ export class WidgetAdminController {
   }
 
   @Delete('leads/:id')
+  @RequireDashboardRoles('admin')
   async deleteLead(
     @Param('id') id: string,
     @Query('actorId') actorId?: string,
@@ -93,6 +96,7 @@ export class WidgetAdminController {
   }
 
   @Delete('reports/history/:id')
+  @RequireDashboardRoles('admin')
   async deleteReportRun(
     @Param('id') id: string,
     @Query('actorId') actorId?: string,

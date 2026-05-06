@@ -10,8 +10,10 @@ import {
 } from './dto';
 import { ToolDispatcherService } from '../tools/tool-dispatcher.service';
 import { AgentOrchestratorService } from './agent-orchestrator.service';
+import { RequireDashboardRoles } from '../utils/dashboard-rbac';
 
 @UseGuards(AdminKeyGuard)
+@RequireDashboardRoles('admin')
 @Controller('admin/agents')
 export class AgentsController {
   constructor(

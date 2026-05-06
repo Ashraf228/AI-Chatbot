@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
+import { RequireDashboardRoles } from '../utils/dashboard-rbac';
 
 type UsageDailyRow = {
   tenant_id: string;
@@ -20,6 +21,7 @@ type UsageSummaryRow = {
 };
 
 @UseGuards(AdminKeyGuard)
+@RequireDashboardRoles('admin')
 @Controller('admin/usage')
 export class UsageController {
   constructor(private db: PrismaService) {}

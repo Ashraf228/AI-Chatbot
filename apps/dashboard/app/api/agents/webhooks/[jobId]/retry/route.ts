@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { requireSession } from "@/lib/require-auth";
 
 export async function POST(
   _req: Request,
   context: { params: Promise<{ jobId: string }> }
 ) {
-  const auth = await requireAuth();
-  if (auth) return auth;
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.response) return auth.response;
 
   const base = process.env.BACKEND_BASE_URL?.trim();
   const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
@@ -24,6 +24,8 @@ export async function POST(
     method: "POST",
     headers: {
       "X-DASHBOARD-TOKEN": adminKey,
+      "X-DASHBOARD-ROLE": auth.session.role,
+      "X-DASHBOARD-ACTOR": auth.session.sub,
     },
     cache: "no-store",
   });

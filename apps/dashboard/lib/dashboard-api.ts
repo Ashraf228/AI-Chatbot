@@ -29,21 +29,34 @@ function resolveDashboardToken() {
 }
 
 export function getDashboardBackendHeaders(
-  headers?: HeadersInit
+  headers?: HeadersInit,
+  session?: DashboardSession | null
 ): Record<string, string> {
   const nextHeaders = new Headers(headers);
   nextHeaders.set("X-DASHBOARD-TOKEN", resolveDashboardToken());
+  if (session) {
+    nextHeaders.set("X-DASHBOARD-ROLE", session.role);
+    nextHeaders.set("X-DASHBOARD-ACTOR", session.sub);
+    if (session.tenantId) {
+      nextHeaders.set("X-DASHBOARD-TENANT", session.tenantId);
+    }
+  }
   return Object.fromEntries(nextHeaders.entries());
 }
 
+type DashboardBackendRequestInit = RequestInit & {
+  session?: DashboardSession | null;
+};
+
 export async function fetchDashboardBackend(
   path: string,
-  init: RequestInit = {}
+  init: DashboardBackendRequestInit = {}
 ) {
   const base = resolveBackendBaseUrl();
+  const { session, ...fetchInit } = init;
   return fetch(`${base}${path}`, {
-    ...init,
-    headers: getDashboardBackendHeaders(init.headers),
+    ...fetchInit,
+    headers: getDashboardBackendHeaders(init.headers, session),
   });
 }
 

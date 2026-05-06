@@ -2,8 +2,10 @@ import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { UpdateSiteModulesDto } from './dto';
 import { SiteModulesService } from './site-modules.service';
+import { RequireDashboardRoles } from '../utils/dashboard-rbac';
 
 @UseGuards(AdminKeyGuard)
+@RequireDashboardRoles('admin')
 @Controller('admin/site-modules')
 export class SiteModulesController {
   constructor(private readonly siteModules: SiteModulesService) {}

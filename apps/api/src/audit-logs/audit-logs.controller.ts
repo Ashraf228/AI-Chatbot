@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
+import { RequireDashboardRoles } from '../utils/dashboard-rbac';
 
 type AuditLogRow = {
   id: string;
@@ -16,6 +17,7 @@ type AuditLogRow = {
 };
 
 @UseGuards(AdminKeyGuard)
+@RequireDashboardRoles('admin')
 @Controller('admin/audit-logs')
 export class AuditLogsController {
   constructor(private readonly db: PrismaService) {}

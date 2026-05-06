@@ -29,6 +29,7 @@ export async function GET(req: Request) {
   const response = await fetchDashboardBackend(`/admin/audit-logs?${params.toString()}`, {
     method: "GET",
     cache: "no-store",
+    session: auth.session,
   });
   const data = await response.json().catch(() => []);
 

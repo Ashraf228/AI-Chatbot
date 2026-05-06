@@ -2,8 +2,10 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { CreateTenantDto } from './dto';
 import { TenantsService } from './tenants.service';
+import { RequireDashboardRoles } from '../utils/dashboard-rbac';
 
 @UseGuards(AdminKeyGuard)
+@RequireDashboardRoles('admin')
 @Controller('admin/tenants')
 export class TenantsController {
   constructor(private readonly tenants: TenantsService) {}
