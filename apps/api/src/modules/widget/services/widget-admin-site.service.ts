@@ -31,6 +31,9 @@ type SiteConfig = {
   templateApplyMode?: string;
   reportKpis?: string[];
   topTestQuestions?: string[];
+  lastTestQuestion?: string;
+  lastTestAnswer?: string;
+  lastTestFeedback?: string;
   lastTestedAt?: string;
   goLiveAt?: string;
 };
@@ -137,6 +140,9 @@ export class WidgetAdminSiteService {
       templateApplyMode: config.templateApplyMode || '',
       reportKpis: Array.isArray(config.reportKpis) ? config.reportKpis : [],
       topTestQuestions: Array.isArray(config.topTestQuestions) ? config.topTestQuestions : [],
+      lastTestQuestion: config.lastTestQuestion || '',
+      lastTestAnswer: config.lastTestAnswer || '',
+      lastTestFeedback: config.lastTestFeedback || '',
       lastTestedAt: config.lastTestedAt || '',
       goLiveAt: config.goLiveAt || '',
       createdAt: row.created_at,
@@ -202,6 +208,9 @@ export class WidgetAdminSiteService {
       templateApplyMode?: string;
       reportKpis?: string[];
       topTestQuestions?: string[];
+      lastTestQuestion?: string;
+      lastTestAnswer?: string;
+      lastTestFeedback?: string;
       lastTestedAt?: string;
       goLiveAt?: string;
       allowedDomains?: string[];
@@ -239,6 +248,9 @@ export class WidgetAdminSiteService {
       templateApplyMode: payload.templateApplyMode ?? site.templateApplyMode,
       reportKpis: payload.reportKpis ?? site.reportKpis,
       topTestQuestions: payload.topTestQuestions ?? site.topTestQuestions,
+      lastTestQuestion: payload.lastTestQuestion ?? site.lastTestQuestion,
+      lastTestAnswer: payload.lastTestAnswer ?? site.lastTestAnswer,
+      lastTestFeedback: payload.lastTestFeedback ?? site.lastTestFeedback,
       lastTestedAt: payload.lastTestedAt ?? site.lastTestedAt,
       goLiveAt: payload.goLiveAt ?? site.goLiveAt,
     };

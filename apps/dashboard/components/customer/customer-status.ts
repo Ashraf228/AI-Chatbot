@@ -1,85 +1,60 @@
-export type CustomerSetupSnapshot = {
-  name: string;
-  allowedDomains: string[];
-  industry: string;
-  setupGoal: string;
-  siteKey: string;
-  logoUrl?: string;
-  brandColor?: string;
-  welcomeMessage?: string;
-  knowledgeCount: number;
-  lastTestedAt?: string;
-  goLiveAt?: string;
-  hasError?: boolean;
-};
+export type CustomerStatusSeverity = "success" | "warning" | "error" | "info";
+
+export type CustomerStatusTone = "done" | "pending" | "attention";
 
 export type CustomerOverallStatus =
   | "Setup unvollständig"
   | "Wissen fehlt"
   | "Design fehlt"
   | "Einbindung fehlt"
+  | "Datenschutz-URL fehlt"
   | "Test erforderlich"
   | "Bereit für Live"
   | "Live"
+  | "Pausiert"
   | "Fehler";
 
-export function isDesignConfigured(snapshot: CustomerSetupSnapshot) {
-  return Boolean(
-    snapshot.logoUrl ||
-      (snapshot.brandColor && snapshot.brandColor !== "#b55400") ||
-      (snapshot.welcomeMessage && snapshot.welcomeMessage !== "Hi! Wie kann ich helfen?"),
-  );
+export type CustomerApiStatus = {
+  siteId: string;
+  code: string;
+  label: CustomerOverallStatus | string;
+  status: CustomerOverallStatus | string;
+  severity: CustomerStatusSeverity;
+  progress: number;
+  lifecycleStatus: "draft" | "setup_incomplete" | "ready_for_test" | "live" | "paused" | "error";
+  isLiveReady: boolean;
+  missingSteps: string[];
+  nextAction?: {
+    label: string;
+    href: string;
+  };
+  knowledgeCount: number;
+  industry: string;
+  setupGoal: string;
+  lastTestedAt: string;
+  goLiveAt: string;
+};
+
+export function mapStatusSeverityToTone(severity: CustomerStatusSeverity): CustomerStatusTone {
+  if (severity === "success") {
+    return "done";
+  }
+
+  if (severity === "error") {
+    return "attention";
+  }
+
+  return "pending";
 }
 
-export function resolveCustomerOverallStatus(
-  snapshot: CustomerSetupSnapshot,
-): CustomerOverallStatus {
-  if (snapshot.hasError) {
-    return "Fehler";
-  }
-
-  if (snapshot.goLiveAt) {
-    return "Live";
-  }
-
-  const basicsDone = Boolean(
-    snapshot.name.trim() &&
-      snapshot.allowedDomains.length > 0 &&
-      snapshot.industry &&
-      snapshot.setupGoal,
-  );
-
-  if (!basicsDone) {
-    return "Setup unvollständig";
-  }
-
-  if (snapshot.knowledgeCount === 0) {
-    return "Wissen fehlt";
-  }
-
-  if (!isDesignConfigured(snapshot)) {
-    return "Design fehlt";
-  }
-
-  if (!snapshot.siteKey || snapshot.allowedDomains.length === 0) {
-    return "Einbindung fehlt";
-  }
-
-  if (!snapshot.lastTestedAt) {
-    return "Test erforderlich";
-  }
-
-  return "Bereit für Live";
-}
-
-export function mapOverallStatusToTone(status: CustomerOverallStatus) {
+export function mapOverallStatusToTone(status: CustomerOverallStatus | string): CustomerStatusTone {
   if (status === "Live" || status === "Bereit für Live") {
-    return "done" as const;
+    return "done";
   }
 
-  if (status === "Fehler") {
-    return "attention" as const;
+  if (status === "Fehler" || status === "Datenschutz-URL fehlt") {
+    return "attention";
   }
 
-  return "pending" as const;
+  return "pending";
 }

@@ -71,6 +71,30 @@ export class SitesController {
     return this.statuses.resolveStatus(siteId);
   }
 
+  @Post(':siteId/go-live')
+  async goLive(
+    @Param('siteId') siteId: string,
+    @Body() body: { actorId?: string; actorRole?: string },
+  ) {
+    const status = await this.statuses.resolveStatus(siteId);
+    if (!status.isLiveReady) {
+      throw new BadRequestException({
+        message: 'Kunde ist noch nicht bereit für Live.',
+        status,
+      });
+    }
+
+    const site = await this.sites.markLive(siteId, {
+      actorId: typeof body.actorId === 'string' ? body.actorId : undefined,
+      actorRole: typeof body.actorRole === 'string' ? body.actorRole : undefined,
+    });
+
+    return {
+      site,
+      status: await this.statuses.resolveStatus(siteId),
+    };
+  }
+
   @Patch(':siteId')
   async update(@Param('siteId') siteId: string, @Body() dto: UpdateSiteDto) {
     return this.sites.updateSite(siteId, dto);

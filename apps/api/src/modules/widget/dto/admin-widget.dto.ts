@@ -144,6 +144,14 @@ export class UpdateWidgetConfigDto {
   allowedDomains?: string[];
 
   @IsOptional()
+  @Transform(({ value }) => normalizeStringArray(value))
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(255, { each: true })
+  topTestQuestions?: string[];
+
+  @IsOptional()
   @Transform(({ value }) => normalizeSuggestedQuestions(value))
   @IsObject()
   suggestedQuestionsByPath?: Record<string, string[]>;
@@ -174,6 +182,23 @@ export class UpdateWidgetConfigDto {
   @IsString()
   @MaxLength(100)
   lastTestedAt?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(1000)
+  lastTestQuestion?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(12000)
+  lastTestAnswer?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['helpful', 'wrong'])
+  lastTestFeedback?: 'helpful' | 'wrong';
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))

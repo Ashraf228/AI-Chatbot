@@ -6,6 +6,7 @@ import { encodeSiteId } from "../../lib/site-id";
 import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
 import { Button } from "../shared/Button";
 import { ErrorState } from "../shared/ErrorState";
+import type { CustomerApiStatus } from "./customer-status";
 import { CustomerTestChatPanel } from "./CustomerTestChatPanel";
 
 type CustomerQuickActionsProps = {
@@ -43,6 +44,7 @@ function toPreviewUrl(domain: string) {
 export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
   const siteSlug = encodeSiteId(siteId);
   const [site, setSite] = useState<SiteDetails | null>(null);
+  const [serverStatus, setServerStatus] = useState<CustomerApiStatus | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,8 +59,12 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
 
   useEffect(() => {
     async function load() {
-      const response = await fetch(`/api/widget/sites/${siteId}`, { cache: "no-store" });
+      const [response, statusResponse] = await Promise.all([
+        fetch(`/api/widget/sites/${siteId}`, { cache: "no-store" }),
+        fetch(`/api/sites/${siteId}/status`, { cache: "no-store" }),
+      ]);
       const data = await response.json().catch(() => ({}));
+      const statusData = await statusResponse.json().catch(() => ({}));
 
       if (!response.ok) {
         setError(data?.message || "Quick Actions konnten nicht geladen werden.");
@@ -72,6 +78,9 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
         lastTestedAt: data.lastTestedAt || "",
         goLiveAt: data.goLiveAt || "",
       });
+      if (statusResponse.ok && statusData?.status) {
+        setServerStatus(statusData);
+      }
     }
 
     load();
@@ -108,26 +117,29 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
     setError(null);
     setMessage(null);
 
-    const response = await fetch(`/api/widget/config/${siteId}`, {
-      method: "PATCH",
+    const response = await fetch(`/api/sites/${siteId}/go-live`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        goLiveAt: new Date().toISOString(),
-      }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setError(data?.message || "Live-Status konnte nicht gesetzt werden.");
+      setError(data?.message || data?.status?.label || "Live-Status konnte nicht gesetzt werden.");
+      if (data?.status) {
+        setServerStatus(data.status);
+      }
       setSaving(null);
       return;
     }
 
+    if (data?.status) {
+      setServerStatus(data.status);
+    }
     setSite((current) =>
       current
         ? {
             ...current,
-            goLiveAt: data.goLiveAt ?? new Date().toISOString(),
+            goLiveAt: data?.status?.goLiveAt || new Date().toISOString(),
           }
         : current,
     );
@@ -135,9 +147,7 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
     setSaving(null);
   }
 
-  const canMarkLive = Boolean(
-    site?.siteKey && site.allowedDomains.length > 0 && site.lastTestedAt && !site.goLiveAt,
-  );
+  const canMarkLive = Boolean(serverStatus?.isLiveReady && !site?.goLiveAt);
 
   return (
     <div className="dashboard-stack">
@@ -191,6 +201,15 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
               <strong>Live-Status</strong>
               <p className="dashboard-copy dashboard-copy--muted">{formatDate(site.goLiveAt)}</p>
             </div>
+          </div>
+        ) : null}
+
+        {serverStatus && !serverStatus.isLiveReady && !site?.goLiveAt ? (
+          <div className="dashboard-card dashboard-card--soft">
+            <strong>Live-Schaltung blockiert</strong>
+            <p className="dashboard-copy dashboard-copy--muted">
+              {serverStatus.label}. Nächster Schritt: {serverStatus.nextAction?.label || "Setup prüfen"}.
+            </p>
           </div>
         ) : null}
 

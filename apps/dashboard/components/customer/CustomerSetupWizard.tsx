@@ -10,7 +10,9 @@ import { LoadingState } from "../shared/LoadingState";
 import { Select } from "../shared/Select";
 import { CustomerStatusBadge } from "./CustomerStatusBadge";
 import {
+  mapStatusSeverityToTone,
   mapOverallStatusToTone,
+  type CustomerApiStatus,
   type CustomerOverallStatus,
 } from "./customer-status";
 import { type IndustryTemplate, templatesByKey } from "../../lib/industry-templates";
@@ -91,6 +93,8 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
   const [templates, setTemplates] = useState<IndustryTemplate[]>([]);
   const [overallStatus, setOverallStatus] = useState<CustomerOverallStatus>("Setup unvollständig");
+  const [serverStatus, setServerStatus] = useState<CustomerApiStatus | null>(null);
+  const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -103,6 +107,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     const data = await response.json().catch(() => ({}));
     if (response.ok && data?.status) {
       setOverallStatus(data.status);
+      setServerStatus(data);
     }
   }
 
@@ -156,6 +161,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     setTemplates(Array.isArray(templatesData) ? templatesData : []);
     if (statusRes.ok && statusData?.status) {
       setOverallStatus(statusData.status);
+      setServerStatus(statusData);
     }
     setBasicsForm({
       name: nextSite.name,
@@ -247,7 +253,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     if (!response.ok) {
       setError(data?.message || "Basisdaten konnten nicht gespeichert werden.");
       setSavingKey(null);
-      return;
+      return false;
     }
 
     setSite((current) =>
@@ -262,6 +268,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     setMessage("Basisdaten gespeichert.");
     setSavingKey(null);
     await refreshStatus();
+    return true;
   }
 
   async function patchSetup(values: Record<string, unknown>, successMessage: string, key: string) {
@@ -279,7 +286,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     if (!response.ok) {
       setError(data?.message || "Setup-Daten konnten nicht gespeichert werden.");
       setSavingKey(null);
-      return;
+      return false;
     }
 
     setSite((current) =>
@@ -297,17 +304,18 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     setMessage(successMessage);
     setSavingKey(null);
     await refreshStatus();
+    return true;
   }
 
   async function applyIndustryTemplate() {
     if (!site) {
-      return;
+      return false;
     }
 
     const template = templatesByKey(templates)[site.industry];
     if (!template) {
       setError("Für diese Branche ist noch keine Vorlage hinterlegt.");
-      return;
+      return false;
     }
 
     setSavingKey("template");
@@ -325,14 +333,100 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         const data = await response.json().catch(() => ({}));
         setError(data?.message || "Vorlage konnte nicht vollständig angewendet werden.");
         setSavingKey(null);
-        return;
+        return false;
       }
 
       await load();
       setMessage(`Vorlage „${template.label}“ angewendet.`);
+      return true;
     } finally {
       setSavingKey(null);
     }
+  }
+
+  async function goLive() {
+    setSavingKey("live");
+    setError(null);
+    setMessage(null);
+
+    const response = await fetch(`/api/sites/${siteId}/go-live`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      setError(data?.message || data?.status?.label || "Kunde konnte nicht live geschaltet werden.");
+      setSavingKey(null);
+      if (data?.status) {
+        setServerStatus(data.status);
+        setOverallStatus(data.status.status || data.status.label);
+      }
+      return false;
+    }
+
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            goLiveAt: data?.status?.goLiveAt || new Date().toISOString(),
+          }
+        : current,
+    );
+    if (data?.status) {
+      setServerStatus(data.status);
+      setOverallStatus(data.status.status || data.status.label);
+    }
+    setMessage("Kunde live geschaltet.");
+    setSavingKey(null);
+    return true;
+  }
+
+  async function saveCurrentStep() {
+    const step = SETUP_STEPS[activeStepIndex]?.key;
+    if (!step || !site) {
+      return false;
+    }
+
+    switch (step) {
+      case "basics":
+        return saveBasics();
+      case "industry":
+        return patchSetup({ industry: site.industry }, "Branche gespeichert.", "industry");
+      case "template":
+        return applyIndustryTemplate();
+      case "goal":
+        return patchSetup({ setupGoal: site.setupGoal }, "Bot-Ziel gespeichert.", "goal");
+      case "behavior":
+        return patchSetup(
+          { systemPrompt: behaviorForm.systemPrompt.trim() },
+          "Verhalten gespeichert.",
+          "behavior",
+        );
+      case "testing":
+        return patchSetup(
+          { lastTestedAt: new Date().toISOString() },
+          "Test als erledigt markiert.",
+          "testing",
+        );
+      case "live":
+        return goLive();
+      default:
+        return true;
+    }
+  }
+
+  async function goNext() {
+    const saved = await saveCurrentStep();
+    if (!saved) {
+      return;
+    }
+
+    setActiveStepIndex((current) => Math.min(current + 1, SETUP_STEPS.length - 1));
+  }
+
+  function skipStep() {
+    setActiveStepIndex((current) => Math.min(current + 1, SETUP_STEPS.length - 1));
   }
 
   if (loading) {
@@ -347,16 +441,9 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     return <ErrorState message="Kundendaten konnten nicht geladen werden." />;
   }
 
-  const canGoLive =
-    progress.basicsDone &&
-    progress.industryDone &&
-    progress.templateDone &&
-    progress.knowledgeDone &&
-    progress.goalDone &&
-    progress.behaviorDone &&
-    progress.designDone &&
-    progress.embeddingDone &&
-    progress.testingDone;
+  const currentStep = SETUP_STEPS[activeStepIndex];
+  const displayProgress = serverStatus?.progress ?? Math.round((progress.completed / progress.total) * 100);
+  const canGoLive = Boolean(serverStatus?.isLiveReady);
 
   return (
     <div className="dashboard-stack">
@@ -372,34 +459,48 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
           <div className="dashboard-stack dashboard-stack--sm">
             <div className="dashboard-card dashboard-card--soft">
               <strong>
-                {progress.completed} / {progress.total} Schritte
+                Schritt {activeStepIndex + 1} von {SETUP_STEPS.length}
               </strong>
               <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                Aktueller Fortschritt
+                {displayProgress}% Fortschritt
               </p>
             </div>
             <CustomerStatusBadge
-              status={mapOverallStatusToTone(overallStatus)}
-              label={overallStatus}
+              status={serverStatus ? mapStatusSeverityToTone(serverStatus.severity) : mapOverallStatusToTone(overallStatus)}
+              label={serverStatus?.label || overallStatus}
             />
           </div>
         </div>
+
+        {serverStatus?.nextAction ? (
+          <div className="dashboard-card dashboard-card--soft dashboard-info-row">
+            <strong>Nächste sinnvolle Aktion</strong>
+            <Link href={serverStatus.nextAction.href} className="dashboard-link-card">
+              {serverStatus.nextAction.label}
+            </Link>
+          </div>
+        ) : null}
 
         {message ? <p className="dashboard-status dashboard-status--success">{message}</p> : null}
         {error ? <ErrorState message={error} /> : null}
 
         <div className="dashboard-setup-steps">
           {SETUP_STEPS.map((step, index) => (
-            <a key={step.key} href={`#${step.anchor}`} className="dashboard-setup-step">
+            <button
+              key={step.key}
+              type="button"
+              className="dashboard-setup-step"
+              onClick={() => setActiveStepIndex(index)}
+            >
               <span className="dashboard-setup-step__number">{index + 1}</span>
               <span>{step.label}</span>
               <CustomerStatusBadge status={progress.steps[step.key] ? "done" : "pending"} />
-            </a>
+            </button>
           ))}
         </div>
       </section>
 
-      <section id="setup-step-basics" className="dashboard-card dashboard-stack">
+      <section id="setup-step-basics" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "basics"}>
         <div className="dashboard-info-row">
           <div>
             <strong>1. Firma & Domain</strong>
@@ -430,7 +531,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </Button>
       </section>
 
-      <section id="setup-step-industry" className="dashboard-card dashboard-stack">
+      <section id="setup-step-industry" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "industry"}>
         <div className="dashboard-info-row">
           <div>
             <strong>2. Branche auswählen</strong>
@@ -465,7 +566,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </Button>
       </section>
 
-      <section id="setup-step-template" className="dashboard-card dashboard-stack">
+      <section id="setup-step-template" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "template"}>
         <div className="dashboard-info-row">
           <div>
             <strong>3. Vorlage anwenden</strong>
@@ -491,7 +592,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section id="setup-step-knowledge" className="dashboard-card dashboard-stack">
+      <section id="setup-step-knowledge" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "knowledge"}>
         <div className="dashboard-info-row">
           <div>
             <strong>4. Wissen importieren</strong>
@@ -522,7 +623,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section id="setup-step-goal" className="dashboard-card dashboard-stack">
+      <section id="setup-step-goal" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "goal"}>
         <div className="dashboard-info-row">
           <div>
             <strong>5. Bot-Ziel festlegen</strong>
@@ -565,7 +666,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section id="setup-step-behavior" className="dashboard-card dashboard-stack">
+      <section id="setup-step-behavior" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "behavior"}>
         <div className="dashboard-info-row">
           <div>
             <strong>6. Verhalten festlegen</strong>
@@ -607,7 +708,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section id="setup-step-design" className="dashboard-card dashboard-stack">
+      <section id="setup-step-design" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "design"}>
         <div className="dashboard-info-row">
           <div>
             <strong>7. Design einstellen</strong>
@@ -629,7 +730,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </Link>
       </section>
 
-      <section id="setup-step-embedding" className="dashboard-card dashboard-stack">
+      <section id="setup-step-embedding" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "embedding"}>
         <div className="dashboard-info-row">
           <div>
             <strong>8. Einbindung</strong>
@@ -648,7 +749,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </Link>
       </section>
 
-      <section id="setup-step-testing" className="dashboard-card dashboard-stack">
+      <section id="setup-step-testing" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "testing"}>
         <div className="dashboard-info-row">
           <div>
             <strong>9. Testen</strong>
@@ -694,7 +795,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
       </section>
 
-      <section id="setup-step-live" className="dashboard-card dashboard-stack">
+      <section id="setup-step-live" className="dashboard-card dashboard-stack" hidden={currentStep.key !== "live"}>
         <div className="dashboard-info-row">
           <div>
             <strong>10. Live schalten</strong>
@@ -713,13 +814,49 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         </div>
         <Button
           type="button"
-          onClick={() =>
-            patchSetup({ goLiveAt: new Date().toISOString() }, "Kunde live geschaltet.", "live")
-          }
+          onClick={goLive}
           disabled={!canGoLive || savingKey === "live" || progress.liveDone}
         >
           {savingKey === "live" ? "Speichert..." : progress.liveDone ? "Bereits live" : "Live schalten"}
         </Button>
+      </section>
+
+      <section className="dashboard-card dashboard-inline dashboard-inline--spaced dashboard-wrap">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => setActiveStepIndex((current) => Math.max(current - 1, 0))}
+          disabled={activeStepIndex === 0 || Boolean(savingKey)}
+        >
+          Zurück
+        </Button>
+        <div className="dashboard-inline dashboard-wrap">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={saveCurrentStep}
+            disabled={Boolean(savingKey)}
+          >
+            {savingKey ? "Speichert..." : "Speichern"}
+          </Button>
+          {currentStep.key !== "live" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={skipStep}
+              disabled={Boolean(savingKey)}
+            >
+              Überspringen
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            onClick={currentStep.key === "live" ? goLive : goNext}
+            disabled={Boolean(savingKey) || (currentStep.key === "live" && (!canGoLive || progress.liveDone))}
+          >
+            {currentStep.key === "live" ? "Live schalten" : "Weiter"}
+          </Button>
+        </div>
       </section>
     </div>
   );

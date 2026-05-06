@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminKeyGuard } from '../../../utils/admin.guard';
 import { WidgetAdminService } from '../services/widget-admin.service';
 import {
@@ -29,6 +29,12 @@ export class WidgetAdminController {
 
   @Patch('config/:siteId')
   async updateConfig(@Param('siteId') siteId: string, @Body() body: UpdateWidgetConfigDto) {
+    if (body.goLiveAt) {
+      throw new BadRequestException(
+        'Live-Schaltung läuft über /admin/sites/:siteId/go-live, damit alle Pflichtbedingungen serverseitig geprüft werden.',
+      );
+    }
+
     return this.widgetAdminService.updateWidgetConfig(siteId, body);
   }
 

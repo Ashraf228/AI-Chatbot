@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { CustomerStatusBadge } from "./CustomerStatusBadge";
 import {
+  mapStatusSeverityToTone,
   mapOverallStatusToTone,
+  type CustomerApiStatus,
   type CustomerOverallStatus,
 } from "./customer-status";
 import { ErrorState } from "../shared/ErrorState";
@@ -52,6 +54,7 @@ function formatDate(value: string) {
 
 export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
   const [site, setSite] = useState<SiteDetails | null>(null);
+  const [serverStatus, setServerStatus] = useState<CustomerApiStatus | null>(null);
   const [knowledgeCount, setKnowledgeCount] = useState(0);
   const [overallStatus, setOverallStatus] = useState<CustomerOverallStatus>("Setup unvollständig");
   const [eventSummary, setEventSummary] = useState<EventSummary>({
@@ -109,6 +112,7 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
       setKnowledgeCount(Array.isArray(knowledgeData) ? knowledgeData.length : 0);
       if (statusRes.ok && statusData?.status) {
         setOverallStatus(statusData.status);
+        setServerStatus(statusData);
       }
       setEventSummary({
         startedChats: Number(eventData?.startedChats || 0),
@@ -155,14 +159,14 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
           </p>
         </div>
         <CustomerStatusBadge
-          status={mapOverallStatusToTone(overallStatus)}
-          label={overallStatus}
+          status={serverStatus ? mapStatusSeverityToTone(serverStatus.severity) : mapOverallStatusToTone(overallStatus)}
+          label={serverStatus?.label || overallStatus}
         />
       </div>
 
       <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16 }}>
         <div className="dashboard-card dashboard-card--soft">
-          <strong>{site.goLiveAt ? "Live" : "Noch nicht live"}</strong>
+          <strong>{serverStatus?.lifecycleStatus === "live" || site.goLiveAt ? "Live" : "Noch nicht live"}</strong>
           <p className="dashboard-copy dashboard-copy--muted">Widget-Status</p>
         </div>
         <div className="dashboard-card dashboard-card--soft">
@@ -189,6 +193,13 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
           <p className="dashboard-copy dashboard-copy--muted">{formatDate(lastReport)}</p>
         </div>
       </div>
+
+      {serverStatus?.nextAction ? (
+        <div className="dashboard-card dashboard-card--soft dashboard-info-row">
+          <strong>Nächste Aktion</strong>
+          <span>{serverStatus.nextAction.label}</span>
+        </div>
+      ) : null}
 
       <div className="dashboard-card dashboard-card--soft">
         <strong>Top-Fragen</strong>

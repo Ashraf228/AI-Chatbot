@@ -158,4 +158,49 @@ export class SitesService {
 
     return this.getSite(siteId);
   }
+
+  async markLive(
+    siteId: string,
+    actor: { actorId?: string; actorRole?: string } = {},
+  ) {
+    const site = await this.getSite(siteId);
+    if (!site) {
+      throw new BadRequestException('site not found');
+    }
+
+    const goLiveAt = new Date().toISOString();
+    await this.db.query(
+      `UPDATE sites
+       SET config = COALESCE(config, '{}'::jsonb) || $2::jsonb
+       WHERE id = $1`,
+      [
+        siteId,
+        JSON.stringify({
+          goLiveAt,
+          isActive: true,
+          lifecycleStatus: 'live',
+        }),
+      ],
+    );
+
+    await this.db.query(
+      `INSERT INTO audit_logs(
+         id, site_id, tenant_id, actor_id, actor_role, action, resource_type, resource_id, metadata, created_at
+       )
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())`,
+      [
+        randomUUID(),
+        siteId,
+        site.tenant_id,
+        actor.actorId || 'dashboard',
+        actor.actorRole || 'admin',
+        'site.go_live',
+        'site',
+        siteId,
+        JSON.stringify({ goLiveAt }),
+      ],
+    );
+
+    return this.getSite(siteId);
+  }
 }
