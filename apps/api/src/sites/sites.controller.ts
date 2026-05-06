@@ -40,7 +40,15 @@ export class SitesController {
         } catch {
           return {
             siteId: site.id,
+            code: 'error',
+            label: 'Fehler',
             status: 'Fehler',
+            severity: 'error',
+            progress: 0,
+            lifecycleStatus: 'error',
+            isLiveReady: false,
+            missingSteps: [],
+            nextAction: { label: 'Setup prüfen', href: `/sites/${site.id}/setup` },
             knowledgeCount: 0,
             industry: '',
             setupGoal: '',

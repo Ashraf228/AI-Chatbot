@@ -6,11 +6,16 @@ export type SiteModulePatch = {
 
 export type IndustryTemplate = {
   key: string;
+  version: number;
   label: string;
   setupGoal: "lead_capture" | "support" | "product_advice" | "appointments";
   welcomeMessage: string;
   systemPrompt: string;
+  tone?: "professional" | "friendly" | "consultative";
+  ctaText?: string;
   recommendedQuestions: Record<string, string[]>;
+  topTestQuestions?: string[];
+  reportKpis?: string[];
   modules: SiteModulePatch[];
 };
 

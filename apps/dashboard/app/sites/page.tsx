@@ -165,12 +165,12 @@ export default function SitesPage() {
 
     if (data?.id) {
       const template = templateMap[form.industry];
-      const response = await fetch(`/api/industry-templates/${data.id}/apply`, {
+      const response = await fetch(`/api/sites/${data.id}/apply-template`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ templateKey: template.key }),
+        body: JSON.stringify({ templateId: template.key, mode: "overwrite" }),
       });
 
       if (!response.ok) {

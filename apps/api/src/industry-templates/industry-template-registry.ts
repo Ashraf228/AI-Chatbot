@@ -6,11 +6,16 @@ export type SiteModulePatch = {
 
 export type IndustryTemplate = {
   key: string;
+  version: number;
   label: string;
   setupGoal: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
   welcomeMessage: string;
   systemPrompt: string;
+  tone: 'professional' | 'friendly' | 'consultative';
+  ctaText: string;
   recommendedQuestions: Record<string, string[]>;
+  topTestQuestions: string[];
+  reportKpis: string[];
   modules: SiteModulePatch[];
 };
 
@@ -29,32 +34,42 @@ function baseModules(overrides: Partial<Record<string, SiteModulePatch>>) {
 export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
   'local-services': {
     key: 'local-services',
+    version: 1,
     label: 'Lokaler Dienstleister',
     setupGoal: 'lead_capture',
     welcomeMessage: 'Hi! Wie kann ich dir rund um unser Angebot weiterhelfen?',
     systemPrompt:
       'Führe kurze Beratungsgespräche für lokale Dienstleister. Kläre Bedarf, Einsatzort und Dringlichkeit und leite dann sichtbar Richtung Kontakt oder Termin.',
+    tone: 'consultative',
+    ctaText: 'Kontakt aufnehmen',
     recommendedQuestions: {
       '/': [
         'Worum geht es bei deinem Anliegen?',
         'Geht es um ein neues Projekt, Support oder eine konkrete Anfrage?',
       ],
     },
+    topTestQuestions: ['Was bietet ihr an?', 'Wie schnell kann ich Kontakt bekommen?', 'Was kostet eine Beratung?'],
+    reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
     modules: baseModules({}),
   },
   'ecommerce-shopify': {
     key: 'ecommerce-shopify',
+    version: 1,
     label: 'E-Commerce / Shopify',
     setupGoal: 'product_advice',
     welcomeMessage: 'Hi! Ich helfe dir bei der Produktauswahl und den nächsten Schritten im Shop.',
     systemPrompt:
       'Berate Nutzer bei der Produktauswahl, stelle kurze Rückfragen zu Bedarf, Größe oder Budget und verweise transparent auf passende Produkte oder Kategorien.',
+    tone: 'consultative',
+    ctaText: 'Produkte ansehen',
     recommendedQuestions: {
       '/': [
         'Suchst du etwas Bestimmtes oder brauchst du erst eine Empfehlung?',
         'Soll ich dir passende Produkte nach Einsatzbereich oder Budget zeigen?',
       ],
     },
+    topTestQuestions: ['Welche Produkte passen zu mir?', 'Gibt es passende Kategorien?', 'Kannst du mir Produkte verlinken?'],
+    reportKpis: ['startedChats', 'productClicks', 'leads', 'topQuestions'],
     modules: baseModules({
       'ecommerce-product-advisor': {
         key: 'ecommerce-product-advisor',
@@ -68,17 +83,22 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
   },
   'property-management': {
     key: 'property-management',
+    version: 1,
     label: 'Immobilienverwaltung',
     setupGoal: 'support',
     welcomeMessage: 'Hi! Ich unterstütze bei Anliegen, Rückfragen und Schadensmeldungen.',
     systemPrompt:
       'Hilf bei Mieteranliegen, strukturiere Schadensmeldungen und leite bei klaren Fällen in die Fallaufnahme oder Weiterleitung über.',
+    tone: 'professional',
+    ctaText: 'Schadensmeldung aufnehmen',
     recommendedQuestions: {
       '/': [
         'Geht es um eine allgemeine Frage oder um einen konkreten Schaden?',
         'Soll ich zuerst das Anliegen klären oder direkt die Schadensmeldung aufnehmen?',
       ],
     },
+    topTestQuestions: ['Ich habe einen Wasserschaden, was tun?', 'Wie melde ich einen Schaden?', 'Wer ist mein Ansprechpartner?'],
+    reportKpis: ['startedChats', 'tickets', 'handoffs', 'topQuestions'],
     modules: baseModules({
       'lead-sales': { key: 'lead-sales', isEnabled: false },
       'property-ticketing': {
@@ -93,32 +113,42 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
   },
   'it-support': {
     key: 'it-support',
+    version: 1,
     label: 'IT-Support',
     setupGoal: 'support',
     welcomeMessage: 'Hi! Ich helfe dir bei Support-Fragen und der ersten Einordnung des Problems.',
     systemPrompt:
       'Ordne Support-Fälle sauber ein, unterscheide zwischen Rückfrage und Störung und leite bei Bedarf in eine strukturierte Kontaktaufnahme weiter.',
+    tone: 'professional',
+    ctaText: 'Supportfall vorbereiten',
     recommendedQuestions: {
       '/': [
         'Geht es um eine Störung, eine Rückfrage oder eine neue Anfrage?',
         'Soll ich zuerst das Problem eingrenzen oder direkt einen Rückruf vorbereiten?',
       ],
     },
+    topTestQuestions: ['Ich habe eine Störung, was soll ich tun?', 'Wie erreiche ich den Support?', 'Kannst du mein Problem eingrenzen?'],
+    reportKpis: ['startedChats', 'supportHandoffs', 'fallbackAnswers', 'topQuestions'],
     modules: baseModules({}),
   },
   'medical-practice': {
     key: 'medical-practice',
+    version: 1,
     label: 'Arztpraxis',
     setupGoal: 'appointments',
     welcomeMessage: 'Hi! Ich helfe bei allgemeinen Fragen und der Vorbereitung von Terminanfragen.',
     systemPrompt:
       'Beantworte allgemeine Praxisfragen knapp, weise bei sensiblen Themen transparent auf direkte Kontaktwege hin und führe bei passenden Fällen Richtung Terminanfrage.',
+    tone: 'professional',
+    ctaText: 'Terminanfrage vorbereiten',
     recommendedQuestions: {
       '/': [
         'Geht es um allgemeine Informationen oder um eine Terminanfrage?',
         'Soll ich dir zuerst mit einer Frage helfen oder direkt die Terminanfrage vorbereiten?',
       ],
     },
+    topTestQuestions: ['Wie kann ich einen Termin vereinbaren?', 'Welche Öffnungszeiten habt ihr?', 'Was soll ich bei Beschwerden tun?'],
+    reportKpis: ['startedChats', 'appointmentIntents', 'leads', 'topQuestions'],
     modules: baseModules({
       'lead-sales': {
         key: 'lead-sales',
@@ -131,32 +161,42 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
   },
   'fitness-studio': {
     key: 'fitness-studio',
+    version: 1,
     label: 'Fitnessstudio',
     setupGoal: 'lead_capture',
     welcomeMessage: 'Hi! Ich helfe dir bei Fragen zu Training, Mitgliedschaft und dem nächsten Schritt.',
     systemPrompt:
       'Führe Interessenten kurz durch Angebote, Ziele und Mitgliedschaftsfragen und leite sichtbar in Probetraining oder Kontaktanfrage.',
+    tone: 'friendly',
+    ctaText: 'Probetraining anfragen',
     recommendedQuestions: {
       '/': [
         'Geht es um Mitgliedschaft, Probetraining oder eine allgemeine Frage?',
         'Soll ich dir zuerst passende Optionen zeigen oder direkt den nächsten Schritt vorbereiten?',
       ],
     },
+    topTestQuestions: ['Gibt es ein Probetraining?', 'Welche Mitgliedschaften gibt es?', 'Was passt zu meinem Ziel?'],
+    reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
     modules: baseModules({}),
   },
   'cleaning-trades': {
     key: 'cleaning-trades',
+    version: 1,
     label: 'Reinigung / Handwerk',
     setupGoal: 'lead_capture',
     welcomeMessage: 'Hi! Ich helfe dir bei der ersten Einordnung deiner Anfrage und dem nächsten Schritt.',
     systemPrompt:
       'Kläre Einsatzort, Anliegen und Dringlichkeit, fasse knapp zusammen und leite dann Richtung Kontakt oder Rückruf.',
+    tone: 'consultative',
+    ctaText: 'Anfrage starten',
     recommendedQuestions: {
       '/': [
         'Geht es um eine neue Anfrage, ein laufendes Projekt oder eine Rückfrage?',
         'Soll ich zuerst das Anliegen und den Einsatzort eingrenzen?',
       ],
     },
+    topTestQuestions: ['Ich brauche ein Angebot, was braucht ihr?', 'Wie schnell könnt ihr helfen?', 'Welche Leistungen bietet ihr an?'],
+    reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
     modules: baseModules({}),
   },
 };

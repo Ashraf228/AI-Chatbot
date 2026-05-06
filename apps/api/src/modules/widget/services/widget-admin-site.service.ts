@@ -22,6 +22,15 @@ type SiteConfig = {
   systemPrompt?: string;
   industry?: string;
   setupGoal?: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+  tone?: string;
+  ctaText?: string;
+  templateId?: string;
+  templateVersion?: number;
+  templateAppliedAt?: string;
+  templateAppliedBy?: string;
+  templateApplyMode?: string;
+  reportKpis?: string[];
+  topTestQuestions?: string[];
   lastTestedAt?: string;
   goLiveAt?: string;
 };
@@ -119,6 +128,15 @@ export class WidgetAdminSiteService {
       systemPrompt: config.systemPrompt || '',
       industry: config.industry || '',
       setupGoal: config.setupGoal || '',
+      tone: config.tone || '',
+      ctaText: config.ctaText || '',
+      templateId: config.templateId || '',
+      templateVersion: config.templateVersion || null,
+      templateAppliedAt: config.templateAppliedAt || '',
+      templateAppliedBy: config.templateAppliedBy || '',
+      templateApplyMode: config.templateApplyMode || '',
+      reportKpis: Array.isArray(config.reportKpis) ? config.reportKpis : [],
+      topTestQuestions: Array.isArray(config.topTestQuestions) ? config.topTestQuestions : [],
       lastTestedAt: config.lastTestedAt || '',
       goLiveAt: config.goLiveAt || '',
       createdAt: row.created_at,
@@ -175,6 +193,15 @@ export class WidgetAdminSiteService {
       systemPrompt?: string;
       industry?: string;
       setupGoal?: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+      tone?: string;
+      ctaText?: string;
+      templateId?: string;
+      templateVersion?: number;
+      templateAppliedAt?: string;
+      templateAppliedBy?: string;
+      templateApplyMode?: string;
+      reportKpis?: string[];
+      topTestQuestions?: string[];
       lastTestedAt?: string;
       goLiveAt?: string;
       allowedDomains?: string[];
@@ -203,6 +230,15 @@ export class WidgetAdminSiteService {
       systemPrompt: payload.systemPrompt ?? site.systemPrompt,
       industry: payload.industry ?? site.industry,
       setupGoal: payload.setupGoal ?? site.setupGoal,
+      tone: payload.tone ?? site.tone,
+      ctaText: payload.ctaText ?? site.ctaText,
+      templateId: payload.templateId ?? site.templateId,
+      templateVersion: payload.templateVersion ?? site.templateVersion,
+      templateAppliedAt: payload.templateAppliedAt ?? site.templateAppliedAt,
+      templateAppliedBy: payload.templateAppliedBy ?? site.templateAppliedBy,
+      templateApplyMode: payload.templateApplyMode ?? site.templateApplyMode,
+      reportKpis: payload.reportKpis ?? site.reportKpis,
+      topTestQuestions: payload.topTestQuestions ?? site.topTestQuestions,
       lastTestedAt: payload.lastTestedAt ?? site.lastTestedAt,
       goLiveAt: payload.goLiveAt ?? site.goLiveAt,
     };

@@ -19,7 +19,9 @@ export async function POST(
   const body = await req.json().catch(() => ({}));
   const response = await fetchDashboardBackend(`/admin/sites/${siteId}/apply-template`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify({
       templateId: body.templateId || body.templateKey,
       mode: body.mode || "overwrite",
