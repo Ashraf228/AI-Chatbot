@@ -61,7 +61,7 @@ export class AdminKeyGuard implements CanActivate {
     if (
       requiredRoles.length > 0 &&
       (typeof dashboardRole !== 'string' ||
-        !['admin', 'operator', 'customer'].includes(dashboardRole))
+        !['admin', 'operator', 'customer', 'viewer'].includes(dashboardRole))
     ) {
       throw new UnauthorizedException('dashboard role required');
     }

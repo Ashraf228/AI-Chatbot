@@ -1,6 +1,6 @@
 import { SetMetadata } from '@nestjs/common';
 
-export type DashboardRole = 'admin' | 'operator' | 'customer';
+export type DashboardRole = 'admin' | 'operator' | 'customer' | 'viewer';
 
 export const REQUIRED_DASHBOARD_ROLES = 'requiredDashboardRoles';
 

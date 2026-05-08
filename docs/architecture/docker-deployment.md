@@ -23,15 +23,21 @@ Mindestens diese Werte sollten gesetzt sein:
 ```env
 OPENAI_API_KEY=...
 ADMIN_KEY=...
+DASHBOARD_INTERNAL_TOKEN=...
 ADMIN_PANEL_PASSWORD_HASH=scrypt$<saltHex>$<hashHex>
+OPERATOR_PANEL_PASSWORD_HASH=scrypt$<saltHex>$<hashHex>
 ADMIN_SESSION_SECRET=...
+INTEGRATION_SECRET_KEY=<32-byte-base64-or-64-char-hex>
 POSTGRES_PASSWORD=...
 REDIS_PASSWORD=...
 BACKEND_BASE_URL=http://api:5000
 REPORTER_API_BASE_URL=http://api:5000
+APP_URL=https://app.example.com
 PUBLIC_API_BASE_URL=https://api.example.com
 PUBLIC_WIDGET_BUNDLE_URL=https://widget.example.com/widget.js
 NEXT_PUBLIC_WIDGET_LOADER_URL=https://widget.example.com/loader.js
+LEAD_NOTIFICATION_EMAIL=alerts@example.com
+ADMIN_EMAIL=admin@example.com
 ADMIN_DOMAIN=admin.example.com
 API_DOMAIN=api.example.com
 WIDGET_DOMAIN=widget.example.com
@@ -57,6 +63,14 @@ Das Script erzeugt:
 - das passende `ADMIN_PANEL_PASSWORD_HASH` im Format `scrypt$<saltHex>$<hashHex>`
 
 Fuer Produktion solltest du nur den Hash in die Server-`.env` uebernehmen und das Klartext-Passwort danach sicher separat verwahren.
+
+Zusaetzliche Production-Hinweise:
+
+- `DASHBOARD_INTERNAL_TOKEN` muss in `api` und `dashboard` identisch sein und mindestens 32 Zeichen haben.
+- `ADMIN_PANEL_PASSWORD_HASH` ist fuer Production Pflicht; der Klartext-Fallback `ADMIN_PANEL_PASSWORD` ist nur fuer lokale Entwicklung gedacht.
+- `OPERATOR_PANEL_PASSWORD_HASH` ist noetig, wenn der Mitarbeiter-Login genutzt wird.
+- `INTEGRATION_SECRET_KEY` muss als 32-Byte-Base64-Wert oder 64-stelliger Hex-Wert gesetzt sein.
+- `APP_URL`, `LEAD_NOTIFICATION_EMAIL` und `ADMIN_EMAIL` werden fuer Dashboard-Links und Lead-Benachrichtigungen genutzt.
 
 ## Lokaler Start
 
@@ -108,12 +122,15 @@ Moegliche Werte:
 
 ## Empfohlene Startreihenfolge fuer einen Server
 
-1. `.env` mit produktiven Secrets anlegen
-2. `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `BACKEND_BASE_URL`, `PUBLIC_API_BASE_URL`, `PUBLIC_WIDGET_BUNDLE_URL`, `NEXT_PUBLIC_WIDGET_LOADER_URL`, `ADMIN_DOMAIN`, `API_DOMAIN` und `WIDGET_DOMAIN` auf produktive Werte setzen
-3. `docker compose up --build -d`
-4. optional Reporter mit Profil starten
-5. `siteKey`, Branding und erlaubte Domains im Admin-Setup pflegen
-6. Loader-Script auf Kundenseiten einbinden
+1. Aktuellen Code auf dem Server ziehen.
+2. `.env` mit produktiven Secrets auf Basis von `.env.example` pruefen.
+3. `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `DASHBOARD_INTERNAL_TOKEN`, `ADMIN_PANEL_PASSWORD_HASH`, `INTEGRATION_SECRET_KEY`, `BACKEND_BASE_URL`, `PUBLIC_API_BASE_URL`, `PUBLIC_WIDGET_BUNDLE_URL`, `NEXT_PUBLIC_WIDGET_LOADER_URL`, `ADMIN_DOMAIN`, `API_DOMAIN` und `WIDGET_DOMAIN` auf produktive Werte setzen.
+4. Optional vorab Migrationen manuell ausfuehren: `docker compose run --rm api node dist/db/run-migrations.js`.
+5. Services bauen und starten: `docker compose up --build -d`.
+6. Optional Reporter mit Profil starten.
+7. Healthchecks pruefen: `/healthz`, Widget `loader.js`, Dashboard Login und Testchat.
+8. `siteKey`, Branding und erlaubte Domains im Admin-Setup pflegen.
+9. Loader-Script auf Kundenseiten einbinden.
 
 ## Hinweise
 
@@ -121,7 +138,8 @@ Moegliche Werte:
 - Redis laeuft mit Passwortschutz und ist nicht mehr ueber einen Host-Port erreichbar.
 - Das Dashboard verwendet fuer Login-Rate-Limits Redis statt eines rein lokalen In-Memory-Counters.
 - Der Widget-Host liefert `loader.js` und `widget.js` gemeinsam aus und proxyt `/widget/*` intern zur API. Dadurch reicht spaeter ein einziges Script-Snippet fuer Kunden.
-- Das Backend legt benoetigte Tabellen beim Start selbst an.
+- Das Backend fuehrt Datenbankmigrationen beim API-Start automatisch aus. Dazu gehoert auch `015_conversation_metadata.sql`, die fuer den Pending-Lead-State in `conversations.metadata` benoetigt wird.
+- Bei Bedarf koennen Migrationen vor dem Start manuell mit `docker compose run --rm api node dist/db/run-migrations.js` ausgefuehrt werden.
 - Fuer produktive Umgebungen sollte vor dem Go-Live ein echter End-to-End-Compose-Test durchgefuehrt werden.
 - Wenn `TLS_ENABLED=true` gesetzt ist, lauscht der interne Nginx-Proxy auch auf `443` und verwendet die unter `TLS_CERTS_DIR` gemounteten Zertifikate.
 - Fuer Hetzner ist die empfohlene Variante, dein Let's-Encrypt-Verzeichnis read-only nach `TLS_CERTS_DIR` zu mounten und `443` direkt ueber den Proxy zu terminieren.

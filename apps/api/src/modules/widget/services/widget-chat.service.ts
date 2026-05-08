@@ -23,6 +23,7 @@ import { redactPII } from '../../../utils/pii';
 import { sanitizeInput, sanitizeOutput } from '../../../utils/security';
 import { WidgetSecurityService } from './widget-security.service';
 import { EcommerceProductAdvisorService } from '../../ecommerce-product-advisor/ecommerce-product-advisor.service';
+import { ChatAgentOrchestratorService } from '../../../chat/chat-agent-orchestrator.service';
 
 type MessageRow = {
   id: string;
@@ -53,6 +54,7 @@ export class WidgetChatService {
     private readonly chatRoutingService: ChatRoutingService,
     private readonly widgetSecurityService: WidgetSecurityService,
     private readonly ecommerceProductAdvisor: EcommerceProductAdvisorService,
+    private readonly chatAgentOrchestrator: ChatAgentOrchestratorService,
   ) {}
 
   async sendMessage(dto: SendMessageDto, origin?: string, req?: Request) {
@@ -143,6 +145,63 @@ export class WidgetChatService {
       [conversation.id],
     );
     const history = historyRes.rows.slice().reverse();
+
+    const agentDecision = await this.chatAgentOrchestrator.decide({
+      tenantId,
+      siteId: site.id,
+      conversationId: conversation.id,
+      sessionId,
+      message,
+      history,
+    });
+
+    if (agentDecision.handled && agentDecision.answer) {
+      const safeAnswer = sanitizeOutput(agentDecision.answer);
+      const parts = buildResponseParts({
+        answer: safeAnswer,
+        route: 'agent',
+        sources: [],
+        cta: agentDecision.cta,
+      });
+
+      await this.db.query(
+        `INSERT INTO messages(id, conversation_id, role, content)
+         VALUES ($1, $2, $3, $4)`,
+        [randomUUID(), conversation.id, 'assistant', safeAnswer],
+      );
+
+      await this.db.query(
+        `UPDATE conversations
+         SET last_active_at = now()
+         WHERE id = $1`,
+        [conversation.id],
+      );
+
+      await this.db.query(
+        `UPDATE widget_sessions
+         SET last_seen_at = now(),
+             lead_captured = COALESCE(lead_captured, false) OR $3::boolean
+         WHERE id = $1 AND site_id = $2`,
+        [sessionId, site.id, Boolean(agentDecision.leadId)],
+      );
+
+      res.status(200);
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.write(`${JSON.stringify({ type: 'start', sessionId })}\n`);
+      res.write(`${JSON.stringify({ type: 'chunk', delta: safeAnswer })}\n`);
+      res.write(`${JSON.stringify({
+        type: 'done',
+        answer: safeAnswer,
+        sessionId,
+        parts,
+        sources: [],
+      })}\n`);
+      res.end();
+      return;
+    }
+
     const routeDecision = await this.chatRoutingService.resolveForSite({
       siteId: site.id,
       message,

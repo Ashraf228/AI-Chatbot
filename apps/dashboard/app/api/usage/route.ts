@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchDashboardBackend } from "@/lib/dashboard-api";
 import { requireSession } from "@/lib/require-auth";
 
 export async function GET(req: Request) {
@@ -6,43 +7,21 @@ export async function GET(req: Request) {
     const auth = await requireSession({ adminOnly: true });
     if (auth.response) return auth.response;
 
-    const base = process.env.BACKEND_BASE_URL?.trim();
-    const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
-
-    if (!base) {
-      return NextResponse.json(
-        { message: "BACKEND_BASE_URL missing" },
-        { status: 500 }
-      );
-    }
-
-    if (!adminKey) {
-      return NextResponse.json(
-        { message: "ADMIN_KEY missing" },
-        { status: 500 }
-      );
-    }
-
     const url = new URL(req.url);
     const tenantId = url.searchParams.get("tenantId");
     const siteId = url.searchParams.get("siteId");
     const summary = url.searchParams.get("summary");
 
-    const target =
-      summary === "1" ? `${base}/admin/usage/summary` : `${base}/admin/usage`;
+    const targetParams = new URLSearchParams();
+    if (tenantId) targetParams.set("tenantId", tenantId);
+    if (siteId) targetParams.set("siteId", siteId);
 
-    const targetUrl = new URL(target);
+    const targetPath = summary === "1" ? "/admin/usage/summary" : "/admin/usage";
+    const target = targetParams.size > 0 ? `${targetPath}?${targetParams.toString()}` : targetPath;
 
-    if (tenantId) targetUrl.searchParams.set("tenantId", tenantId);
-    if (siteId) targetUrl.searchParams.set("siteId", siteId);
-
-    const r = await fetch(targetUrl.toString(), {
+    const r = await fetchDashboardBackend(target, {
       method: "GET",
-      headers: {
-        "X-DASHBOARD-TOKEN": adminKey,
-        "X-DASHBOARD-ROLE": auth.session.role,
-        "X-DASHBOARD-ACTOR": auth.session.sub,
-      },
+      session: auth.session,
       cache: "no-store",
     });
 

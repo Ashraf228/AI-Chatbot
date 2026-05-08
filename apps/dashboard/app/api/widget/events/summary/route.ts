@@ -1,31 +1,22 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { fetchDashboardBackend } from "@/lib/dashboard-api";
+import { requireSession } from "@/lib/require-auth";
 
 export async function GET(req: Request) {
-  const auth = await requireAuth();
-  if (auth) return auth;
+  const auth = await requireSession();
+  if (auth.response) return auth.response;
 
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
   const url = new URL(req.url);
   const siteId = url.searchParams.get("siteId");
+  const params = new URLSearchParams();
+  if (siteId) params.set("siteId", siteId);
+  const target = params.size > 0
+    ? `/admin/widget/events/summary?${params.toString()}`
+    : "/admin/widget/events/summary";
 
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
-  }
-
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const target = new URL(`${base}/admin/widget/events/summary`);
-  if (siteId) target.searchParams.set("siteId", siteId);
-
-  const r = await fetch(target.toString(), {
+  const r = await fetchDashboardBackend(target, {
     method: "GET",
-    headers: {
-      "X-DASHBOARD-TOKEN": adminKey,
-    },
+    session: auth.session,
     cache: "no-store",
   });
 

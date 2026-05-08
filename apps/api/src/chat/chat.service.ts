@@ -20,6 +20,7 @@ import { sanitizeInput, sanitizeOutput } from '../utils/security';
 import { logEvent } from '../utils/logger';
 import { estimateOpenAICost } from '../usage/costs';
 import { EcommerceProductAdvisorService } from '../modules/ecommerce-product-advisor/ecommerce-product-advisor.service';
+import { ChatAgentOrchestratorService } from './chat-agent-orchestrator.service';
 
 @Injectable()
 export class ChatService {
@@ -36,6 +37,7 @@ export class ChatService {
     private db: PrismaService,
     private routing: ChatRoutingService,
     private ecommerceProductAdvisor: EcommerceProductAdvisorService,
+    private chatAgentOrchestrator: ChatAgentOrchestratorService,
   ) {}
 
   private async insertUsageEvent(params: {
@@ -292,6 +294,85 @@ export class ChatService {
       [conversationId],
     );
     const history = historyRes.rows.slice().reverse();
+
+    const agentDecision = await this.chatAgentOrchestrator.decide({
+      tenantId,
+      siteId: dto.siteId,
+      conversationId,
+      sessionId,
+      message: safeMessage,
+      history,
+    });
+
+    if (agentDecision.handled && agentDecision.answer) {
+      const safeAnswer = sanitizeOutput(agentDecision.answer);
+
+      await this.insertUsageEvent({
+        tenantId,
+        siteId: dto.siteId,
+        conversationId,
+        sessionId,
+        model: 'rule-based-agent-orchestrator',
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        estimatedCost: 0,
+        latencyMs: 0,
+        success: true,
+      });
+
+      await this.upsertDailyUsage({
+        tenantId,
+        siteId: dto.siteId,
+        requestCount: 1,
+        userMessageCount: 1,
+        assistantMessageCount: 1,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        estimatedCost: 0,
+        successCount: 1,
+        errorCount: 0,
+        latencyMs: 0,
+      });
+
+      await this.db.query(
+        `INSERT INTO messages(id, conversation_id, role, content)
+         VALUES ($1, $2, $3, $4)`,
+        [randomUUID(), conversationId, 'assistant', safeAnswer],
+      );
+
+      await this.db.query(
+        `UPDATE conversations
+         SET last_active_at = now()
+         WHERE id = $1`,
+        [conversationId],
+      );
+
+      const parts = buildResponseParts({
+        answer: safeAnswer,
+        route: 'agent',
+        sources: [],
+        cta: agentDecision.cta,
+      });
+
+      logEvent('chat_agent_orchestrator_handled', {
+        siteId: dto.siteId,
+        tenantId,
+        conversationId,
+        action: agentDecision.action,
+        leadId: agentDecision.leadId || null,
+        contactRequestId: agentDecision.contactRequestId || null,
+      });
+
+      return {
+        answer: safeAnswer,
+        parts,
+        sources: [],
+        sessionId,
+      };
+    }
+
     const routeDecision = await this.routing.resolveForSite({
       siteId: dto.siteId,
       message: safeMessage,

@@ -6,6 +6,9 @@ type LeadNotificationPayload = {
   siteId: string;
   siteName: string;
   submittedAt: string;
+  source?: string;
+  scheduleIntent?: boolean;
+  dashboardUrl?: string;
   lead: {
     name: string;
     email: string;
@@ -19,7 +22,7 @@ export class LeadMailerService {
   constructor(private readonly mailer: ReportMailerService) {}
 
   buildLeadNotification(payload: LeadNotificationPayload): MailMessage {
-    const subject = `Neuer Lead fuer ${payload.siteName || payload.siteId}`;
+    const subject = `Neue Anfrage über den Chatbot – ${payload.siteName || payload.siteId}`;
 
     return {
       to: payload.recipientEmail,
@@ -44,30 +47,40 @@ export class LeadMailerService {
     <h1>Neuer Lead eingegangen</h1>
     <p><strong>Site:</strong> ${escapeHtml(payload.siteName || payload.siteId)}</p>
     <p><strong>Zeitpunkt:</strong> ${escapeHtml(payload.submittedAt)}</p>
+    <p><strong>Quelle:</strong> ${escapeHtml(payload.source || 'Widget Chat')}</p>
+    <p><strong>Terminabsicht:</strong> ${payload.scheduleIntent ? 'Ja' : 'Nein'}</p>
     <h2>Kontaktdaten</h2>
     <ul>
       <li><strong>Name:</strong> ${escapeHtml(payload.lead.name)}</li>
-      <li><strong>E-Mail:</strong> ${escapeHtml(payload.lead.email)}</li>
+      <li><strong>E-Mail:</strong> ${escapeHtml(payload.lead.email || '-')}</li>
       <li><strong>Telefon:</strong> ${escapeHtml(payload.lead.phone || '-')}</li>
     </ul>
     <h2>Anliegen</h2>
     <p>${escapeHtml(payload.lead.message || '-')}</p>
+    ${
+      payload.dashboardUrl
+        ? `<p><a href="${escapeHtml(payload.dashboardUrl)}">Im Dashboard öffnen</a></p>`
+        : ''
+    }
   </body>
 </html>`;
   }
 
   private renderText(payload: LeadNotificationPayload) {
     return [
-      `Neuer Lead fuer ${payload.siteName || payload.siteId}`,
+      `Neue Anfrage über den Chatbot – ${payload.siteName || payload.siteId}`,
       `Zeitpunkt: ${payload.submittedAt}`,
+      `Quelle: ${payload.source || 'Widget Chat'}`,
+      `Terminabsicht: ${payload.scheduleIntent ? 'Ja' : 'Nein'}`,
       '',
       'Kontaktdaten:',
       `- Name: ${payload.lead.name}`,
-      `- E-Mail: ${payload.lead.email}`,
+      `- E-Mail: ${payload.lead.email || '-'}`,
       `- Telefon: ${payload.lead.phone || '-'}`,
       '',
       'Anliegen:',
       payload.lead.message || '-',
+      payload.dashboardUrl ? `Dashboard: ${payload.dashboardUrl}` : '',
     ].join('\n');
   }
 }

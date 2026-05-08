@@ -1,8 +1,10 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { SitesService } from './sites.service';
 import { CreateSiteDto, UpdateSiteDto } from './dto';
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { SiteStatusService } from './site-status.service';
+import { AdminScopeService } from '../utils/admin-scope.service';
+import { SiteAgentActivityService } from './site-agent-activity.service';
 
 @UseGuards(AdminKeyGuard)
 @Controller('admin/sites')
@@ -10,13 +12,18 @@ export class SitesController {
   constructor(
     private sites: SitesService,
     private statuses: SiteStatusService,
+    private scope: AdminScopeService,
+    private agentActivity: SiteAgentActivityService,
   ) {}
 
   @Post()
-  async create(@Body() dto: CreateSiteDto) {
+  async create(@Body() dto: CreateSiteDto, @Req() req: { dashboardAuth?: unknown }) {
     if (!dto.tenantId?.trim()) {
       throw new BadRequestException('tenantId required');
     }
+    const auth = this.scope.getAuth(req);
+    this.scope.assertRole(auth, ['admin', 'operator']);
+    await this.scope.assertTenantAccess(auth, dto.tenantId);
 
     return this.sites.createSite(
       {
@@ -31,8 +38,9 @@ export class SitesController {
   }
 
   @Get()
-  async list() {
-    const sites = await this.sites.listSites();
+  async list(@Req() req: { dashboardAuth?: unknown }) {
+    const auth = this.scope.getAuth(req);
+    const sites = this.scope.filterSitesForAuth(auth, await this.sites.listSites());
     const statuses = await Promise.all(
       sites.map(async (site) => {
         try {
@@ -48,7 +56,8 @@ export class SitesController {
             lifecycleStatus: 'error',
             isLiveReady: false,
             missingSteps: [],
-            nextAction: { label: 'Setup prüfen', href: `/sites/${site.id}/setup` },
+            steps: [],
+            nextAction: { key: 'basics', label: 'Setup prüfen', href: `/sites/${site.id}/setup` },
             knowledgeCount: 0,
             industry: '',
             setupGoal: '',
@@ -67,15 +76,35 @@ export class SitesController {
   }
 
   @Get(':siteId/status')
-  async status(@Param('siteId') siteId: string) {
+  async status(@Param('siteId') siteId: string, @Req() req: { dashboardAuth?: unknown }) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+    });
     return this.statuses.resolveStatus(siteId);
+  }
+
+  @Get(':siteId/agent-activity')
+  async agentActivityLog(
+    @Param('siteId') siteId: string,
+    @Query('limit') limit: string | undefined,
+    @Req() req: { dashboardAuth?: unknown },
+  ) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+    return this.agentActivity.listForSite(siteId, Number(limit) || 50);
   }
 
   @Post(':siteId/go-live')
   async goLive(
     @Param('siteId') siteId: string,
     @Body() body: { actorId?: string; actorRole?: string },
+    @Req() req: { dashboardAuth?: unknown },
   ) {
+    const auth = this.scope.getAuth(req);
+    await this.scope.assertSiteAccess(auth, siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
     const status = await this.statuses.resolveStatus(siteId);
     if (!status.isLiveReady) {
       throw new BadRequestException({
@@ -85,8 +114,8 @@ export class SitesController {
     }
 
     const site = await this.sites.markLive(siteId, {
-      actorId: typeof body.actorId === 'string' ? body.actorId : undefined,
-      actorRole: typeof body.actorRole === 'string' ? body.actorRole : undefined,
+      actorId: auth.actorId || (typeof body.actorId === 'string' ? body.actorId : undefined),
+      actorRole: auth.role || (typeof body.actorRole === 'string' ? body.actorRole : undefined),
     });
 
     return {
@@ -96,7 +125,14 @@ export class SitesController {
   }
 
   @Patch(':siteId')
-  async update(@Param('siteId') siteId: string, @Body() dto: UpdateSiteDto) {
+  async update(
+    @Param('siteId') siteId: string,
+    @Body() dto: UpdateSiteDto,
+    @Req() req: { dashboardAuth?: unknown },
+  ) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
     return this.sites.updateSite(siteId, dto);
   }
 }

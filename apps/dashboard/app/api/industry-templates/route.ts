@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { fetchDashboardBackend } from "@/lib/dashboard-api";
-import { requireAuth } from "@/lib/require-auth";
+import { requireSession } from "@/lib/require-auth";
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (auth) return auth;
+  const auth = await requireSession();
+  if (auth.response) return auth.response;
 
   const response = await fetchDashboardBackend("/admin/industry-templates", {
     method: "GET",
     cache: "no-store",
+    session: auth.session,
   });
 
   const text = await response.text();

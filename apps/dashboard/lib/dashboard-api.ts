@@ -79,6 +79,7 @@ export async function listAccessibleSites(session: DashboardSession) {
   const response = await fetchDashboardBackend("/admin/sites", {
     method: "GET",
     cache: "no-store",
+    session,
   });
 
   if (!response.ok) {

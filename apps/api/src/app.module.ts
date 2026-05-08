@@ -27,6 +27,8 @@ import { EcommerceProductAdvisorModule } from './modules/ecommerce-product-advis
 import { PropertyTicketingModule } from './modules/property-ticketing/property-ticketing.module';
 import { IndustryTemplatesModule } from './industry-templates/industry-templates.module';
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { AdminScopeModule } from './utils/admin-scope.module';
+import { SiteDataModule } from './site-data/site-data.module';
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module';
     PropertyTicketingModule,
     IndustryTemplatesModule,
     AuditLogsModule,
+    AdminScopeModule,
+    SiteDataModule,
   ],
   controllers: [HealthController],
   providers: [

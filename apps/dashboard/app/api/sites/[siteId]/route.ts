@@ -20,6 +20,7 @@ export async function PATCH(
 
   const response = await fetchDashboardBackend(`/admin/sites/${siteId}`, {
     method: "PATCH",
+    session: auth.session,
     headers: {
       "Content-Type": "application/json",
     },

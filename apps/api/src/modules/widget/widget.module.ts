@@ -34,9 +34,17 @@ import { LlmService } from '../../vector/llm.service';
 import { EcommerceProductAdvisorModule } from '../ecommerce-product-advisor/ecommerce-product-advisor.module';
 import { SitesModule } from '../../sites/sites.module';
 import { AuditLogsModule } from '../../audit-logs/audit-logs.module';
+import { SiteModulesModule } from '../../site-modules/site-modules.module';
+import { ChatAgentOrchestratorService } from '../../chat/chat-agent-orchestrator.service';
 
 @Module({
-  imports: [ChatRoutingModule, EcommerceProductAdvisorModule, SitesModule, AuditLogsModule],
+  imports: [
+    ChatRoutingModule,
+    EcommerceProductAdvisorModule,
+    SitesModule,
+    AuditLogsModule,
+    SiteModulesModule,
+  ],
   controllers: [
     WidgetConfigController,
     WidgetSessionController,
@@ -65,6 +73,7 @@ import { AuditLogsModule } from '../../audit-logs/audit-logs.module';
     PrismaService,
     RateLimitService,
     ChatService,
+    ChatAgentOrchestratorService,
     EmbeddingService,
     VectorService,
     LlmService,

@@ -1,4 +1,4 @@
-export type CustomerStatusSeverity = "success" | "warning" | "error" | "info";
+export type CustomerStatusSeverity = "success" | "warning" | "error" | "neutral" | "info";
 
 export type CustomerStatusTone = "done" | "pending" | "attention";
 
@@ -13,6 +13,36 @@ export type CustomerOverallStatus =
   | "Live"
   | "Pausiert"
   | "Fehler";
+
+export type CustomerStatusStepKey =
+  | "basics"
+  | "template"
+  | "knowledge"
+  | "behavior"
+  | "design"
+  | "embed"
+  | "test"
+  | "live"
+  | string;
+
+export type CustomerStatusStepState = "complete" | "incomplete" | "warning" | "blocked";
+
+export type CustomerStatusAction = {
+  key?: string;
+  label: string;
+  href?: string;
+};
+
+export type CustomerStatusStep = {
+  key: CustomerStatusStepKey;
+  label: string;
+  status: CustomerStatusStepState;
+  missingReason?: string;
+  nextAction?: {
+    label: string;
+    href?: string;
+  };
+};
 
 export type CustomerApiStatus = {
   siteId: string;
@@ -31,10 +61,8 @@ export type CustomerApiStatus = {
     | "error";
   isLiveReady: boolean;
   missingSteps: string[];
-  nextAction?: {
-    label: string;
-    href: string;
-  };
+  nextAction?: CustomerStatusAction;
+  steps: CustomerStatusStep[];
   knowledgeCount: number;
   industry: string;
   setupGoal: string;

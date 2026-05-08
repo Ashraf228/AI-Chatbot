@@ -16,6 +16,7 @@ export async function PATCH(
     const lookup = await fetchDashboardBackend("/admin/widget/leads", {
       method: "GET",
       cache: "no-store",
+      session: auth.session,
     });
     const leads = (await lookup.json().catch(() => [])) as Array<{
       id?: string;
@@ -29,6 +30,7 @@ export async function PATCH(
 
   const r = await fetchDashboardBackend(`/admin/widget/leads/${id}`, {
     method: "PATCH",
+    session: auth.session,
     headers: {
       "Content-Type": "application/json",
     },

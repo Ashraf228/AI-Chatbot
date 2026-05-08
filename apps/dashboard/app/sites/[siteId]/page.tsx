@@ -95,7 +95,7 @@ export default async function SiteDetailPage({
               </div>
             </section>
 
-            {session?.role === "admin" ? (
+            {session?.role === "admin" || session?.role === "operator" ? (
               <details className="dashboard-card dashboard-stack">
                 <summary
                   className="dashboard-card-title"

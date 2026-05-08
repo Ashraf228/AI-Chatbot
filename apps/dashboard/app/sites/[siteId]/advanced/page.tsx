@@ -16,13 +16,16 @@ export default async function SiteAdvancedPage({
   searchParams: Promise<{ section?: string }>;
 }) {
   const session = await getDashboardSession();
-  if (session?.role !== "admin") {
+  if (session?.role !== "admin" && session?.role !== "operator") {
     redirect("/sites");
   }
   const { siteId: rawSiteId } = await params;
   const { section: rawSection } = await searchParams;
   const siteId = decodeSiteId(rawSiteId);
   const section = normalizeAdvancedSection(rawSection);
+  if (session.role === "operator" && section !== "automations") {
+    redirect(`/sites/${rawSiteId}/advanced?section=automations`);
+  }
 
   return (
     <div>

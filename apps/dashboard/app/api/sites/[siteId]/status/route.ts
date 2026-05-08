@@ -19,6 +19,7 @@ export async function GET(
   const response = await fetchDashboardBackend(`/admin/sites/${siteId}/status`, {
     method: "GET",
     cache: "no-store",
+    session: auth.session,
   });
 
   const text = await response.text();

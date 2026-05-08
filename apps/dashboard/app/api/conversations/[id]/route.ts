@@ -22,6 +22,7 @@ export async function GET(
     const r = await fetchDashboardBackend(`/admin/conversations/${id}`, {
       method: "GET",
       cache: "no-store",
+      session: auth.session,
     });
     const data = (await r.json().catch(() => ({}))) as {
       conversation?: { site_id?: string };

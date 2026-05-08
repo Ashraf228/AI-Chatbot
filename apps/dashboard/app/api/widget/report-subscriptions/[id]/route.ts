@@ -16,6 +16,7 @@ export async function PATCH(
     const lookup = await fetchDashboardBackend("/admin/widget/report-subscriptions", {
       method: "GET",
       cache: "no-store",
+      session: auth.session,
     });
     const subscriptions = (await lookup.json().catch(() => [])) as Array<{
       id?: string;
@@ -31,6 +32,7 @@ export async function PATCH(
 
   const r = await fetchDashboardBackend(`/admin/widget/report-subscriptions/${id}`, {
     method: "PATCH",
+    session: auth.session,
     headers: {
       "Content-Type": "application/json",
     },
@@ -57,6 +59,7 @@ export async function DELETE(
     const lookup = await fetchDashboardBackend("/admin/widget/report-subscriptions", {
       method: "GET",
       cache: "no-store",
+      session: auth.session,
     });
     const subscriptions = (await lookup.json().catch(() => [])) as Array<{
       id?: string;
@@ -72,6 +75,7 @@ export async function DELETE(
 
   const r = await fetchDashboardBackend(`/admin/widget/report-subscriptions/${id}`, {
     method: "DELETE",
+    session: auth.session,
   });
 
   const text = await r.text();

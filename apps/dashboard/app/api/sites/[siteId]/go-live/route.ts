@@ -18,6 +18,7 @@ export async function POST(
 
   const response = await fetchDashboardBackend(`/admin/sites/${siteId}/go-live`, {
     method: "POST",
+    session: auth.session,
     body: JSON.stringify({
       actorId: auth.session.sub,
       actorRole: auth.session.role,

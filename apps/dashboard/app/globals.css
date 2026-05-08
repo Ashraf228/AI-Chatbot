@@ -500,6 +500,12 @@ textarea {
   text-decoration: none;
 }
 
+.dashboard-setup-step--active {
+  border-color: rgba(17, 17, 17, 0.55);
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(17, 17, 17, 0.08);
+}
+
 .dashboard-setup-step__number {
   display: inline-flex;
   width: 26px;

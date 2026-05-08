@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchDashboardBackend } from "@/lib/dashboard-api";
 import { requireSession } from "@/lib/require-auth";
 
 export async function POST(
@@ -8,27 +9,15 @@ export async function POST(
   const auth = await requireSession({ adminOnly: true });
   if (auth.response) return auth.response;
 
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
   const body = await req.json();
   const { siteId } = await context.params;
 
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
-  }
-
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const r = await fetch(`${base}/admin/agents/${siteId}/execute`, {
+  const r = await fetchDashboardBackend(`/admin/agents/${siteId}/execute`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-DASHBOARD-TOKEN": adminKey,
-      "X-DASHBOARD-ROLE": auth.session.role,
-      "X-DASHBOARD-ACTOR": auth.session.sub,
     },
+    session: auth.session,
     body: JSON.stringify(body),
   });
 

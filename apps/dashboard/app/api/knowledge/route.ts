@@ -19,6 +19,7 @@ export async function GET(req: Request) {
     {
       method: "GET",
       cache: "no-store",
+      session: auth.session,
     }
   );
 

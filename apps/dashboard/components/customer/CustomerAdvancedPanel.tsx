@@ -2,7 +2,9 @@ import Link from "next/link";
 import { SiteAgentsForm } from "../agents/SiteAgentsForm";
 import { SiteIntegrationsForm } from "../integrations/SiteIntegrationsForm";
 import { SiteModulesForm } from "../modules/SiteModulesForm";
+import { CustomerAgentActivityTable } from "./CustomerAgentActivityTable";
 import { CustomerAuditLogTable } from "./CustomerAuditLogTable";
+import { CustomerDataPrivacyActions } from "./CustomerDataPrivacyActions";
 import { CustomerRetentionSettings } from "./CustomerRetentionSettings";
 import type { DashboardSessionRole } from "../../lib/auth";
 import { encodeSiteId } from "../../lib/site-id";
@@ -37,30 +39,36 @@ export function CustomerAdvancedPanel({
         <div className="dashboard-card dashboard-card--soft">
           <h3 className="dashboard-card-title dashboard-card-title--sm">Erweitert</h3>
           <div className="dashboard-hub-grid">
-            <AdvancedLink
-              href={`/sites/${siteSlug}/advanced?section=features`}
-              title="Funktionen"
-              description="Aktive Fähigkeiten und Branchenmodule festlegen."
-              isActive={activeSection === "features"}
-            />
-            <AdvancedLink
-              href={`/sites/${siteSlug}/advanced?section=connections`}
-              title="Verbindungen"
-              description="Shopify, Webhooks und weitere externe Systeme verwalten."
-              isActive={activeSection === "connections"}
-            />
+            {role === "admin" ? (
+              <>
+                <AdvancedLink
+                  href={`/sites/${siteSlug}/advanced?section=features`}
+                  title="Funktionen"
+                  description="Aktive Fähigkeiten und Branchenmodule festlegen."
+                  isActive={activeSection === "features"}
+                />
+                <AdvancedLink
+                  href={`/sites/${siteSlug}/advanced?section=connections`}
+                  title="Verbindungen"
+                  description="Shopify, Webhooks und weitere externe Systeme verwalten."
+                  isActive={activeSection === "connections"}
+                />
+              </>
+            ) : null}
             <AdvancedLink
               href={`/sites/${siteSlug}/advanced?section=automations`}
               title="Automationen"
               description="Abläufe, Tickets, Webhooks und Automationsschritte einsehen."
               isActive={activeSection === "automations"}
             />
-            <AdvancedLink
-              href={`/sites/${siteSlug}/advanced?section=privacy`}
-              title="Datenschutz"
-              description="Datenaufbewahrung für Chats, Anfragen und Berichte festlegen."
-              isActive={activeSection === "privacy"}
-            />
+            {role === "admin" ? (
+              <AdvancedLink
+                href={`/sites/${siteSlug}/advanced?section=privacy`}
+                title="Datenschutz"
+                description="Datenaufbewahrung für Chats, Anfragen und Berichte festlegen."
+                isActive={activeSection === "privacy"}
+              />
+            ) : null}
           </div>
         </div>
 
@@ -101,11 +109,17 @@ export function CustomerAdvancedPanel({
                 Zur Übersicht
               </Link>
             </div>
-            {section === "features" ? <SiteModulesForm siteId={siteId} /> : null}
-            {section === "connections" ? <SiteIntegrationsForm siteId={siteId} /> : null}
-            {section === "automations" ? <SiteAgentsForm siteId={siteId} /> : null}
-            {section === "privacy" ? (
+            {section === "features" && role === "admin" ? <SiteModulesForm siteId={siteId} /> : null}
+            {section === "connections" && role === "admin" ? <SiteIntegrationsForm siteId={siteId} /> : null}
+            {section === "automations" ? (
               <>
+                <CustomerAgentActivityTable siteId={siteId} />
+                {role === "admin" ? <SiteAgentsForm siteId={siteId} /> : null}
+              </>
+            ) : null}
+            {section === "privacy" && role === "admin" ? (
+              <>
+                <CustomerDataPrivacyActions siteId={siteId} role={role} />
                 <CustomerRetentionSettings siteId={siteId} />
                 {role === "admin" ? <CustomerAuditLogTable siteId={siteId} /> : null}
               </>

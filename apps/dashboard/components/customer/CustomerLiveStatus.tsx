@@ -1,13 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { CustomerStatusBadge } from "./CustomerStatusBadge";
-import {
-  mapStatusSeverityToTone,
-  mapOverallStatusToTone,
-  type CustomerApiStatus,
-  type CustomerOverallStatus,
-} from "./customer-status";
+import { mapStatusSeverityToTone, type CustomerApiStatus } from "./customer-status";
 import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
 
@@ -56,7 +51,6 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [serverStatus, setServerStatus] = useState<CustomerApiStatus | null>(null);
   const [knowledgeCount, setKnowledgeCount] = useState(0);
-  const [overallStatus, setOverallStatus] = useState<CustomerOverallStatus>("Setup unvollständig");
   const [eventSummary, setEventSummary] = useState<EventSummary>({
     startedChats: 0,
     leads: 0,
@@ -109,11 +103,16 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
         lastTestedAt: siteData.lastTestedAt || "",
         goLiveAt: siteData.goLiveAt || "",
       });
-      setKnowledgeCount(Array.isArray(knowledgeData) ? knowledgeData.length : 0);
       if (statusRes.ok && statusData?.status) {
-        setOverallStatus(statusData.status);
         setServerStatus(statusData);
       }
+      setKnowledgeCount(
+        statusRes.ok && typeof statusData?.knowledgeCount === "number"
+          ? Number(statusData.knowledgeCount)
+          : Array.isArray(knowledgeData)
+            ? knowledgeData.length
+            : 0,
+      );
       setEventSummary({
         startedChats: Number(eventData?.startedChats || 0),
         leads: Number(eventData?.leads || 0),
@@ -149,6 +148,9 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
     return <ErrorState message={error || "Kundenstatus konnte nicht geladen werden."} />;
   }
 
+  const liveStep = serverStatus?.steps?.find((step) => step.key === "live");
+  const isLive = liveStep?.status === "complete" || serverStatus?.lifecycleStatus === "live";
+
   return (
     <section className="dashboard-card dashboard-stack">
       <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
@@ -159,14 +161,14 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
           </p>
         </div>
         <CustomerStatusBadge
-          status={serverStatus ? mapStatusSeverityToTone(serverStatus.severity) : mapOverallStatusToTone(overallStatus)}
-          label={serverStatus?.label || overallStatus}
+          status={serverStatus ? mapStatusSeverityToTone(serverStatus.severity) : "pending"}
+          label={serverStatus?.label || "Status offen"}
         />
       </div>
 
       <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16 }}>
         <div className="dashboard-card dashboard-card--soft">
-          <strong>{serverStatus?.lifecycleStatus === "live" || site.goLiveAt ? "Live" : "Noch nicht live"}</strong>
+          <strong>{isLive ? "Live" : "Noch nicht live"}</strong>
           <p className="dashboard-copy dashboard-copy--muted">Widget-Status</p>
         </div>
         <div className="dashboard-card dashboard-card--soft">

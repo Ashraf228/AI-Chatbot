@@ -17,154 +17,28 @@ type SiteModule = {
   config: Record<string, unknown>;
 };
 
-type LeadSalesModuleConfig = {
-  primaryGoal: "lead_capture" | "appointment";
-  ctaLabel: string;
-  ctaDescription: string;
-  qualificationFocus: string;
-  handoffInstruction: string;
+type SiteModuleCatalogItem = {
+  key: string;
+  label: string;
+  description: string;
+  category: string;
+  defaultEnabled: boolean;
+  defaultConfig: Record<string, unknown>;
+  requiredFields: string[];
+  optionalFields: string[];
 };
 
-type EcommerceProductAdvisorModuleConfig = {
-  catalogMode: "knowledge_only" | "shopify_catalog";
-  recommendationStyle: "consultative" | "direct";
-  ctaLabel: string;
-  ctaDescription: string;
-  productLinkInstruction: string;
-  fallbackInstruction: string;
-};
-
-type PropertyTicketingModuleConfig = {
-  intakeMode: "email_handoff" | "ticket_system";
-  urgencyStyle: "structured" | "brief";
-  ctaLabel: string;
-  ctaDescription: string;
-  incidentInstruction: string;
-  handoffInstruction: string;
-};
-
-const DEFAULT_LEAD_SALES_CONFIG: LeadSalesModuleConfig = {
-  primaryGoal: "lead_capture",
-  ctaLabel: "Kontaktdaten hinterlassen",
-  ctaDescription: "Wir melden uns schnellstmoeglich mit den naechsten Schritten.",
-  qualificationFocus: "Verstehe Bedarf, Einsatzbereich und Dringlichkeit in wenigen Rueckfragen.",
-  handoffInstruction:
-    "Fuehre sichtbar Richtung Kontakt, Termin oder strukturierte Datenerfassung, sobald der Bedarf klar ist.",
-};
-
-const DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_CONFIG: EcommerceProductAdvisorModuleConfig = {
-  catalogMode: "knowledge_only",
-  recommendationStyle: "consultative",
-  ctaLabel: "Produktberatung anfragen",
-  ctaDescription:
-    "Wir helfen bei Auswahl, Sortiment oder der passenden naechsten Empfehlung.",
-  productLinkInstruction:
-    "Verweise auf konkrete Produkte, Kategorien oder Kollektionen, sobald verifizierbare Links oder Daten verfuegbar sind.",
-  fallbackInstruction:
-    "Wenn konkrete Produktdaten fehlen, bleibe transparent, stelle eine kurze Rueckfrage und fuehre bei Bedarf in eine persoenliche Beratung.",
-};
-
-const DEFAULT_PROPERTY_TICKETING_CONFIG: PropertyTicketingModuleConfig = {
-  intakeMode: "email_handoff",
-  urgencyStyle: "structured",
-  ctaLabel: "Schadensmeldung aufnehmen",
-  ctaDescription: "Wir erfassen den Fall und leiten ihn an das zustaendige Team weiter.",
-  incidentInstruction:
-    "Klaere Problem, Ort, Betroffenheit und Dringlichkeit in einer klaren Reihenfolge.",
-  handoffInstruction:
-    "Fuehre nach einer kurzen Qualifizierung sichtbar in die Fallaufnahme oder Weiterleitung.",
-};
-
-function normalizeLeadSalesConfig(config: Record<string, unknown> | undefined): LeadSalesModuleConfig {
-  return {
-    primaryGoal: config?.primaryGoal === "appointment" ? "appointment" : DEFAULT_LEAD_SALES_CONFIG.primaryGoal,
-    ctaLabel:
-      typeof config?.ctaLabel === "string" && config.ctaLabel.trim()
-        ? config.ctaLabel
-        : DEFAULT_LEAD_SALES_CONFIG.ctaLabel,
-    ctaDescription:
-      typeof config?.ctaDescription === "string" && config.ctaDescription.trim()
-        ? config.ctaDescription
-        : DEFAULT_LEAD_SALES_CONFIG.ctaDescription,
-    qualificationFocus:
-      typeof config?.qualificationFocus === "string" && config.qualificationFocus.trim()
-        ? config.qualificationFocus
-        : DEFAULT_LEAD_SALES_CONFIG.qualificationFocus,
-    handoffInstruction:
-      typeof config?.handoffInstruction === "string" && config.handoffInstruction.trim()
-        ? config.handoffInstruction
-        : DEFAULT_LEAD_SALES_CONFIG.handoffInstruction,
-  };
-}
-
-function normalizeEcommerceProductAdvisorConfig(
-  config: Record<string, unknown> | undefined,
-): EcommerceProductAdvisorModuleConfig {
-  return {
-    catalogMode:
-      config?.catalogMode === "shopify_catalog"
-        ? "shopify_catalog"
-        : DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_CONFIG.catalogMode,
-    recommendationStyle:
-      config?.recommendationStyle === "direct"
-        ? "direct"
-        : DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_CONFIG.recommendationStyle,
-    ctaLabel:
-      typeof config?.ctaLabel === "string" && config.ctaLabel.trim()
-        ? config.ctaLabel
-        : DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_CONFIG.ctaLabel,
-    ctaDescription:
-      typeof config?.ctaDescription === "string" && config.ctaDescription.trim()
-        ? config.ctaDescription
-        : DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_CONFIG.ctaDescription,
-    productLinkInstruction:
-      typeof config?.productLinkInstruction === "string" && config.productLinkInstruction.trim()
-        ? config.productLinkInstruction
-        : DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_CONFIG.productLinkInstruction,
-    fallbackInstruction:
-      typeof config?.fallbackInstruction === "string" && config.fallbackInstruction.trim()
-        ? config.fallbackInstruction
-        : DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_CONFIG.fallbackInstruction,
-  };
-}
-
-function normalizePropertyTicketingConfig(
-  config: Record<string, unknown> | undefined,
-): PropertyTicketingModuleConfig {
-  return {
-    intakeMode:
-      config?.intakeMode === "ticket_system"
-        ? "ticket_system"
-        : DEFAULT_PROPERTY_TICKETING_CONFIG.intakeMode,
-    urgencyStyle:
-      config?.urgencyStyle === "brief"
-        ? "brief"
-        : DEFAULT_PROPERTY_TICKETING_CONFIG.urgencyStyle,
-    ctaLabel:
-      typeof config?.ctaLabel === "string" && config.ctaLabel.trim()
-        ? config.ctaLabel
-        : DEFAULT_PROPERTY_TICKETING_CONFIG.ctaLabel,
-    ctaDescription:
-      typeof config?.ctaDescription === "string" && config.ctaDescription.trim()
-        ? config.ctaDescription
-        : DEFAULT_PROPERTY_TICKETING_CONFIG.ctaDescription,
-    incidentInstruction:
-      typeof config?.incidentInstruction === "string" && config.incidentInstruction.trim()
-        ? config.incidentInstruction
-        : DEFAULT_PROPERTY_TICKETING_CONFIG.incidentInstruction,
-    handoffInstruction:
-      typeof config?.handoffInstruction === "string" && config.handoffInstruction.trim()
-        ? config.handoffInstruction
-        : DEFAULT_PROPERTY_TICKETING_CONFIG.handoffInstruction,
-  };
+function configString(config: Record<string, unknown> | undefined, key: string) {
+  const value = config?.[key];
+  return typeof value === "string" ? value : "";
 }
 
 function LeadSalesModuleFields({
   config,
   onChange,
 }: {
-  config: LeadSalesModuleConfig;
-  onChange: (configPatch: Partial<LeadSalesModuleConfig>) => void;
+  config: Record<string, unknown>;
+  onChange: (configPatch: Record<string, unknown>) => void;
 }) {
   return (
     <div className="dashboard-stack dashboard-stack--sm">
@@ -172,13 +46,14 @@ function LeadSalesModuleFields({
         <label className="dashboard-field">
           <span className="dashboard-label">Hauptziel</span>
           <Select
-            value={config.primaryGoal}
+            value={configString(config, "primaryGoal")}
             onChange={(event) =>
               onChange({
-                primaryGoal: event.target.value as LeadSalesModuleConfig["primaryGoal"],
+                primaryGoal: event.target.value,
               })
             }
           >
+            <option value="">Bitte wählen</option>
             <option value="lead_capture">Kontaktdaten sammeln</option>
             <option value="appointment">Termin vorbereiten</option>
           </Select>
@@ -187,7 +62,7 @@ function LeadSalesModuleFields({
         <label className="dashboard-field">
           <span className="dashboard-label">CTA-Text</span>
           <Input
-            value={config.ctaLabel}
+            value={configString(config, "ctaLabel")}
             onChange={(event) => onChange({ ctaLabel: event.target.value })}
             placeholder="Kontaktdaten hinterlassen"
           />
@@ -197,7 +72,7 @@ function LeadSalesModuleFields({
       <label className="dashboard-field">
         <span className="dashboard-label">CTA-Beschreibung</span>
         <Input
-          value={config.ctaDescription}
+          value={configString(config, "ctaDescription")}
           onChange={(event) => onChange({ ctaDescription: event.target.value })}
           placeholder="Wir melden uns schnellstmoeglich mit den naechsten Schritten."
         />
@@ -208,7 +83,7 @@ function LeadSalesModuleFields({
         <textarea
           className="dashboard-textarea"
           rows={3}
-          value={config.qualificationFocus}
+          value={configString(config, "qualificationFocus")}
           onChange={(event) => onChange({ qualificationFocus: event.target.value })}
         />
       </label>
@@ -218,7 +93,7 @@ function LeadSalesModuleFields({
         <textarea
           className="dashboard-textarea"
           rows={3}
-          value={config.handoffInstruction}
+          value={configString(config, "handoffInstruction")}
           onChange={(event) => onChange({ handoffInstruction: event.target.value })}
         />
       </label>
@@ -230,8 +105,8 @@ function EcommerceProductAdvisorFields({
   config,
   onChange,
 }: {
-  config: EcommerceProductAdvisorModuleConfig;
-  onChange: (configPatch: Partial<EcommerceProductAdvisorModuleConfig>) => void;
+  config: Record<string, unknown>;
+  onChange: (configPatch: Record<string, unknown>) => void;
 }) {
   return (
     <div className="dashboard-stack dashboard-stack--sm">
@@ -239,13 +114,14 @@ function EcommerceProductAdvisorFields({
         <label className="dashboard-field">
           <span className="dashboard-label">Katalogquelle</span>
           <Select
-            value={config.catalogMode}
+            value={configString(config, "catalogMode")}
             onChange={(event) =>
               onChange({
-                catalogMode: event.target.value as EcommerceProductAdvisorModuleConfig["catalogMode"],
+                catalogMode: event.target.value,
               })
             }
           >
+            <option value="">Bitte wählen</option>
             <option value="knowledge_only">Wissensbasis / manuelle Inhalte</option>
             <option value="shopify_catalog">Shopify-Katalog angebunden</option>
           </Select>
@@ -254,14 +130,14 @@ function EcommerceProductAdvisorFields({
         <label className="dashboard-field">
           <span className="dashboard-label">Beratungsstil</span>
           <Select
-            value={config.recommendationStyle}
+            value={configString(config, "recommendationStyle")}
             onChange={(event) =>
               onChange({
-                recommendationStyle:
-                  event.target.value as EcommerceProductAdvisorModuleConfig["recommendationStyle"],
+                recommendationStyle: event.target.value,
               })
             }
           >
+            <option value="">Bitte wählen</option>
             <option value="consultative">Beratend</option>
             <option value="direct">Direkt empfehlend</option>
           </Select>
@@ -272,7 +148,7 @@ function EcommerceProductAdvisorFields({
         <label className="dashboard-field">
           <span className="dashboard-label">CTA-Text</span>
           <Input
-            value={config.ctaLabel}
+            value={configString(config, "ctaLabel")}
             onChange={(event) => onChange({ ctaLabel: event.target.value })}
             placeholder="Produktberatung anfragen"
           />
@@ -281,7 +157,7 @@ function EcommerceProductAdvisorFields({
         <label className="dashboard-field">
           <span className="dashboard-label">CTA-Beschreibung</span>
           <Input
-            value={config.ctaDescription}
+            value={configString(config, "ctaDescription")}
             onChange={(event) => onChange({ ctaDescription: event.target.value })}
             placeholder="Wir helfen bei Auswahl, Sortiment oder der passenden naechsten Empfehlung."
           />
@@ -293,7 +169,7 @@ function EcommerceProductAdvisorFields({
         <textarea
           className="dashboard-textarea"
           rows={3}
-          value={config.productLinkInstruction}
+          value={configString(config, "productLinkInstruction")}
           onChange={(event) => onChange({ productLinkInstruction: event.target.value })}
         />
       </label>
@@ -303,7 +179,7 @@ function EcommerceProductAdvisorFields({
         <textarea
           className="dashboard-textarea"
           rows={3}
-          value={config.fallbackInstruction}
+          value={configString(config, "fallbackInstruction")}
           onChange={(event) => onChange({ fallbackInstruction: event.target.value })}
         />
       </label>
@@ -315,8 +191,8 @@ function PropertyTicketingFields({
   config,
   onChange,
 }: {
-  config: PropertyTicketingModuleConfig;
-  onChange: (configPatch: Partial<PropertyTicketingModuleConfig>) => void;
+  config: Record<string, unknown>;
+  onChange: (configPatch: Record<string, unknown>) => void;
 }) {
   return (
     <div className="dashboard-stack dashboard-stack--sm">
@@ -324,13 +200,14 @@ function PropertyTicketingFields({
         <label className="dashboard-field">
           <span className="dashboard-label">Uebergabeweg</span>
           <Select
-            value={config.intakeMode}
+            value={configString(config, "intakeMode")}
             onChange={(event) =>
               onChange({
-                intakeMode: event.target.value as PropertyTicketingModuleConfig["intakeMode"],
+                intakeMode: event.target.value,
               })
             }
           >
+            <option value="">Bitte wählen</option>
             <option value="email_handoff">Weiterleitung / E-Mail-Fallaufnahme</option>
             <option value="ticket_system">Ticket-System vorbereitet</option>
           </Select>
@@ -339,13 +216,14 @@ function PropertyTicketingFields({
         <label className="dashboard-field">
           <span className="dashboard-label">Rueckfrage-Stil</span>
           <Select
-            value={config.urgencyStyle}
+            value={configString(config, "urgencyStyle")}
             onChange={(event) =>
               onChange({
-                urgencyStyle: event.target.value as PropertyTicketingModuleConfig["urgencyStyle"],
+                urgencyStyle: event.target.value,
               })
             }
           >
+            <option value="">Bitte wählen</option>
             <option value="structured">Strukturiert</option>
             <option value="brief">Kurz und kritisch</option>
           </Select>
@@ -356,7 +234,7 @@ function PropertyTicketingFields({
         <label className="dashboard-field">
           <span className="dashboard-label">CTA-Text</span>
           <Input
-            value={config.ctaLabel}
+            value={configString(config, "ctaLabel")}
             onChange={(event) => onChange({ ctaLabel: event.target.value })}
             placeholder="Schadensmeldung aufnehmen"
           />
@@ -365,7 +243,7 @@ function PropertyTicketingFields({
         <label className="dashboard-field">
           <span className="dashboard-label">CTA-Beschreibung</span>
           <Input
-            value={config.ctaDescription}
+            value={configString(config, "ctaDescription")}
             onChange={(event) => onChange({ ctaDescription: event.target.value })}
             placeholder="Wir erfassen den Fall und leiten ihn an das zustaendige Team weiter."
           />
@@ -377,7 +255,7 @@ function PropertyTicketingFields({
         <textarea
           className="dashboard-textarea"
           rows={3}
-          value={config.incidentInstruction}
+          value={configString(config, "incidentInstruction")}
           onChange={(event) => onChange({ incidentInstruction: event.target.value })}
         />
       </label>
@@ -387,7 +265,7 @@ function PropertyTicketingFields({
         <textarea
           className="dashboard-textarea"
           rows={3}
-          value={config.handoffInstruction}
+          value={configString(config, "handoffInstruction")}
           onChange={(event) => onChange({ handoffInstruction: event.target.value })}
         />
       </label>
@@ -397,6 +275,7 @@ function PropertyTicketingFields({
 
 export function SiteModulesForm({ siteId }: { siteId: string }) {
   const [modules, setModules] = useState<SiteModule[]>([]);
+  const [catalog, setCatalog] = useState<SiteModuleCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -407,16 +286,29 @@ export function SiteModulesForm({ siteId }: { siteId: string }) {
       setLoading(true);
       setError(null);
 
-      const res = await fetch(`/api/site-modules/${siteId}`, { cache: "no-store" });
-      const data = await res.json().catch(() => []);
+      const [modulesRes, catalogRes] = await Promise.all([
+        fetch(`/api/site-modules/${siteId}`, { cache: "no-store" }),
+        fetch("/api/site-modules/catalog", { cache: "no-store" }),
+      ]);
+      const [modulesData, catalogData] = await Promise.all([
+        modulesRes.json().catch(() => []),
+        catalogRes.json().catch(() => []),
+      ]);
 
-      if (!res.ok) {
-        setError(data?.message || "Module konnten nicht geladen werden.");
+      if (!modulesRes.ok) {
+        setError(modulesData?.message || "Funktionen konnten nicht geladen werden.");
         setLoading(false);
         return;
       }
 
-      setModules(Array.isArray(data) ? data : []);
+      if (!catalogRes.ok) {
+        setError(catalogData?.message || "Funktionskatalog konnte nicht geladen werden.");
+        setLoading(false);
+        return;
+      }
+
+      setModules(Array.isArray(modulesData) ? modulesData : []);
+      setCatalog(Array.isArray(catalogData) ? catalogData : []);
       setLoading(false);
     }
 
@@ -462,12 +354,12 @@ export function SiteModulesForm({ siteId }: { siteId: string }) {
       const data = await res.json().catch(() => []);
 
       if (!res.ok) {
-        setError(data?.message || "Module konnten nicht gespeichert werden.");
+        setError(data?.message || "Funktionen konnten nicht gespeichert werden.");
         return;
       }
 
       setModules(Array.isArray(data) ? data : []);
-      setMessage("Module gespeichert.");
+      setMessage("Funktionen gespeichert.");
     } finally {
       setSaving(false);
     }
@@ -484,68 +376,75 @@ export function SiteModulesForm({ siteId }: { siteId: string }) {
   return (
     <div className="dashboard-card dashboard-stack">
       <div>
-        <h2 className="dashboard-card-title">Aktive Module</h2>
+        <h2 className="dashboard-card-title">Aktive Funktionen</h2>
         <p className="dashboard-copy">
-          Hier legst du fest, welche Branchen- und Agenten-Bausteine fuer diesen Kunden
+          Hier legst du fest, welche Branchen- und Automations-Bausteine fuer diesen Kunden
           grundsaetzlich aktiv sein sollen.
         </p>
       </div>
 
       <div className="dashboard-stack dashboard-stack--sm">
-        {modules.map((module) => (
-          <div key={module.key} className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-            <label className="dashboard-checkbox">
-              <input
-                type="checkbox"
-                checked={module.isEnabled}
-                onChange={(event) =>
-                  setModules((current) =>
-                    current.map((entry) =>
-                      entry.key === module.key
-                        ? { ...entry, isEnabled: event.target.checked }
-                        : entry,
-                    ),
-                  )
-                }
-              />
-              <span>
-                <strong>{module.label}</strong>
-                <br />
-                <span className="dashboard-copy dashboard-copy--muted">{module.description}</span>
-                <br />
-                <span className="dashboard-mono dashboard-copy--muted">
-                  {module.category} · {module.key}
+        {modules.map((module) => {
+          const catalogItem = catalog.find((entry) => entry.key === module.key);
+          const label = catalogItem?.label || module.label;
+          const description = catalogItem?.description || module.description;
+          const category = catalogItem?.category || module.category;
+
+          return (
+            <div key={module.key} className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+              <label className="dashboard-checkbox">
+                <input
+                  type="checkbox"
+                  checked={module.isEnabled}
+                  onChange={(event) =>
+                    setModules((current) =>
+                      current.map((entry) =>
+                        entry.key === module.key
+                          ? { ...entry, isEnabled: event.target.checked }
+                          : entry,
+                      ),
+                    )
+                  }
+                />
+                <span>
+                  <strong>{label}</strong>
+                  <br />
+                  <span className="dashboard-copy dashboard-copy--muted">{description}</span>
+                  <br />
+                  <span className="dashboard-mono dashboard-copy--muted">
+                    {category} · {module.key}
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
 
-            {module.key === "lead-sales" && module.isEnabled ? (
-              <LeadSalesModuleFields
-                config={normalizeLeadSalesConfig(module.config)}
-                onChange={(configPatch) => updateModuleConfig(module.key, configPatch)}
-              />
-            ) : null}
+              {module.key === "lead-sales" && module.isEnabled ? (
+                <LeadSalesModuleFields
+                  config={module.config || {}}
+                  onChange={(configPatch) => updateModuleConfig(module.key, configPatch)}
+                />
+              ) : null}
 
-            {module.key === "ecommerce-product-advisor" && module.isEnabled ? (
-              <EcommerceProductAdvisorFields
-                config={normalizeEcommerceProductAdvisorConfig(module.config)}
-                onChange={(configPatch) => updateModuleConfig(module.key, configPatch)}
-              />
-            ) : null}
+              {module.key === "ecommerce-product-advisor" && module.isEnabled ? (
+                <EcommerceProductAdvisorFields
+                  config={module.config || {}}
+                  onChange={(configPatch) => updateModuleConfig(module.key, configPatch)}
+                />
+              ) : null}
 
-            {module.key === "property-ticketing" && module.isEnabled ? (
-              <PropertyTicketingFields
-                config={normalizePropertyTicketingConfig(module.config)}
-                onChange={(configPatch) => updateModuleConfig(module.key, configPatch)}
-              />
-            ) : null}
-          </div>
-        ))}
+              {module.key === "property-ticketing" && module.isEnabled ? (
+                <PropertyTicketingFields
+                  config={module.config || {}}
+                  onChange={(configPatch) => updateModuleConfig(module.key, configPatch)}
+                />
+              ) : null}
+            </div>
+          );
+        })}
       </div>
 
       <div className="dashboard-actions">
         <Button onClick={saveModules} disabled={saving}>
-          {saving ? "Module werden gespeichert..." : "Module speichern"}
+          {saving ? "Funktionen werden gespeichert..." : "Funktionen speichern"}
         </Button>
         {message ? <p className="dashboard-status dashboard-status--success">{message}</p> : null}
       </div>

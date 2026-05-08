@@ -18,6 +18,7 @@ import { memoryStorage } from 'multer';
 import { IngestService } from './ingest.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { AuditLogService } from '../audit-logs/audit-log.service';
+import { AdminScopeService } from '../utils/admin-scope.service';
 import { IsArray, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -62,15 +63,22 @@ export class IngestController {
   constructor(
     private ingest: IngestService,
     private auditLogs: AuditLogService,
+    private scope: AdminScopeService,
   ) {}
 
   @Get('knowledge')
-  async listKnowledge(@Query('siteId') siteId: string) {
+  async listKnowledge(@Query('siteId') siteId: string, @Req() req: { dashboardAuth?: unknown }) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+    });
     return this.ingest.listKnowledge(siteId);
   }
 
   @Get('sources')
-  async listSources(@Query('siteId') siteId: string) {
+  async listSources(@Query('siteId') siteId: string, @Req() req: { dashboardAuth?: unknown }) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+    });
     return this.ingest.listSources(siteId);
   }
 
@@ -79,12 +87,15 @@ export class IngestController {
     @Param('documentId') documentId: string,
     @Req() req: { dashboardAuth?: { actorId?: string; role?: string } },
   ) {
+    await this.scope.assertKnowledgeDocumentAccess(this.scope.getAuth(req), documentId, {
+      allowedRoles: ['admin', 'operator'],
+    });
     const result = await this.ingest.deleteKnowledge(documentId);
     await this.auditLogs.record({
       siteId: result.siteId,
       actorId: req.dashboardAuth?.actorId,
       actorRole: req.dashboardAuth?.role,
-      action: 'knowledge.deleted',
+      action: 'delete_knowledge_source',
       resourceType: 'knowledge_document',
       resourceId: documentId,
       metadata: {
@@ -100,12 +111,15 @@ export class IngestController {
     @Body() body: UpdateFaqItemDto,
     @Req() req: { dashboardAuth?: { actorId?: string; role?: string } },
   ) {
+    await this.scope.assertFaqChunkAccess(this.scope.getAuth(req), chunkId, {
+      allowedRoles: ['admin', 'operator'],
+    });
     const result = await this.ingest.updateFaqItem(chunkId, body.q, body.a);
     await this.auditLogs.record({
       siteId: result.siteId,
       actorId: req.dashboardAuth?.actorId,
       actorRole: req.dashboardAuth?.role,
-      action: 'knowledge.updated',
+      action: 'update_knowledge_source',
       resourceType: 'faq_chunk',
       resourceId: chunkId,
       metadata: {
@@ -121,12 +135,15 @@ export class IngestController {
     @Body() body: IngestFaqDto,
     @Req() req: { dashboardAuth?: { actorId?: string; role?: string } },
   ) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), body.siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
     const result = await this.ingest.ingestFaq(body.siteId, body.title ?? 'FAQ', body.items ?? []);
     await this.auditLogs.record({
       siteId: body.siteId,
       actorId: req.dashboardAuth?.actorId,
       actorRole: req.dashboardAuth?.role,
-      action: 'knowledge.created',
+      action: 'ingest_faq',
       resourceType: 'knowledge_document',
       resourceId: result.documentId,
       metadata: {
@@ -171,12 +188,16 @@ export class IngestController {
       throw new BadRequestException('uploaded PDF is empty or buffer missing');
     }
 
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+
     const result = await this.ingest.ingestPdf(siteId, file);
     await this.auditLogs.record({
       siteId,
       actorId: req.dashboardAuth?.actorId,
       actorRole: req.dashboardAuth?.role,
-      action: 'knowledge.created',
+      action: 'upload_pdf',
       resourceType: 'knowledge_document',
       resourceId: result.documentId,
       metadata: {

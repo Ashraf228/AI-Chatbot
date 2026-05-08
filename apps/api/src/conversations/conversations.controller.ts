@@ -1,7 +1,8 @@
-import { Controller, Delete, Get, Header, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Header, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../db/prisma.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
+import { AdminScopeService } from '../utils/admin-scope.service';
 import { RequireDashboardRoles } from '../utils/dashboard-rbac';
 import { toCsv } from '../utils/csv';
 
@@ -46,16 +47,25 @@ type ConversationExportRow = {
 @UseGuards(AdminKeyGuard)
 @Controller('admin/conversations')
 export class ConversationsController {
-  constructor(private db: PrismaService) {}
+  constructor(
+    private db: PrismaService,
+    private scope: AdminScopeService,
+  ) {}
 
   @Get()
-  async list(@Query('siteId') siteId?: string) {
+  async list(@Query('siteId') siteId: string | undefined, @Req() req: { dashboardAuth?: unknown }) {
+    const auth = this.scope.getAuth(req);
     const params: string[] = [];
     let where = '';
 
     if (siteId) {
+      await this.scope.assertSiteAccess(auth, siteId, {
+        allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+      });
       params.push(siteId);
       where = `WHERE c.site_id = $1`;
+    } else {
+      this.scope.assertRole(auth, ['admin']);
     }
 
     const res = await this.db.query<ConversationListRow>(
@@ -157,7 +167,11 @@ export class ConversationsController {
   }
 
   @Get(':id')
-  async detail(@Param('id') id: string) {
+  async detail(@Param('id') id: string, @Req() req: { dashboardAuth?: unknown }) {
+    await this.scope.assertConversationAccess(this.scope.getAuth(req), id, {
+      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+    });
+
     const conv = await this.db.query<ConversationRow>(
       `SELECT * FROM conversations WHERE id = $1 LIMIT 1`,
       [id],

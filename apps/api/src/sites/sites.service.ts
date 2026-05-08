@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from 'crypto';
 import { SiteConfigInput } from './dto';
 import { resolveSiteKey } from './site-key';
 import { TenantsService } from '../tenants/tenants.service';
+import { AuditLogService } from '../audit-logs/audit-log.service';
 
 type SiteRow = {
   id: string;
@@ -29,6 +30,7 @@ export class SitesService {
   constructor(
     private db: PrismaService,
     private readonly tenants: TenantsService,
+    private readonly auditLogs: AuditLogService,
   ) {}
 
   private normalizeSite(row: SiteRow | null): NormalizedSiteRow | null {
@@ -183,23 +185,16 @@ export class SitesService {
       ],
     );
 
-    await this.db.query(
-      `INSERT INTO audit_logs(
-         id, site_id, tenant_id, actor_id, actor_role, action, resource_type, resource_id, metadata, created_at
-       )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())`,
-      [
-        randomUUID(),
-        siteId,
-        site.tenant_id,
-        actor.actorId || 'dashboard',
-        actor.actorRole || 'admin',
-        'site.go_live',
-        'site',
-        siteId,
-        JSON.stringify({ goLiveAt }),
-      ],
-    );
+    await this.auditLogs.record({
+      siteId,
+      tenantId: site.tenant_id,
+      actorId: actor.actorId,
+      actorRole: actor.actorRole,
+      action: 'go_live',
+      resourceType: 'site',
+      resourceId: siteId,
+      metadata: { goLiveAt, lifecycleStatus: 'live' },
+    });
 
     return this.getSite(siteId);
   }

@@ -19,6 +19,7 @@ export async function GET(req: Request) {
   const r = await fetchDashboardBackend(`${target.pathname}${target.search}`, {
     method: "GET",
     cache: "no-store",
+    session: auth.session,
   });
   const data = (await r.json().catch(() => [])) as Record<string, unknown>[];
   if (!r.ok) {
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
 
   const r = await fetchDashboardBackend("/admin/widget/report-subscriptions", {
     method: "POST",
+    session: auth.session,
     headers: {
       "Content-Type": "application/json",
     },

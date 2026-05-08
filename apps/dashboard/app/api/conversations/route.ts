@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     const r = await fetchDashboardBackend(target, {
       method: "GET",
       cache: "no-store",
+      session: auth.session,
     });
     const data = (await r.json().catch(() => [])) as Record<string, unknown>[];
     if (!r.ok) {

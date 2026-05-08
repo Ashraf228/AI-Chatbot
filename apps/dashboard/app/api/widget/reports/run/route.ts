@@ -15,6 +15,7 @@ export async function POST(req: Request) {
 
   const r = await fetchDashboardBackend("/admin/widget/reports/run", {
     method: "POST",
+    session: auth.session,
     headers: {
       "Content-Type": "application/json",
     },

@@ -17,6 +17,18 @@ type AuditLog = {
 };
 
 const ACTION_LABELS: Record<string, string> = {
+  apply_template: "Vorlage angewendet",
+  go_live: "Live geschaltet",
+  update_widget_config: "Widget-Einstellungen geändert",
+  update_branding: "Design geändert",
+  update_behavior: "Verhalten geändert",
+  ingest_faq: "FAQ importiert",
+  upload_pdf: "PDF hochgeladen",
+  update_knowledge_source: "Wissen geändert",
+  delete_knowledge_source: "Wissen gelöscht",
+  update_site_modules: "Funktionen geändert",
+  update_integration: "Verbindung geändert",
+  rotate_integration_secrets: "Verbindungs-Secrets rotiert",
   "template.applied": "Vorlage angewendet",
   "site.go_live": "Live geschaltet",
   "leads.exported": "Anfragen exportiert",
@@ -36,7 +48,7 @@ export function CustomerAuditLogTable({ siteId }: { siteId: string }) {
     async function load() {
       setLoading(true);
       setError(null);
-      const response = await fetch(`/api/audit-logs?siteId=${encodeURIComponent(siteId)}&limit=100`, {
+      const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/audit-logs?limit=100`, {
         cache: "no-store",
       });
       const data = await response.json().catch(() => []);

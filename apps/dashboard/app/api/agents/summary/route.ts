@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/require-auth";
+import { fetchDashboardBackend } from "@/lib/dashboard-api";
+import { requireSession } from "@/lib/require-auth";
 
 type SiteRow = {
   id: string;
@@ -21,25 +22,12 @@ type AgentRun = {
 };
 
 export async function GET() {
-  const auth = await requireAuth();
-  if (auth) return auth;
+  const auth = await requireSession();
+  if (auth.response) return auth.response;
 
-  const base = process.env.BACKEND_BASE_URL?.trim();
-  const adminKey = process.env.DASHBOARD_INTERNAL_TOKEN?.trim() || process.env.ADMIN_KEY?.trim();
-
-  if (!base) {
-    return NextResponse.json({ message: "BACKEND_BASE_URL missing" }, { status: 500 });
-  }
-
-  if (!adminKey) {
-    return NextResponse.json({ message: "ADMIN_KEY missing" }, { status: 500 });
-  }
-
-  const sitesRes = await fetch(`${base}/admin/sites`, {
+  const sitesRes = await fetchDashboardBackend("/admin/sites", {
     method: "GET",
-    headers: {
-      "X-DASHBOARD-TOKEN": adminKey,
-    },
+    session: auth.session,
     cache: "no-store",
   });
 
@@ -56,11 +44,9 @@ export async function GET() {
   const sites = Array.isArray(sitesData) ? (sitesData as SiteRow[]) : [];
   const runResults = await Promise.all(
     sites.map(async (site) => {
-      const response = await fetch(`${base}/admin/agents/${encodeURIComponent(site.id)}`, {
+      const response = await fetchDashboardBackend(`/admin/agents/${encodeURIComponent(site.id)}`, {
         method: "GET",
-        headers: {
-          "X-DASHBOARD-TOKEN": adminKey,
-        },
+        session: auth.session,
         cache: "no-store",
       });
 

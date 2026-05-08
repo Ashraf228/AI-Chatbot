@@ -3,6 +3,7 @@ import { PrismaService } from '../db/prisma.service';
 import { SitesService } from '../sites/sites.service';
 import {
   getSiteModuleDefinition,
+  listSiteModuleCatalog,
   SITE_MODULE_REGISTRY,
   SiteModuleDefinition,
 } from './module-registry';
@@ -23,6 +24,10 @@ export class SiteModulesService {
     private readonly db: PrismaService,
     private readonly sites: SitesService,
   ) {}
+
+  listCatalog() {
+    return listSiteModuleCatalog();
+  }
 
   private mapRow(
     siteId: string,
