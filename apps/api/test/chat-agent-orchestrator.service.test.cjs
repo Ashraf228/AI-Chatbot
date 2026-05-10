@@ -277,6 +277,35 @@ test('ChatAgentOrchestratorService keeps context when appointment intent follows
   assert.ok(auditLogs.some((entry) => entry.action === 'schedule_intent_detected'));
 });
 
+test('ChatAgentOrchestratorService uses stored conversation topic for appointment contact collection', async () => {
+  const { decide, conversations } = createHarness();
+  conversations.set('conversation-1', {
+    metadata: {
+      conversationState: {
+        intent: 'support',
+        stage: 'qualification',
+        topic: 'KI für Unternehmen / Support',
+        urgency: 'high',
+        goal: 'answer_question',
+        collectedFields: {
+          concern: 'KI für Unternehmen / Support',
+        },
+      },
+    },
+  });
+
+  const result = await decide('einen termin');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'ask_for_contact');
+  assert.doesNotMatch(result.answer, /Worum geht es genau/i);
+  assert.match(result.answer, /E-Mail oder Telefon/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.scheduleIntent, true);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'KI für Unternehmen / Support');
+  assert.equal(conversations.get('conversation-1').metadata.conversationState.goal, 'schedule_call');
+  assert.equal(conversations.get('conversation-1').metadata.conversationState.stage, 'contact_collection');
+});
+
 test('ChatAgentOrchestratorService returns schedule link when appointment lead is complete', async () => {
   const { decide, leads, contactRequests } = createHarness({
     scheduleUrl: 'https://example.com/book',

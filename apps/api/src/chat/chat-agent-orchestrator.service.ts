@@ -168,10 +168,6 @@ export class ChatAgentOrchestratorService {
       return { action: 'normal_answer', handled: false, decision: structuredDecision };
     }
 
-    const contact = mergeContactDetailsFromState(
-      mergeContactDetails(pendingLead, contactFromMessage),
-      conversationState,
-    );
     const effectiveScheduleIntent =
       Boolean(
         scheduleIntent ||
@@ -180,6 +176,14 @@ export class ChatAgentOrchestratorService {
           conversationState.intent === 'appointment' ||
           conversationState.goal === 'schedule_call',
       );
+    const contact = ensureScheduleContactContext(
+      mergeContactDetailsFromState(
+        mergeContactDetails(pendingLead, contactFromMessage),
+        conversationState,
+      ),
+      conversationState,
+      effectiveScheduleIntent,
+    );
     const missing = getMissingContactFields(contact);
     const cta = buildLeadCta(moduleContext.ctaLabel, moduleContext.ctaDescription, siteConfig.ctaText);
     const activeConversationState = buildConversationState({
@@ -236,7 +240,7 @@ export class ChatAgentOrchestratorService {
       return {
         action: 'ask_for_contact',
         handled: true,
-        answer: buildMissingFieldsQuestion(missing, effectiveScheduleIntent),
+        answer: buildMissingFieldsQuestion(missing, effectiveScheduleIntent, Boolean(contact.concern)),
         decision: structuredDecision,
         cta,
       };
@@ -977,6 +981,19 @@ function mergeContactDetailsFromState(contact: ContactDetails, state: Conversati
   };
 }
 
+function ensureScheduleContactContext(
+  contact: ContactDetails,
+  state: ConversationState | null,
+  scheduleIntent: boolean,
+): ContactDetails {
+  if (!scheduleIntent || contact.concern) {
+    return contact;
+  }
+
+  const contextConcern = state?.collectedFields?.concern || state?.topic || undefined;
+  return contextConcern ? { ...contact, concern: contextConcern } : contact;
+}
+
 function buildConversationState(params: {
   previous: ConversationState | null;
   message: string;
@@ -1190,7 +1207,11 @@ function getMissingContactFields(contact: ContactDetails) {
   return missing;
 }
 
-function buildMissingFieldsQuestion(missing: string[], scheduleIntent: boolean) {
+function buildMissingFieldsQuestion(missing: string[], scheduleIntent: boolean, hasKnownConcern = false) {
+  if (scheduleIntent && hasKnownConcern && missing.includes('name') && missing.includes('contact')) {
+    return 'Perfekt. Wie können wir dich am besten erreichen - per E-Mail oder Telefon?';
+  }
+
   if (missing[0] === 'concern') {
     return 'Klar. Worum geht es genau?';
   }
