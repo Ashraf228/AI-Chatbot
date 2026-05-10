@@ -39,6 +39,11 @@ type Tenant = {
   name: string;
 };
 
+const DEFAULT_TENANT = {
+  id: "t_default",
+  name: "Interner Mandant",
+};
+
 export default function SitesPage() {
   const [sites, setSites] = useState<Site[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -47,7 +52,7 @@ export default function SitesPage() {
   const [siteMetricsById, setSiteMetricsById] = useState<Record<string, BusinessSiteMetric>>({});
   const [form, setForm] = useState({
     siteKey: "",
-    tenantId: "t_default",
+    tenantId: "",
     name: "",
     domain: "localhost",
     industry: "",
@@ -110,6 +115,11 @@ export default function SitesPage() {
             ? current.tenantId
             : items[0].id,
       }));
+    } else {
+      setForm((current) => ({
+        ...current,
+        tenantId: "",
+      }));
     }
   }
 
@@ -143,24 +153,25 @@ export default function SitesPage() {
     setErr(null);
     setMsg(null);
 
-    const body = {
-      siteKey: form.siteKey.trim(),
-      tenantId: form.tenantId.trim(),
-      name: form.name.trim(),
-      allowedDomains: [form.domain.trim()].filter(Boolean),
-      config: {},
-    };
     const templateMap = templatesByKey(templates);
-
-    if (!body.tenantId) {
-      setErr("Bitte zuerst einen Mandanten auswählen oder anlegen.");
-      return;
-    }
 
     if (!form.industry || !templateMap[form.industry]) {
       setErr("Bitte eine Branche auswählen. Die passende Vorlage wird beim Anlegen automatisch angewendet.");
       return;
     }
+
+    const tenantId = await ensureTenantForCustomerCreate();
+    if (!tenantId) {
+      return;
+    }
+
+    const body = {
+      siteKey: form.siteKey.trim(),
+      tenantId,
+      name: form.name.trim(),
+      allowedDomains: [form.domain.trim()].filter(Boolean),
+      config: {},
+    };
 
     const r = await fetch("/api/sites", {
       method: "POST",
@@ -173,7 +184,7 @@ export default function SitesPage() {
     const data = await r.json().catch(() => ({}));
 
     if (!r.ok) {
-      setErr(typeof data === "string" ? data : JSON.stringify(data));
+      setErr(formatApiError(data, "Kunde konnte nicht angelegt werden."));
       return;
     }
 
@@ -198,13 +209,65 @@ export default function SitesPage() {
 
     setForm({
       siteKey: "",
-      tenantId: "t_default",
+      tenantId,
       name: "",
       domain: "localhost",
       industry: "",
     });
 
     await loadSites();
+  }
+
+  async function ensureTenantForCustomerCreate() {
+    const selectedTenantId = form.tenantId.trim();
+    const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
+
+    if (selectedTenant) {
+      return selectedTenant.id;
+    }
+
+    if (tenants.length > 0) {
+      const fallbackTenantId = tenants[0].id;
+      setForm((current) => ({ ...current, tenantId: fallbackTenantId }));
+      return fallbackTenantId;
+    }
+
+    const response = await fetch("/api/tenants", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(DEFAULT_TENANT),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (response.ok && data?.id) {
+      const createdTenant = {
+        id: String(data.id),
+        name: String(data.name || DEFAULT_TENANT.name),
+      };
+      setTenants([createdTenant]);
+      setForm((current) => ({ ...current, tenantId: createdTenant.id }));
+      return createdTenant.id;
+    }
+
+    const refreshed = await fetch("/api/tenants", { cache: "no-store" });
+    const refreshedData = await refreshed.json().catch(() => []);
+    const refreshedTenants = Array.isArray(refreshedData) ? refreshedData : [];
+
+    if (refreshed.ok && refreshedTenants.length > 0) {
+      setTenants(refreshedTenants);
+      setForm((current) => ({ ...current, tenantId: refreshedTenants[0].id }));
+      return refreshedTenants[0].id;
+    }
+
+    setErr(
+      response.status === 403
+        ? "Es ist noch kein interner Mandant vorhanden. Bitte als Admin einen Mandanten anlegen."
+        : formatApiError(data, "Interner Mandant konnte nicht automatisch angelegt werden."),
+    );
+    return null;
   }
 
   async function createTenant(e: React.FormEvent<HTMLFormElement>) {
@@ -254,6 +317,11 @@ export default function SitesPage() {
             <p className="dashboard-copy dashboard-copy--muted">
               Starte mit Kundenname, Domain und Branche. Interne Technikangaben bleiben bewusst im Hintergrund.
             </p>
+            {tenants.length === 0 ? (
+              <p className="dashboard-status dashboard-status--neutral">
+                Beim ersten Kunden wird automatisch ein interner Standardmandant angelegt.
+              </p>
+            ) : null}
 
             <SiteForm
               form={form}
@@ -420,4 +488,24 @@ function formatGoal(goal: string) {
   }
 
   return goal;
+}
+
+function formatApiError(data: unknown, fallback: string) {
+  if (typeof data === "string") {
+    return data;
+  }
+
+  if (data && typeof data === "object" && "message" in data) {
+    const message = String((data as { message?: unknown }).message || "");
+
+    if (message === "tenantId not found") {
+      return "Der interne Mandant wurde nicht gefunden. Bitte versuche es erneut oder lege einen Mandanten manuell an.";
+    }
+
+    if (message) {
+      return message;
+    }
+  }
+
+  return fallback;
 }
