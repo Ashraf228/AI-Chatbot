@@ -13,7 +13,7 @@ export function LeadFilters({ status, onStatusChange }: LeadFiltersProps) {
         <option value="new">Neu</option>
         <option value="contacted">Kontaktiert</option>
         <option value="qualified">Qualifiziert</option>
-        <option value="lost">Verloren</option>
+        <option value="closed">Abgeschlossen</option>
       </Select>
     </div>
   );

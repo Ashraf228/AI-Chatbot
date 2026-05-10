@@ -23,8 +23,16 @@ export function MessageBubble({
     return null;
   }
 
+  const messageClassName = [
+    "ssb-message",
+    `ssb-message--${message.role}`,
+    message.error ? "ssb-message--error" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div className={`ssb-message ssb-message--${message.role}`}>
+    <div className={messageClassName}>
       <div className="ssb-message-bubble">
         <MessageRichContent parts={parts} onLeadCapture={onLeadLinkClick} />
       </div>

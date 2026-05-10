@@ -28,7 +28,12 @@ export function LeadCaptureForm({ state, onSubmit }: LeadCaptureFormProps) {
         void onSubmit(lead);
       }}
     >
-      <div className="ssb-lead-form__title">Rueckruf oder Angebot anfragen</div>
+      <div>
+        <div className="ssb-lead-form__title">Kontakt aufnehmen</div>
+        <p className="ssb-lead-form__hint">
+          Hinterlasse kurz deine Daten. Wir melden uns mit einer passenden Antwort zurück.
+        </p>
+      </div>
       <Input
         value={lead.name}
         placeholder="Name"
@@ -50,11 +55,14 @@ export function LeadCaptureForm({ state, onSubmit }: LeadCaptureFormProps) {
         onChange={(event) => updateField("message", event.target.value)}
       />
       {state === "error" ? (
-        <div className="ssb-lead-form__error">Lead konnte nicht gespeichert werden.</div>
+        <div className="ssb-lead-form__error">Die Anfrage konnte nicht gesendet werden. Bitte versuche es erneut.</div>
       ) : null}
       <Button type="submit" disabled={state === "submitting"}>
-        {state === "submitting" ? "Wird gesendet ..." : "Kontakt anfragen"}
+        {state === "submitting" ? "Wird gesendet ..." : "Anfrage senden"}
       </Button>
+      <p className="ssb-lead-form__privacy">
+        Wir verwenden deine Angaben nur zur Bearbeitung deiner Anfrage.
+      </p>
     </form>
   );
 }

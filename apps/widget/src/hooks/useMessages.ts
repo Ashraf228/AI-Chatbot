@@ -95,7 +95,7 @@ export function useMessages(greeting: string) {
         message.id === messageId
           ? {
               ...message,
-              content: "Fehler beim Verbinden. Bitte spaeter erneut versuchen.",
+              content: "Der Assistent ist gerade nicht erreichbar. Bitte versuche es gleich erneut.",
               pending: false,
               error: true,
             }

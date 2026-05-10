@@ -5,6 +5,7 @@ import { CustomerStatusBadge } from "./CustomerStatusBadge";
 import { mapStatusSeverityToTone, type CustomerApiStatus } from "./customer-status";
 import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
+import { CompactMetricCard } from "../shared/CompactMetricCard";
 
 type CustomerLiveStatusProps = {
   siteId: string;
@@ -166,23 +167,11 @@ export function CustomerLiveStatus({ siteId }: CustomerLiveStatusProps) {
         />
       </div>
 
-      <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16 }}>
-        <div className="dashboard-card dashboard-card--soft">
-          <strong>{isLive ? "Live" : "Noch nicht live"}</strong>
-          <p className="dashboard-copy dashboard-copy--muted">Widget-Status</p>
-        </div>
-        <div className="dashboard-card dashboard-card--soft">
-          <strong>{eventSummary.leads}</strong>
-          <p className="dashboard-copy dashboard-copy--muted">Neue Anfragen</p>
-        </div>
-        <div className="dashboard-card dashboard-card--soft">
-          <strong>{eventSummary.startedChats}</strong>
-          <p className="dashboard-copy dashboard-copy--muted">Chats bisher</p>
-        </div>
-        <div className="dashboard-card dashboard-card--soft">
-          <strong>{knowledgeCount}</strong>
-          <p className="dashboard-copy dashboard-copy--muted">Wissensinhalte</p>
-        </div>
+      <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 12 }}>
+        <CompactMetricCard label="Widget-Status" value={isLive ? "Live" : "Nicht live"} />
+        <CompactMetricCard label="Neue Anfragen" value={eventSummary.leads} />
+        <CompactMetricCard label="Chats bisher" value={eventSummary.startedChats} />
+        <CompactMetricCard label="Wissensinhalte" value={knowledgeCount} />
       </div>
 
       <div className="dashboard-grid dashboard-grid--two" style={{ gap: 16 }}>

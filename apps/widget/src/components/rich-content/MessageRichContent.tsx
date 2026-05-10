@@ -58,21 +58,24 @@ export function MessageRichContent({ parts, onLeadCapture }: MessageRichContentP
         {inlineParts.map((part, index) => renderInlinePart(part, `${part.kind}-${index}`))}
       </div>
       {cards.length > 0 ? (
-        <div className="ssb-rich-message__cards">
-          {cards.map((card, index) => (
-            <a
-              key={`${card.url}-${index}`}
-              className="ssb-source-card"
-              href={card.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <span className="ssb-source-card__eyebrow">Link</span>
-              <strong className="ssb-source-card__title">{card.title}</strong>
-              <span className="ssb-source-card__url">{card.url}</span>
-            </a>
-          ))}
-        </div>
+        <details className="ssb-sources">
+          <summary>{cards.length === 1 ? "Quelle anzeigen" : `${cards.length} Quellen anzeigen`}</summary>
+          <div className="ssb-rich-message__cards">
+            {cards.map((card, index) => (
+              <a
+                key={`${card.url}-${index}`}
+                className="ssb-source-card"
+                href={card.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span className="ssb-source-card__eyebrow">Quelle</span>
+                <strong className="ssb-source-card__title">{card.title}</strong>
+                <span className="ssb-source-card__url">{card.url}</span>
+              </a>
+            ))}
+          </div>
+        </details>
       ) : null}
       {productCards.length > 0 ? (
         <div className="ssb-rich-message__cards">
@@ -99,7 +102,7 @@ export function MessageRichContent({ parts, onLeadCapture }: MessageRichContentP
                 <span
                   className={`ssb-product-card__availability ssb-product-card__availability--${card.availability}`}
                 >
-                  {card.availability === "available" ? "Verfuegbar" : "Derzeit nicht verfuegbar"}
+                  {card.availability === "available" ? "Verfügbar" : "Derzeit nicht verfügbar"}
                 </span>
               ) : null}
               <span className="ssb-product-card__url">{card.url}</span>
@@ -144,7 +147,7 @@ export function MessageRichContent({ parts, onLeadCapture }: MessageRichContentP
                 <span
                   className={`ssb-variant-card__availability ssb-variant-card__availability--${card.availability}`}
                 >
-                  {card.availability === "available" ? "Verfuegbar" : "Derzeit nicht verfuegbar"}
+                  {card.availability === "available" ? "Verfügbar" : "Derzeit nicht verfügbar"}
                 </span>
               ) : null}
             </a>

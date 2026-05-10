@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../shared/Button";
-import { Input } from "../shared/Input";
 
 type ComposerProps = {
   placeholder: string;
@@ -8,9 +7,11 @@ type ComposerProps = {
   onSubmit: (value: string) => void | Promise<void>;
 };
 
+const MAX_MESSAGE_LENGTH = 800;
+
 export function Composer({ placeholder, disabled, onSubmit }: ComposerProps) {
   const [value, setValue] = useState("");
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const shouldRefocusRef = useRef(false);
 
   useEffect(() => {
@@ -34,22 +35,37 @@ export function Composer({ placeholder, disabled, onSubmit }: ComposerProps) {
 
   return (
     <div className="ssb-composer">
-      <Input
+      <textarea
         ref={inputRef}
+        className="ssb-input ssb-composer__textarea"
         value={value}
-        placeholder={placeholder}
+        placeholder={placeholder || "Nachricht schreiben..."}
         disabled={disabled}
+        maxLength={MAX_MESSAGE_LENGTH}
+        rows={1}
         autoFocus
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter") {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
             void handleSubmit();
           }
         }}
       />
-      <Button type="button" disabled={disabled} onClick={() => void handleSubmit()}>
-        Senden
+      <Button
+        type="button"
+        className="ssb-composer__send"
+        disabled={disabled || !value.trim()}
+        aria-label="Nachricht senden"
+        onClick={() => void handleSubmit()}
+      >
+        <span>Senden</span>
       </Button>
+      {value.length > MAX_MESSAGE_LENGTH * 0.85 ? (
+        <div className="ssb-composer__limit" aria-live="polite">
+          {value.length}/{MAX_MESSAGE_LENGTH}
+        </div>
+      ) : null}
     </div>
   );
 }

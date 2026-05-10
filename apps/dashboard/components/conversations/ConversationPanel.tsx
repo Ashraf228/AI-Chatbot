@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "../shared/Button";
-import { EmptyState } from "../shared/EmptyState";
 import { ErrorState } from "../shared/ErrorState";
 import { Input } from "../shared/Input";
 import { Select } from "../shared/Select";
+import { EmptyStateCard } from "../shared/EmptyStateCard";
+import { CompactMetricCard } from "../shared/CompactMetricCard";
+import { StatusBadge } from "../inbox/StatusBadge";
+import { getDecisionLabel } from "../../lib/labels";
 
 type Conversation = {
   id: string;
@@ -49,7 +52,19 @@ function parseJsonResponse<T>(text: string): T | null {
 }
 
 function toErrorMessage(value: unknown) {
-  return typeof value === "string" ? value : JSON.stringify(value);
+  if (value && typeof value === "object" && "message" in value && typeof value.message === "string") {
+    return value.message;
+  }
+
+  return typeof value === "string" ? value : "Daten konnten nicht geladen werden.";
+}
+
+function conversationStatus(item: Conversation) {
+  if (item.has_ticket) return "ticket";
+  if (item.has_handoff) return "handoff";
+  if (item.last_role === "user") return "unanswered";
+  if (item.has_lead) return "lead";
+  return "answered";
 }
 
 export function ConversationPanel({
@@ -172,10 +187,21 @@ export function ConversationPanel({
       .toLowerCase()
       .includes(query);
   });
+  const leadCount = items.filter((item) => item.has_lead).length;
+  const handoffCount = items.filter((item) => item.has_handoff).length;
+  const unansweredCount = items.filter((item) => item.last_role === "user").length;
+  const ticketCount = items.filter((item) => item.has_ticket).length;
 
   return (
     <div className="dashboard-stack">
-      <div className="dashboard-card">
+      <div className="dashboard-card dashboard-card--compact dashboard-stack dashboard-stack--sm">
+        <div className="dashboard-grid dashboard-grid--metrics-4 dashboard-gap-12">
+          <CompactMetricCard label="Chats" value={items.length} />
+          <CompactMetricCard label="Mit Anfrage" value={leadCount} />
+          <CompactMetricCard label="Übergaben" value={handoffCount} />
+          <CompactMetricCard label="Tickets" value={ticketCount} />
+          <CompactMetricCard label="Unbeantwortet" value={unansweredCount} />
+        </div>
         <div className="dashboard-inline dashboard-gap-12 dashboard-mb-16">
           <Input
             placeholder="Nach Kunde filtern"
@@ -195,7 +221,7 @@ export function ConversationPanel({
             <Select value={filter} onChange={(event) => setFilter(event.target.value)}>
               <option value="all">Alle Chats</option>
               <option value="with_lead">Mit Anfrage</option>
-              <option value="handoff">Handoff</option>
+              <option value="handoff">Übergabe nötig</option>
               <option value="ticket">Ticket erstellt</option>
               <option value="unanswered">Unbeantwortet</option>
             </Select>
@@ -219,12 +245,15 @@ export function ConversationPanel({
         {err && <ErrorState message={err} />}
       </div>
 
-      <div className="dashboard-grid dashboard-grid--split">
-        <div className="dashboard-card">
+      <div className="conversation-ops-grid">
+        <div className="dashboard-card dashboard-card--compact">
           <h2 className="dashboard-card-title">Chats</h2>
 
           {filteredItems.length === 0 ? (
-            <EmptyState title="Keine Chats gefunden." />
+            <EmptyStateCard
+              title={lockedSiteId ? "Noch keine Gespräche vorhanden" : "Keine Chats gefunden"}
+              description="Neue Gespräche erscheinen hier, sobald das Widget genutzt wird."
+            />
           ) : (
             <div className="dashboard-conversation-list">
               {filteredItems.map((conv) => (
@@ -233,29 +262,28 @@ export function ConversationPanel({
                     onClick={() => loadMessages(conv.id)}
                     className={`dashboard-conversation-item ${selectedId === conv.id ? "is-selected" : ""}`}
                   >
-                    <div>
-                      <strong>{conv.site_id}</strong>
+                    <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
+                      <strong>{conv.session_id ? `Besucher ${conv.session_id.slice(0, 8)}` : conv.site_id}</strong>
+                      <StatusBadge status={conversationStatus(conv)} />
                     </div>
-                    <div className="dashboard-meta">session: {conv.session_id.slice(0, 8)}...</div>
-                    <div className="dashboard-meta">Nachrichten: {conv.message_count}</div>
+                    {!lockedSiteId ? <div className="dashboard-meta">{conv.site_id}</div> : null}
                     {conv.last_message ? (
-                      <div className="dashboard-meta dashboard-breakword">Letzte Nachricht: {conv.last_message}</div>
+                      <div className="dashboard-meta dashboard-breakword">{conv.last_message}</div>
                     ) : null}
                     <div className="dashboard-inline dashboard-wrap" style={{ gap: 6, marginTop: 8 }}>
-                      {conv.has_lead ? <span className="dashboard-status dashboard-status--success">Anfrage</span> : null}
-                      {conv.has_handoff ? <span className="dashboard-status dashboard-status--error">Handoff</span> : null}
-                      {conv.has_ticket ? <span className="dashboard-badge">Ticket</span> : null}
+                      {conv.has_lead ? <span className="dashboard-badge">Anfrage erkannt</span> : null}
                       {Number(conv.tool_count || 0) > 0 ? <span className="dashboard-badge">Aktionen: {conv.tool_count}</span> : null}
-                      {conv.decision_type ? <span className="dashboard-badge">{conv.decision_type}</span> : null}
+                      {getDecisionLabel(conv.decision_type) ? <span className="dashboard-badge">{getDecisionLabel(conv.decision_type)}</span> : null}
+                      <span className="dashboard-badge">{conv.message_count} Nachrichten</span>
                     </div>
                     <div className="dashboard-meta dashboard-meta--subtle">
-                      zuletzt aktiv: {new Date(conv.last_active_at).toLocaleString()}
+                      {new Date(conv.last_active_at).toLocaleString("de-DE")}
                     </div>
                   </button>
 
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="danger"
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteConversation(conv.id);
@@ -270,13 +298,13 @@ export function ConversationPanel({
           )}
         </div>
 
-        <div className="dashboard-card">
+        <div className="dashboard-card dashboard-card--compact">
           <h2 className="dashboard-card-title">Nachrichten</h2>
 
           {!selectedId ? (
-            <EmptyState title="Wähle links einen Chat aus." />
+            <EmptyStateCard title="Chat auswählen" description="Wähle links ein Gespräch für die Vorschau aus." />
           ) : messages.length === 0 ? (
-            <EmptyState title="Keine Nachrichten gefunden." />
+            <EmptyStateCard title="Keine Nachrichten gefunden" />
           ) : (
             <div className="dashboard-stack">
               {messages.map((msg) => (
@@ -287,7 +315,7 @@ export function ConversationPanel({
                   }`}
                 >
                   <div className="dashboard-message-head">
-                    {msg.role.toUpperCase()} — {new Date(msg.created_at).toLocaleString()}
+                    {msg.role === "user" ? "Besucher" : "Assistent"} · {new Date(msg.created_at).toLocaleString("de-DE")}
                   </div>
                   <div className="dashboard-prewrap">{msg.content}</div>
                 </div>

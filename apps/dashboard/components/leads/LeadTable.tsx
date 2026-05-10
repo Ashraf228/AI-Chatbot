@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { LeadFilters } from "./LeadFilters";
 import { LeadStatusBadge } from "./LeadStatusBadge";
-import { EmptyState } from "../shared/EmptyState";
 import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
 import { Select } from "../shared/Select";
 import { Button } from "../shared/Button";
 import { Input } from "../shared/Input";
 import { encodeSiteId } from "../../lib/site-id";
+import { CompactMetricCard } from "../shared/CompactMetricCard";
+import { EmptyStateCard } from "../shared/EmptyStateCard";
 
 type LeadTableProps = {
   siteId?: string;
@@ -103,13 +104,13 @@ export function LeadTable({ siteId }: LeadTableProps) {
   const qualifiedCount = items.filter((lead) => lead.status === "qualified").length;
 
   return (
-    <div className="dashboard-card">
+    <div className="dashboard-card dashboard-card--compact">
       <div className="dashboard-stack dashboard-stack--sm">
         <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 12 }}>
-          <LeadMiniMetric label="Anfragen" value={items.length} />
-          <LeadMiniMetric label="Neu" value={newCount} />
-          <LeadMiniMetric label="Kontaktiert" value={contactedCount} />
-          <LeadMiniMetric label="Qualifiziert" value={qualifiedCount} />
+          <CompactMetricCard label="Anfragen" value={items.length} />
+          <CompactMetricCard label="Neu" value={newCount} />
+          <CompactMetricCard label="Kontaktiert" value={contactedCount} />
+          <CompactMetricCard label="Qualifiziert" value={qualifiedCount} />
         </div>
         <div className="dashboard-grid dashboard-grid--two" style={{ gap: 12 }}>
           <LeadFilters status={status} onStatusChange={setStatus} />
@@ -137,75 +138,49 @@ export function LeadTable({ siteId }: LeadTableProps) {
       ) : error ? (
         <ErrorState message={error} />
       ) : filteredItems.length === 0 ? (
-        <EmptyState title="Keine Anfragen gefunden." />
+        <EmptyStateCard title={siteId ? "Noch keine Anfragen für diesen Kunden" : "Keine Anfragen gefunden"} />
       ) : (
-        <div className="dashboard-table-wrap">
-          <table className="dashboard-table" style={{ minWidth: 860 }}>
-            <thead>
-              <tr>
-                {["Anfrage", "Kunde", "Kontakt", "Status", "Nachricht", "Zeit", "Aktionen"].map((cell) => (
-                  <th key={cell} className="dashboard-th">
-                    {cell}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.map((lead) => (
-                <tr key={lead.id}>
-                  <td className="dashboard-td">
-                    <strong>{lead.name}</strong>
-                  </td>
-                  <td className="dashboard-td">{lead.siteName || lead.siteId}</td>
-                  <td className="dashboard-td">
-                    <div>{lead.email}</div>
-                    {lead.phone && <div className="dashboard-copy dashboard-copy--muted">{lead.phone}</div>}
-                  </td>
-                  <td className="dashboard-td">
-                    <div className="dashboard-stack dashboard-stack--sm">
-                      <LeadStatusBadge status={lead.status} />
-                      <Select
-                        value={lead.status}
-                        onChange={(e) => updateStatus(lead.id, e.target.value)}
-                      >
-                        <option value="new">Neu</option>
-                        <option value="contacted">Kontaktiert</option>
-                        <option value="qualified">Qualifiziert</option>
-                        <option value="closed">Abgeschlossen</option>
-                      </Select>
-                    </div>
-                  </td>
-                  <td className="dashboard-td">{lead.message || "-"}</td>
-                  <td className="dashboard-td">{new Date(lead.createdAt).toLocaleString()}</td>
-                  <td className="dashboard-td">
-                    <div className="dashboard-stack dashboard-stack--sm">
-                      {lead.sessionId ? (
-                        <a className="dashboard-link-card" href={`/sites/${encodeSiteId(lead.siteId)}/conversations`}>
-                          Chat öffnen
-                        </a>
-                      ) : null}
-                      <Button type="button" variant="secondary" onClick={() => deleteLead(lead.id)}>
-                        Löschen
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="lead-compact-list">
+          {filteredItems.map((lead) => (
+            <article key={lead.id} className="lead-compact-row">
+              <div>
+                <strong>{lead.name || "Unbekannter Kontakt"}</strong>
+                <p className="dashboard-copy dashboard-copy--muted">
+                  {[lead.email, lead.phone].filter(Boolean).join(" · ") || "Keine Kontaktmöglichkeit hinterlegt"}
+                </p>
+              </div>
+              <div>
+                <strong>{lead.siteName || lead.siteId}</strong>
+                <p className="dashboard-copy dashboard-copy--muted">
+                  {lead.message || "Kein Anliegen hinterlegt"}
+                </p>
+              </div>
+              <div className="dashboard-stack dashboard-stack--sm">
+                <LeadStatusBadge status={lead.status} />
+                <Select value={lead.status} onChange={(e) => updateStatus(lead.id, e.target.value)}>
+                  <option value="new">Neu</option>
+                  <option value="contacted">Kontaktiert</option>
+                  <option value="qualified">Qualifiziert</option>
+                  <option value="closed">Abgeschlossen</option>
+                </Select>
+              </div>
+              <div>
+                <p className="dashboard-copy dashboard-copy--muted">{new Date(lead.createdAt).toLocaleString("de-DE")}</p>
+                <div className="dashboard-inline dashboard-wrap">
+                  {lead.sessionId ? (
+                    <a className="dashboard-link-card" href={`/sites/${encodeSiteId(lead.siteId)}/conversations`}>
+                      Chat öffnen
+                    </a>
+                  ) : null}
+                  <Button type="button" variant="secondary" onClick={() => deleteLead(lead.id)}>
+                    Löschen
+                  </Button>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function LeadMiniMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="dashboard-card dashboard-card--soft">
-      <strong>{value}</strong>
-      <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-        {label}
-      </p>
     </div>
   );
 }

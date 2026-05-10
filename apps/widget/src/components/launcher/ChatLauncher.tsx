@@ -8,10 +8,21 @@ type ChatLauncherProps = {
 };
 
 export function ChatLauncher({ label, unreadCount, onClick }: ChatLauncherProps) {
+  const displayLabel = label?.trim() || "Chat";
+
   return (
     <div className="ssb-launcher">
-      <Button type="button" variant="primary" onClick={onClick}>
-        {label}
+      <Button
+        type="button"
+        variant="primary"
+        className="ssb-launcher__button"
+        aria-label={`${displayLabel} öffnen`}
+        onClick={onClick}
+      >
+        <span className="ssb-launcher__icon" aria-hidden="true">
+          <span />
+        </span>
+        <span className="ssb-launcher__label">{displayLabel}</span>
       </Button>
       <UnreadBadge count={unreadCount} />
     </div>

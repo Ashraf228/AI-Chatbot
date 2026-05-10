@@ -45,7 +45,7 @@ export function SiteBusinessOverview({ siteId }: { siteId: string }) {
           <BusinessMetricCard label="Wissen bereit" value={formatNumber(data.knowledge.activeReady)} />
           <BusinessMetricCard label="Wissen in Verarbeitung" value={formatNumber(data.knowledge.processing)} />
           <BusinessMetricCard label="Wissen fehlerhaft" value={formatNumber(data.knowledge.failed)} />
-          <BusinessMetricCard label="Knowledge-Hit-Rate" value={formatPercent(data.knowledgeHitRate)} />
+          <BusinessMetricCard label="Antworten mit Wissen" value={formatPercent(data.knowledgeHitRate)} />
         </div>
       ) : null}
       <div className="dashboard-grid dashboard-grid--two" style={{ gap: 14 }}>

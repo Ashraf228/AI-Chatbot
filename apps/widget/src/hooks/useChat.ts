@@ -5,6 +5,24 @@ import { useMessages } from "./useMessages";
 import { useWidgetConfig } from "./useWidgetConfig";
 import { useSessionContext } from "../app/providers/SessionProvider";
 
+function friendlyChatError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+
+  if (message.includes("HTTP 403")) {
+    return "Diese Website ist für das Widget noch nicht freigegeben.";
+  }
+
+  if (message.includes("HTTP 429")) {
+    return "Zu viele Anfragen in kurzer Zeit. Bitte warte einen Moment.";
+  }
+
+  if (message.includes("HTTP 5")) {
+    return "Der Assistent ist gerade nicht erreichbar. Bitte versuche es gleich erneut.";
+  }
+
+  return "Die Nachricht konnte gerade nicht zugestellt werden.";
+}
+
 export function useChat() {
   const config = useWidgetConfig();
   const { track } = useAnalytics();
@@ -74,9 +92,9 @@ export function useChat() {
         reply.parts,
       );
       await track("message_received", { sources: reply.sources?.length ?? 0 });
-    } catch {
+    } catch (err) {
       rejectAssistantMessage(placeholderId);
-      setError("Die Nachricht konnte gerade nicht zugestellt werden.");
+      setError(friendlyChatError(err));
     } finally {
       setIsSending(false);
     }

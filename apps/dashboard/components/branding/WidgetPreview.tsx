@@ -8,11 +8,16 @@ type WidgetPreviewProps = {
   accentColor: string;
   fontFamily: string;
   welcomeMessage: string;
+  placeholderText?: string;
+  launcherLabel?: string;
+  privacyUrl?: string;
 };
 
 export function WidgetPreview(props: WidgetPreviewProps) {
   const displayTitle = props.companyName || "Support";
   const displayBotName = props.botName || "Service-Assistent";
+  const displayPlaceholder = props.placeholderText || "Nachricht schreiben...";
+  const launcherLabel = props.launcherLabel || "Chat";
 
   return (
     <div
@@ -38,8 +43,10 @@ export function WidgetPreview(props: WidgetPreviewProps) {
           <div className="dashboard-preview-copy">
             <div className="dashboard-preview-title">{displayTitle}</div>
             <div className="dashboard-preview-subtitle">
-              {displayBotName} • {displayTitle}
+              <span className="dashboard-preview-presence" aria-hidden="true" />
+              {displayBotName}
             </div>
+            {props.privacyUrl ? <div className="dashboard-preview-privacy">Datenschutz</div> : null}
           </div>
         </div>
         <div className="dashboard-preview-close">×</div>
@@ -55,8 +62,18 @@ export function WidgetPreview(props: WidgetPreviewProps) {
           </div>
         </div>
 
+        <div className="dashboard-preview-chip-row">
+          <span>Welche Leistungen bieten Sie an?</span>
+          <span>Kontakt aufnehmen</span>
+          <span>Ich brauche Unterstützung</span>
+        </div>
+
+        <p className="dashboard-preview-hint">
+          Die KI kann Fehler machen. Bei Bedarf wird deine Anfrage weitergeleitet.
+        </p>
+
         <div className="dashboard-preview-composer">
-          <div className="dashboard-preview-input">Nachricht schreiben...</div>
+          <div className="dashboard-preview-input">{displayPlaceholder}</div>
           <div className="dashboard-preview-send" style={{ background: props.brandColor }}>
             Senden
           </div>
@@ -64,7 +81,8 @@ export function WidgetPreview(props: WidgetPreviewProps) {
 
         <div className="dashboard-preview-launcher-row">
           <div className="dashboard-preview-launcher" style={{ background: props.brandColor }}>
-            Chat
+            <span className="dashboard-preview-launcher-icon" />
+            {launcherLabel}
           </div>
         </div>
       </div>

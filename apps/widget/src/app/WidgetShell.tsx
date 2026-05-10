@@ -63,6 +63,7 @@ export function WidgetShell() {
           companyName={config.companyName}
           botName={config.botName}
           logoUrl={config.logoUrl}
+          privacyUrl={config.privacyUrl}
           suggestedQuestions={suggestedQuestions}
           placeholder={config.placeholder}
           messages={messages}

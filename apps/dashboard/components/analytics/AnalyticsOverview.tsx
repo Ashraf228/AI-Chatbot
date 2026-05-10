@@ -61,9 +61,9 @@ export function AnalyticsOverview({
           <BusinessMetricCard label="Conversion Rate" value={formatPercent(data.conversionRate)} />
         </div>
         <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16 }}>
-          <BusinessMetricCard label="Handoff Rate" value={formatPercent(data.handoffRate)} />
-          <BusinessMetricCard label="Knowledge-Hit-Rate" value={formatPercent(data.knowledgeHitRate)} />
-          <BusinessMetricCard label="Tool-Aktionen" value={formatNumber(data.toolExecutionCount)} />
+          <BusinessMetricCard label="Übergabequote" value={formatPercent(data.handoffRate)} />
+          <BusinessMetricCard label="Antworten mit Wissen" value={formatPercent(data.knowledgeHitRate)} />
+          <BusinessMetricCard label="Automationen" value={formatNumber(data.toolExecutionCount)} />
           <BusinessMetricCard label="Ø Antwortzeit" value={`${formatNumber(data.averageResponseTimeMs)} ms`} />
         </div>
         <div className="dashboard-grid dashboard-grid--two" style={{ gap: 16 }}>
@@ -72,7 +72,7 @@ export function AnalyticsOverview({
             value={formatMinutes(data.estimatedSupportTimeSavedMinutes)}
             hint={`${data.supportTimeAssumptionMinutes} Minuten Standardannahme pro Gespräch`}
           />
-          <BusinessMetricCard label="Offene Handoffs/Tickets" value={formatNumber(data.openHandoffsOrTickets)} />
+          <BusinessMetricCard label="Offene Übergaben/Tickets" value={formatNumber(data.openHandoffsOrTickets)} />
         </div>
       </section>
 

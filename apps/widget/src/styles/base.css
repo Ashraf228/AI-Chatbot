@@ -13,6 +13,7 @@ a {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }

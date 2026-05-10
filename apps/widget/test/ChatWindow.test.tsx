@@ -79,7 +79,7 @@ describe("ChatWindow", () => {
       screen.getByPlaceholderText("Worum geht es? (optional)"),
       "Ich möchte einen Termin.",
     );
-    await user.click(screen.getByRole("button", { name: "Kontakt anfragen" }));
+    await user.click(screen.getByRole("button", { name: "Anfrage senden" }));
 
     await waitFor(() =>
       expect(submitLeadMock).toHaveBeenCalledWith(

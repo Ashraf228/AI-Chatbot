@@ -4,13 +4,15 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { encodeSiteId } from "../../lib/site-id";
 import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
-import { Button } from "../shared/Button";
+import { CompactMetricCard } from "../shared/CompactMetricCard";
 import { ErrorState } from "../shared/ErrorState";
 import type { CustomerApiStatus } from "./customer-status";
 import { CustomerTestChatPanel } from "./CustomerTestChatPanel";
+import { PrimaryActionPanel } from "./PrimaryActionPanel";
 
 type CustomerQuickActionsProps = {
   siteId: string;
+  showTestChat?: boolean;
 };
 
 type SiteDetails = {
@@ -41,7 +43,7 @@ function toPreviewUrl(domain: string) {
   return `https://${domain}`;
 }
 
-export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
+export function CustomerQuickActions({ siteId, showTestChat = true }: CustomerQuickActionsProps) {
   const siteSlug = encodeSiteId(siteId);
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [serverStatus, setServerStatus] = useState<CustomerApiStatus | null>(null);
@@ -148,75 +150,49 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
   }
 
   const canMarkLive = Boolean(serverStatus?.isLiveReady && !site?.goLiveAt);
+  const primaryAction =
+    serverStatus?.missingSteps?.includes("knowledge") || (serverStatus?.knowledgeCount ?? 0) === 0
+      ? { label: "Wissen hinzufügen", href: `/sites/${siteSlug}/knowledge` }
+      : site?.goLiveAt
+        ? { label: "Chat testen", href: "#customer-test-chat" }
+        : { label: "Setup fortsetzen", href: `/sites/${siteSlug}/setup` };
+  const liveBlockedReason =
+    serverStatus && !serverStatus.isLiveReady && !site?.goLiveAt
+      ? `${serverStatus.label}. Nächster Schritt: ${serverStatus.nextAction?.label || "Setup prüfen"}.`
+      : "";
 
   return (
     <div className="dashboard-stack">
-      <section className="dashboard-card dashboard-stack">
-        <div>
-          <h2 className="dashboard-card-title">Quick Actions</h2>
-          <p className="dashboard-copy">
-            Die häufigsten Aufgaben für diesen Kunden sind hier direkt erreichbar.
-          </p>
+      <PrimaryActionPanel
+        title="Aktionen"
+        description="Die wichtigsten Aktionen für Einrichtung und Betrieb."
+        primaryAction={primaryAction}
+        secondaryActions={[
+          { label: "Chat testen", href: "#customer-test-chat" },
+          { label: "Widget-Code kopieren", onClick: copyEmbedCode },
+          { label: "Vorschau öffnen", href: previewUrl || undefined, disabled: !previewUrl },
+        ]}
+        liveAction={{
+          label: site?.goLiveAt ? "Bereits live" : saving === "live" ? "Schaltet live..." : "Kunde live schalten",
+          onClick: markLive,
+          disabled: !canMarkLive || saving === "live",
+        }}
+        liveBlockedReason={liveBlockedReason}
+        feedback={
+          <>
+            {copied ? <p className="dashboard-status dashboard-status--success">{copied} kopiert.</p> : null}
+            {message ? <p className="dashboard-status dashboard-status--success">{message}</p> : null}
+            {error ? <ErrorState message={error} /> : null}
+          </>
+        }
+      />
+
+      {site ? (
+        <div className="dashboard-grid dashboard-grid--two">
+          <CompactMetricCard label="Letzter Test" value={formatDate(site.lastTestedAt)} />
+          <CompactMetricCard label="Live-Status" value={formatDate(site.goLiveAt)} />
         </div>
-
-        <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
-          <Link href={`/sites/${siteSlug}/knowledge`} className="dashboard-button dashboard-button--secondary">
-            Wissen hinzufügen
-          </Link>
-          <Link href="#customer-test-chat" className="dashboard-button dashboard-button--secondary">
-            Chat testen
-          </Link>
-          <Button type="button" variant="secondary" onClick={copyEmbedCode}>
-            Widget-Code kopieren
-          </Button>
-          <Link href={`/sites/${siteSlug}/reports`} className="dashboard-button dashboard-button--secondary">
-            Bericht ansehen
-          </Link>
-          <Button
-            type="button"
-            onClick={markLive}
-            disabled={!canMarkLive || saving === "live"}
-          >
-            {site?.goLiveAt ? "Bereits live" : saving === "live" ? "Schaltet live..." : "Kunde live schalten"}
-          </Button>
-          {previewUrl ? (
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="dashboard-button dashboard-button--secondary"
-            >
-              Vorschau öffnen
-            </a>
-          ) : null}
-        </div>
-
-        {site ? (
-          <div className="dashboard-grid dashboard-grid--two">
-            <div className="dashboard-card dashboard-card--soft">
-              <strong>Letzter Test</strong>
-              <p className="dashboard-copy dashboard-copy--muted">{formatDate(site.lastTestedAt)}</p>
-            </div>
-            <div className="dashboard-card dashboard-card--soft">
-              <strong>Live-Status</strong>
-              <p className="dashboard-copy dashboard-copy--muted">{formatDate(site.goLiveAt)}</p>
-            </div>
-          </div>
-        ) : null}
-
-        {serverStatus && !serverStatus.isLiveReady && !site?.goLiveAt ? (
-          <div className="dashboard-card dashboard-card--soft">
-            <strong>Live-Schaltung blockiert</strong>
-            <p className="dashboard-copy dashboard-copy--muted">
-              {serverStatus.label}. Nächster Schritt: {serverStatus.nextAction?.label || "Setup prüfen"}.
-            </p>
-          </div>
-        ) : null}
-
-        {copied ? <p className="dashboard-status dashboard-status--success">{copied} kopiert.</p> : null}
-        {message ? <p className="dashboard-status dashboard-status--success">{message}</p> : null}
-        {error ? <ErrorState message={error} /> : null}
-      </section>
+      ) : null}
 
       <section className="dashboard-card dashboard-stack">
         <div>
@@ -254,7 +230,7 @@ export function CustomerQuickActions({ siteId }: CustomerQuickActionsProps) {
         </div>
       </section>
 
-      <CustomerTestChatPanel siteId={siteId} />
+      {showTestChat ? <CustomerTestChatPanel siteId={siteId} compact /> : null}
     </div>
   );
 }

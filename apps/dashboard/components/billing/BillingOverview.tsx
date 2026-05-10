@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { UsageLimitCards } from "./UsageLimitCards";
+import { ErrorState } from "../shared/ErrorState";
+import { LoadingState } from "../shared/LoadingState";
+import { getStatusLabel } from "../../lib/labels";
 
 type BillingPlan = {
   code: string;
@@ -77,11 +80,11 @@ export function BillingOverview() {
   }, []);
 
   if (error) {
-    return <p className="dashboard-error">{error}</p>;
+    return <ErrorState message={error} />;
   }
 
   if (!limits || !usage) {
-    return <p className="dashboard-loading">Plan und Nutzung werden geladen...</p>;
+    return <LoadingState label="Plan und Nutzung werden geladen..." />;
   }
 
   const plan = limits.plan;
@@ -98,7 +101,7 @@ export function BillingOverview() {
           <p className="dashboard-copy">{plan?.description || "Für diesen Mandanten ist noch kein Plan hinterlegt."}</p>
         </div>
         <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16 }}>
-          <Metric label="Status" value={limits.subscription?.status || "unbekannt"} />
+          <Metric label="Status" value={getStatusLabel(limits.subscription?.status || "unknown") || "Unbekannt"} />
           <Metric label="Preis" value={price} />
           <Metric label="Zeitraum ab" value={formatDate(usage.periodStart)} />
           <Metric label="Zeitraum bis" value={formatDate(usage.periodEnd)} />

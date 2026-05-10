@@ -14,6 +14,7 @@ type ChatWindowProps = {
   companyName?: string;
   botName?: string;
   logoUrl?: string;
+  privacyUrl?: string;
   suggestedQuestions: string[];
   placeholder: string;
   messages: ChatMessage[];
@@ -53,6 +54,7 @@ export function ChatWindow({
   companyName,
   botName,
   logoUrl,
+  privacyUrl,
   suggestedQuestions,
   placeholder,
   messages,
@@ -78,6 +80,7 @@ export function ChatWindow({
   });
   const contactCtaMessageId =
     leadState === "success" ? null : getContactCtaMessageId(messages);
+  const hasUserMessages = messages.some((message) => message.role === "user");
 
   return (
     <>
@@ -87,18 +90,27 @@ export function ChatWindow({
           companyName={companyName}
           botName={botName}
           logoUrl={logoUrl}
+          privacyUrl={privacyUrl}
           onClose={onClose}
         />
         <div className="ssb-chat-body">
           <ConsentBanner
             visible={consentRequired && !consentAccepted}
+            privacyUrl={privacyUrl}
             onAccept={onAcceptConsent}
           />
-          <SuggestedQuestions
-            questions={suggestedQuestions}
-            disabled={isSending || (consentRequired && !consentAccepted)}
-            onSelect={onSendMessage}
-          />
+          {!hasUserMessages ? (
+            <div className="ssb-start-panel">
+              <SuggestedQuestions
+                questions={suggestedQuestions}
+                disabled={isSending || (consentRequired && !consentAccepted)}
+                onSelect={onSendMessage}
+              />
+              <p className="ssb-start-panel__hint">
+                Die KI kann Fehler machen. Bei Bedarf wird deine Anfrage weitergeleitet.
+              </p>
+            </div>
+          ) : null}
           <StatusBanner error={error} isSending={isSending} />
           <MessageList
             messages={messages}

@@ -1,27 +1,22 @@
-import Link from "next/link";
 import { getDashboardSession } from "../../lib/auth";
-import { siteTabs } from "../../lib/dashboard-config";
-import { encodeSiteId } from "../../lib/site-id";
+import { siteNavGroups } from "../../lib/dashboard-config";
+import { CustomerNavGroups } from "../customer/CustomerNavGroups";
+import { CustomerStatusBar } from "../customer/CustomerStatusBar";
 
 export async function SiteTabs({ siteId }: { siteId: string }) {
-  const siteSlug = encodeSiteId(siteId);
   const session = await getDashboardSession();
-  const showAdvanced = session?.role === "admin";
-  const tabs = showAdvanced
-    ? [...siteTabs, { slug: "privacy", label: "Datenschutz" }, { slug: "advanced", label: "Erweiterte Einstellungen" }]
-    : siteTabs;
+  const groups = siteNavGroups.filter((group) => {
+    if (!group.adminOnly) {
+      return true;
+    }
+
+    return session?.role === "admin" || (group.operatorVisible && session?.role === "operator");
+  });
 
   return (
-    <div className="dashboard-tab-row">
-      {tabs.map((tab) => (
-        <Link
-          key={tab.slug || "overview"}
-          href={tab.slug ? `/sites/${siteSlug}/${tab.slug}` : `/sites/${siteSlug}`}
-          className="dashboard-tab-link"
-        >
-          {tab.label}
-        </Link>
-      ))}
+    <div className="customer-detail-shell">
+      <CustomerStatusBar siteId={siteId} />
+      <CustomerNavGroups siteId={siteId} groups={groups} />
     </div>
   );
 }

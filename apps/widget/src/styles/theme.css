@@ -1,9 +1,9 @@
 :root {
   --ssb-font-sans: "Arial", "Helvetica Neue", sans-serif;
-  --ssb-color-bg: #fffdf8;
+  --ssb-color-bg: #faf7f2;
   --ssb-color-surface: #ffffff;
-  --ssb-color-panel: #fff7e8;
-  --ssb-color-border: rgba(27, 31, 35, 0.12);
+  --ssb-color-panel: #fffaf2;
+  --ssb-color-border: rgba(24, 18, 10, 0.12);
   --ssb-color-text: #1b1f23;
   --ssb-color-muted: #5f646d;
   --ssb-color-primary: #b55400;
@@ -12,7 +12,8 @@
   --ssb-color-primary-rgb: 181, 84, 0;
   --ssb-color-user: #1b1f23;
   --ssb-color-user-text: #ffffff;
-  --ssb-shadow-lg: 0 22px 54px rgba(24, 18, 10, 0.18);
+  --ssb-shadow-lg: 0 24px 70px rgba(24, 18, 10, 0.22);
+  --ssb-shadow-md: 0 14px 34px rgba(24, 18, 10, 0.14);
   --ssb-radius-xl: 22px;
   --ssb-radius-lg: 16px;
   --ssb-radius-md: 12px;

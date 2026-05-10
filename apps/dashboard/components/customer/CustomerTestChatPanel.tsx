@@ -7,6 +7,7 @@ import { ErrorState } from "../shared/ErrorState";
 
 type CustomerTestChatPanelProps = {
   siteId: string;
+  compact?: boolean;
 };
 
 type TestMessage = {
@@ -28,7 +29,7 @@ const TEST_QUESTIONS = [
   "Was ist der nächste Schritt?",
 ];
 
-export function CustomerTestChatPanel({ siteId }: CustomerTestChatPanelProps) {
+export function CustomerTestChatPanel({ siteId, compact = false }: CustomerTestChatPanelProps) {
   const [sessionId, setSessionId] = useState("");
   const [siteConfig, setSiteConfig] = useState<SiteTestConfig>({
     topTestQuestions: [],
@@ -173,22 +174,22 @@ export function CustomerTestChatPanel({ siteId }: CustomerTestChatPanelProps) {
     setSavingTest(false);
   }
 
+  const showMessages = compact ? messages.some((entry) => entry.role === "assistant") : messages.length > 0;
+
   return (
-    <section id="customer-test-chat" className="dashboard-card dashboard-stack">
+    <section id="customer-test-chat" className={`dashboard-card dashboard-stack${compact ? " dashboard-card--compact test-chat-compact" : ""}`}>
       <div>
         <h2 className="dashboard-card-title">Test-Chat</h2>
-        <p className="dashboard-copy">
-          Stelle echte Testfragen direkt gegen den Bot dieses Kunden. Das nutzt dieselbe Chat-Logik wie das Widget.
-        </p>
+        {!compact ? (
+          <p className="dashboard-copy">
+            Stelle echte Testfragen direkt gegen den Bot dieses Kunden. Das nutzt dieselbe Chat-Logik wie das Widget.
+          </p>
+        ) : null}
       </div>
 
-      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-        {messages.length === 0 ? (
-          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-            Noch keine Testnachricht gesendet.
-          </p>
-        ) : (
-          messages.map((entry, index) => (
+      {showMessages ? (
+        <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+          {messages.map((entry, index) => (
             <div
               key={`${entry.role}-${index}`}
               className={entry.role === "assistant" ? "dashboard-chat-message" : "dashboard-chat-message dashboard-chat-message--user"}
@@ -196,12 +197,12 @@ export function CustomerTestChatPanel({ siteId }: CustomerTestChatPanelProps) {
               <strong>{entry.role === "assistant" ? "Bot" : "Mitarbeiter"}</strong>
               <p>{entry.content}</p>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="dashboard-inline dashboard-wrap">
-        {testQuestions.map((question) => (
+        {testQuestions.slice(0, compact ? 3 : 5).map((question) => (
           <Button
             key={question}
             type="button"
@@ -213,7 +214,7 @@ export function CustomerTestChatPanel({ siteId }: CustomerTestChatPanelProps) {
         ))}
       </div>
 
-      {siteConfig.lastTestAnswer ? (
+      {siteConfig.lastTestAnswer && !compact ? (
         <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
           <strong>Letzte gespeicherte Testantwort</strong>
           <p className="dashboard-copy dashboard-copy--muted">{siteConfig.lastTestQuestion}</p>
@@ -249,7 +250,7 @@ export function CustomerTestChatPanel({ siteId }: CustomerTestChatPanelProps) {
           <span className="dashboard-field-label">Testfrage</span>
           <textarea
             className="dashboard-textarea"
-            rows={3}
+            rows={compact ? 2 : 3}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="Frage eingeben, die ein Kunde stellen könnte..."

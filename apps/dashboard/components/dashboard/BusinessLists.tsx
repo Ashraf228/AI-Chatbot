@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { encodeSiteId } from "../../lib/site-id";
+import { getStatusLabel } from "../../lib/labels";
 import type { BusinessConversation, BusinessLead, BusinessQuestion, RecommendedAction } from "../../lib/business-analytics";
+import { EmptyStateCard } from "../shared/EmptyStateCard";
 
 export function RecommendedActions({ items }: { items: RecommendedAction[] }) {
   if (items.length === 0) {
-    return <p className="dashboard-copy dashboard-copy--muted">Aktuell keine dringenden Empfehlungen.</p>;
+    return <EmptyStateCard title="Keine dringenden Empfehlungen" description="Wenn Handlungsbedarf entsteht, erscheint er hier." />;
   }
 
   return (
@@ -25,7 +27,7 @@ export function RecommendedActions({ items }: { items: RecommendedAction[] }) {
 
 export function RecentConversations({ items }: { items: BusinessConversation[] }) {
   if (items.length === 0) {
-    return <p className="dashboard-copy dashboard-copy--muted">Noch keine Gespräche vorhanden.</p>;
+    return <EmptyStateCard title="Noch keine Gespräche vorhanden" description="Neue Gespräche erscheinen nach den ersten Widget-Chats." />;
   }
 
   return (
@@ -52,7 +54,7 @@ export function RecentConversations({ items }: { items: BusinessConversation[] }
 
 export function RecentLeads({ items }: { items: BusinessLead[] }) {
   if (items.length === 0) {
-    return <p className="dashboard-copy dashboard-copy--muted">Noch keine neuen Anfragen vorhanden.</p>;
+    return <EmptyStateCard title="Noch keine Anfragen vorhanden" description="Neue Kontakte aus dem Widget erscheinen hier." />;
   }
 
   return (
@@ -66,7 +68,7 @@ export function RecentLeads({ items }: { items: BusinessLead[] }) {
         >
           <div className="dashboard-info-row">
             <strong>{item.name || "Neue Anfrage"}</strong>
-            <span>{item.status}</span>
+            <span>{getStatusLabel(item.status)}</span>
           </div>
           <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
             {item.siteName} · {item.message || item.email || item.phone}
@@ -79,7 +81,7 @@ export function RecentLeads({ items }: { items: BusinessLead[] }) {
 
 export function QuestionList({ items, emptyLabel }: { items: BusinessQuestion[]; emptyLabel: string }) {
   if (items.length === 0) {
-    return <p className="dashboard-copy dashboard-copy--muted">{emptyLabel}</p>;
+    return <EmptyStateCard title={emptyLabel.replace(/\.$/, "")} />;
   }
 
   return (

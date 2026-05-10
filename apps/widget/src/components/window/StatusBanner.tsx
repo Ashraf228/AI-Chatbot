@@ -5,7 +5,11 @@ type StatusBannerProps = {
 
 export function StatusBanner({ error, isSending }: StatusBannerProps) {
   if (error) {
-    return <div className="ssb-status-banner ssb-status-banner--error">{error}</div>;
+    return (
+      <div className="ssb-status-banner ssb-status-banner--error" role="status">
+        {error}
+      </div>
+    );
   }
 
   if (isSending) {

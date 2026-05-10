@@ -6,6 +6,7 @@ import { ErrorState } from "../shared/ErrorState";
 import { Input } from "../shared/Input";
 import { LoadingState } from "../shared/LoadingState";
 import { Select } from "../shared/Select";
+import { getStatusLabel } from "../../lib/labels";
 
 type IntegrationField = {
   key: string;
@@ -74,10 +75,7 @@ function cleanSecrets(secrets: Record<string, string>) {
 }
 
 function statusLabel(integration: SiteIntegration) {
-  if (integration.enabled) {
-    return "Aktiv";
-  }
-  return "Inaktiv";
+  return getStatusLabel(integration.enabled ? "enabled" : "disabled");
 }
 
 function categoryLabel(category: string) {
