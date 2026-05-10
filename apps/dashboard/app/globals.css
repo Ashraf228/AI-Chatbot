@@ -55,6 +55,23 @@ textarea {
   min-height: 100vh;
 }
 
+body:has(.dashboard-auth) .dashboard-root {
+  display: block;
+}
+
+body:has(.dashboard-auth) .dashboard-main {
+  padding: 0;
+}
+
+body:has(.dashboard-auth) .dashboard-surface {
+  min-height: 100vh;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
 .dashboard-main {
   padding: 18px;
 }
@@ -360,8 +377,8 @@ textarea {
 }
 
 .dashboard-auth {
-  position: fixed;
-  inset: 0;
+  position: relative;
+  width: 100%;
   z-index: 50;
   min-height: 100vh;
   display: grid;
@@ -374,7 +391,7 @@ textarea {
 }
 
 .dashboard-auth-card {
-  width: min(100%, 480px);
+  width: min(calc(100vw - 48px), 480px);
   padding: 32px;
   border: 1px solid var(--dash-panel-border);
   border-radius: 24px;
