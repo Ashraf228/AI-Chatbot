@@ -1,4 +1,5 @@
 import { BrandLogo } from "./BrandLogo";
+import { Button } from "../shared/Button";
 
 export function Topbar({ title }: { title: string }) {
   return (
@@ -7,7 +8,14 @@ export function Topbar({ title }: { title: string }) {
         <div className="dashboard-eyebrow">Soulé Dashboard</div>
         <h1 className="dashboard-title">{title}</h1>
       </div>
-      <BrandLogo size={42} showWordmark={false} />
+      <div className="dashboard-topbar-actions">
+        <form action="/api/auth/logout" method="POST">
+          <Button type="submit" variant="secondary">
+            Abmelden
+          </Button>
+        </form>
+        <BrandLogo size={42} showWordmark={false} />
+      </div>
     </header>
   );
 }

@@ -123,6 +123,12 @@ textarea {
   color: var(--dash-text);
 }
 
+.dashboard-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .dashboard-page {
   padding: 24px;
 }
