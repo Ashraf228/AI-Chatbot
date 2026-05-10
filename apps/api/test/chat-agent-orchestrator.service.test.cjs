@@ -338,6 +338,22 @@ test('ChatAgentOrchestratorService asks for contact when appointment has context
   assert.equal(leads.length, 0);
 });
 
+test('ChatAgentOrchestratorService turns preferred phone channel into a concrete phone request', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  await decide('Ich brauche eine KI für mein Unternehmen');
+  await decide('um Support');
+  const appointmentReply = await decide('einen termin');
+  const phoneChannelReply = await decide('telefon');
+
+  assert.match(appointmentReply.answer, /E-Mail oder Telefon/i);
+  assert.doesNotMatch(phoneChannelReply.answer, /Wie können wir dich am besten erreichen/i);
+  assert.match(phoneChannelReply.answer, /Telefonnummer/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.preferredContact, 'phone');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.scheduleIntent, true);
+  assert.equal(leads.length, 0);
+});
+
 test('ChatAgentOrchestratorService deduplicates repeated lead data in the same session', async () => {
   const { decide, leads, emailJobs } = createHarness();
   const message = 'Ich brauche Beratung zu KI Automatisierung. Mein Name ist Max Mustermann, max@example.de';

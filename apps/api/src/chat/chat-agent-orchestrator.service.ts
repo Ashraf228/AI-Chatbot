@@ -66,6 +66,7 @@ type ContactDetails = {
   email?: string;
   phone?: string;
   concern?: string;
+  preferredContact?: 'email' | 'phone';
 };
 
 export type ChatAgentDecision = {
@@ -240,7 +241,12 @@ export class ChatAgentOrchestratorService {
       return {
         action: 'ask_for_contact',
         handled: true,
-        answer: buildMissingFieldsQuestion(missing, effectiveScheduleIntent, Boolean(contact.concern)),
+        answer: buildMissingFieldsQuestion(
+          missing,
+          effectiveScheduleIntent,
+          Boolean(contact.concern),
+          contact.preferredContact,
+        ),
         decision: structuredDecision,
         cta,
       };
@@ -744,6 +750,7 @@ function parsePendingLeadState(value: unknown): PendingLeadState | null {
     name: asString(pendingLead.name) || undefined,
     email: asString(pendingLead.email) || undefined,
     phone: asString(pendingLead.phone) || undefined,
+    preferredContact: parsePreferredContact(asString(pendingLead.preferredContact)),
     concern: asString(pendingLead.concern) || undefined,
     startedAt: asString(pendingLead.startedAt) || undefined,
     updatedAt: asString(pendingLead.updatedAt) || undefined,
@@ -769,6 +776,7 @@ function parseConversationState(value: unknown): ConversationState | null {
       name: asString(collectedFields.name) || undefined,
       email: asString(collectedFields.email) || undefined,
       phone: asString(collectedFields.phone) || undefined,
+      preferredContact: parsePreferredContact(asString(collectedFields.preferredContact)),
       concern: asString(collectedFields.concern) || undefined,
       company: asString(collectedFields.company) || undefined,
     },
@@ -800,6 +808,13 @@ function parseConversationGoal(value: string): ConversationState['goal'] {
     return value as ConversationState['goal'];
   }
   return null;
+}
+
+function parsePreferredContact(value: string): ContactDetails['preferredContact'] | undefined {
+  if (value === 'email' || value === 'phone') {
+    return value;
+  }
+  return undefined;
 }
 
 function normalizeText(value: string) {
@@ -846,13 +861,27 @@ function extractContactDetails(message: string, pendingLead: PendingLeadState | 
   const phone = message.match(/(?:\+?\d[\d\s()./-]{6,}\d)/)?.[0]?.replace(/\s+/g, ' ').trim();
   const name = extractName(message) || inferNameFromPendingAnswer(message, pendingLead);
   const concern = extractConcern(message, pendingLead);
+  const preferredContact = extractPreferredContact(message);
 
   return {
     name,
     email,
     phone,
     concern,
+    preferredContact,
   };
+}
+
+function extractPreferredContact(message: string): ContactDetails['preferredContact'] | undefined {
+  if (/\b(telefon|telefonisch|phone|handy|anruf|anrufen|rueckruf|rückruf|whatsapp)\b/i.test(message)) {
+    return 'phone';
+  }
+
+  if (/\b(e-mail|email|mail|per mail)\b/i.test(message)) {
+    return 'email';
+  }
+
+  return undefined;
 }
 
 function extractName(text: string) {
@@ -968,6 +997,7 @@ function mergeContactDetails(
     email: current.email || pendingLead?.email,
     phone: current.phone || pendingLead?.phone,
     concern: current.concern || pendingLead?.concern,
+    preferredContact: current.preferredContact || pendingLead?.preferredContact,
   };
 }
 
@@ -978,6 +1008,7 @@ function mergeContactDetailsFromState(contact: ContactDetails, state: Conversati
     email: contact.email || collected.email,
     phone: contact.phone || collected.phone,
     concern: contact.concern || collected.concern || state?.topic || undefined,
+    preferredContact: contact.preferredContact || collected.preferredContact,
   };
 }
 
@@ -1146,6 +1177,7 @@ function buildPendingLeadState(params: {
     email: params.contact.email,
     phone: params.contact.phone,
     concern: params.contact.concern,
+    preferredContact: params.contact.preferredContact,
     startedAt: params.previous?.startedAt || now,
     updatedAt: now,
   };
@@ -1207,7 +1239,20 @@ function getMissingContactFields(contact: ContactDetails) {
   return missing;
 }
 
-function buildMissingFieldsQuestion(missing: string[], scheduleIntent: boolean, hasKnownConcern = false) {
+function buildMissingFieldsQuestion(
+  missing: string[],
+  scheduleIntent: boolean,
+  hasKnownConcern = false,
+  preferredContact?: ContactDetails['preferredContact'],
+) {
+  if (missing.includes('contact') && preferredContact === 'phone') {
+    return 'Gerne. Wie lautet deine Telefonnummer?';
+  }
+
+  if (missing.includes('contact') && preferredContact === 'email') {
+    return 'Gerne. Wie lautet deine E-Mail-Adresse?';
+  }
+
   if (scheduleIntent && hasKnownConcern && missing.includes('name') && missing.includes('contact')) {
     return 'Perfekt. Wie können wir dich am besten erreichen - per E-Mail oder Telefon?';
   }
