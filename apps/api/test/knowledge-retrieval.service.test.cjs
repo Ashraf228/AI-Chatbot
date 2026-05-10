@@ -38,6 +38,39 @@ test('VectorService.search filters active ready knowledge sources and scopes ten
   assert.equal(captured.params[4], 0.7);
 });
 
+test('VectorService.upsertChunk removes null bytes before storing chunk text and metadata', async () => {
+  const queries = [];
+  const db = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      return { rows: [] };
+    },
+  };
+  const service = new VectorService(db);
+
+  await service.upsertChunk({
+    id: 'chunk-1',
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    documentId: 'doc-1',
+    content: 'PDF\u0000Text',
+    metadata: {
+      filename: 'datei\u0000.pdf',
+      nested: {
+        value: 'A\u0000B',
+      },
+    },
+    contentHash: 'hash-1',
+    embedding: [0.1, 0.2],
+  });
+
+  const insert = queries.find((query) => /INSERT INTO chunks/i.test(query.sql));
+  assert.ok(insert);
+  assert.equal(insert.params[4], 'PDFText');
+  assert.equal(insert.params[5].filename, 'datei.pdf');
+  assert.equal(insert.params[5].nested.value, 'AB');
+});
+
 test('ChatPipeline strict knowledgeMode returns safe answer without LLM when retrieval is empty', async () => {
   const calls = { llm: 0 };
   const db = {

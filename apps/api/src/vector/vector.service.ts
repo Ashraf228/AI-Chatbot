@@ -16,6 +16,35 @@ export type VectorSearchRow = {
   score: number;
 };
 
+function sanitizePostgresText(value: string): string {
+  return value.replace(/\u0000/g, '');
+}
+
+function sanitizeJsonValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return sanitizePostgresText(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeJsonValue(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        sanitizePostgresText(key),
+        sanitizeJsonValue(item),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function sanitizeMetadata(metadata: VectorChunkMetadata): VectorChunkMetadata {
+  return sanitizeJsonValue(metadata) as VectorChunkMetadata;
+}
+
 @Injectable()
 export class VectorService {
   constructor(private db: PrismaService) {}
@@ -48,8 +77,8 @@ export class VectorService {
         params.tenantId,
         params.siteId,
         params.documentId,
-        params.content,
-        params.metadata,
+        sanitizePostgresText(params.content),
+        sanitizeMetadata(params.metadata),
         params.contentHash,
         this.toPgVectorLiteral(params.embedding),
       ],
@@ -74,8 +103,8 @@ export class VectorService {
        WHERE id = $1`,
       [
         params.id,
-        params.content,
-        params.metadata,
+        sanitizePostgresText(params.content),
+        sanitizeMetadata(params.metadata),
         params.contentHash,
         this.toPgVectorLiteral(params.embedding),
       ],
