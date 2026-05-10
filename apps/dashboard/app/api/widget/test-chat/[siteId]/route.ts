@@ -62,6 +62,7 @@ export async function POST(
   const siteResponse = await fetchDashboardBackend(`/admin/widget/sites/${siteId}`, {
     method: "GET",
     cache: "no-store",
+    session: auth.session,
   });
   const site = (await siteResponse.json().catch(() => ({}))) as AdminSite;
 
