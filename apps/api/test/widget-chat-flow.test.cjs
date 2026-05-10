@@ -76,30 +76,8 @@ test('widget chat flow can create a session and return an assistant reply', asyn
   assert.equal(sessionInsertCount, 1);
 
   const widgetChatService = new WidgetChatService(
-    {
-      async reply(dto) {
-        return {
-          sessionId: dto.sessionId,
-          answer: 'Wir koennen euch im Support gut entlasten.',
-          parts: [{ kind: 'text', text: 'Wir koennen euch im Support gut entlasten.' }],
-          sources: [],
-        };
-      },
-    },
     widgetConfigService,
     db,
-    {},
-    {},
-    {},
-    {
-      async resolveForSite() {
-        return {
-          route: 'faq',
-          reason: 'default_faq',
-          guide: 'FAQ route',
-        };
-      },
-    },
     {
       async enforceOrigin() {},
       async assertSessionBelongsToSite() {},
@@ -109,8 +87,14 @@ test('widget chat flow can create a session and return an assistant reply', asyn
       },
     },
     {
-      async buildRecommendationContextForSite() {
-        return { products: [], collections: [] };
+      async process(input) {
+        return {
+          sessionId: input.sessionId,
+          conversationId: 'conversation-1',
+          answer: 'Wir koennen euch im Support gut entlasten.',
+          parts: [{ kind: 'text', text: 'Wir koennen euch im Support gut entlasten.' }],
+          sources: [],
+        };
       },
     },
   );

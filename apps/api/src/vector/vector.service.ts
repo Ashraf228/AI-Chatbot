@@ -5,6 +5,10 @@ export type VectorChunkMetadata = Record<string, unknown>;
 
 export type VectorSearchRow = {
   id: string;
+  document_id: string;
+  source_id: string | null;
+  source_type: string | null;
+  source_label: string | null;
   content: string;
   metadata: VectorChunkMetadata;
   title: string | null;
@@ -85,25 +89,49 @@ export class VectorService {
     siteId: string,
     embedding: number[],
     k = 6,
+    minScore?: number,
   ): Promise<VectorSearchRow[]> {
     const res = await this.db.query<VectorSearchRow>(
       `
+      WITH ranked AS (
+        SELECT
+          c.id,
+          c.document_id,
+          d.source_id,
+          ks.source_type,
+          ks.label AS source_label,
+          c.content,
+          c.metadata,
+          d.title,
+          COALESCE(ks.source_url, d.source_url) AS source_url,
+          (1 - (c.embedding <=> $3::vector)) AS score,
+          c.embedding <=> $3::vector AS distance
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        LEFT JOIN knowledge_sources ks ON ks.id = d.source_id
+        WHERE c.tenant_id = $1
+          AND c.site_id = $2
+          AND c.embedding IS NOT NULL
+          AND COALESCE(ks.is_active, true) = true
+          AND COALESCE(ks.sync_status, 'ready') = 'ready'
+      )
       SELECT
-        c.id,
-        c.content,
-        c.metadata,
-        d.title,
-        d.source_url,
-        (1 - (c.embedding <=> $3::vector)) AS score
-      FROM chunks c
-      JOIN documents d ON d.id = c.document_id
-      WHERE c.tenant_id = $1
-        AND c.site_id = $2
-        AND c.embedding IS NOT NULL
-      ORDER BY c.embedding <=> $3::vector
+        id,
+        document_id,
+        source_id,
+        source_type,
+        source_label,
+        content,
+        metadata,
+        title,
+        source_url,
+        score
+      FROM ranked
+      WHERE ($5::double precision IS NULL OR score >= $5::double precision)
+      ORDER BY distance
       LIMIT $4
       `,
-      [tenantId, siteId, this.toPgVectorLiteral(embedding), k],
+      [tenantId, siteId, this.toPgVectorLiteral(embedding), k, minScore ?? null],
     );
 
     return res.rows;

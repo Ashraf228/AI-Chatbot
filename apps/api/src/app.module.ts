@@ -29,6 +29,8 @@ import { IndustryTemplatesModule } from './industry-templates/industry-templates
 import { AuditLogsModule } from './audit-logs/audit-logs.module';
 import { AdminScopeModule } from './utils/admin-scope.module';
 import { SiteDataModule } from './site-data/site-data.module';
+import { BusinessAnalyticsModule } from './business-analytics/business-analytics.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { SiteDataModule } from './site-data/site-data.module';
     AuditLogsModule,
     AdminScopeModule,
     SiteDataModule,
+    BusinessAnalyticsModule,
+    BillingModule,
   ],
   controllers: [HealthController],
   providers: [

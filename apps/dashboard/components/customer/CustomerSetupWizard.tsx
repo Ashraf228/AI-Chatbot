@@ -1,9 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { WidgetPreview } from "../branding/WidgetPreview";
 import { type IndustryTemplate, templatesByKey } from "../../lib/industry-templates";
+import {
+  createManualKnowledgeSource,
+  deleteKnowledgeSource,
+  getKnowledgeSources,
+  getSite,
+  importUrlKnowledgeSource,
+  resyncKnowledgeSource,
+  setKnowledgeSourceActive,
+  setSiteGoLive,
+  updateSiteBasics,
+  updateSiteBranding,
+  updateSiteSettings,
+  uploadKnowledgePdf,
+} from "../../lib/setup-wizard-api";
 import { encodeSiteId } from "../../lib/site-id";
 import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
 import { Button } from "../shared/Button";
@@ -18,7 +32,6 @@ import {
   type CustomerApiStatus,
   type CustomerOverallStatus,
   type CustomerStatusStep,
-  type CustomerStatusStepKey,
   type CustomerStatusTone,
 } from "./customer-status";
 
@@ -32,108 +45,125 @@ type SiteDetails = {
   siteKey: string;
   allowedDomains: string[];
   companyName: string;
+  websiteUrl: string;
+  supportEmail: string;
+  phone: string;
+  language: "de" | "en";
   botName: string;
   logoUrl: string;
   brandColor: string;
+  accentColor: string;
   welcomeMessage: string;
-  systemPrompt: string;
+  placeholderText: string;
+  widgetPosition: "bottom_right" | "bottom_left";
+  launcherLabel: string;
   privacyUrl: string;
+  privacyNoticeText: string;
+  fontFamily: string;
+  systemPrompt: string;
   industry: string;
-  setupGoal: "" | "lead_capture" | "support" | "product_advice" | "appointments";
-  tone: "" | "professional" | "friendly" | "consultative";
+  setupGoal: string;
+  primaryGoal: PrimaryGoal | "";
+  tone: Tone | "";
+  knowledgeMode: KnowledgeMode;
+  fallbackBehavior: FallbackBehavior;
   ctaText: string;
   templateId: string;
   templateVersion: number | null;
   templateAppliedAt: string;
   lastTestedAt: string;
+  lastTestQuestion: string;
+  lastTestAnswer: string;
   goLiveAt: string;
 };
 
-type KnowledgeItem = {
+type KnowledgeMode = "flexible" | "grounded" | "strict";
+type FallbackBehavior = "ask_followup" | "collect_contact" | "handoff";
+type PrimaryGoal =
+  | "support_automation"
+  | "lead_generation"
+  | "customer_advice"
+  | "product_questions"
+  | "appointment_requests"
+  | "internal_knowledge";
+type Tone = "professional" | "friendly" | "premium" | "direct" | "consultative";
+
+type KnowledgeSource = {
   id: string;
   type: string;
+  title: string;
+  label: string;
+  url: string;
+  sourceUrl: string;
+  status: "pending" | "processing" | "ready" | "failed" | "disabled" | string;
+  syncStatus: string;
+  isActive: boolean;
+  lastSyncedAt: string | null;
+  errorMessage: string;
+  createdAt: string;
 };
 
-type SetupStepKey =
-  | "basics"
-  | "template"
-  | "knowledge"
-  | "behavior"
-  | "design"
-  | "embed"
-  | "test"
-  | "live";
+type WizardStepKey = "profile" | "goal" | "knowledge" | "design" | "launch";
 
-const SETUP_STEPS: Array<{ key: SetupStepKey; label: string; description: string }> = [
-  { key: "basics", label: "Basis", description: "Firma und erlaubte Domains" },
-  { key: "template", label: "Branche & Vorlage", description: "Branche wählen und Vorlage anwenden" },
-  { key: "knowledge", label: "Wissen", description: "Wissensinhalte prüfen" },
-  { key: "behavior", label: "Verhalten", description: "Ziel, Tonalität und CTA" },
-  { key: "design", label: "Design", description: "Farbe, Logo und Datenschutz" },
-  { key: "embed", label: "Einbindung", description: "Code kopieren und Domain prüfen" },
-  { key: "test", label: "Testen", description: "Test-Chat durchführen" },
-  { key: "live", label: "Live schalten", description: "Bereitschaft prüfen und veröffentlichen" },
+type TestChatMessage = {
+  role: "user" | "assistant";
+  text: string;
+  sources?: Array<{ title?: string; url?: string; score?: number }>;
+};
+
+const WIZARD_STEPS: Array<{ key: WizardStepKey; label: string; description: string }> = [
+  { key: "profile", label: "Unternehmen", description: "Firma, Branche und Domain" },
+  { key: "goal", label: "KI-Ziel", description: "Aufgabe, Ton und Wissensmodus" },
+  { key: "knowledge", label: "Wissen", description: "FAQ, Website oder PDF hinzufügen" },
+  { key: "design", label: "Design", description: "Branding und Widget-Vorschau" },
+  { key: "launch", label: "Test & Einbindung", description: "Prüfen, kopieren, live schalten" },
 ];
 
-const WIZARD_STEP_TO_STATUS_STEP: Record<SetupStepKey, CustomerStatusStepKey> = {
-  basics: "basics",
-  template: "template",
-  knowledge: "knowledge",
-  behavior: "behavior",
-  design: "design",
-  embed: "embed",
-  test: "test",
-  live: "live",
-};
-
-const STATUS_STEP_TO_WIZARD_STEP: Partial<Record<CustomerStatusStepKey, SetupStepKey>> = {
-  basics: "basics",
-  template: "template",
-  knowledge: "knowledge",
-  behavior: "behavior",
-  design: "design",
-  embed: "embed",
-  test: "test",
-  live: "live",
-};
-
-const GOAL_OPTIONS = [
-  { value: "", label: "Bitte wählen" },
-  { value: "lead_capture", label: "Anfragen sammeln" },
-  { value: "support", label: "Support beantworten" },
-  { value: "product_advice", label: "Produkte empfehlen" },
-  { value: "appointments", label: "Termine vorbereiten" },
+const GOAL_OPTIONS: Array<{ value: PrimaryGoal | ""; label: string; help: string }> = [
+  { value: "", label: "Bitte wählen", help: "Noch kein Ziel gewählt." },
+  { value: "support_automation", label: "Support automatisieren", help: "Häufige Kundenfragen zuverlässig beantworten." },
+  { value: "lead_generation", label: "Anfragen gewinnen", help: "Interessenten erkennen und Kontaktdaten erfassen." },
+  { value: "customer_advice", label: "Kunden beraten", help: "Besucher durch Beratungsgespräche führen." },
+  { value: "product_questions", label: "Produktfragen beantworten", help: "Sortiment, Leistungen oder Produkte erklären." },
+  { value: "appointment_requests", label: "Termine vorbereiten", help: "Kontakt- oder Terminwünsche qualifizieren." },
+  { value: "internal_knowledge", label: "Internes Wissen nutzbar machen", help: "Wissen strukturiert und kontrolliert abrufen." },
 ];
 
-const TONE_OPTIONS = [
+const TONE_OPTIONS: Array<{ value: Tone | ""; label: string }> = [
   { value: "", label: "Bitte wählen" },
   { value: "professional", label: "Professionell" },
-  { value: "friendly", label: "Locker und freundlich" },
+  { value: "friendly", label: "Freundlich" },
+  { value: "premium", label: "Premium" },
+  { value: "direct", label: "Direkt" },
   { value: "consultative", label: "Beratend" },
 ];
 
-function formatDate(value: string) {
+const KNOWLEDGE_MODE_OPTIONS: Array<{ value: KnowledgeMode; label: string; help: string }> = [
+  { value: "flexible", label: "Flexibel", help: "Antwortet allgemein und nutzt Wissen, wenn es passt." },
+  { value: "grounded", label: "Quellenorientiert", help: "Antwortet primär aus hinterlegtem Unternehmenswissen." },
+  { value: "strict", label: "Streng", help: "Antwortet nur, wenn passende Wissensquellen gefunden werden." },
+];
+
+const FALLBACK_OPTIONS: Array<{ value: FallbackBehavior; label: string }> = [
+  { value: "ask_followup", label: "Rückfrage stellen" },
+  { value: "collect_contact", label: "Kontakt aufnehmen lassen" },
+  { value: "handoff", label: "An Menschen übergeben" },
+];
+
+const STATUS_STEP_GROUPS: Record<WizardStepKey, string[]> = {
+  profile: ["basics", "template"],
+  goal: ["behavior"],
+  knowledge: ["knowledge"],
+  design: ["design"],
+  launch: ["embed", "test", "live"],
+};
+
+function formatDate(value: string | null | undefined) {
   if (!value) {
     return "Noch nicht gesetzt";
   }
 
   return new Date(value).toLocaleString("de-DE");
-}
-
-function findStatusStep(status: CustomerApiStatus | null, stepKey: SetupStepKey): CustomerStatusStep | undefined {
-  return status?.steps?.find((step) => step.key === WIZARD_STEP_TO_STATUS_STEP[stepKey]);
-}
-
-function mapStepStatusToTone(step: CustomerStatusStep | undefined): CustomerStatusTone {
-  if (step?.status === "complete") {
-    return "done";
-  }
-
-  if (step?.status === "warning" || step?.status === "blocked") {
-    return "attention";
-  }
-
-  return "pending";
 }
 
 function normalizeDomains(value: string) {
@@ -143,551 +173,751 @@ function normalizeDomains(value: string) {
     .filter(Boolean);
 }
 
+function domainFromUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    return new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`).hostname;
+  } catch {
+    return trimmed.replace(/^https?:\/\//, "").split("/")[0] || trimmed;
+  }
+}
+
 function createEmbedCode(loaderUrl: string, siteKey: string) {
-  return `<script src="${loaderUrl}" data-site-key="${siteKey}" defer></script>`;
+  return `<script src="${loaderUrl}" data-site-key="${siteKey}" async></script>`;
+}
+
+function firstString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
+}
+
+function normalizeSite(data: Record<string, unknown>): SiteDetails {
+  const allowedDomains = Array.isArray(data.allowedDomains)
+    ? data.allowedDomains.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const primaryGoal = firstString(data.primaryGoal, firstString(data.setupGoal)) as SiteDetails["primaryGoal"];
+
+  return {
+    id: firstString(data.id),
+    name: firstString(data.name),
+    siteKey: firstString(data.siteKey),
+    allowedDomains,
+    companyName: firstString(data.companyName, firstString(data.name)),
+    websiteUrl: firstString(data.websiteUrl, firstString(data.domain, allowedDomains[0] || "")),
+    supportEmail: firstString(data.supportEmail),
+    phone: firstString(data.phone),
+    language: firstString(data.language, "de") === "en" ? "en" : "de",
+    botName: firstString(data.botName, "Service-Assistent"),
+    logoUrl: firstString(data.logoUrl),
+    brandColor: firstString(data.brandColor, "#b55400"),
+    accentColor: firstString(data.accentColor, "#fff0d9"),
+    welcomeMessage: firstString(data.welcomeMessage, "Hi! Wie kann ich helfen?"),
+    placeholderText: firstString(data.placeholderText, "Nachricht schreiben..."),
+    widgetPosition: firstString(data.widgetPosition) === "bottom_left" ? "bottom_left" : "bottom_right",
+    launcherLabel: firstString(data.launcherLabel, "Chat"),
+    privacyUrl: firstString(data.privacyUrl),
+    privacyNoticeText: firstString(data.privacyNoticeText),
+    fontFamily: firstString(data.fontFamily, "system"),
+    systemPrompt: firstString(data.systemPrompt),
+    industry: firstString(data.industry),
+    setupGoal: firstString(data.setupGoal),
+    primaryGoal,
+    tone: firstString(data.tone) as SiteDetails["tone"],
+    knowledgeMode: ["flexible", "grounded", "strict"].includes(firstString(data.knowledgeMode))
+      ? (data.knowledgeMode as KnowledgeMode)
+      : "flexible",
+    fallbackBehavior: ["ask_followup", "collect_contact", "handoff"].includes(firstString(data.fallbackBehavior))
+      ? (data.fallbackBehavior as FallbackBehavior)
+      : "ask_followup",
+    ctaText: firstString(data.ctaText),
+    templateId: firstString(data.templateId),
+    templateVersion: typeof data.templateVersion === "number" ? data.templateVersion : null,
+    templateAppliedAt: firstString(data.templateAppliedAt),
+    lastTestedAt: firstString(data.lastTestedAt),
+    lastTestQuestion: firstString(data.lastTestQuestion),
+    lastTestAnswer: firstString(data.lastTestAnswer),
+    goLiveAt: firstString(data.goLiveAt),
+  };
+}
+
+function mapStepStatusToTone(status: CustomerStatusStep["status"] | undefined): CustomerStatusTone {
+  if (status === "complete") {
+    return "done";
+  }
+  if (status === "warning" || status === "blocked") {
+    return "attention";
+  }
+  return "pending";
+}
+
+function statusForWizardStep(status: CustomerApiStatus | null, step: WizardStepKey): CustomerStatusTone {
+  const keys = STATUS_STEP_GROUPS[step];
+  const related = status?.steps?.filter((entry) => keys.includes(entry.key)) || [];
+  if (related.length === 0) {
+    return "pending";
+  }
+  if (related.some((entry) => entry.status === "blocked" || entry.status === "warning")) {
+    return "attention";
+  }
+  if (related.every((entry) => entry.status === "complete")) {
+    return "done";
+  }
+  return "pending";
+}
+
+function statusLabel(source: KnowledgeSource) {
+  if (!source.isActive || source.status === "disabled") {
+    return "Deaktiviert";
+  }
+  if (source.status === "ready") {
+    return "Bereit";
+  }
+  if (source.status === "processing") {
+    return "Verarbeitung";
+  }
+  if (source.status === "failed") {
+    return "Fehler";
+  }
+  return "Wartet";
+}
+
+function sourceTone(source: KnowledgeSource): CustomerStatusTone {
+  if (!source.isActive || source.status === "disabled") {
+    return "pending";
+  }
+  if (source.status === "ready") {
+    return "done";
+  }
+  if (source.status === "failed") {
+    return "attention";
+  }
+  return "pending";
 }
 
 export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   const siteSlug = encodeSiteId(siteId);
   const [site, setSite] = useState<SiteDetails | null>(null);
-  const [knowledge, setKnowledge] = useState<KnowledgeItem[]>([]);
   const [templates, setTemplates] = useState<IndustryTemplate[]>([]);
-  const [overallStatus, setOverallStatus] = useState<CustomerOverallStatus>("Setup unvollständig");
+  const [sources, setSources] = useState<KnowledgeSource[]>([]);
+  const [overallStatus, setOverallStatus] = useState<CustomerOverallStatus | string>("Setup unvollständig");
   const [serverStatus, setServerStatus] = useState<CustomerApiStatus | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [loaderUrl, setLoaderUrl] = useState(
     process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js",
   );
-  const [copied, setCopied] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [basicsForm, setBasicsForm] = useState({ name: "", allowedDomains: "" });
-  const [behaviorForm, setBehaviorForm] = useState({
-    setupGoal: "" as SiteDetails["setupGoal"],
+  const [copied, setCopied] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    companyName: "",
+    industry: "",
+    websiteUrl: "",
+    allowedDomains: "",
+    supportEmail: "",
+    phone: "",
+    language: "de" as "de" | "en",
+  });
+  const [goalForm, setGoalForm] = useState({
+    primaryGoal: "" as SiteDetails["primaryGoal"],
     tone: "" as SiteDetails["tone"],
+    knowledgeMode: "flexible" as KnowledgeMode,
+    fallbackBehavior: "ask_followup" as FallbackBehavior,
     ctaText: "",
     systemPrompt: "",
   });
+  const [knowledgeForm, setKnowledgeForm] = useState({
+    title: "FAQ",
+    question: "",
+    content: "",
+    url: "",
+    urlTitle: "",
+  });
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [designForm, setDesignForm] = useState({
     brandColor: "#b55400",
+    accentColor: "#fff0d9",
     logoUrl: "",
-    privacyUrl: "",
     welcomeMessage: "",
+    placeholderText: "Nachricht schreiben...",
+    widgetPosition: "bottom_right" as "bottom_right" | "bottom_left",
+    launcherLabel: "Chat",
+    privacyUrl: "",
+    privacyNoticeText: "",
   });
+  const [testQuestion, setTestQuestion] = useState("");
+  const [testSessionId, setTestSessionId] = useState("");
+  const [testMessages, setTestMessages] = useState<TestChatMessage[]>([]);
 
   useEffect(() => {
     setLoaderUrl(resolveWidgetLoaderUrl(process.env.NEXT_PUBLIC_WIDGET_LOADER_URL));
   }, []);
 
+  const templateMap = useMemo(() => templatesByKey(templates), [templates]);
+  const activeStep = WIZARD_STEPS[activeStepIndex];
+  const selectedTemplate = site?.industry ? templateMap[site.industry] : undefined;
+  const readyActiveSources = sources.filter((source) => source.isActive && source.status === "ready");
+  const embedCode = site ? createEmbedCode(loaderUrl, site.siteKey) : "";
+  const canGoLive = Boolean(serverStatus?.isLiveReady);
+  const liveDone = serverStatus?.lifecycleStatus === "live" || Boolean(site?.goLiveAt);
+
   async function refreshStatus() {
-    const response = await fetch(`/api/sites/${siteId}/status`, { cache: "no-store" });
-    const data = await response.json().catch(() => ({}));
-    if (response.ok && data?.status) {
-      setOverallStatus(data.status);
+    const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/status`, { cache: "no-store" });
+    const data = (await response.json().catch(() => ({}))) as CustomerApiStatus & { status?: string };
+    if (response.ok && data?.code) {
+      setOverallStatus(data.status || data.label);
       setServerStatus(data);
     }
+  }
+
+  async function refreshSources() {
+    const data = await getKnowledgeSources(siteId);
+    setSources(Array.isArray(data) ? (data as KnowledgeSource[]) : []);
   }
 
   async function load() {
     setLoading(true);
     setError(null);
+    try {
+      const [siteData, sourcesData, templatesResponse, statusResponse] = await Promise.all([
+        getSite(siteId),
+        getKnowledgeSources(siteId),
+        fetch("/api/industry-templates", { cache: "no-store" }),
+        fetch(`/api/sites/${encodeURIComponent(siteId)}/status`, { cache: "no-store" }),
+      ]);
+      const templatesData = await templatesResponse.json().catch(() => []);
+      const statusData = (await statusResponse.json().catch(() => ({}))) as CustomerApiStatus & { status?: string };
+      const nextSite = normalizeSite(siteData as Record<string, unknown>);
 
-    const [siteRes, knowledgeRes, templatesRes, statusRes] = await Promise.all([
-      fetch(`/api/widget/sites/${siteId}`, { cache: "no-store" }),
-      fetch(`/api/knowledge?siteId=${encodeURIComponent(siteId)}`, { cache: "no-store" }),
-      fetch("/api/industry-templates", { cache: "no-store" }),
-      fetch(`/api/sites/${siteId}/status`, { cache: "no-store" }),
-    ]);
-
-    const siteData = await siteRes.json().catch(() => ({}));
-    const knowledgeData = await knowledgeRes.json().catch(() => []);
-    const templatesData = await templatesRes.json().catch(() => []);
-    const statusData = await statusRes.json().catch(() => ({}));
-
-    if (!siteRes.ok) {
-      setError(siteData?.message || "Kundendaten konnten nicht geladen werden.");
+      setSite(nextSite);
+      setSources(Array.isArray(sourcesData) ? (sourcesData as KnowledgeSource[]) : []);
+      setTemplates(Array.isArray(templatesData) ? templatesData : []);
+      if (statusResponse.ok && statusData?.code) {
+        setOverallStatus(statusData.status || statusData.label);
+        setServerStatus(statusData);
+      }
+      setProfileForm({
+        companyName: nextSite.companyName || nextSite.name,
+        industry: nextSite.industry,
+        websiteUrl: nextSite.websiteUrl,
+        allowedDomains: nextSite.allowedDomains.join("\n"),
+        supportEmail: nextSite.supportEmail,
+        phone: nextSite.phone,
+        language: nextSite.language,
+      });
+      setGoalForm({
+        primaryGoal: nextSite.primaryGoal,
+        tone: nextSite.tone,
+        knowledgeMode: nextSite.knowledgeMode,
+        fallbackBehavior: nextSite.fallbackBehavior,
+        ctaText: nextSite.ctaText,
+        systemPrompt: nextSite.systemPrompt,
+      });
+      setDesignForm({
+        brandColor: nextSite.brandColor,
+        accentColor: nextSite.accentColor,
+        logoUrl: nextSite.logoUrl,
+        welcomeMessage: nextSite.welcomeMessage,
+        placeholderText: nextSite.placeholderText,
+        widgetPosition: nextSite.widgetPosition,
+        launcherLabel: nextSite.launcherLabel,
+        privacyUrl: nextSite.privacyUrl,
+        privacyNoticeText: nextSite.privacyNoticeText,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Setup konnte nicht geladen werden.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (!knowledgeRes.ok) {
-      setError(knowledgeData?.message || "Wissensdaten konnten nicht geladen werden.");
-      setLoading(false);
-      return;
-    }
-
-    const nextSite: SiteDetails = {
-      id: siteData.id,
-      name: siteData.name || "",
-      siteKey: siteData.siteKey || "",
-      allowedDomains: Array.isArray(siteData.allowedDomains) ? siteData.allowedDomains : [],
-      companyName: siteData.companyName || "",
-      botName: siteData.botName || "",
-      logoUrl: siteData.logoUrl || "",
-      brandColor: siteData.brandColor || "#b55400",
-      welcomeMessage: siteData.welcomeMessage || "",
-      systemPrompt: siteData.systemPrompt || "",
-      privacyUrl: siteData.privacyUrl || "",
-      industry: siteData.industry || "",
-      setupGoal: siteData.setupGoal || "",
-      tone: siteData.tone || "",
-      ctaText: siteData.ctaText || "",
-      templateId: siteData.templateId || "",
-      templateVersion: siteData.templateVersion || null,
-      templateAppliedAt: siteData.templateAppliedAt || "",
-      lastTestedAt: siteData.lastTestedAt || "",
-      goLiveAt: siteData.goLiveAt || "",
-    };
-
-    setSite(nextSite);
-    setTemplates(Array.isArray(templatesData) ? templatesData : []);
-    if (statusRes.ok && statusData?.status) {
-      setOverallStatus(statusData.status);
-      setServerStatus(statusData);
-    }
-    setBasicsForm({
-      name: nextSite.name,
-      allowedDomains: nextSite.allowedDomains.join("\n"),
-    });
-    setBehaviorForm({
-      setupGoal: nextSite.setupGoal,
-      tone: nextSite.tone,
-      ctaText: nextSite.ctaText,
-      systemPrompt: nextSite.systemPrompt,
-    });
-    setDesignForm({
-      brandColor: nextSite.brandColor,
-      logoUrl: nextSite.logoUrl,
-      privacyUrl: nextSite.privacyUrl,
-      welcomeMessage: nextSite.welcomeMessage,
-    });
-    setKnowledge(Array.isArray(knowledgeData) ? knowledgeData : []);
-    setLoading(false);
   }
 
   useEffect(() => {
     load();
   }, [siteId]);
 
-  const knowledgeCounts = useMemo(() => {
-    const faqCount = knowledge.filter((item) => item.type === "faq").length;
-    const pdfCount = knowledge.filter((item) => item.type === "pdf").length;
-    return { total: knowledge.length, faqCount, pdfCount };
-  }, [knowledge]);
-
-  const currentStep = SETUP_STEPS[activeStepIndex];
-  const currentStatusStep = currentStep ? findStatusStep(serverStatus, currentStep.key) : undefined;
-  const displayProgress = serverStatus?.progress ?? 0;
-  const canGoLive = Boolean(serverStatus?.isLiveReady);
-  const liveDone = findStatusStep(serverStatus, "live")?.status === "complete";
-  const templateMap = useMemo(() => templatesByKey(templates), [templates]);
-  const selectedTemplate = site?.industry ? templateMap[site.industry] : undefined;
-  const embedCode = site ? createEmbedCode(loaderUrl, site.siteKey) : "";
-
-  function jumpToStatusStep(statusStepKey: string | undefined) {
-    const wizardStep = statusStepKey ? STATUS_STEP_TO_WIZARD_STEP[statusStepKey] : undefined;
-    const index = wizardStep ? SETUP_STEPS.findIndex((step) => step.key === wizardStep) : -1;
-    if (index >= 0) {
-      setActiveStepIndex(index);
-    }
-  }
-
-  async function saveBasics() {
-    setSavingKey("basics");
-    setError(null);
-    setMessage(null);
-
-    const allowedDomains = normalizeDomains(basicsForm.allowedDomains);
-    const response = await fetch(`/api/sites/${siteId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: basicsForm.name.trim(),
-        allowedDomains,
-      }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(data?.message || "Basisdaten konnten nicht gespeichert werden.");
-      setSavingKey(null);
-      return false;
-    }
-
-    setSite((current) =>
-      current
-        ? {
-            ...current,
-            name: data.name || current.name,
-            allowedDomains: Array.isArray(data.allowed_domains) ? data.allowed_domains : allowedDomains,
-          }
-        : current,
-    );
-    setMessage("Basisdaten gespeichert.");
-    setSavingKey(null);
-    await refreshStatus();
-    return true;
-  }
-
-  async function patchSetup(values: Record<string, unknown>, successMessage: string, key: string) {
+  async function runAction<T>(key: string, action: () => Promise<T>, successMessage: string) {
     setSavingKey(key);
     setError(null);
     setMessage(null);
-
-    const response = await fetch(`/api/widget/config/${siteId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(values),
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(data?.message || "Setup-Daten konnten nicht gespeichert werden.");
+    try {
+      const result = await action();
+      setMessage(successMessage);
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Aktion konnte nicht ausgeführt werden.");
+      return null;
+    } finally {
       setSavingKey(null);
-      return false;
     }
-
-    setSite((current) =>
-      current
-        ? {
-            ...current,
-            industry: data.industry ?? current.industry,
-            setupGoal: data.setupGoal ?? current.setupGoal,
-            tone: data.tone ?? current.tone,
-            ctaText: data.ctaText ?? current.ctaText,
-            systemPrompt: data.systemPrompt ?? current.systemPrompt,
-            lastTestedAt: data.lastTestedAt ?? current.lastTestedAt,
-            goLiveAt: data.goLiveAt ?? current.goLiveAt,
-          }
-        : current,
-    );
-    setMessage(successMessage);
-    setSavingKey(null);
-    await refreshStatus();
-    return true;
   }
 
-  async function saveBehavior() {
-    return patchSetup(
-      {
-        setupGoal: behaviorForm.setupGoal,
-        tone: behaviorForm.tone,
-        ctaText: behaviorForm.ctaText.trim(),
-        systemPrompt: behaviorForm.systemPrompt.trim(),
+  async function saveProfile() {
+    const rawDomains = normalizeDomains(profileForm.allowedDomains);
+    const websiteDomain = domainFromUrl(profileForm.websiteUrl);
+    const allowedDomains = rawDomains.length > 0 ? rawDomains : websiteDomain ? [websiteDomain] : [];
+    const companyName = profileForm.companyName.trim();
+
+    const saved = await runAction(
+      "profile",
+      async () => {
+        const [siteResult, brandingResult, configResult] = await Promise.all([
+          updateSiteBasics(siteId, { name: companyName || site?.name || siteId, allowedDomains }),
+          updateSiteBranding(siteId, { companyName: companyName || site?.companyName || site?.name || "" }),
+          updateSiteSettings(siteId, {
+            websiteUrl: profileForm.websiteUrl.trim(),
+            domain: websiteDomain,
+            allowedDomains,
+            supportEmail: profileForm.supportEmail.trim(),
+            phone: profileForm.phone.trim(),
+            language: profileForm.language,
+            industry: profileForm.industry,
+          }),
+        ]);
+        return { siteResult, brandingResult, configResult };
       },
-      "Verhalten gespeichert.",
-      "behavior",
+      "Unternehmensprofil gespeichert.",
     );
-  }
 
-  async function saveDesign() {
-    setSavingKey("design");
-    setError(null);
-    setMessage(null);
-
-    const response = await fetch(`/api/widget/branding/${siteId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        brandColor: designForm.brandColor,
-        logoUrl: designForm.logoUrl.trim(),
-        privacyUrl: designForm.privacyUrl.trim(),
-        welcomeMessage: designForm.welcomeMessage.trim(),
-      }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setError(data?.message || "Design konnte nicht gespeichert werden.");
-      setSavingKey(null);
+    if (!saved) {
       return false;
     }
 
-    setSite((current) =>
-      current
-        ? {
-            ...current,
-            brandColor: data.brandColor ?? current.brandColor,
-            logoUrl: data.logoUrl ?? current.logoUrl,
-            privacyUrl: data.privacyUrl ?? current.privacyUrl,
-            welcomeMessage: data.welcomeMessage ?? current.welcomeMessage,
-          }
-        : current,
-    );
-    setMessage("Design gespeichert.");
-    setSavingKey(null);
-    await refreshStatus();
+    await load();
     return true;
-  }
-
-  async function saveTemplateChoice() {
-    if (!site) {
-      return false;
-    }
-
-    return patchSetup({ industry: site.industry }, "Branche gespeichert.", "template");
   }
 
   async function applyIndustryTemplate() {
-    if (!site) {
+    if (!profileForm.industry) {
+      setError("Bitte zuerst eine Branche auswählen.");
       return false;
     }
 
-    const template = templateMap[site.industry];
+    const template = templateMap[profileForm.industry];
     if (!template) {
       setError("Für diese Branche ist noch keine Vorlage hinterlegt.");
       return false;
     }
 
-    setSavingKey("template");
+    const response = await runAction(
+      "template",
+      async () => {
+        const templateResponse = await fetch(`/api/sites/${encodeURIComponent(siteId)}/apply-template`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: template.key, mode: "fill_missing_only" }),
+        });
+        const data = await templateResponse.json().catch(() => ({}));
+        if (!templateResponse.ok) {
+          throw new Error(typeof data?.message === "string" ? data.message : "Vorlage konnte nicht angewendet werden.");
+        }
+        return data;
+      },
+      `Vorlage „${template.label}“ angewendet.`,
+    );
+
+    if (!response) {
+      return false;
+    }
+    await load();
+    return true;
+  }
+
+  async function saveGoal() {
+    const saved = await runAction(
+      "goal",
+      () =>
+        updateSiteSettings(siteId, {
+          primaryGoal: goalForm.primaryGoal,
+          setupGoal: goalForm.primaryGoal,
+          tone: goalForm.tone,
+          knowledgeMode: goalForm.knowledgeMode,
+          fallbackBehavior: goalForm.fallbackBehavior,
+          ctaText: goalForm.ctaText.trim(),
+          systemPrompt: goalForm.systemPrompt.trim(),
+        }),
+      "KI-Ziel gespeichert.",
+    );
+    if (!saved) {
+      return false;
+    }
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            primaryGoal: goalForm.primaryGoal,
+            setupGoal: goalForm.primaryGoal,
+            tone: goalForm.tone,
+            knowledgeMode: goalForm.knowledgeMode,
+            fallbackBehavior: goalForm.fallbackBehavior,
+            ctaText: goalForm.ctaText,
+            systemPrompt: goalForm.systemPrompt,
+          }
+        : current,
+    );
+    await refreshStatus();
+    return true;
+  }
+
+  async function saveDesign() {
+    const saved = await runAction(
+      "design",
+      async () => {
+        const [branding, config] = await Promise.all([
+          updateSiteBranding(siteId, {
+            brandColor: designForm.brandColor,
+            accentColor: designForm.accentColor,
+            logoUrl: designForm.logoUrl.trim(),
+            welcomeMessage: designForm.welcomeMessage.trim(),
+            privacyUrl: designForm.privacyUrl.trim(),
+          }),
+          updateSiteSettings(siteId, {
+            placeholderText: designForm.placeholderText.trim(),
+            widgetPosition: designForm.widgetPosition,
+            launcherLabel: designForm.launcherLabel.trim(),
+            privacyNoticeText: designForm.privacyNoticeText.trim(),
+          }),
+        ]);
+        return { branding, config };
+      },
+      "Design gespeichert.",
+    );
+    if (!saved) {
+      return false;
+    }
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            ...designForm,
+          }
+        : current,
+    );
+    await refreshStatus();
+    return true;
+  }
+
+  async function addManualKnowledge() {
+    if (!knowledgeForm.content.trim()) {
+      setError("Bitte Inhalt für das Wissen eintragen.");
+      return;
+    }
+
+    const created = await runAction(
+      "manual",
+      () =>
+        createManualKnowledgeSource(siteId, {
+          title: knowledgeForm.title.trim() || "Wissen",
+          question: knowledgeForm.question.trim() || undefined,
+          content: knowledgeForm.content.trim(),
+        }),
+      "Wissen gespeichert.",
+    );
+    if (created) {
+      setKnowledgeForm((current) => ({ ...current, question: "", content: "" }));
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function addUrlKnowledge() {
+    if (!knowledgeForm.url.trim()) {
+      setError("Bitte Website-URL eintragen.");
+      return;
+    }
+
+    const imported = await runAction(
+      "url",
+      () =>
+        importUrlKnowledgeSource(siteId, {
+          url: knowledgeForm.url.trim(),
+          title: knowledgeForm.urlTitle.trim() || undefined,
+        }),
+      "Website-Wissen importiert.",
+    );
+    if (imported) {
+      setKnowledgeForm((current) => ({ ...current, url: "", urlTitle: "" }));
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function addPdfKnowledge() {
+    if (!pdfFile) {
+      setError("Bitte eine PDF-Datei auswählen.");
+      return;
+    }
+
+    const uploaded = await runAction("pdf", () => uploadKnowledgePdf(siteId, pdfFile), "PDF verarbeitet.");
+    if (uploaded) {
+      setPdfFile(null);
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function toggleKnowledgeSource(source: KnowledgeSource) {
+    const updated = await runAction(
+      `source-${source.id}`,
+      () => setKnowledgeSourceActive(source.id, !source.isActive),
+      source.isActive ? "Wissensquelle deaktiviert." : "Wissensquelle aktiviert.",
+    );
+    if (updated) {
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function resyncSource(source: KnowledgeSource) {
+    const updated = await runAction(
+      `resync-${source.id}`,
+      () => resyncKnowledgeSource(source.id),
+      "Wissensquelle wird aktualisiert.",
+    );
+    if (updated) {
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function removeSource(source: KnowledgeSource) {
+    const confirmed = window.confirm(`Wissensquelle „${source.title || source.label || source.id}“ wirklich löschen?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const deleted = await runAction(
+      `delete-${source.id}`,
+      () => deleteKnowledgeSource(source.id),
+      "Wissensquelle gelöscht.",
+    );
+    if (deleted) {
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function sendTestMessage() {
+    const messageText = testQuestion.trim();
+    if (!messageText) {
+      setError("Bitte eine Testfrage eingeben.");
+      return;
+    }
+
+    setSavingKey("test-chat");
     setError(null);
-    setMessage(null);
+    setTestMessages((current) => [...current, { role: "user", text: messageText }]);
+    setTestQuestion("");
 
     try {
-      const response = await fetch(`/api/sites/${siteId}/apply-template`, {
+      const response = await fetch(`/api/widget/test-chat/${encodeURIComponent(siteId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId: template.key, mode: "overwrite" }),
+        body: JSON.stringify({ message: messageText, sessionId: testSessionId }),
       });
-
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        setError(data?.message || "Vorlage konnte nicht vollständig angewendet werden.");
-        return false;
+        throw new Error(typeof data?.message === "string" ? data.message : "Test-Chat konnte nicht antworten.");
       }
-
+      setTestSessionId(typeof data.sessionId === "string" ? data.sessionId : testSessionId);
+      const answer = typeof data.answer === "string" ? data.answer : "";
+      setTestMessages((current) => [
+        ...current,
+        { role: "assistant", text: answer, sources: Array.isArray(data.sources) ? data.sources : [] },
+      ]);
+      await updateSiteSettings(siteId, {
+        lastTestedAt: new Date().toISOString(),
+        lastTestQuestion: messageText,
+        lastTestAnswer: answer,
+      });
       await load();
-      setMessage(`Vorlage „${template.label}“ angewendet.`);
-      return true;
+      setMessage("Test gespeichert.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Test-Chat konnte nicht ausgeführt werden.");
     } finally {
       setSavingKey(null);
     }
   }
 
   async function copyEmbedCode() {
-    if (!embedCode) {
-      return;
-    }
-
     try {
       await navigator.clipboard.writeText(embedCode);
-      setCopied("Einbindungscode");
-      setError(null);
-      setTimeout(() => setCopied(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
     } catch {
       setError("Einbindungscode konnte nicht kopiert werden.");
     }
   }
 
-  async function markTested() {
-    return patchSetup({ lastTestedAt: new Date().toISOString() }, "Test als erledigt markiert.", "test");
-  }
-
   async function goLive() {
-    setSavingKey("live");
-    setError(null);
-    setMessage(null);
-
-    const response = await fetch(`/api/sites/${siteId}/go-live`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-    });
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      setError(data?.message || data?.status?.label || "Kunde konnte nicht live geschaltet werden.");
-      setSavingKey(null);
-      if (data?.status) {
-        setServerStatus(data.status);
-        setOverallStatus(data.status.status || data.status.label);
-      }
-      return false;
+    const result = await runAction("live", () => setSiteGoLive(siteId), "Kunde live geschaltet.");
+    if (result) {
+      await load();
     }
-
-    setSite((current) =>
-      current
-        ? {
-            ...current,
-            goLiveAt: data?.status?.goLiveAt || new Date().toISOString(),
-          }
-        : current,
-    );
-    if (data?.status) {
-      setServerStatus(data.status);
-      setOverallStatus(data.status.status || data.status.label);
-    }
-    setMessage("Kunde live geschaltet.");
-    setSavingKey(null);
-    return true;
   }
 
   async function saveCurrentStep() {
-    if (!currentStep || !site) {
-      return false;
-    }
-
-    switch (currentStep.key) {
-      case "basics":
-        return saveBasics();
-      case "template":
-        return saveTemplateChoice();
-      case "behavior":
-        return saveBehavior();
+    switch (activeStep.key) {
+      case "profile":
+        return saveProfile();
+      case "goal":
+        return saveGoal();
       case "design":
         return saveDesign();
-      case "test":
-        return markTested();
-      case "live":
-        return goLive();
       default:
+        await refreshStatus();
         return true;
     }
   }
 
-  async function goNext() {
+  async function nextStep() {
     const saved = await saveCurrentStep();
-    if (!saved) {
-      return;
+    if (saved) {
+      setActiveStepIndex((current) => Math.min(current + 1, WIZARD_STEPS.length - 1));
     }
-
-    setActiveStepIndex((current) => Math.min(current + 1, SETUP_STEPS.length - 1));
   }
 
-  function skipStep() {
-    setActiveStepIndex((current) => Math.min(current + 1, SETUP_STEPS.length - 1));
+  function jumpToStatusStep(stepKey?: string) {
+    const index = WIZARD_STEPS.findIndex((step) => STATUS_STEP_GROUPS[step.key].includes(stepKey || ""));
+    if (index >= 0) {
+      setActiveStepIndex(index);
+    }
   }
 
-  function renderCurrentStep() {
-    if (!site || !currentStep) {
+  function renderStep() {
+    if (!site) {
       return null;
     }
 
-    const statusBadge = <CustomerStatusBadge status={mapStepStatusToTone(currentStatusStep)} />;
-
-    switch (currentStep.key) {
-      case "basics":
+    switch (activeStep.key) {
+      case "profile":
         return (
-          <section className="dashboard-card dashboard-stack">
-            <StepHeader
-              title="Basis"
-              description="Lege fest, wie der Kunde intern heißt und auf welchen Domains das Widget laufen darf."
-              badge={statusBadge}
-              statusStep={currentStatusStep}
+          <section className="dashboard-card dashboard-stack" id="setup-step-basics">
+            <StepIntro
+              title="Für welches Unternehmen richten wir die KI ein?"
+              description="Diese Angaben bestimmen Branchenvorlage, Domain-Freigabe und interne Zuordnung."
+              status={statusForWizardStep(serverStatus, "profile")}
             />
             <div className="dashboard-grid dashboard-grid--two">
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Firmenname</span>
+                <span className="dashboard-field-label">Unternehmensname</span>
                 <Input
-                  value={basicsForm.name}
-                  onChange={(event) => setBasicsForm((current) => ({ ...current, name: event.target.value }))}
+                  value={profileForm.companyName}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, companyName: event.target.value }))}
+                  placeholder="Muster GmbH"
                 />
               </label>
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Erlaubte Domains</span>
-                <textarea
-                  className="dashboard-textarea"
-                  rows={3}
-                  value={basicsForm.allowedDomains}
+                <span className="dashboard-field-label">Branche</span>
+                <Select
+                  value={profileForm.industry}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, industry: event.target.value }))}
+                >
+                  <option value="">Bitte wählen</option>
+                  {templates.map((template) => (
+                    <option key={template.key} value={template.key}>
+                      {template.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Website</span>
+                <Input
+                  value={profileForm.websiteUrl}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, websiteUrl: event.target.value }))}
+                  placeholder="https://www.kunde.de"
+                />
+              </label>
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Sprache</span>
+                <Select
+                  value={profileForm.language}
                   onChange={(event) =>
-                    setBasicsForm((current) => ({ ...current, allowedDomains: event.target.value }))
+                    setProfileForm((current) => ({
+                      ...current,
+                      language: event.target.value === "en" ? "en" : "de",
+                    }))
                   }
-                  placeholder="soulesmartbusiness.com"
+                >
+                  <option value="de">Deutsch</option>
+                  <option value="en">Englisch</option>
+                </Select>
+              </label>
+            </div>
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">Erlaubte Domains</span>
+              <textarea
+                className="dashboard-textarea"
+                rows={3}
+                value={profileForm.allowedDomains}
+                onChange={(event) => setProfileForm((current) => ({ ...current, allowedDomains: event.target.value }))}
+                placeholder="kunde.de&#10;www.kunde.de"
+              />
+            </label>
+            <div className="dashboard-grid dashboard-grid--two">
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Support-E-Mail optional</span>
+                <Input
+                  type="email"
+                  value={profileForm.supportEmail}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, supportEmail: event.target.value }))}
+                  placeholder="support@kunde.de"
+                />
+              </label>
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Telefon optional</span>
+                <Input
+                  value={profileForm.phone}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
+                  placeholder="+49 ..."
                 />
               </label>
             </div>
-            <Button type="button" onClick={saveBasics} disabled={savingKey === "basics"}>
-              {savingKey === "basics" ? "Speichert..." : "Basis speichern"}
-            </Button>
-          </section>
-        );
-
-      case "template":
-        return (
-          <section className="dashboard-card dashboard-stack">
-            <StepHeader
-              title="Branche & Vorlage"
-              description="Wähle die Branche und wende die passende Vorlage an. Dadurch werden Ziel, Verhalten, Fragen und Defaults vorbereitet."
-              badge={statusBadge}
-              statusStep={currentStatusStep}
-            />
-            <label className="dashboard-field">
-              <span className="dashboard-field-label">Branche</span>
-              <Select
-                value={site.industry}
-                onChange={(event) =>
-                  setSite((current) => (current ? { ...current, industry: event.target.value } : current))
-                }
-              >
-                <option value="">Bitte wählen</option>
-                {templates.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
             <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-              <strong>{selectedTemplate?.label || "Keine Vorlage ausgewählt"}</strong>
-              <p className="dashboard-copy dashboard-copy--muted">
-                Angewendet: {site.templateId ? `${site.templateId} v${site.templateVersion || "?"}` : "Noch nicht"}
-                {site.templateAppliedAt ? `, ${formatDate(site.templateAppliedAt)}` : ""}
+              <strong>{selectedTemplate?.label || "Noch keine Vorlage ausgewählt"}</strong>
+              <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                {site.templateId
+                  ? `Angewendet: ${site.templateId} v${site.templateVersion || "?"}, ${formatDate(site.templateAppliedAt)}`
+                  : "Vorlagen setzen sinnvolle Defaults für Ziel, Tonalität, CTA, Testfragen und Funktionen."}
               </p>
               <div className="dashboard-inline dashboard-wrap">
-                <Button type="button" variant="secondary" onClick={saveTemplateChoice} disabled={savingKey === "template"}>
-                  Branche speichern
+                <Button type="button" onClick={saveProfile} disabled={savingKey === "profile"}>
+                  {savingKey === "profile" ? "Speichert..." : "Profil speichern"}
                 </Button>
                 <Button
                   type="button"
+                  variant="secondary"
                   onClick={applyIndustryTemplate}
-                  disabled={savingKey === "template" || !site.industry || !selectedTemplate}
+                  disabled={savingKey === "template" || !profileForm.industry}
                 >
-                  {savingKey === "template" ? "Wird angewendet..." : "Vorlage anwenden"}
+                  {savingKey === "template" ? "Wendet an..." : "Vorlage anwenden"}
                 </Button>
               </div>
             </div>
           </section>
         );
 
-      case "knowledge":
+      case "goal":
         return (
-          <section className="dashboard-card dashboard-stack">
-            <StepHeader
-              title="Wissen"
-              description="Prüfe, ob genügend Wissensinhalte vorhanden sind. Uploads und FAQs bleiben auf der Wissensseite."
-              badge={statusBadge}
-              statusStep={currentStatusStep}
-            />
-            <div className="dashboard-grid dashboard-grid--metrics-3">
-              <Metric label="Wissensinhalte" value={knowledgeCounts.total} />
-              <Metric label="FAQ-Einträge" value={knowledgeCounts.faqCount} />
-              <Metric label="PDF-Dokumente" value={knowledgeCounts.pdfCount} />
-            </div>
-            <Link href={`/sites/${siteSlug}/knowledge`} className="dashboard-button dashboard-button--secondary">
-              Wissen hinzufügen
-            </Link>
-          </section>
-        );
-
-      case "behavior":
-        return (
-          <section className="dashboard-card dashboard-stack">
-            <StepHeader
-              title="Verhalten"
-              description="Lege Ziel, Tonalität, CTA und Gesprächsanweisung in einfachen Worten fest."
-              badge={statusBadge}
-              statusStep={currentStatusStep}
+          <section className="dashboard-card dashboard-stack" id="setup-step-goal">
+            <StepIntro
+              title="Was soll die KI geschäftlich erreichen?"
+              description="Die Auswahl steuert Gesprächsführung, Rückfragen und Fallback-Verhalten."
+              status={statusForWizardStep(serverStatus, "goal")}
             />
             <div className="dashboard-grid dashboard-grid--two">
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Bot-Ziel</span>
+                <span className="dashboard-field-label">Hauptziel</span>
                 <Select
-                  value={behaviorForm.setupGoal}
+                  value={goalForm.primaryGoal}
                   onChange={(event) =>
-                    setBehaviorForm((current) => ({
+                    setGoalForm((current) => ({
                       ...current,
-                      setupGoal: event.target.value as SiteDetails["setupGoal"],
+                      primaryGoal: event.target.value as SiteDetails["primaryGoal"],
                     }))
                   }
                 >
@@ -701,9 +931,9 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
               <label className="dashboard-field">
                 <span className="dashboard-field-label">Tonalität</span>
                 <Select
-                  value={behaviorForm.tone}
+                  value={goalForm.tone}
                   onChange={(event) =>
-                    setBehaviorForm((current) => ({ ...current, tone: event.target.value as SiteDetails["tone"] }))
+                    setGoalForm((current) => ({ ...current, tone: event.target.value as SiteDetails["tone"] }))
                   }
                 >
                   {TONE_OPTIONS.map((option) => (
@@ -714,198 +944,421 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                 </Select>
               </label>
             </div>
+            <div className="dashboard-grid dashboard-grid--two">
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Wissensmodus</span>
+                <Select
+                  value={goalForm.knowledgeMode}
+                  onChange={(event) =>
+                    setGoalForm((current) => ({ ...current, knowledgeMode: event.target.value as KnowledgeMode }))
+                  }
+                >
+                  {KNOWLEDGE_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Wenn die KI unsicher ist</span>
+                <Select
+                  value={goalForm.fallbackBehavior}
+                  onChange={(event) =>
+                    setGoalForm((current) => ({
+                      ...current,
+                      fallbackBehavior: event.target.value as FallbackBehavior,
+                    }))
+                  }
+                >
+                  {FALLBACK_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            </div>
             <label className="dashboard-field">
-              <span className="dashboard-field-label">CTA</span>
+              <span className="dashboard-field-label">CTA / nächster Schritt</span>
               <Input
-                value={behaviorForm.ctaText}
-                onChange={(event) => setBehaviorForm((current) => ({ ...current, ctaText: event.target.value }))}
-                placeholder="Zum Kontaktformular führen"
+                value={goalForm.ctaText}
+                onChange={(event) => setGoalForm((current) => ({ ...current, ctaText: event.target.value }))}
+                placeholder="Kontakt aufnehmen, Termin vereinbaren, Anfrage aufnehmen"
               />
             </label>
             <label className="dashboard-field">
-              <span className="dashboard-field-label">Gesprächsanweisung</span>
+              <span className="dashboard-field-label">Kurze Gesprächsanweisung</span>
               <textarea
                 className="dashboard-textarea"
                 rows={5}
-                value={behaviorForm.systemPrompt}
-                onChange={(event) =>
-                  setBehaviorForm((current) => ({ ...current, systemPrompt: event.target.value }))
-                }
-                placeholder="Beispiel: Antworte professionell, stelle maximal eine Rückfrage und leite bei konkretem Bedarf zur Kontaktaufnahme."
+                value={goalForm.systemPrompt}
+                onChange={(event) => setGoalForm((current) => ({ ...current, systemPrompt: event.target.value }))}
+                placeholder="Beispiel: Stelle maximal eine Rückfrage, bleibe professionell und leite bei konkretem Interesse zur Kontaktaufnahme."
               />
             </label>
-            <div className="dashboard-inline dashboard-wrap">
-              <Button type="button" onClick={saveBehavior} disabled={savingKey === "behavior"}>
-                {savingKey === "behavior" ? "Speichert..." : "Verhalten speichern"}
-              </Button>
-              <Link href={`/sites/${siteSlug}/widget`} className="dashboard-button dashboard-button--secondary">
-                Verhalten im Detail öffnen
-              </Link>
+            <div className="dashboard-grid dashboard-grid--two">
+              {GOAL_OPTIONS.filter((option) => option.value === goalForm.primaryGoal).map((option) => (
+                <div key={option.value || "empty"} className="dashboard-card dashboard-card--soft">
+                  <strong>Auswirkung</strong>
+                  <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                    {option.help}
+                  </p>
+                </div>
+              ))}
+              {KNOWLEDGE_MODE_OPTIONS.filter((option) => option.value === goalForm.knowledgeMode).map((option) => (
+                <div key={option.value} className="dashboard-card dashboard-card--soft">
+                  <strong>Wissensmodus</strong>
+                  <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                    {option.help}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <Button type="button" onClick={saveGoal} disabled={savingKey === "goal"}>
+              {savingKey === "goal" ? "Speichert..." : "KI-Ziel speichern"}
+            </Button>
+          </section>
+        );
+
+      case "knowledge":
+        return (
+          <section className="dashboard-card dashboard-stack" id="setup-step-knowledge">
+            <StepIntro
+              title="Welches Wissen soll die KI nutzen?"
+              description="Füge kontrollierte Wissensquellen hinzu. Nur aktive und bereite Quellen werden im Chat verwendet."
+              status={statusForWizardStep(serverStatus, "knowledge")}
+            />
+            <div className="dashboard-grid dashboard-grid--metrics-3">
+              <Metric label="Quellen gesamt" value={sources.length} />
+              <Metric label="Aktiv & bereit" value={readyActiveSources.length} />
+              <Metric label="Wissensmodus" value={goalForm.knowledgeMode === "strict" ? "Streng" : "Flexibel"} />
+            </div>
+            <div className="dashboard-grid dashboard-grid--two">
+              <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+                <h3 className="dashboard-card-title dashboard-card-title--sm">FAQ / Text</h3>
+                <Input
+                  value={knowledgeForm.title}
+                  onChange={(event) => setKnowledgeForm((current) => ({ ...current, title: event.target.value }))}
+                  placeholder="Titel"
+                />
+                <Input
+                  value={knowledgeForm.question}
+                  onChange={(event) => setKnowledgeForm((current) => ({ ...current, question: event.target.value }))}
+                  placeholder="Frage optional"
+                />
+                <textarea
+                  className="dashboard-textarea"
+                  value={knowledgeForm.content}
+                  onChange={(event) => setKnowledgeForm((current) => ({ ...current, content: event.target.value }))}
+                  placeholder="Antwort, FAQ oder Wissenstext einfügen"
+                  style={{ minHeight: 150 }}
+                />
+                <Button type="button" onClick={addManualKnowledge} disabled={savingKey === "manual"}>
+                  {savingKey === "manual" ? "Speichert..." : "Text speichern"}
+                </Button>
+              </div>
+              <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+                <h3 className="dashboard-card-title dashboard-card-title--sm">Website oder PDF</h3>
+                <Input
+                  value={knowledgeForm.url}
+                  onChange={(event) => setKnowledgeForm((current) => ({ ...current, url: event.target.value }))}
+                  placeholder="https://www.kunde.de/faq"
+                />
+                <Input
+                  value={knowledgeForm.urlTitle}
+                  onChange={(event) => setKnowledgeForm((current) => ({ ...current, urlTitle: event.target.value }))}
+                  placeholder="Titel optional"
+                />
+                <Button type="button" onClick={addUrlKnowledge} disabled={savingKey === "url"}>
+                  {savingKey === "url" ? "Importiert..." : "Website importieren"}
+                </Button>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  className="dashboard-control"
+                  onChange={(event) => setPdfFile(event.target.files?.[0] ?? null)}
+                />
+                <Button type="button" variant="secondary" onClick={addPdfKnowledge} disabled={savingKey === "pdf"}>
+                  {savingKey === "pdf" ? "Lädt hoch..." : "PDF hochladen"}
+                </Button>
+              </div>
+            </div>
+            <div className="dashboard-stack dashboard-stack--sm">
+              <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
+                <h3 className="dashboard-card-title dashboard-card-title--sm">Wissensquellen</h3>
+                <Link href={`/sites/${siteSlug}/knowledge`} className="dashboard-button dashboard-button--secondary">
+                  Wissensbereich öffnen
+                </Link>
+              </div>
+              {sources.length === 0 ? (
+                <div className="dashboard-card dashboard-card--soft">
+                  <p className="dashboard-copy" style={{ marginBottom: 0 }}>
+                    Noch keine Wissensquelle vorhanden. Für den strengen Wissensmodus ist mindestens eine aktive, bereite Quelle Pflicht.
+                  </p>
+                </div>
+              ) : (
+                sources.map((source) => (
+                  <div key={source.id} className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+                    <div className="dashboard-info-row">
+                      <div>
+                        <strong>{source.title || source.label || "Wissensquelle"}</strong>
+                        <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                          {source.type.toUpperCase()} · {source.url || source.sourceUrl || "Manueller Inhalt"} · zuletzt:{" "}
+                          {formatDate(source.lastSyncedAt)}
+                        </p>
+                      </div>
+                      <CustomerStatusBadge status={sourceTone(source)} label={statusLabel(source)} />
+                    </div>
+                    {source.errorMessage ? <p className="dashboard-status dashboard-status--error">{source.errorMessage}</p> : null}
+                    <div className="dashboard-inline dashboard-wrap">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => toggleKnowledgeSource(source)}
+                        disabled={savingKey === `source-${source.id}`}
+                      >
+                        {source.isActive ? "Deaktivieren" : "Aktivieren"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => resyncSource(source)}
+                        disabled={savingKey === `resync-${source.id}`}
+                      >
+                        Neu synchronisieren
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() => removeSource(source)}
+                        disabled={savingKey === `delete-${source.id}`}
+                      >
+                        Löschen
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </section>
         );
 
       case "design":
         return (
-          <section className="dashboard-card dashboard-stack">
-            <StepHeader
-              title="Design"
-              description="Setze Farbe, Logo, Begrüßung und Datenschutz-URL. Die Datenschutz-URL ist vor Live Pflicht."
-              badge={statusBadge}
-              statusStep={currentStatusStep}
+          <section className="dashboard-card dashboard-stack" id="setup-step-design">
+            <StepIntro
+              title="Wie soll das Widget beim Kunden wirken?"
+              description="Branding, Begrüßung und Datenschutz werden direkt in einer einfachen Vorschau sichtbar."
+              status={statusForWizardStep(serverStatus, "design")}
+            />
+            <div className="dashboard-grid dashboard-grid--form-preview">
+              <div className="dashboard-stack">
+                <div className="dashboard-grid dashboard-grid--two">
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Hauptfarbe</span>
+                    <Input
+                      type="color"
+                      value={designForm.brandColor}
+                      onChange={(event) => setDesignForm((current) => ({ ...current, brandColor: event.target.value }))}
+                    />
+                  </label>
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Akzentfarbe</span>
+                    <Input
+                      type="color"
+                      value={designForm.accentColor}
+                      onChange={(event) => setDesignForm((current) => ({ ...current, accentColor: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Logo URL optional</span>
+                  <Input
+                    value={designForm.logoUrl}
+                    onChange={(event) => setDesignForm((current) => ({ ...current, logoUrl: event.target.value }))}
+                    placeholder="https://..."
+                  />
+                </label>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Begrüßung</span>
+                  <textarea
+                    className="dashboard-textarea"
+                    rows={3}
+                    value={designForm.welcomeMessage}
+                    onChange={(event) =>
+                      setDesignForm((current) => ({ ...current, welcomeMessage: event.target.value }))
+                    }
+                  />
+                </label>
+                <div className="dashboard-grid dashboard-grid--two">
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Eingabe-Platzhalter</span>
+                    <Input
+                      value={designForm.placeholderText}
+                      onChange={(event) =>
+                        setDesignForm((current) => ({ ...current, placeholderText: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Button-Text</span>
+                    <Input
+                      value={designForm.launcherLabel}
+                      onChange={(event) => setDesignForm((current) => ({ ...current, launcherLabel: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Position</span>
+                  <Select
+                    value={designForm.widgetPosition}
+                    onChange={(event) =>
+                      setDesignForm((current) => ({
+                        ...current,
+                        widgetPosition: event.target.value === "bottom_left" ? "bottom_left" : "bottom_right",
+                      }))
+                    }
+                  >
+                    <option value="bottom_right">Unten rechts</option>
+                    <option value="bottom_left">Unten links</option>
+                  </Select>
+                </label>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Datenschutz-URL</span>
+                  <Input
+                    value={designForm.privacyUrl}
+                    onChange={(event) => setDesignForm((current) => ({ ...current, privacyUrl: event.target.value }))}
+                    placeholder="https://www.kunde.de/datenschutz"
+                  />
+                </label>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Datenschutz-Hinweis optional</span>
+                  <textarea
+                    className="dashboard-textarea"
+                    rows={3}
+                    value={designForm.privacyNoticeText}
+                    onChange={(event) =>
+                      setDesignForm((current) => ({ ...current, privacyNoticeText: event.target.value }))
+                    }
+                    placeholder="Kurzer Hinweis zur Verarbeitung von Chatdaten."
+                  />
+                </label>
+                <Button type="button" onClick={saveDesign} disabled={savingKey === "design"}>
+                  {savingKey === "design" ? "Speichert..." : "Design speichern"}
+                </Button>
+              </div>
+              <WidgetPreview
+                companyName={profileForm.companyName || site.companyName || site.name}
+                botName={site.botName}
+                logoUrl={designForm.logoUrl}
+                brandColor={designForm.brandColor}
+                accentColor={designForm.accentColor}
+                fontFamily={site.fontFamily}
+                welcomeMessage={designForm.welcomeMessage}
+              />
+            </div>
+          </section>
+        );
+
+      case "launch":
+        return (
+          <section className="dashboard-card dashboard-stack" id="setup-step-live">
+            <StepIntro
+              title="Testen, einbinden und live schalten"
+              description="Prüfe den Chat, kopiere den Einbindungscode und schalte erst live, wenn der Backend-Status bereit ist."
+              status={statusForWizardStep(serverStatus, "launch")}
             />
             <div className="dashboard-grid dashboard-grid--two">
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Farbe</span>
-                <Input
-                  type="color"
-                  value={designForm.brandColor}
-                  onChange={(event) => setDesignForm((current) => ({ ...current, brandColor: event.target.value }))}
+              <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+                <h3 className="dashboard-card-title dashboard-card-title--sm">Test-Chat</h3>
+                <div className="dashboard-stack dashboard-stack--sm">
+                  {testMessages.length === 0 ? (
+                    <p className="dashboard-copy dashboard-copy--muted">Stelle eine typische Kundenfrage, bevor du live schaltest.</p>
+                  ) : (
+                    testMessages.map((entry, index) => (
+                      <div key={`${entry.role}-${index}`} className="dashboard-card">
+                        <strong>{entry.role === "user" ? "Testfrage" : "Antwort"}</strong>
+                        <p className="dashboard-copy" style={{ marginBottom: 0 }}>
+                          {entry.text}
+                        </p>
+                        {entry.sources?.length ? (
+                          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0, marginTop: 6 }}>
+                            Quellen: {entry.sources.map((source) => source.title || source.url || "Quelle").join(", ")}
+                          </p>
+                        ) : null}
+                      </div>
+                    ))
+                  )}
+                </div>
+                <textarea
+                  className="dashboard-textarea"
+                  rows={3}
+                  value={testQuestion}
+                  onChange={(event) => setTestQuestion(event.target.value)}
+                  placeholder="Testfrage eingeben"
                 />
-              </label>
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Logo URL</span>
-                <Input
-                  value={designForm.logoUrl}
-                  onChange={(event) => setDesignForm((current) => ({ ...current, logoUrl: event.target.value }))}
-                  placeholder="https://..."
-                />
-              </label>
-            </div>
-            <label className="dashboard-field">
-              <span className="dashboard-field-label">Datenschutz-URL</span>
-              <Input
-                value={designForm.privacyUrl}
-                onChange={(event) => setDesignForm((current) => ({ ...current, privacyUrl: event.target.value }))}
-                placeholder="https://..."
-              />
-            </label>
-            <label className="dashboard-field">
-              <span className="dashboard-field-label">Begrüßung</span>
-              <textarea
-                className="dashboard-textarea"
-                rows={3}
-                value={designForm.welcomeMessage}
-                onChange={(event) => setDesignForm((current) => ({ ...current, welcomeMessage: event.target.value }))}
-              />
-            </label>
-            <div className="dashboard-info-row">
-              <strong>Widget-Position</strong>
-              <span>Unten rechts</span>
-            </div>
-            <div className="dashboard-inline dashboard-wrap">
-              <Button type="button" onClick={saveDesign} disabled={savingKey === "design"}>
-                {savingKey === "design" ? "Speichert..." : "Design speichern"}
-              </Button>
-              <Link href={`/sites/${siteSlug}/branding`} className="dashboard-button dashboard-button--secondary">
-                Design im Detail öffnen
-              </Link>
-            </div>
-          </section>
-        );
-
-      case "embed":
-        return (
-          <section className="dashboard-card dashboard-stack">
-            <StepHeader
-              title="Einbindung"
-              description="Kopiere den Einbindungscode und prüfe die erlaubten Domains."
-              badge={statusBadge}
-              statusStep={currentStatusStep}
-            />
-            <div className="dashboard-info-row">
-              <strong>Einbindungscode</strong>
-              <span className="dashboard-breakword dashboard-mono">{site.siteKey || "Noch nicht vorhanden"}</span>
-            </div>
-            <div className="dashboard-info-row">
-              <strong>Erlaubte Domains</strong>
-              <span>{site.allowedDomains.length > 0 ? site.allowedDomains.join(", ") : "Noch nicht gesetzt"}</span>
-            </div>
-            <textarea className="dashboard-textarea dashboard-mono" readOnly value={embedCode} />
-            <div className="dashboard-inline dashboard-wrap">
-              <Button type="button" onClick={copyEmbedCode} disabled={!embedCode}>
-                Einbindungscode kopieren
-              </Button>
-              <Link href={`/sites/${siteSlug}/embedding`} className="dashboard-button dashboard-button--secondary">
-                Einbindung im Detail öffnen
-              </Link>
-            </div>
-            {copied ? <p className="dashboard-status dashboard-status--success">{copied} kopiert.</p> : null}
-          </section>
-        );
-
-      case "test":
-        return (
-          <section className="dashboard-card dashboard-stack">
-            <StepHeader
-              title="Testen"
-              description="Führe einen Test-Chat durch und markiere den Kunden danach als getestet."
-              badge={statusBadge}
-              statusStep={currentStatusStep}
-            />
-            <div className="dashboard-info-row">
-              <strong>Letzter Test</strong>
-              <span>{formatDate(site.lastTestedAt)}</span>
+                <Button type="button" onClick={sendTestMessage} disabled={savingKey === "test-chat"}>
+                  {savingKey === "test-chat" ? "Test läuft..." : "Testfrage senden"}
+                </Button>
+                <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                  Letzter Test: {formatDate(site.lastTestedAt)}
+                </p>
+              </div>
+              <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+                <h3 className="dashboard-card-title dashboard-card-title--sm">Einbindung</h3>
+                <div className="dashboard-info-row">
+                  <strong>Einbindungscode</strong>
+                  <span className="dashboard-breakword dashboard-mono">{site.siteKey}</span>
+                </div>
+                <textarea className="dashboard-textarea dashboard-mono" readOnly value={embedCode} rows={5} />
+                <Button type="button" onClick={copyEmbedCode}>
+                  Einbindungscode kopieren
+                </Button>
+                {copied ? <p className="dashboard-status dashboard-status--success">Einbindungscode kopiert.</p> : null}
+                <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                  Erlaubte Domains: {site.allowedDomains.length ? site.allowedDomains.join(", ") : "Noch nicht gesetzt"}
+                </p>
+              </div>
             </div>
             <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-              <strong>Test-Checkliste</strong>
-              <p className="dashboard-copy dashboard-copy--muted">
-                Prüfe Begrüßung, zwei typische Fragen, CTA und Einbindung. Der eigentliche Test-Chat liegt auf der Kundenübersicht.
-              </p>
-            </div>
-            <div className="dashboard-inline dashboard-wrap">
-              <Link href={`/sites/${siteSlug}#customer-test-chat`} className="dashboard-button dashboard-button--secondary">
-                Test-Chat öffnen
-              </Link>
-              <Button type="button" onClick={markTested} disabled={savingKey === "test"}>
-                {savingKey === "test" ? "Speichert..." : "Als getestet markieren"}
+              <div className="dashboard-info-row">
+                <div>
+                  <strong>Live-Checkliste</strong>
+                  <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                    Der Backend-Status entscheidet, ob Live-Schaltung erlaubt ist.
+                  </p>
+                </div>
+                <CustomerStatusBadge
+                  status={serverStatus ? mapStatusSeverityToTone(serverStatus.severity) : mapOverallStatusToTone(overallStatus)}
+                  label={serverStatus?.label || overallStatus}
+                />
+              </div>
+              <div className="dashboard-grid dashboard-grid--two">
+                {(serverStatus?.steps || []).map((step) => (
+                  <button
+                    key={step.key}
+                    type="button"
+                    className="dashboard-link-card"
+                    onClick={() => jumpToStatusStep(step.key)}
+                  >
+                    <span>{step.label}</span>
+                    <CustomerStatusBadge status={mapStepStatusToTone(step.status)} />
+                  </button>
+                ))}
+              </div>
+              {serverStatus?.missingSteps?.length ? (
+                <p className="dashboard-status dashboard-status--error">
+                  Noch offen:{" "}
+                  {serverStatus.missingSteps
+                    .map((key) => serverStatus.steps.find((step) => step.key === key)?.label || key)
+                    .join(", ")}
+                </p>
+              ) : null}
+              <Button type="button" onClick={goLive} disabled={!canGoLive || liveDone || savingKey === "live"}>
+                {savingKey === "live" ? "Schaltet live..." : liveDone ? "Bereits live" : "Live schalten"}
               </Button>
             </div>
-          </section>
-        );
-
-      case "live":
-        return (
-          <section className="dashboard-card dashboard-stack">
-            <StepHeader
-              title="Live schalten"
-              description="Live ist erst möglich, wenn der Backend-Status alle Pflichtpunkte bestätigt."
-              badge={
-                <CustomerStatusBadge
-                  status={liveDone ? "done" : canGoLive ? "pending" : "attention"}
-                  label={liveDone ? "Live" : canGoLive ? "Bereit" : "Vorbereitung offen"}
-                />
-              }
-              statusStep={currentStatusStep}
-            />
-            <div className="dashboard-info-row">
-              <strong>Aktueller Status</strong>
-              <span>{serverStatus?.label || overallStatus}</span>
-            </div>
-            <div className="dashboard-info-row">
-              <strong>Live seit</strong>
-              <span>{formatDate(site.goLiveAt)}</span>
-            </div>
-            {serverStatus?.missingSteps?.length ? (
-              <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-                <strong>Noch offen</strong>
-                <div className="dashboard-inline dashboard-wrap">
-                  {serverStatus.missingSteps.map((step) => (
-                    <button
-                      key={step}
-                      type="button"
-                      className="dashboard-link-card"
-                      onClick={() => jumpToStatusStep(step)}
-                    >
-                      {serverStatus.steps.find((entry) => entry.key === step)?.label || step}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            <Button type="button" onClick={goLive} disabled={!canGoLive || savingKey === "live" || liveDone}>
-              {savingKey === "live" ? "Speichert..." : liveDone ? "Bereits live" : "Live schalten"}
-            </Button>
           </section>
         );
     }
@@ -915,12 +1368,8 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     return <LoadingState />;
   }
 
-  if (error && !site) {
-    return <ErrorState message={error} />;
-  }
-
   if (!site) {
-    return <ErrorState message="Kundendaten konnten nicht geladen werden." />;
+    return <ErrorState message={error || "Kundendaten konnten nicht geladen werden."} />;
   }
 
   return (
@@ -928,18 +1377,18 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       <section className="dashboard-card dashboard-stack">
         <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
           <div>
-            <h2 className="dashboard-card-title">Geführte Einrichtung</h2>
+            <h2 className="dashboard-card-title">Setup Wizard</h2>
             <p className="dashboard-copy">
-              Schritt für Schritt: Basis, Vorlage, Wissen, Verhalten, Design, Einbindung, Test und Live-Schaltung.
+              Richte die KI in fünf Schritten ein: Unternehmen, Ziel, Wissen, Design, Test und Einbindung.
             </p>
           </div>
           <div className="dashboard-stack dashboard-stack--sm">
             <div className="dashboard-card dashboard-card--soft">
               <strong>
-                Schritt {activeStepIndex + 1} von {SETUP_STEPS.length}
+                Schritt {activeStepIndex + 1} von {WIZARD_STEPS.length}
               </strong>
               <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                {displayProgress}% Fortschritt
+                {serverStatus?.progress ?? 0}% Live-Bereitschaft
               </p>
             </div>
             <CustomerStatusBadge
@@ -951,17 +1400,13 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
 
         {serverStatus?.nextAction ? (
           <div className="dashboard-card dashboard-card--soft dashboard-info-row">
-            <strong>Nächste sinnvolle Aktion</strong>
+            <strong>Nächste Aktion</strong>
             {serverStatus.nextAction.href ? (
               <Link href={serverStatus.nextAction.href} className="dashboard-link-card">
                 {serverStatus.nextAction.label}
               </Link>
             ) : (
-              <button
-                type="button"
-                className="dashboard-link-card"
-                onClick={() => jumpToStatusStep(serverStatus.nextAction?.key)}
-              >
+              <button type="button" className="dashboard-link-card" onClick={() => jumpToStatusStep(serverStatus.nextAction?.key)}>
                 {serverStatus.nextAction.label}
               </button>
             )}
@@ -972,8 +1417,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         {error ? <ErrorState message={error} /> : null}
 
         <div className="dashboard-setup-steps">
-          {SETUP_STEPS.map((step, index) => {
-            const stepStatus = findStatusStep(serverStatus, step.key);
+          {WIZARD_STEPS.map((step, index) => {
             const isActive = index === activeStepIndex;
             return (
               <button
@@ -990,14 +1434,14 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     {step.description}
                   </span>
                 </span>
-                <CustomerStatusBadge status={mapStepStatusToTone(stepStatus)} />
+                <CustomerStatusBadge status={statusForWizardStep(serverStatus, step.key)} />
               </button>
             );
           })}
         </div>
       </section>
 
-      {renderCurrentStep()}
+      {renderStep()}
 
       <section className="dashboard-card dashboard-inline dashboard-inline--spaced dashboard-wrap">
         <Button
@@ -1012,17 +1456,17 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
           <Button type="button" variant="secondary" onClick={saveCurrentStep} disabled={Boolean(savingKey)}>
             {savingKey ? "Speichert..." : "Speichern"}
           </Button>
-          {currentStep.key !== "live" ? (
-            <Button type="button" variant="secondary" onClick={skipStep} disabled={Boolean(savingKey)}>
+          {activeStep.key !== "launch" ? (
+            <Button type="button" variant="secondary" onClick={() => setActiveStepIndex((current) => current + 1)}>
               Überspringen
             </Button>
           ) : null}
           <Button
             type="button"
-            onClick={currentStep.key === "live" ? goLive : goNext}
-            disabled={Boolean(savingKey) || (currentStep.key === "live" && (!canGoLive || liveDone))}
+            onClick={activeStep.key === "launch" ? goLive : nextStep}
+            disabled={Boolean(savingKey) || (activeStep.key === "launch" && (!canGoLive || liveDone))}
           >
-            {currentStep.key === "live" ? "Live schalten" : "Weiter"}
+            {activeStep.key === "launch" ? "Live schalten" : "Weiter"}
           </Button>
         </div>
       </section>
@@ -1030,39 +1474,27 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   );
 }
 
-function StepHeader({
+function StepIntro({
   title,
   description,
-  badge,
-  statusStep,
+  status,
 }: {
   title: string;
   description: string;
-  badge: ReactNode;
-  statusStep?: CustomerStatusStep;
+  status: CustomerStatusTone;
 }) {
   return (
-    <div className="dashboard-stack dashboard-stack--sm">
-      <div className="dashboard-info-row">
-        <div>
-          <strong>{title}</strong>
-          <p className="dashboard-copy dashboard-copy--muted">{description}</p>
-        </div>
-        {badge}
+    <div className="dashboard-info-row">
+      <div>
+        <h3 className="dashboard-card-title dashboard-card-title--sm">{title}</h3>
+        <p className="dashboard-copy dashboard-copy--muted">{description}</p>
       </div>
-      {statusStep?.missingReason ? (
-        <p className="dashboard-status dashboard-status--error">{statusStep.missingReason}</p>
-      ) : null}
-      {statusStep?.nextAction?.href ? (
-        <Link href={statusStep.nextAction.href} className="dashboard-link-card">
-          {statusStep.nextAction.label}
-        </Link>
-      ) : null}
+      <CustomerStatusBadge status={status} />
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="dashboard-card dashboard-card--soft">
       <strong>{value}</strong>

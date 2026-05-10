@@ -6,9 +6,10 @@ import { SiteAgentActivityService } from './site-agent-activity.service';
 import { PrismaService } from '../db/prisma.service';
 import { TenantsModule } from '../tenants/tenants.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [TenantsModule, AuditLogsModule],
+  imports: [TenantsModule, AuditLogsModule, BillingModule],
   controllers: [SitesController],
   providers: [SitesService, SiteStatusService, SiteAgentActivityService, PrismaService],
   exports: [SitesService, SiteStatusService],

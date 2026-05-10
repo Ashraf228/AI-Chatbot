@@ -11,6 +11,8 @@ import { Select } from "../../components/shared/Select";
 import { SiteForm } from "../../components/sites/SiteForm";
 import { type IndustryTemplate, templatesByKey } from "../../lib/industry-templates";
 import { encodeSiteId } from "../../lib/site-id";
+import type { BusinessSiteMetric } from "../../lib/business-analytics";
+import { formatNumber, formatPercent } from "../../lib/business-analytics";
 import {
   mapOverallStatusToTone,
   type CustomerOverallStatus,
@@ -42,6 +44,7 @@ export default function SitesPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [templates, setTemplates] = useState<IndustryTemplate[]>([]);
   const [siteStatusById, setSiteStatusById] = useState<Record<string, SiteStatusSummary>>({});
+  const [siteMetricsById, setSiteMetricsById] = useState<Record<string, BusinessSiteMetric>>({});
   const [form, setForm] = useState({
     siteKey: "",
     tenantId: "t_default",
@@ -114,7 +117,18 @@ export default function SitesPage() {
     loadTenants();
     loadSites();
     loadTemplates();
+    loadBusinessSummary();
   }, []);
+
+  async function loadBusinessSummary() {
+    const response = await fetch("/api/dashboard/summary", { cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && Array.isArray(data?.sites)) {
+      setSiteMetricsById(
+        Object.fromEntries(data.sites.map((site: BusinessSiteMetric) => [site.id, site])),
+      );
+    }
+  }
 
   async function loadTemplates() {
     const response = await fetch("/api/industry-templates", { cache: "no-store" });
@@ -301,6 +315,7 @@ export default function SitesPage() {
               ) : (
                 sites.map((site) => {
                   const status = siteStatusById[site.id];
+                  const metrics = siteMetricsById[site.id];
 
                   return (
                     <div key={site.id} className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
@@ -320,6 +335,12 @@ export default function SitesPage() {
                         <InfoRow label="Branche" value={templateLabels[status.industry]?.label || status.industry} />
                       ) : null}
                       {status?.setupGoal ? <InfoRow label="Bot-Ziel" value={formatGoal(status.setupGoal)} /> : null}
+                      <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 10 }}>
+                        <MiniMetric label="Chats 7 Tage" value={formatNumber(metrics?.conversations7d || 0)} />
+                        <MiniMetric label="Anfragen 7 Tage" value={formatNumber(metrics?.leads7d || 0)} />
+                        <MiniMetric label="Conversion" value={formatPercent(metrics?.conversionRate || 0)} />
+                        <MiniMetric label="Widget" value={metrics?.isActive ? "Aktiv" : "Inaktiv"} />
+                      </div>
                       <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
                         <Button
                           type="button"
@@ -334,10 +355,10 @@ export default function SitesPage() {
                           type="button"
                           variant="secondary"
                           onClick={() => {
-                            window.location.href = `/sites/${encodeSiteId(site.id)}/knowledge`;
+                            window.location.href = `/sites/${encodeSiteId(site.id)}/analytics`;
                           }}
                         >
-                          Wissen öffnen
+                          Analytics ansehen
                         </Button>
                         <Button
                           type="button"
@@ -366,6 +387,17 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <div className="dashboard-info-row">
       <strong>{label}</strong>
       <span className="dashboard-breakword">{value}</span>
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="dashboard-card dashboard-card--soft">
+      <strong>{value}</strong>
+      <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0, fontSize: 12 }}>
+        {label}
+      </p>
     </div>
   );
 }

@@ -38,6 +38,26 @@ function createDeps() {
       async listForSite() {
         return [];
       },
+      async getById(sourceId) {
+        return {
+          id: sourceId,
+          tenantId: 'tenant-1',
+          siteId: 'site-1',
+          type: 'manual',
+          title: 'Manual',
+          metadata: { content: 'Alter Inhalt' },
+          url: '',
+        };
+      },
+      async markProcessing() {},
+      async markReady() {},
+      async markFailed() {},
+      async setActive(sourceId, isActive) {
+        return { id: sourceId, siteId: 'site-1', isActive };
+      },
+      async deleteSource(sourceId) {
+        return { ok: true, deletedId: sourceId, siteId: 'site-1' };
+      },
       async deleteIfUnused() {},
     },
   };
@@ -115,4 +135,58 @@ test('IngestService.ingestFaq keeps tenant context scoped to the selected site',
   assert.equal(captured.sourceInput.siteId, 'site-2');
   assert.equal(captured.chunkInput.tenantId, 'tenant-2');
   assert.equal(captured.chunkInput.siteId, 'site-2');
+});
+
+test('IngestService.ingestManual creates source and chunk', async () => {
+  const deps = createDeps();
+  let createdSource = null;
+  let chunkInput = null;
+  deps.knowledgeSources.createForSite = async (input) => {
+    createdSource = input;
+    return 'manual-source';
+  };
+  deps.vector.upsertChunk = async (params) => {
+    chunkInput = params;
+    return { id: params.id, skipped: false };
+  };
+  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+
+  const result = await service.ingestManual('site-1', {
+    title: 'Manual',
+    content: 'Das ist Unternehmenswissen.',
+    tags: ['support'],
+  });
+
+  assert.equal(result.sourceId, 'manual-source');
+  assert.equal(createdSource.sourceType, 'manual');
+  assert.equal(createdSource.syncStatus, 'processing');
+  assert.equal(chunkInput.metadata.kind, 'manual');
+});
+
+test('IngestService.deleteSource delegates source cleanup', async () => {
+  const deps = createDeps();
+  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+
+  const result = await service.deleteSource('source-1');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.deletedId, 'source-1');
+});
+
+test('IngestService.resyncSource replaces old chunks via source documents', async () => {
+  const deps = createDeps();
+  const deletes = [];
+  deps.db.query = async (sql, params) => {
+    deps.dbQueries.push({ sql, params });
+    if (/DELETE FROM documents WHERE source_id/i.test(sql)) {
+      deletes.push(params[0]);
+    }
+    return { rows: [] };
+  };
+  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+
+  const result = await service.resyncSource('source-1');
+
+  assert.equal(result.sourceId, 'source-1');
+  assert.deepEqual(deletes, ['source-1']);
 });

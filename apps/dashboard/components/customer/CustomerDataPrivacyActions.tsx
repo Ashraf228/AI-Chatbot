@@ -5,14 +5,13 @@ import { Button } from "../shared/Button";
 import { ErrorState } from "../shared/ErrorState";
 import { Select } from "../shared/Select";
 
-type DeleteScope = "leads" | "conversations" | "knowledge" | "reports" | "technical" | "all";
+type DeleteScope = "leads" | "conversations" | "knowledge" | "tickets" | "all";
 
 const DELETE_SCOPE_OPTIONS: Array<{ value: DeleteScope; label: string }> = [
   { value: "leads", label: "Anfragen" },
   { value: "conversations", label: "Chats" },
   { value: "knowledge", label: "Wissen" },
-  { value: "reports", label: "Berichte" },
-  { value: "technical", label: "Technische Protokolle" },
+  { value: "tickets", label: "Tickets & Kontaktanfragen" },
   { value: "all", label: "Alle unterstützten Bereiche" },
 ];
 
@@ -24,6 +23,7 @@ export function CustomerDataPrivacyActions({
   role: string;
 }) {
   const [scope, setScope] = useState<DeleteScope>("leads");
+  const [anonymizeInstead, setAnonymizeInstead] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function CustomerDataPrivacyActions({
     setError(null);
     setMessage(null);
 
-    const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/export`, {
+    const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/privacy/export`, {
       cache: "no-store",
     });
     const data = await response.json().catch(() => ({}));
@@ -61,10 +61,29 @@ export function CustomerDataPrivacyActions({
     setError(null);
     setMessage(null);
 
-    const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/delete-data`, {
+    const privacyPayload =
+      scope === "all"
+        ? {
+            deleteConversations: true,
+            deleteLeads: true,
+            deleteTickets: true,
+            deleteKnowledge: true,
+            anonymizeInstead,
+            confirm: true,
+          }
+        : {
+            deleteConversations: scope === "conversations",
+            deleteLeads: scope === "leads",
+            deleteTickets: scope === "tickets",
+            deleteKnowledge: scope === "knowledge",
+            anonymizeInstead,
+            confirm: true,
+          };
+
+    const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/privacy/delete-data`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scope, confirm: true }),
+      body: JSON.stringify(privacyPayload),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -74,7 +93,7 @@ export function CustomerDataPrivacyActions({
     }
 
     setConfirmation("");
-    setMessage(`Daten gelöscht: ${Object.entries(data.deleted || {}).map(([key, value]) => `${key}: ${value}`).join(", ")}`);
+    setMessage(`Datenschutz-Aktion ausgeführt: ${Object.entries(data.counts || data.deleted || {}).map(([key, value]) => `${key}: ${value}`).join(", ")}`);
     setBusy(null);
   }
 
@@ -119,6 +138,16 @@ export function CustomerDataPrivacyActions({
               onChange={(event) => setConfirmation(event.target.value)}
               placeholder="LÖSCHEN"
             />
+          </label>
+          <label className="dashboard-inline">
+            <input
+              type="checkbox"
+              checked={anonymizeInstead}
+              onChange={(event) => setAnonymizeInstead(event.target.checked)}
+            />
+            <span className="dashboard-copy dashboard-copy--muted">
+              Wenn möglich anonymisieren statt vollständig löschen.
+            </span>
           </label>
           <Button type="button" variant="danger" onClick={deleteData} disabled={!canDelete || Boolean(busy)}>
             {busy === "delete" ? "Löscht..." : "Daten löschen"}

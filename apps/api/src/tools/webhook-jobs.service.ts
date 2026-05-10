@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../db/prisma.service';
+import { validatePublicIntegrationUrl } from '../integrations/integration-security';
 
 type WebhookJobRow = {
   id: string;
@@ -48,8 +49,11 @@ export class WebhookJobsService {
     payload: Record<string, unknown>;
     headers?: Record<string, string>;
     maxAttempts?: number;
+    method?: string;
   }) {
     const id = randomUUID();
+    const endpointUrl = await validatePublicIntegrationUrl(input.endpointUrl);
+    const method = normalizeWebhookMethod(input.method);
 
     await this.db.query(
       `INSERT INTO webhook_jobs(
@@ -75,7 +79,7 @@ export class WebhookJobsService {
          created_at,
          updated_at
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, 'POST', $8::jsonb, $9::jsonb, 'queued', 0, $10,
+         $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, 'queued', 0, $11,
          now(), null, null, null, null, null, now(), now()
        )`,
       [
@@ -85,7 +89,8 @@ export class WebhookJobsService {
         input.agentRunId,
         input.providerKey,
         input.connectionKey,
-        input.endpointUrl,
+        endpointUrl,
+        method,
         JSON.stringify(input.headers || {}),
         JSON.stringify(input.payload || {}),
         input.maxAttempts ?? 5,
@@ -218,6 +223,8 @@ export class WebhookJobsService {
         method: job.method || 'POST',
         headers: job.headers || {},
         body: JSON.stringify(job.payload || {}),
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10000),
       });
       const responseBody = clipText(await response.text());
 
@@ -279,4 +286,9 @@ export class WebhookJobsService {
       ],
     );
   }
+}
+
+function normalizeWebhookMethod(method: string | undefined) {
+  const next = (method || 'POST').toUpperCase();
+  return ['POST', 'PUT', 'PATCH'].includes(next) ? next : 'POST';
 }

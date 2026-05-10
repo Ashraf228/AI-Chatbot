@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../db/prisma.service';
+import { sanitizeForAuditLog } from '../utils/pii';
 
 export type AuditActor = {
   actorId?: string | null;
@@ -29,23 +30,8 @@ export type AuditLogRow = {
   created_at: string;
 };
 
-const SENSITIVE_KEY_PATTERN = /(secret|token|password|passwort|api[_-]?key|apikey|oauth|authorization|private[_-]?key)/i;
-
 function sanitizeMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeMetadata(entry));
-  }
-
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-      key,
-      SENSITIVE_KEY_PATTERN.test(key) ? '[redacted]' : sanitizeMetadata(entry),
-    ]),
-  );
+  return sanitizeForAuditLog(value);
 }
 
 function mapAuditLogRow(row: AuditLogRow) {

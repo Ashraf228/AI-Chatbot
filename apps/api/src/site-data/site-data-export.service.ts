@@ -11,9 +11,23 @@ export type DeleteSiteDataScope =
   | 'technical'
   | 'all';
 
+export type PrivacyDeleteInput = {
+  deleteConversations?: boolean;
+  deleteLeads?: boolean;
+  deleteTickets?: boolean;
+  deleteKnowledge?: boolean;
+  anonymizeInstead?: boolean;
+  confirm?: boolean;
+};
+
 type DeleteResult = {
   scope: DeleteSiteDataScope;
   deleted: Record<string, number>;
+};
+
+type PrivacyDeleteResult = {
+  anonymized: boolean;
+  counts: Record<string, number>;
 };
 
 const SENSITIVE_KEY_PATTERN = /(secret|token|password|passwort|api[_-]?key|apikey|oauth|authorization|private[_-]?key|smtp|redis|postgres|openai)/i;
@@ -280,6 +294,114 @@ export class SiteDataExportService {
     };
   }
 
+  async exportPrivacyData(siteId: string, auth: DashboardAuthContext) {
+    const payload = await this.exportSiteData(siteId, auth);
+    const site = payload.site && typeof payload.site === 'object'
+      ? payload.site as Record<string, unknown>
+      : {};
+    await this.auditLogs.record({
+      siteId,
+      tenantId: typeof site.tenant_id === 'string' ? site.tenant_id : null,
+      actorId: auth.actorId,
+      actorRole: auth.role,
+      action: 'privacy.exported',
+      resourceType: 'site_data',
+      resourceId: siteId,
+      metadata: {
+        counts: {
+          conversations: Array.isArray(payload.conversations) ? payload.conversations.length : 0,
+          leads: Array.isArray(payload.leads) ? payload.leads.length : 0,
+          knowledgeSources: Array.isArray(payload.knowledge?.sources) ? payload.knowledge.sources.length : 0,
+        },
+      },
+    });
+    return {
+      exportedAt: payload.exportedAt,
+      site: payload.site,
+      conversations: payload.conversations,
+      leads: payload.leads,
+      tickets: payload.technical?.agentTickets || [],
+      contactRequests: await this.queryRows(
+        `SELECT id, tenant_id, site_id, name, email, phone, preferred_channel, note, status, created_at
+         FROM agent_contact_requests
+         WHERE site_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1000`,
+        [siteId],
+      ),
+      knowledge: payload.knowledge,
+    };
+  }
+
+  async deletePrivacyData(
+    siteId: string,
+    input: PrivacyDeleteInput,
+    auth: DashboardAuthContext,
+  ): Promise<PrivacyDeleteResult> {
+    if (input.confirm !== true) {
+      throw new BadRequestException('confirm=true required');
+    }
+
+    const site = await this.db.query<{ tenant_id: string | null }>(
+      `SELECT tenant_id FROM sites WHERE id = $1 LIMIT 1`,
+      [siteId],
+    );
+    const siteRow = site.rows[0];
+    if (!siteRow) {
+      throw new BadRequestException('site not found');
+    }
+
+    const counts: Record<string, number> = {};
+    if (input.deleteConversations) {
+      Object.assign(
+        counts,
+        input.anonymizeInstead
+          ? await this.anonymizeConversations(siteId)
+          : await this.deleteScope(siteId, 'conversations'),
+      );
+    }
+    if (input.deleteLeads) {
+      Object.assign(
+        counts,
+        input.anonymizeInstead ? await this.anonymizeLeads(siteId) : await this.deleteScope(siteId, 'leads'),
+      );
+    }
+    if (input.deleteTickets) {
+      Object.assign(
+        counts,
+        input.anonymizeInstead ? await this.anonymizeTickets(siteId) : await this.deleteTicketsAndRequests(siteId),
+      );
+    }
+    if (input.deleteKnowledge) {
+      Object.assign(counts, await this.deleteScope(siteId, 'knowledge'));
+    }
+
+    await this.auditLogs.record({
+      siteId,
+      tenantId: siteRow.tenant_id,
+      actorId: auth.actorId,
+      actorRole: auth.role,
+      action: 'privacy.deleted',
+      resourceType: 'site_data',
+      resourceId: siteId,
+      metadata: {
+        requested: {
+          deleteConversations: input.deleteConversations === true,
+          deleteLeads: input.deleteLeads === true,
+          deleteTickets: input.deleteTickets === true,
+          deleteKnowledge: input.deleteKnowledge === true,
+          anonymizeInstead: input.anonymizeInstead === true,
+        },
+        counts,
+      },
+    });
+
+    return {
+      anonymized: input.anonymizeInstead === true,
+      counts,
+    };
+  }
+
   private async deleteScope(siteId: string, scope: DeleteSiteDataScope) {
     switch (scope) {
       case 'leads':
@@ -312,6 +434,67 @@ export class SiteDataExportService {
       default:
         throw new BadRequestException('Unsupported delete scope');
     }
+  }
+
+  private async anonymizeConversations(siteId: string) {
+    const messages = await this.deleteRows(
+      `UPDATE messages m
+       SET content = '[anonymized]'
+       FROM conversations c
+       WHERE c.id = m.conversation_id
+         AND c.site_id = $1`,
+      [siteId],
+    );
+    const conversations = await this.deleteRows(
+      `UPDATE conversations
+       SET metadata = '{}'::jsonb
+       WHERE site_id = $1`,
+      [siteId],
+    );
+    return { messagesAnonymized: messages, conversationsAnonymized: conversations };
+  }
+
+  private async anonymizeLeads(siteId: string) {
+    return {
+      widgetLeadsAnonymized: await this.deleteRows(
+        `UPDATE widget_leads
+         SET name = 'Anonymized',
+             email = '',
+             phone = null,
+             message = '[anonymized]'
+         WHERE site_id = $1`,
+        [siteId],
+      ),
+    };
+  }
+
+  private async anonymizeTickets(siteId: string) {
+    return {
+      agentContactRequestsAnonymized: await this.deleteRows(
+        `UPDATE agent_contact_requests
+         SET name = null,
+             email = null,
+             phone = null,
+             note = '[anonymized]'
+         WHERE site_id = $1`,
+        [siteId],
+      ),
+      agentTicketsAnonymized: await this.deleteRows(
+        `UPDATE agent_tickets
+         SET reporter_name = null,
+             reporter_email = null,
+             description = '[anonymized]'
+         WHERE site_id = $1`,
+        [siteId],
+      ),
+    };
+  }
+
+  private async deleteTicketsAndRequests(siteId: string) {
+    return {
+      agentContactRequests: await this.deleteRows(`DELETE FROM agent_contact_requests WHERE site_id = $1`, [siteId]),
+      agentTickets: await this.deleteRows(`DELETE FROM agent_tickets WHERE site_id = $1`, [siteId]),
+    };
   }
 
   private async queryRows<T extends Record<string, unknown>>(sql: string, params: unknown[]) {

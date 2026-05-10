@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 
 import { WidgetSecurityService } from '../services/widget-security.service';
 
@@ -22,6 +22,9 @@ export class WidgetRateLimitGuard implements CanActivate {
       route.includes('chat') ? 30 : 60,
       60_000,
     );
-    return result.allowed;
+    if (!result.allowed) {
+      throw new HttpException('Rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
+    }
+    return true;
   }
 }

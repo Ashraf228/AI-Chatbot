@@ -49,8 +49,8 @@ test('IntegrationsService.listForSite returns registry entries and masks secret 
   assert.equal(shopify.status, 'connected');
   assert.equal(shopify.config.shopDomain, 'shop.example.myshopify.com');
   assert.equal(shopify.configuredSecretCount, 1);
-  assert.equal(shopify.secretFieldCount, 1);
-  assert.equal(shopify.secretFields[0].key, 'adminApiToken');
+  assert.equal(shopify.secretFieldCount, 2);
+  assert.equal(shopify.secretFields.some((field) => field.key === 'adminApiToken'), true);
 });
 
 test('IntegrationsService.getConnectionForSite decrypts encrypted secrets for internal use', async () => {

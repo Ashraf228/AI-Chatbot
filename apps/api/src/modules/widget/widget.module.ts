@@ -21,29 +21,20 @@ import { EmailJobsService } from './services/email-jobs.service';
 import { ReportMailerService } from './services/report-mailer.service';
 import { LeadMailerService } from './services/lead-mailer.service';
 
+import { ChatPipelineModule } from '../../ai/chat-pipeline/chat-pipeline.module';
 import { WidgetOriginGuard } from './guards/widget-origin.guard';
 import { WidgetRateLimitGuard } from './guards/widget-rate-limit.guard';
 import { WidgetSiteGuard } from './guards/widget-site.guard';
 import { PrismaService } from '../../db/prisma.service';
 import { RateLimitService } from '../../utils/rate-limit.service';
-import { ChatService } from '../../chat/chat.service';
-import { ChatRoutingModule } from '../../chat-routing/chat-routing.module';
-import { EmbeddingService } from '../../vector/embedding.service';
-import { VectorService } from '../../vector/vector.service';
-import { LlmService } from '../../vector/llm.service';
-import { EcommerceProductAdvisorModule } from '../ecommerce-product-advisor/ecommerce-product-advisor.module';
-import { SitesModule } from '../../sites/sites.module';
 import { AuditLogsModule } from '../../audit-logs/audit-logs.module';
-import { SiteModulesModule } from '../../site-modules/site-modules.module';
-import { ChatAgentOrchestratorService } from '../../chat/chat-agent-orchestrator.service';
+import { BillingModule } from '../../billing/billing.module';
 
 @Module({
   imports: [
-    ChatRoutingModule,
-    EcommerceProductAdvisorModule,
-    SitesModule,
+    ChatPipelineModule,
     AuditLogsModule,
-    SiteModulesModule,
+    BillingModule,
   ],
   controllers: [
     WidgetConfigController,
@@ -72,11 +63,6 @@ import { ChatAgentOrchestratorService } from '../../chat/chat-agent-orchestrator
     WidgetSiteGuard,
     PrismaService,
     RateLimitService,
-    ChatService,
-    ChatAgentOrchestratorService,
-    EmbeddingService,
-    VectorService,
-    LlmService,
   ],
   exports: [
     WidgetConfigService,

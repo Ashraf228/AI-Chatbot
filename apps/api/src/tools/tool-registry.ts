@@ -2,7 +2,7 @@ export type ToolDefinition = {
   key: string;
   label: string;
   description: string;
-  category: 'lead' | 'commerce' | 'support' | 'automation' | 'knowledge';
+  category: 'lead' | 'commerce' | 'support' | 'automation' | 'knowledge' | 'service';
 };
 
 export const TOOL_REGISTRY: ToolDefinition[] = [
@@ -41,6 +41,18 @@ export const TOOL_REGISTRY: ToolDefinition[] = [
     label: 'Wissensquelle durchsuchen',
     description: 'Nutzt spaeter FAQ-, PDF- oder externe Wissensquellen als Tool-Aufruf.',
     category: 'knowledge',
+  },
+  {
+    key: 'recommend_service',
+    label: 'Service empfehlen',
+    description: 'Bereitet eine strukturierte Service-Empfehlung anhand Intent und Kontext vor.',
+    category: 'service',
+  },
+  {
+    key: 'handoff',
+    label: 'Menschliche Uebergabe vorbereiten',
+    description: 'Markiert ein Gespraech fuer menschliche Nachbearbeitung.',
+    category: 'support',
   },
 ];
 

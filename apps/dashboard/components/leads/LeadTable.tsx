@@ -8,6 +8,8 @@ import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
 import { Select } from "../shared/Select";
 import { Button } from "../shared/Button";
+import { Input } from "../shared/Input";
+import { encodeSiteId } from "../../lib/site-id";
 
 type LeadTableProps = {
   siteId?: string;
@@ -21,6 +23,7 @@ type LeadRow = {
   email: string;
   phone?: string;
   message?: string;
+  sessionId?: string;
   status: string;
   createdAt: string;
 };
@@ -30,6 +33,7 @@ export function LeadTable({ siteId }: LeadTableProps) {
   const [items, setItems] = useState<LeadRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   async function load() {
     setLoading(true);
@@ -85,20 +89,54 @@ export function LeadTable({ siteId }: LeadTableProps) {
     window.location.href = `/api/widget/leads/export?${params.toString()}`;
   }
 
+  const filteredItems = items.filter((lead) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return [lead.name, lead.email, lead.phone || "", lead.message || "", lead.siteName || lead.siteId]
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+
+  const newCount = items.filter((lead) => lead.status === "new").length;
+  const contactedCount = items.filter((lead) => lead.status === "contacted").length;
+  const qualifiedCount = items.filter((lead) => lead.status === "qualified").length;
+
   return (
     <div className="dashboard-card">
-      <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
-        <LeadFilters status={status} onStatusChange={setStatus} />
-        <Button type="button" variant="secondary" onClick={exportLeads}>
-          Anfragen exportieren
-        </Button>
+      <div className="dashboard-stack dashboard-stack--sm">
+        <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 12 }}>
+          <LeadMiniMetric label="Anfragen" value={items.length} />
+          <LeadMiniMetric label="Neu" value={newCount} />
+          <LeadMiniMetric label="Kontaktiert" value={contactedCount} />
+          <LeadMiniMetric label="Qualifiziert" value={qualifiedCount} />
+        </div>
+        <div className="dashboard-grid dashboard-grid--two" style={{ gap: 12 }}>
+          <LeadFilters status={status} onStatusChange={setStatus} />
+          <label className="dashboard-field">
+            <span className="dashboard-field-label">Suche</span>
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Name, Kontakt, Interesse"
+            />
+          </label>
+        </div>
+        <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
+          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+            Quelle: Widget Chat. Status kann hier ohne CRM-Logik gepflegt werden.
+          </p>
+          <Button type="button" variant="secondary" onClick={exportLeads}>
+            Anfragen exportieren
+          </Button>
+        </div>
       </div>
 
       {loading ? (
         <LoadingState />
       ) : error ? (
         <ErrorState message={error} />
-      ) : items.length === 0 ? (
+      ) : filteredItems.length === 0 ? (
         <EmptyState title="Keine Anfragen gefunden." />
       ) : (
         <div className="dashboard-table-wrap">
@@ -113,7 +151,7 @@ export function LeadTable({ siteId }: LeadTableProps) {
               </tr>
             </thead>
             <tbody>
-              {items.map((lead) => (
+              {filteredItems.map((lead) => (
                 <tr key={lead.id}>
                   <td className="dashboard-td">
                     <strong>{lead.name}</strong>
@@ -140,9 +178,16 @@ export function LeadTable({ siteId }: LeadTableProps) {
                   <td className="dashboard-td">{lead.message || "-"}</td>
                   <td className="dashboard-td">{new Date(lead.createdAt).toLocaleString()}</td>
                   <td className="dashboard-td">
-                    <Button type="button" variant="secondary" onClick={() => deleteLead(lead.id)}>
-                      Löschen
-                    </Button>
+                    <div className="dashboard-stack dashboard-stack--sm">
+                      {lead.sessionId ? (
+                        <a className="dashboard-link-card" href={`/sites/${encodeSiteId(lead.siteId)}/conversations`}>
+                          Chat öffnen
+                        </a>
+                      ) : null}
+                      <Button type="button" variant="secondary" onClick={() => deleteLead(lead.id)}>
+                        Löschen
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -150,6 +195,17 @@ export function LeadTable({ siteId }: LeadTableProps) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function LeadMiniMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="dashboard-card dashboard-card--soft">
+      <strong>{value}</strong>
+      <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+        {label}
+      </p>
     </div>
   );
 }

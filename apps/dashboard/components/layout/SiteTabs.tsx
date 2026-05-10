@@ -8,7 +8,7 @@ export async function SiteTabs({ siteId }: { siteId: string }) {
   const session = await getDashboardSession();
   const showAdvanced = session?.role === "admin";
   const tabs = showAdvanced
-    ? [...siteTabs, { slug: "advanced", label: "Erweiterte Einstellungen" }]
+    ? [...siteTabs, { slug: "privacy", label: "Datenschutz" }, { slug: "advanced", label: "Erweiterte Einstellungen" }]
     : siteTabs;
 
   return (

@@ -19,6 +19,7 @@ function createService({ leadNotificationEmail = 'hello@soulesmartbusiness.com' 
           id: 'site-1',
           name: 'SouleSmartBusiness',
           companyName: 'SouleSmartBusiness',
+          tenantId: 'tenant-1',
           leadNotificationEmail,
           siteKey,
         };
@@ -47,6 +48,9 @@ function createService({ leadNotificationEmail = 'hello@soulesmartbusiness.com' 
       isConfigured() {
         return true;
       },
+    },
+    {
+      async assertWithinLimit() {},
     },
   );
 

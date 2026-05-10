@@ -4,6 +4,7 @@ import { PrismaService } from '../../../db/prisma.service';
 
 type SiteConfig = {
   domain?: string;
+  websiteUrl?: string;
   brandColor?: string;
   accentColor?: string;
   fontFamily?: string;
@@ -21,9 +22,19 @@ type SiteConfig = {
   conversationFlow?: Record<string, unknown>;
   systemPrompt?: string;
   industry?: string;
-  setupGoal?: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+  setupGoal?: string;
+  primaryGoal?: string;
   tone?: string;
+  knowledgeMode?: 'flexible' | 'grounded' | 'strict';
+  fallbackBehavior?: string;
   ctaText?: string;
+  supportEmail?: string;
+  phone?: string;
+  language?: 'de' | 'en';
+  placeholderText?: string;
+  widgetPosition?: 'bottom_right' | 'bottom_left';
+  launcherLabel?: string;
+  privacyNoticeText?: string;
   templateId?: string;
   templateVersion?: number;
   templateAppliedAt?: string;
@@ -116,6 +127,7 @@ export class WidgetAdminSiteService {
       publicKey: row.public_key,
       allowedDomains: row.allowed_domains || [],
       domain: config.domain || row.allowed_domains?.[0] || '',
+      websiteUrl: config.websiteUrl || config.domain || row.allowed_domains?.[0] || '',
       brandColor: config.brandColor || '#b55400',
       accentColor: config.accentColor || '#fff0d9',
       fontFamily: config.fontFamily || 'system',
@@ -134,8 +146,18 @@ export class WidgetAdminSiteService {
       systemPrompt: config.systemPrompt || '',
       industry: config.industry || '',
       setupGoal: config.setupGoal || '',
+      primaryGoal: config.primaryGoal || config.setupGoal || '',
       tone: config.tone || '',
+      knowledgeMode: config.knowledgeMode || 'flexible',
+      fallbackBehavior: config.fallbackBehavior || 'ask_followup',
       ctaText: config.ctaText || '',
+      supportEmail: config.supportEmail || '',
+      phone: config.phone || '',
+      language: config.language || 'de',
+      placeholderText: config.placeholderText || 'Nachricht schreiben...',
+      widgetPosition: config.widgetPosition || 'bottom_right',
+      launcherLabel: config.launcherLabel || 'Chat',
+      privacyNoticeText: config.privacyNoticeText || '',
       templateId: config.templateId || '',
       templateVersion: config.templateVersion || null,
       templateAppliedAt: config.templateAppliedAt || '',
@@ -195,6 +217,7 @@ export class WidgetAdminSiteService {
     payload: {
       siteKey?: string;
       domain?: string;
+      websiteUrl?: string;
       isActive?: boolean;
       widgetBundleUrl?: string;
       consentRequired?: boolean;
@@ -204,9 +227,19 @@ export class WidgetAdminSiteService {
       conversationFlow?: Record<string, unknown>;
       systemPrompt?: string;
       industry?: string;
-      setupGoal?: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+      setupGoal?: string;
+      primaryGoal?: string;
       tone?: string;
+      knowledgeMode?: 'flexible' | 'grounded' | 'strict';
+      fallbackBehavior?: string;
       ctaText?: string;
+      supportEmail?: string;
+      phone?: string;
+      language?: 'de' | 'en';
+      placeholderText?: string;
+      widgetPosition?: 'bottom_right' | 'bottom_left';
+      launcherLabel?: string;
+      privacyNoticeText?: string;
       templateId?: string;
       templateVersion?: number;
       templateAppliedAt?: string;
@@ -237,6 +270,7 @@ export class WidgetAdminSiteService {
 
     const nextConfig = {
       domain: payload.domain ?? site.domain,
+      websiteUrl: payload.websiteUrl ?? site.websiteUrl,
       isActive: payload.isActive ?? site.isActive,
       widgetBundleUrl: payload.widgetBundleUrl ?? site.widgetBundleUrl,
       consentRequired: payload.consentRequired ?? site.consentRequired,
@@ -248,8 +282,18 @@ export class WidgetAdminSiteService {
       systemPrompt: payload.systemPrompt ?? site.systemPrompt,
       industry: payload.industry ?? site.industry,
       setupGoal: payload.setupGoal ?? site.setupGoal,
+      primaryGoal: payload.primaryGoal ?? site.primaryGoal,
       tone: payload.tone ?? site.tone,
+      knowledgeMode: payload.knowledgeMode ?? site.knowledgeMode,
+      fallbackBehavior: payload.fallbackBehavior ?? site.fallbackBehavior,
       ctaText: payload.ctaText ?? site.ctaText,
+      supportEmail: payload.supportEmail ?? site.supportEmail,
+      phone: payload.phone ?? site.phone,
+      language: payload.language ?? site.language,
+      placeholderText: payload.placeholderText ?? site.placeholderText,
+      widgetPosition: payload.widgetPosition ?? site.widgetPosition,
+      launcherLabel: payload.launcherLabel ?? site.launcherLabel,
+      privacyNoticeText: payload.privacyNoticeText ?? site.privacyNoticeText,
       templateId: payload.templateId ?? site.templateId,
       templateVersion: payload.templateVersion ?? site.templateVersion,
       templateAppliedAt: payload.templateAppliedAt ?? site.templateAppliedAt,

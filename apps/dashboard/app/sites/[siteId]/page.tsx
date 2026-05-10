@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CustomerAdvancedPanel } from "../../../components/customer/CustomerAdvancedPanel";
 import { CustomerLiveStatus } from "../../../components/customer/CustomerLiveStatus";
 import { CustomerQuickActions } from "../../../components/customer/CustomerQuickActions";
+import { SiteBusinessOverview } from "../../../components/dashboard/SiteBusinessOverview";
 import { SiteTabs } from "../../../components/layout/SiteTabs";
 import { Topbar } from "../../../components/layout/Topbar";
 import { getDashboardSession } from "../../../lib/auth";
@@ -25,6 +26,7 @@ export default async function SiteDetailPage({
         <div className="dashboard-grid dashboard-grid--two">
           <section className="dashboard-stack">
             <CustomerLiveStatus siteId={siteId} />
+            <SiteBusinessOverview siteId={siteId} />
 
             <section className="dashboard-card dashboard-stack">
               <div>

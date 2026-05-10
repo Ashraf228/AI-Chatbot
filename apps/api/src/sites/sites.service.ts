@@ -5,6 +5,7 @@ import { SiteConfigInput } from './dto';
 import { resolveSiteKey } from './site-key';
 import { TenantsService } from '../tenants/tenants.service';
 import { AuditLogService } from '../audit-logs/audit-log.service';
+import { UsageLimitService } from '../billing/usage-limit.service';
 
 type SiteRow = {
   id: string;
@@ -31,6 +32,7 @@ export class SitesService {
     private db: PrismaService,
     private readonly tenants: TenantsService,
     private readonly auditLogs: AuditLogService,
+    private readonly usageLimits: UsageLimitService,
   ) {}
 
   private normalizeSite(row: SiteRow | null): NormalizedSiteRow | null {
@@ -84,6 +86,7 @@ export class SitesService {
   }) {
     const name = params.name.trim();
     const tenantId = await this.tenants.ensureTenantExists(params.tenantId.trim());
+    await this.usageLimits.assertWithinLimit(tenantId, 'maxSites');
     const id = params.id?.trim() || randomUUID();
     const config = parseSiteConfig(params.config);
     const resolvedSiteKey =

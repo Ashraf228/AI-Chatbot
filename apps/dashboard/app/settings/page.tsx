@@ -51,6 +51,9 @@ export default function SettingsPage() {
               <Link href="/usage" className="dashboard-button dashboard-button--secondary">
                 Kosten & Nutzung
               </Link>
+              <Link href="/billing" className="dashboard-button dashboard-button--secondary">
+                Plan & Limits
+              </Link>
             </div>
           </section>
 

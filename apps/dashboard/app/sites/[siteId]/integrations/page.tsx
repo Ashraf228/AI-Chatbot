@@ -1,4 +1,7 @@
-import { redirect } from "next/navigation";
+import { SiteIntegrationsForm } from "../../../../components/integrations/SiteIntegrationsForm";
+import { SiteTabs } from "../../../../components/layout/SiteTabs";
+import { Topbar } from "../../../../components/layout/Topbar";
+import { decodeSiteId } from "../../../../lib/site-id";
 
 export default async function SiteIntegrationsPage({
   params,
@@ -6,5 +9,15 @@ export default async function SiteIntegrationsPage({
   params: Promise<{ siteId: string }>;
 }) {
   const { siteId: rawSiteId } = await params;
-  redirect(`/sites/${rawSiteId}/advanced?section=connections`);
+  const siteId = decodeSiteId(rawSiteId);
+
+  return (
+    <div>
+      <Topbar title={`Verbindungen · ${siteId}`} />
+      <div className="dashboard-page dashboard-page--lg">
+        <SiteTabs siteId={siteId} />
+        <SiteIntegrationsForm siteId={siteId} />
+      </div>
+    </div>
+  );
 }

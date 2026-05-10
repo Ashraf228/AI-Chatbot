@@ -11,6 +11,7 @@ import { LeadMailerService } from './lead-mailer.service';
 import { EmailJobsService } from './email-jobs.service';
 import { logEvent } from '../../../utils/logger';
 import { ReportMailerService } from './report-mailer.service';
+import { UsageLimitService } from '../../../billing/usage-limit.service';
 
 @Injectable()
 export class WidgetLeadsService {
@@ -21,6 +22,7 @@ export class WidgetLeadsService {
     private readonly leadMailer: LeadMailerService,
     private readonly emailJobs: EmailJobsService,
     private readonly reportMailer: ReportMailerService,
+    private readonly usageLimits: UsageLimitService,
   ) {}
 
   async capture(
@@ -31,6 +33,7 @@ export class WidgetLeadsService {
     const site = await this.widgetConfigService.getSiteByKey(dto.siteKey);
     await this.widgetSecurityService.enforceOrigin(dto.siteKey, origin);
     await this.widgetSecurityService.assertSessionBelongsToSite(site.id, dto.sessionId);
+    await this.usageLimits.assertWithinLimit(site.tenantId, 'monthlyLeads');
     const id = randomUUID();
 
     await this.db.query(

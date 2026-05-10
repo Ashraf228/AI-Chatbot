@@ -41,6 +41,8 @@ type SiteConfig = {
   logoUrl?: string;
   industry?: string;
   setupGoal?: string;
+  primaryGoal?: string;
+  knowledgeMode?: 'flexible' | 'grounded' | 'strict';
   systemPrompt?: string;
   ctaText?: string;
   templateId?: string;
@@ -112,8 +114,11 @@ export class SiteStatusService {
     const config = parseConfig(site.config);
     const knowledge = await this.db.query<{ count: string }>(
       `SELECT count(*)::text AS count
-       FROM documents
-       WHERE site_id = $1`,
+       FROM documents d
+       LEFT JOIN knowledge_sources ks ON ks.id = d.source_id
+       WHERE d.site_id = $1
+         AND COALESCE(ks.is_active, true) = true
+         AND COALESCE(ks.sync_status, 'ready') = 'ready'`,
       [siteId],
     );
     const knowledgeCount = Number(knowledge.rows[0]?.count || 0);
@@ -133,7 +138,7 @@ export class SiteStatusService {
       status: status.label,
       knowledgeCount,
       industry: config.industry || '',
-      setupGoal: config.setupGoal || '',
+      setupGoal: config.primaryGoal || config.setupGoal || '',
       lastTestedAt: config.lastTestedAt || '',
       goLiveAt: config.goLiveAt || '',
     };
@@ -152,9 +157,10 @@ export class SiteStatusService {
     const templateDone = Boolean(
       input.config.templateId || input.config.templateAppliedAt || input.config.industry,
     );
-    const knowledgeDone = input.knowledgeCount > 0;
+    const knowledgeMode = input.config.knowledgeMode || 'flexible';
+    const knowledgeDone = input.knowledgeCount > 0 || knowledgeMode !== 'strict';
     const behaviorDone = Boolean(
-      input.config.setupGoal &&
+      (input.config.primaryGoal || input.config.setupGoal) &&
         (input.config.systemPrompt || input.config.ctaText || input.config.welcomeMessage),
     );
     const designVisualDone = isDesignConfigured(input.config);

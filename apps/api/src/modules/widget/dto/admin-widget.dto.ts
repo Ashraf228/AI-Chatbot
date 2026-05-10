@@ -115,6 +115,12 @@ export class UpdateWidgetConfigDto {
   domain?: string;
 
   @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsUrl({ require_tld: false }, { message: 'websiteUrl must be a valid URL' })
+  @MaxLength(1000)
+  websiteUrl?: string;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 
@@ -177,13 +183,102 @@ export class UpdateWidgetConfigDto {
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))
-  @IsIn(['lead_capture', 'support', 'product_advice', 'appointments'])
-  setupGoal?: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+  @IsIn([
+    'lead_capture',
+    'support',
+    'product_advice',
+    'appointments',
+    'support_automation',
+    'lead_generation',
+    'customer_advice',
+    'product_questions',
+    'appointment_requests',
+    'internal_knowledge',
+  ])
+  setupGoal?:
+    | 'lead_capture'
+    | 'support'
+    | 'product_advice'
+    | 'appointments'
+    | 'support_automation'
+    | 'lead_generation'
+    | 'customer_advice'
+    | 'product_questions'
+    | 'appointment_requests'
+    | 'internal_knowledge';
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))
-  @IsIn(['professional', 'friendly', 'consultative'])
-  tone?: 'professional' | 'friendly' | 'consultative';
+  @IsIn([
+    'support_automation',
+    'lead_generation',
+    'customer_advice',
+    'product_questions',
+    'appointment_requests',
+    'internal_knowledge',
+  ])
+  primaryGoal?:
+    | 'support_automation'
+    | 'lead_generation'
+    | 'customer_advice'
+    | 'product_questions'
+    | 'appointment_requests'
+    | 'internal_knowledge';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['professional', 'friendly', 'consultative', 'premium', 'direct'])
+  tone?: 'professional' | 'friendly' | 'consultative' | 'premium' | 'direct';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['flexible', 'grounded', 'strict'])
+  knowledgeMode?: 'flexible' | 'grounded' | 'strict';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['ask_followup', 'collect_contact', 'handoff'])
+  fallbackBehavior?: 'ask_followup' | 'collect_contact' | 'handoff';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsEmail({}, { message: 'supportEmail must be a valid email address' })
+  @MaxLength(200)
+  supportEmail?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(80)
+  phone?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['de', 'en'])
+  language?: 'de' | 'en';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(255)
+  placeholderText?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['bottom_right', 'bottom_left'])
+  widgetPosition?: 'bottom_right' | 'bottom_left';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(80)
+  launcherLabel?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
+  @IsString()
+  @MaxLength(1000)
+  privacyNoticeText?: string;
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))

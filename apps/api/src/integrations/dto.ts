@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsObject, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsObject, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 
 class IntegrationConfigDto {
   @IsOptional()
@@ -41,4 +41,50 @@ export class UpdateIntegrationConnectionsDto {
   @ValidateNested({ each: true })
   @Type(() => UpdateIntegrationConnectionItemDto)
   connections!: UpdateIntegrationConnectionItemDto[];
+}
+
+export class CreateIntegrationDto {
+  @IsString()
+  @MaxLength(120)
+  providerKey!: string;
+
+  @IsString()
+  @MaxLength(120)
+  connectionKey = 'primary';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  displayName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsObject()
+  config?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  secrets?: Record<string, unknown>;
+}
+
+export class PatchIntegrationDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  displayName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsObject()
+  config?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  secrets?: Record<string, unknown>;
 }

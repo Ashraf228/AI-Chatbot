@@ -29,4 +29,5 @@ export const siteTabs = [
   { slug: "leads", label: "Anfragen" },
   { slug: "conversations", label: "Chats" },
   { slug: "reports", label: "Berichte" },
+  { slug: "usage", label: "Nutzung" },
 ];

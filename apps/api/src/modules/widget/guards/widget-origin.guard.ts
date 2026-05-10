@@ -9,9 +9,10 @@ export class WidgetOriginGuard implements CanActivate {
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest();
     const origin = request.headers.origin as string | undefined;
+    const referer = request.headers.referer as string | undefined;
     const siteKey =
       request.body?.siteKey || request.query?.siteKey || request.headers['x-site-key'];
 
-    return this.widgetSecurityService.isAllowedOrigin(String(siteKey || ''), origin);
+    return this.widgetSecurityService.isAllowedOrigin(String(siteKey || ''), origin, referer);
   }
 }

@@ -1,26 +1,14 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { Request } from 'express';
-import { randomUUID } from 'crypto';
 
-import { ChatMessageDto } from './dto';
-import { EmbeddingService } from '../vector/embedding.service';
-import { VectorSearchRow, VectorService } from '../vector/vector.service';
-import { LlmService } from '../vector/llm.service';
+import { ChatPipelineService } from '../ai/chat-pipeline/chat-pipeline.service';
+import { PrismaService } from '../db/prisma.service';
 import { SitesService } from '../sites/sites.service';
 import { isDomainAllowed } from '../utils/cors';
-import { buildSystemPrompt, getSiteSystemPrompt } from './prompt';
-import { buildConversationGuide } from './conversation-guide';
-import { parseConversationFlow } from './flow-builder';
-import { buildResponseParts } from './response-parts';
-import { RateLimitService } from '../utils/rate-limit.service';
-import { PrismaService } from '../db/prisma.service';
-import { ChatRoutingService } from '../chat-routing/chat-routing.service';
-import { redactPII } from '../utils/pii';
-import { sanitizeInput, sanitizeOutput } from '../utils/security';
 import { logEvent } from '../utils/logger';
-import { estimateOpenAICost } from '../usage/costs';
-import { EcommerceProductAdvisorService } from '../modules/ecommerce-product-advisor/ecommerce-product-advisor.service';
-import { ChatAgentOrchestratorService } from './chat-agent-orchestrator.service';
+import { RateLimitService } from '../utils/rate-limit.service';
+import { sanitizeInput } from '../utils/security';
+import { ChatMessageDto } from './dto';
 
 @Injectable()
 export class ChatService {
@@ -29,117 +17,13 @@ export class ChatService {
   }
 
   constructor(
-    private embedder: EmbeddingService,
-    private vector: VectorService,
-    private llm: LlmService,
-    private sites: SitesService,
-    private rateLimit: RateLimitService,
-    private db: PrismaService,
-    private routing: ChatRoutingService,
-    private ecommerceProductAdvisor: EcommerceProductAdvisorService,
-    private chatAgentOrchestrator: ChatAgentOrchestratorService,
+    private readonly sites: SitesService,
+    private readonly rateLimit: RateLimitService,
+    private readonly db: PrismaService,
+    private readonly chatPipeline: ChatPipelineService,
   ) {}
 
-  private async insertUsageEvent(params: {
-    tenantId: string;
-    siteId: string;
-    conversationId: string;
-    sessionId: string;
-    model: string;
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-    estimatedCost: number;
-    latencyMs: number;
-    success: boolean;
-  }) {
-    await this.db.query(
-      `INSERT INTO usage_events (
-        id, tenant_id, site_id, conversation_id, session_id,
-        model, input_tokens, output_tokens, total_tokens,
-        estimated_cost, latency_ms, success, created_at
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9,
-        $10, $11, $12, now()
-      )`,
-      [
-        randomUUID(),
-        params.tenantId,
-        params.siteId,
-        params.conversationId,
-        params.sessionId,
-        params.model,
-        params.inputTokens,
-        params.outputTokens,
-        params.totalTokens,
-        params.estimatedCost,
-        params.latencyMs,
-        params.success,
-      ],
-    );
-  }
-
-  private async upsertDailyUsage(params: {
-    tenantId: string;
-    siteId: string;
-    requestCount: number;
-    userMessageCount: number;
-    assistantMessageCount: number;
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-    estimatedCost: number;
-    successCount: number;
-    errorCount: number;
-    latencyMs: number;
-  }) {
-    await this.db.query(
-      `INSERT INTO usage_daily (
-        tenant_id, site_id, day,
-        request_count, user_message_count, assistant_message_count,
-        input_tokens, output_tokens, total_tokens,
-        estimated_cost, success_count, error_count, latency_ms,
-        created_at, updated_at
-      ) VALUES (
-        $1, $2, CURRENT_DATE,
-        $3, $4, $5,
-        $6, $7, $8,
-        $9, $10, $11, $12,
-        now(), now()
-      )
-      ON CONFLICT (tenant_id, site_id, day)
-      DO UPDATE SET
-        request_count           = usage_daily.request_count           + EXCLUDED.request_count,
-        user_message_count      = usage_daily.user_message_count      + EXCLUDED.user_message_count,
-        assistant_message_count = usage_daily.assistant_message_count + EXCLUDED.assistant_message_count,
-        input_tokens            = usage_daily.input_tokens            + EXCLUDED.input_tokens,
-        output_tokens           = usage_daily.output_tokens           + EXCLUDED.output_tokens,
-        total_tokens            = usage_daily.total_tokens            + EXCLUDED.total_tokens,
-        estimated_cost          = usage_daily.estimated_cost          + EXCLUDED.estimated_cost,
-        success_count           = usage_daily.success_count           + EXCLUDED.success_count,
-        error_count             = usage_daily.error_count             + EXCLUDED.error_count,
-        latency_ms              = usage_daily.latency_ms              + EXCLUDED.latency_ms,
-        updated_at              = now()`,
-      [
-        params.tenantId,
-        params.siteId,
-        params.requestCount,
-        params.userMessageCount,
-        params.assistantMessageCount,
-        params.inputTokens,
-        params.outputTokens,
-        params.totalTokens,
-        params.estimatedCost,
-        params.successCount,
-        params.errorCount,
-        params.latencyMs,
-      ],
-    );
-  }
-
   async reply(dto: ChatMessageDto, origin?: string, req?: Request) {
-    // 1) Site lookup
     const site = await this.sites.getSite(dto.siteId);
     if (!site) {
       throw new HttpException('Invalid siteId', HttpStatus.NOT_FOUND);
@@ -153,12 +37,10 @@ export class ChatService {
       );
     }
 
-    // 2) publicKey check
     if (!site.public_key || dto.publicKey !== site.public_key) {
       throw new HttpException('Invalid publicKey', HttpStatus.FORBIDDEN);
     }
 
-    // 3) Origin validation
     if (!origin) {
       throw new HttpException('Missing origin', HttpStatus.FORBIDDEN);
     }
@@ -167,7 +49,6 @@ export class ChatService {
       throw new HttpException('Invalid origin', HttpStatus.FORBIDDEN);
     }
 
-    // 4) Origin allowlist
     const mode = process.env.SITE_DOMAIN_ALLOWLIST_MODE || 'strict';
     if (mode === 'strict') {
       const allowed = site.allowed_domains || [];
@@ -176,7 +57,6 @@ export class ChatService {
       }
     }
 
-    // 5) Logging erst nach erfolgreicher Grundvalidierung
     logEvent('chat_request', {
       siteId: dto.siteId,
       tenantId,
@@ -185,7 +65,6 @@ export class ChatService {
       messageLength: dto.message?.length,
     });
 
-    // 6) Rate limiting
     const ipRaw =
       (req?.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
       req?.socket?.remoteAddress ||
@@ -213,7 +92,6 @@ export class ChatService {
       throw new HttpException('Rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    // 7) Daily usage limit
     const dailyLimitRes = await this.db.query<{ count: string | number }>(
       `SELECT COUNT(*) AS count
        FROM conversations c
@@ -235,7 +113,6 @@ export class ChatService {
       throw new HttpException('Daily usage limit reached', HttpStatus.TOO_MANY_REQUESTS);
     }
 
-    // 8) Input sanitizen
     let safeMessage: string;
     try {
       safeMessage = sanitizeInput(dto.message);
@@ -246,340 +123,13 @@ export class ChatService {
       );
     }
 
-    // 9) Conversation find/create
-    const sessionId = dto.sessionId?.trim() || randomUUID();
-
-    const convRes = await this.db.query<{ id: string }>(
-      `SELECT id
-       FROM conversations
-       WHERE tenant_id = $1 AND site_id = $2 AND session_id = $3
-       LIMIT 1`,
-      [tenantId, dto.siteId, sessionId],
-    );
-
-    let conversationId = convRes.rows[0]?.id;
-
-    if (!conversationId) {
-      conversationId = randomUUID();
-
-      await this.db.query(
-        `INSERT INTO conversations(id, tenant_id, site_id, session_id)
-         VALUES ($1, $2, $3, $4)`,
-        [conversationId, tenantId, dto.siteId, sessionId],
-      );
-
-      logEvent('conversation_created', {
-        conversationId,
-        tenantId,
-        siteId: dto.siteId,
-        sessionId,
-      });
-    }
-
-    // 10) User-Message redacted speichern
-    const userMsg = redactPII(safeMessage);
-
-    await this.db.query(
-      `INSERT INTO messages(id, conversation_id, role, content)
-       VALUES ($1, $2, $3, $4)`,
-      [randomUUID(), conversationId, 'user', userMsg],
-    );
-
-    const historyRes = await this.db.query<{ role: 'user' | 'assistant' | 'system'; content: string }>(
-      `SELECT role, content
-       FROM messages
-       WHERE conversation_id = $1
-       ORDER BY created_at DESC
-       LIMIT 6`,
-      [conversationId],
-    );
-    const history = historyRes.rows.slice().reverse();
-
-    const agentDecision = await this.chatAgentOrchestrator.decide({
+    return this.chatPipeline.process({
       tenantId,
       siteId: dto.siteId,
-      conversationId,
-      sessionId,
+      sessionId: dto.sessionId,
       message: safeMessage,
-      history,
+      source: 'api',
+      siteConfig: site.config as Record<string, unknown> | null,
     });
-
-    if (agentDecision.handled && agentDecision.answer) {
-      const safeAnswer = sanitizeOutput(agentDecision.answer);
-
-      await this.insertUsageEvent({
-        tenantId,
-        siteId: dto.siteId,
-        conversationId,
-        sessionId,
-        model: 'rule-based-agent-orchestrator',
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        estimatedCost: 0,
-        latencyMs: 0,
-        success: true,
-      });
-
-      await this.upsertDailyUsage({
-        tenantId,
-        siteId: dto.siteId,
-        requestCount: 1,
-        userMessageCount: 1,
-        assistantMessageCount: 1,
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        estimatedCost: 0,
-        successCount: 1,
-        errorCount: 0,
-        latencyMs: 0,
-      });
-
-      await this.db.query(
-        `INSERT INTO messages(id, conversation_id, role, content)
-         VALUES ($1, $2, $3, $4)`,
-        [randomUUID(), conversationId, 'assistant', safeAnswer],
-      );
-
-      await this.db.query(
-        `UPDATE conversations
-         SET last_active_at = now()
-         WHERE id = $1`,
-        [conversationId],
-      );
-
-      const parts = buildResponseParts({
-        answer: safeAnswer,
-        route: 'agent',
-        sources: [],
-        cta: agentDecision.cta,
-      });
-
-      logEvent('chat_agent_orchestrator_handled', {
-        siteId: dto.siteId,
-        tenantId,
-        conversationId,
-        action: agentDecision.action,
-        leadId: agentDecision.leadId || null,
-        contactRequestId: agentDecision.contactRequestId || null,
-      });
-
-      return {
-        answer: safeAnswer,
-        parts,
-        sources: [],
-        sessionId,
-      };
-    }
-
-    const routeDecision = await this.routing.resolveForSite({
-      siteId: dto.siteId,
-      message: safeMessage,
-      history,
-    });
-    const conversationGuide = buildConversationGuide(
-      history,
-      parseConversationFlow((site.config as Record<string, unknown> | undefined)?.conversationFlow),
-    );
-    const routingGuide = `
-Routing-Pfad: ${routeDecision.route}
-Routing-Grund: ${routeDecision.reason}
-${routeDecision.guide}
-    `.trim();
-
-    logEvent('chat_route_resolved', {
-      siteId: dto.siteId,
-      tenantId,
-      conversationId,
-      route: routeDecision.route,
-      reason: routeDecision.reason,
-      agentKey: routeDecision.agentKey || null,
-      moduleKey: routeDecision.moduleKey || null,
-    });
-
-    // 11) Retrieval
-    const retrievalStart = Date.now();
-
-    const qEmbedding = await this.embedder.embed(safeMessage);
-    const hits = await this.vector.search(tenantId, dto.siteId, qEmbedding, 6);
-
-    const retrievalTime = Date.now() - retrievalStart;
-
-    logEvent('retrieval_result', {
-      conversationId,
-      tenantId,
-      siteId: dto.siteId,
-      hits: hits.length,
-      retrievalTime,
-    });
-
-    const context = hits
-      .map(
-        (h: VectorSearchRow, idx: number) =>
-          `# Kontext ${idx + 1} (score ${Number(h.score).toFixed(3)})\n${h.content}`,
-      )
-      .join('\n\n');
-    const advisorContext =
-      routeDecision.route === 'advisor'
-        ? await this.ecommerceProductAdvisor.buildRecommendationContextForSite({
-            siteId: dto.siteId,
-            query: safeMessage,
-            limit: 3,
-            history,
-          })
-        : {
-            products: [],
-            collections: [],
-            clarificationQuestion: undefined,
-            effectiveQuery: safeMessage,
-            state: 'ready_to_recommend',
-            stateGuide: '',
-          };
-    const catalogContext =
-      advisorContext.products.length > 0 || advisorContext.collections.length > 0
-        ? [
-            ...advisorContext.products.map(
-              (product, idx) =>
-                `# Produkt ${idx + 1}\nTitel: ${product.title}\nURL: ${product.url}\nAnbieter: ${product.vendor || '-'}\nTyp: ${product.productType || '-'}`,
-            ),
-            ...advisorContext.collections.map(
-              (collection, idx) =>
-                `# Kategorie ${idx + 1}\nTitel: ${collection.title}\nURL: ${collection.url}`,
-            ),
-          ].join('\n\n')
-        : '';
-    const shouldClarifyAdvisor =
-      routeDecision.route === 'advisor' && Boolean(advisorContext.clarificationQuestion);
-
-    const userPrompt = `
-Verlauf:
-${history
-  .map((entry) => `${entry.role === 'user' ? 'Nutzer' : 'Assistent'}: ${entry.content}`)
-  .join('\n') || '(kein Verlauf vorhanden)'}
-
-Nutzerfrage:
-${safeMessage}
-
-Kontext:
-${context || '(kein Kontext gefunden)'}
-${catalogContext ? `\n\nProduktkatalog:\n${catalogContext}` : ''}
-${advisorContext.stateGuide ? `\n\nAdvisor-Zustand:\n${advisorContext.stateGuide}` : ''}
-`.trim();
-
-    // 12) LLM Call
-    let llmTime = 0;
-    let llmRes = {
-      text: advisorContext.clarificationQuestion || '',
-      usage: {
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-      },
-      model: 'rule-based-advisor',
-      latencyMs: 0,
-    };
-
-    if (!shouldClarifyAdvisor) {
-      const llmStart = Date.now();
-      llmRes = await this.llm.answer(
-        buildSystemPrompt(
-          getSiteSystemPrompt(site.config),
-          [routingGuide, conversationGuide].filter(Boolean).join('\n\n'),
-        ),
-        userPrompt,
-      );
-      llmTime = Date.now() - llmStart;
-    }
-
-    // 13) Kosten schätzen
-    const estimatedCost = estimateOpenAICost({
-      model: llmRes.model,
-      inputTokens: llmRes.usage.inputTokens,
-      outputTokens: llmRes.usage.outputTokens,
-    });
-
-    // 14) Usage-Event speichern
-    await this.insertUsageEvent({
-      tenantId,
-      siteId: dto.siteId,
-      conversationId,
-      sessionId,
-      model: llmRes.model,
-      inputTokens: llmRes.usage.inputTokens,
-      outputTokens: llmRes.usage.outputTokens,
-      totalTokens: llmRes.usage.totalTokens,
-      estimatedCost,
-      latencyMs: llmRes.latencyMs,
-      success: true,
-    });
-
-    // 15) Daily-Aggregat upserten
-    await this.upsertDailyUsage({
-      tenantId,
-      siteId: dto.siteId,
-      requestCount: 1,
-      userMessageCount: 1,
-      assistantMessageCount: 1,
-      inputTokens: llmRes.usage.inputTokens,
-      outputTokens: llmRes.usage.outputTokens,
-      totalTokens: llmRes.usage.totalTokens,
-      estimatedCost,
-      successCount: 1,
-      errorCount: 0,
-      latencyMs: llmRes.latencyMs,
-    });
-
-    // 16) Output sanitizen
-    const safeAnswer = sanitizeOutput(llmRes.text);
-
-    // 17) Assistant-Message speichern
-    await this.db.query(
-      `INSERT INTO messages(id, conversation_id, role, content)
-       VALUES ($1, $2, $3, $4)`,
-      [randomUUID(), conversationId, 'assistant', safeAnswer],
-    );
-
-    // 18) last_active_at aktualisieren
-    await this.db.query(
-      `UPDATE conversations
-       SET last_active_at = now()
-       WHERE id = $1`,
-      [conversationId],
-    );
-
-    const sources = hits.map((h: VectorSearchRow) => ({
-      title: h.title || undefined,
-      url: h.source_url || undefined,
-      score: Number(h.score),
-      metadata: h.metadata,
-    }));
-    const parts = buildResponseParts({
-      answer: safeAnswer,
-      route: routeDecision.route,
-      sources,
-      products: advisorContext.products,
-      collections: advisorContext.collections,
-      cta: shouldClarifyAdvisor ? undefined : routeDecision.cta,
-    });
-
-    // 19) Erfolgs-Logging
-    logEvent('chat_success', {
-      siteId: dto.siteId,
-      tenantId,
-      conversationId,
-      retrievalTime,
-      llmTime,
-      totalTime: retrievalTime + llmTime,
-      sourcesCount: sources.length,
-      answerLength: safeAnswer.length,
-    });
-
-    return {
-      answer: safeAnswer,
-      parts,
-      sources,
-      sessionId,
-    };
   }
 }

@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
+import { AgentDecision } from '../ai/orchestration/agent-decision.types';
+import { AgentOrchestratorService } from '../ai/orchestration/agent-orchestrator.service';
 import { PrismaService } from '../db/prisma.service';
 import { SiteModulesService } from '../site-modules/site-modules.service';
 import { logEvent } from '../utils/logger';
@@ -32,6 +34,21 @@ type PendingLeadState = ContactDetails & {
   completedLeadId?: string;
 };
 
+type ConversationState = {
+  intent?: 'lead' | 'support' | 'sales' | 'appointment' | 'product_advice' | 'ticket' | null;
+  stage?: 'discovery' | 'qualification' | 'contact_collection' | 'scheduling' | 'completed';
+  topic?: string | null;
+  urgency?: string | null;
+  goal?: 'capture_lead' | 'schedule_call' | 'answer_question' | 'create_ticket' | 'recommend_product' | null;
+  collectedFields?: ContactDetails & {
+    company?: string;
+  };
+  missingFields?: string[];
+  nextExpectedField?: string | null;
+  lastUserIntent?: string | null;
+  updatedAt?: string;
+};
+
 type ConversationMetadataRow = {
   id: string;
   metadata: Record<string, unknown> | null;
@@ -55,6 +72,7 @@ export type ChatAgentDecision = {
   action: OrchestratorAction;
   handled: boolean;
   answer?: string;
+  decision?: AgentDecision;
   leadId?: string;
   contactRequestId?: string;
   cta?: {
@@ -71,6 +89,7 @@ export class ChatAgentOrchestratorService {
     private readonly siteModules: SiteModulesService,
     private readonly leadMailer: LeadMailerService,
     private readonly reportMailer: ReportMailerService,
+    @Optional() private readonly decisionOrchestrator?: AgentOrchestratorService,
   ) {}
 
   async decide(params: {
@@ -81,15 +100,24 @@ export class ChatAgentOrchestratorService {
     message: string;
     history: ChatHistoryEntry[];
   }): Promise<ChatAgentDecision> {
+    const structuredDecision = await this.createStructuredDecision(params);
     const moduleContext = await this.getModuleContext(params.siteId);
     const siteConfig = await this.getSiteConfig(params.siteId);
     const text = normalizeText(params.message);
     const leadIntent = hasLeadIntent(text);
     const scheduleIntent = hasScheduleIntent(text);
     const askedForContact = wasContactRequested(params.history);
-    const pendingLead = await this.loadPendingLeadState(params.conversationId);
+    const metadataState = await this.loadConversationMetadata(params.conversationId);
+    const pendingLead = metadataState.pendingLead;
     const pendingActive = pendingLead?.status === 'pending';
     const contactFromMessage = extractContactDetails(params.message, pendingLead);
+    const conversationState = buildConversationState({
+      previous: metadataState.conversationState,
+      message: params.message,
+      contact: mergeContactDetails(pendingLead, contactFromMessage),
+      leadIntent,
+      scheduleIntent,
+    });
 
     const leadFeatureEnabled =
       moduleContext.leadSalesEnabled ||
@@ -98,7 +126,10 @@ export class ChatAgentOrchestratorService {
       siteConfig.leadCaptureEnabled !== false;
 
     if (!leadFeatureEnabled) {
-      return { action: 'normal_answer', handled: false };
+      await this.saveConversationMetadata(params.conversationId, {
+        conversationState,
+      });
+      return { action: 'normal_answer', handled: false, decision: structuredDecision };
     }
 
     if (
@@ -107,7 +138,17 @@ export class ChatAgentOrchestratorService {
       !leadIntent &&
       !scheduleIntent
     ) {
-      return { action: 'normal_answer', handled: false };
+      await this.saveConversationMetadata(params.conversationId, {
+        conversationState: buildConversationState({
+          previous: conversationState,
+          message: params.message,
+          contact: pendingLead,
+          leadIntent,
+          scheduleIntent,
+          stage: 'completed',
+        }),
+      });
+      return { action: 'normal_answer', handled: false, decision: structuredDecision };
     }
 
     if (
@@ -116,14 +157,45 @@ export class ChatAgentOrchestratorService {
       !scheduleIntent &&
       !(askedForContact && hasContactSignal(contactFromMessage))
     ) {
-      return { action: 'normal_answer', handled: false };
+      await this.saveConversationMetadata(params.conversationId, {
+        conversationState,
+      });
+      const nonLeadDecision = this.mapNonLeadStructuredDecision(structuredDecision);
+      if (nonLeadDecision) {
+        return nonLeadDecision;
+      }
+
+      return { action: 'normal_answer', handled: false, decision: structuredDecision };
     }
 
-    const contact = mergeContactDetails(pendingLead, contactFromMessage);
+    const contact = mergeContactDetailsFromState(
+      mergeContactDetails(pendingLead, contactFromMessage),
+      conversationState,
+    );
     const effectiveScheduleIntent =
-      Boolean(scheduleIntent || pendingLead?.scheduleIntent || pendingLead?.intent === 'schedule');
+      Boolean(
+        scheduleIntent ||
+          pendingLead?.scheduleIntent ||
+          pendingLead?.intent === 'schedule' ||
+          conversationState.intent === 'appointment' ||
+          conversationState.goal === 'schedule_call',
+      );
     const missing = getMissingContactFields(contact);
     const cta = buildLeadCta(moduleContext.ctaLabel, moduleContext.ctaDescription, siteConfig.ctaText);
+    const activeConversationState = buildConversationState({
+      previous: conversationState,
+      message: params.message,
+      contact,
+      leadIntent,
+      scheduleIntent: effectiveScheduleIntent,
+      stage: missing.length > 0
+        ? effectiveScheduleIntent && contact.concern
+          ? 'contact_collection'
+          : 'qualification'
+        : effectiveScheduleIntent
+          ? 'scheduling'
+          : 'completed',
+    });
 
     if (missing.length > 0) {
       const nextState = buildPendingLeadState({
@@ -132,7 +204,10 @@ export class ChatAgentOrchestratorService {
         scheduleIntent: effectiveScheduleIntent,
         startedByIntent: scheduleIntent ? 'schedule' : 'lead',
       });
-      await this.savePendingLeadState(params.conversationId, nextState);
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: nextState,
+        conversationState: activeConversationState,
+      });
       await this.recordLeadAudit({
         tenantId: params.tenantId,
         siteId: params.siteId,
@@ -146,11 +221,23 @@ export class ChatAgentOrchestratorService {
           hasMessage: Boolean(nextState.concern),
         },
       });
+      if (effectiveScheduleIntent) {
+        await this.recordLeadAudit({
+          tenantId: params.tenantId,
+          siteId: params.siteId,
+          action: 'schedule_intent_detected',
+          metadata: {
+            hasConcern: Boolean(nextState.concern),
+            missingFields: missing,
+          },
+        });
+      }
 
       return {
         action: 'ask_for_contact',
         handled: true,
         answer: buildMissingFieldsQuestion(missing, effectiveScheduleIntent),
+        decision: structuredDecision,
         cta,
       };
     }
@@ -162,15 +249,25 @@ export class ChatAgentOrchestratorService {
     });
 
     if (leadCapture.created) {
-      await this.savePendingLeadState(params.conversationId, {
-        ...contact,
-        status: 'completed',
-        intent: effectiveScheduleIntent ? 'schedule' : 'lead',
-        scheduleIntent: effectiveScheduleIntent,
-        startedAt: pendingLead?.startedAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-        completedLeadId: leadCapture.leadId,
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: {
+          ...contact,
+          status: 'completed',
+          intent: effectiveScheduleIntent ? 'schedule' : 'lead',
+          scheduleIntent: effectiveScheduleIntent,
+          startedAt: pendingLead?.startedAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          completedLeadId: leadCapture.leadId,
+        },
+        conversationState: buildConversationState({
+          previous: activeConversationState,
+          message: params.message,
+          contact,
+          leadIntent,
+          scheduleIntent: effectiveScheduleIntent,
+          stage: 'completed',
+        }),
       });
       await this.recordLeadAudit({
         tenantId: params.tenantId,
@@ -195,15 +292,25 @@ export class ChatAgentOrchestratorService {
         recipientEmail: siteConfig.leadNotificationEmail || resolveFallbackRecipient(),
       });
     } else if (pendingLead?.status === 'pending') {
-      await this.savePendingLeadState(params.conversationId, {
-        ...contact,
-        status: 'completed',
-        intent: effectiveScheduleIntent ? 'schedule' : 'lead',
-        scheduleIntent: effectiveScheduleIntent,
-        startedAt: pendingLead.startedAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-        completedLeadId: leadCapture.leadId,
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: {
+          ...contact,
+          status: 'completed',
+          intent: effectiveScheduleIntent ? 'schedule' : 'lead',
+          scheduleIntent: effectiveScheduleIntent,
+          startedAt: pendingLead.startedAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          completedLeadId: leadCapture.leadId,
+        },
+        conversationState: buildConversationState({
+          previous: activeConversationState,
+          message: params.message,
+          contact,
+          leadIntent,
+          scheduleIntent: effectiveScheduleIntent,
+          stage: 'completed',
+        }),
       });
     }
 
@@ -230,10 +337,66 @@ export class ChatAgentOrchestratorService {
         ctaText: siteConfig.ctaText,
         scheduleIntent: effectiveScheduleIntent,
       }),
+      decision: structuredDecision,
       leadId: leadCapture.leadId,
       contactRequestId,
       cta,
     };
+  }
+
+  private async createStructuredDecision(params: {
+    tenantId: string;
+    siteId: string;
+    conversationId: string;
+    sessionId: string;
+    message: string;
+    history: ChatHistoryEntry[];
+  }) {
+    if (!this.decisionOrchestrator) {
+      return undefined;
+    }
+
+    try {
+      return await this.decisionOrchestrator.decide(params);
+    } catch (error) {
+      logEvent('chat_structured_decision_failed', {
+        siteId: params.siteId,
+        tenantId: params.tenantId,
+        conversationId: params.conversationId,
+        error: error instanceof Error ? error.message : 'Unknown decision error',
+      });
+      return undefined;
+    }
+  }
+
+  private mapNonLeadStructuredDecision(decision: AgentDecision | undefined): ChatAgentDecision | null {
+    if (!decision || decision.type === 'answer' || decision.confidence < 0.7) {
+      return null;
+    }
+
+    if (
+      decision.type === 'ask_followup' ||
+      decision.type === 'handoff' ||
+      decision.type === 'create_ticket' ||
+      decision.type === 'recommend_service' ||
+      decision.type === 'trigger_tool'
+    ) {
+      return {
+        action: decision.type === 'handoff' ? 'handoff_to_contact' : 'normal_answer',
+        handled: true,
+        answer: decision.message,
+        decision,
+        cta: decision.requiredFields.includes('email') || decision.requiredFields.includes('phone')
+          ? {
+              action: 'lead_capture',
+              label: 'Kontaktdaten hinterlassen',
+              description: 'Wir nehmen deine Anfrage auf.',
+            }
+          : undefined,
+      };
+    }
+
+    return null;
   }
 
   private async getModuleContext(siteId: string) {
@@ -391,7 +554,10 @@ export class ChatAgentOrchestratorService {
     return id;
   }
 
-  private async loadPendingLeadState(conversationId: string): Promise<PendingLeadState | null> {
+  private async loadConversationMetadata(conversationId: string): Promise<{
+    pendingLead: PendingLeadState | null;
+    conversationState: ConversationState | null;
+  }> {
     const res = await this.db.query<ConversationMetadataRow>(
       `SELECT id, metadata
        FROM conversations
@@ -400,45 +566,61 @@ export class ChatAgentOrchestratorService {
       [conversationId],
     );
     const metadata = asObject(res.rows[0]?.metadata);
-    const pendingLead = asObject(metadata.pendingLead);
-    if (!pendingLead.status) {
-      return null;
-    }
-
     return {
-      status: pendingLead.status === 'completed' ? 'completed' : 'pending',
-      intent: pendingLead.intent === 'schedule' ? 'schedule' : 'lead',
-      scheduleIntent: pendingLead.scheduleIntent === true,
-      name: asString(pendingLead.name) || undefined,
-      email: asString(pendingLead.email) || undefined,
-      phone: asString(pendingLead.phone) || undefined,
-      concern: asString(pendingLead.concern) || undefined,
-      startedAt: asString(pendingLead.startedAt) || undefined,
-      updatedAt: asString(pendingLead.updatedAt) || undefined,
-      completedAt: asString(pendingLead.completedAt) || undefined,
-      completedLeadId: asString(pendingLead.completedLeadId) || undefined,
+      pendingLead: parsePendingLeadState(metadata.pendingLead),
+      conversationState: parseConversationState(metadata.conversationState),
     };
   }
 
-  private async savePendingLeadState(conversationId: string, state: PendingLeadState) {
+  private async loadPendingLeadState(conversationId: string): Promise<PendingLeadState | null> {
+    const metadata = await this.loadConversationMetadata(conversationId);
+    return metadata.pendingLead;
+  }
+
+  private async saveConversationMetadata(
+    conversationId: string,
+    state: {
+      pendingLead?: PendingLeadState;
+      conversationState?: ConversationState;
+    },
+  ) {
+    const patch: Record<string, unknown> = {};
+    if (state.pendingLead) {
+      patch.pendingLead = compactPendingLeadState(state.pendingLead);
+    }
+    if (state.conversationState) {
+      const compactState = compactConversationState(state.conversationState);
+      if (Object.keys(compactState).length > 0) {
+        patch.conversationState = compactState;
+      }
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+
     await this.db.query(
       `UPDATE conversations
-       SET metadata = jsonb_set(
-         COALESCE(metadata, '{}'::jsonb),
-         '{pendingLead}',
-         $2::jsonb,
-         true
-       ),
-       last_active_at = now()
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb,
+           last_active_at = now()
        WHERE id = $1`,
-      [conversationId, JSON.stringify(compactPendingLeadState(state))],
+      [conversationId, JSON.stringify(patch)],
     );
+  }
+
+  private async savePendingLeadState(conversationId: string, state: PendingLeadState) {
+    await this.saveConversationMetadata(conversationId, { pendingLead: state });
   }
 
   private async recordLeadAudit(params: {
     tenantId: string;
     siteId: string;
-    action: 'lead_pending_started' | 'lead_pending_updated' | 'lead_captured';
+    action:
+      | 'lead_pending_started'
+      | 'lead_pending_updated'
+      | 'lead_captured'
+      | 'conversation_state_updated'
+      | 'schedule_intent_detected';
     metadata: Record<string, unknown>;
   }) {
     await this.db.query(
@@ -543,6 +725,77 @@ export class ChatAgentOrchestratorService {
       });
     }
   }
+}
+
+function parsePendingLeadState(value: unknown): PendingLeadState | null {
+  const pendingLead = asObject(value);
+  if (!pendingLead.status) {
+    return null;
+  }
+
+  return {
+    status: pendingLead.status === 'completed' ? 'completed' : 'pending',
+    intent: pendingLead.intent === 'schedule' ? 'schedule' : 'lead',
+    scheduleIntent: pendingLead.scheduleIntent === true,
+    name: asString(pendingLead.name) || undefined,
+    email: asString(pendingLead.email) || undefined,
+    phone: asString(pendingLead.phone) || undefined,
+    concern: asString(pendingLead.concern) || undefined,
+    startedAt: asString(pendingLead.startedAt) || undefined,
+    updatedAt: asString(pendingLead.updatedAt) || undefined,
+    completedAt: asString(pendingLead.completedAt) || undefined,
+    completedLeadId: asString(pendingLead.completedLeadId) || undefined,
+  };
+}
+
+function parseConversationState(value: unknown): ConversationState | null {
+  const state = asObject(value);
+  if (!Object.keys(state).length) {
+    return null;
+  }
+
+  const collectedFields = asObject(state.collectedFields);
+  return {
+    intent: parseConversationIntent(asString(state.intent)),
+    stage: parseConversationStage(asString(state.stage)),
+    topic: asString(state.topic) || null,
+    urgency: asString(state.urgency) || null,
+    goal: parseConversationGoal(asString(state.goal)),
+    collectedFields: {
+      name: asString(collectedFields.name) || undefined,
+      email: asString(collectedFields.email) || undefined,
+      phone: asString(collectedFields.phone) || undefined,
+      concern: asString(collectedFields.concern) || undefined,
+      company: asString(collectedFields.company) || undefined,
+    },
+    missingFields: Array.isArray(state.missingFields)
+      ? state.missingFields.map((entry) => asString(entry)).filter(Boolean)
+      : [],
+    nextExpectedField: asString(state.nextExpectedField) || null,
+    lastUserIntent: asString(state.lastUserIntent) || null,
+    updatedAt: asString(state.updatedAt) || undefined,
+  };
+}
+
+function parseConversationIntent(value: string): ConversationState['intent'] {
+  if (['lead', 'support', 'sales', 'appointment', 'product_advice', 'ticket'].includes(value)) {
+    return value as ConversationState['intent'];
+  }
+  return null;
+}
+
+function parseConversationStage(value: string): ConversationState['stage'] | undefined {
+  if (['discovery', 'qualification', 'contact_collection', 'scheduling', 'completed'].includes(value)) {
+    return value as ConversationState['stage'];
+  }
+  return undefined;
+}
+
+function parseConversationGoal(value: string): ConversationState['goal'] {
+  if (['capture_lead', 'schedule_call', 'answer_question', 'create_ticket', 'recommend_product'].includes(value)) {
+    return value as ConversationState['goal'];
+  }
+  return null;
 }
 
 function normalizeText(value: string) {
@@ -687,6 +940,14 @@ function looksLikeContactOnly(value: string) {
   return withoutPhone.trim().length < 16;
 }
 
+function isPureContactInput(value: string) {
+  return Boolean(
+    value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i) ||
+      value.match(/(?:\+?\d[\d\s()./-]{6,}\d)/) ||
+      extractName(value),
+  );
+}
+
 function cleanExtractedText(value: string) {
   return value
     .replace(/\b(e-mail|email|telefon|handy|nummer|und|meine|mein)\b.*$/i, '')
@@ -704,6 +965,153 @@ function mergeContactDetails(
     phone: current.phone || pendingLead?.phone,
     concern: current.concern || pendingLead?.concern,
   };
+}
+
+function mergeContactDetailsFromState(contact: ContactDetails, state: ConversationState | null): ContactDetails {
+  const collected = state?.collectedFields || {};
+  return {
+    name: contact.name || collected.name,
+    email: contact.email || collected.email,
+    phone: contact.phone || collected.phone,
+    concern: contact.concern || collected.concern || state?.topic || undefined,
+  };
+}
+
+function buildConversationState(params: {
+  previous: ConversationState | null;
+  message: string;
+  contact: ContactDetails;
+  leadIntent: boolean;
+  scheduleIntent: boolean;
+  stage?: ConversationState['stage'];
+}): ConversationState {
+  const text = normalizeText(params.message);
+  const inferredIntent = inferConversationIntent(text, params.leadIntent, params.scheduleIntent);
+  const topic = inferTopic(params.message, params.previous, params.contact, inferredIntent);
+  const urgency = inferUrgency(text) || params.previous?.urgency || null;
+  const currentContact = removeEmptyContactFields(params.contact);
+  const hasContext = Boolean(
+    params.previous ||
+      inferredIntent ||
+      topic ||
+      urgency ||
+      Object.keys(currentContact).length > 0,
+  );
+  const collectedFields = {
+    ...params.previous?.collectedFields,
+    ...currentContact,
+    concern: params.contact.concern || topic || params.previous?.collectedFields?.concern || undefined,
+  };
+  const normalizedContact: ContactDetails = {
+    name: collectedFields.name,
+    email: collectedFields.email,
+    phone: collectedFields.phone,
+    concern: collectedFields.concern,
+  };
+  const missingFields = hasContext ? getMissingContactFields(normalizedContact) : [];
+  const goal = params.scheduleIntent
+    ? 'schedule_call'
+    : params.leadIntent
+      ? 'capture_lead'
+      : params.previous?.goal || (topic ? 'answer_question' : null);
+
+  return {
+    intent: inferredIntent || params.previous?.intent || null,
+    stage:
+      params.stage ||
+      params.previous?.stage ||
+      (params.scheduleIntent ? 'contact_collection' : topic ? 'discovery' : undefined),
+    topic,
+    urgency,
+    goal,
+    collectedFields,
+    missingFields,
+    nextExpectedField: missingFields[0] || null,
+    lastUserIntent: inferredIntent || params.previous?.lastUserIntent || null,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function inferConversationIntent(
+  text: string,
+  leadIntent: boolean,
+  scheduleIntent: boolean,
+): ConversationState['intent'] {
+  if (scheduleIntent) {
+    return 'appointment';
+  }
+  if (/\b(support|kundenservice|kundensupport|hilfe|fragen|faq)\b/i.test(text)) {
+    return 'support';
+  }
+  if (/\b(ticket|schaden|schadensmeldung|reparatur|defekt)\b/i.test(text)) {
+    return 'ticket';
+  }
+  if (/\b(produkt|shop|kaufen|empfehlung|sortiment)\b/i.test(text)) {
+    return 'product_advice';
+  }
+  if (leadIntent || /\b(kundengewinnung|sales|verkauf|angebot|beratung)\b/i.test(text)) {
+    return 'lead';
+  }
+  return null;
+}
+
+function inferTopic(
+  message: string,
+  previous: ConversationState | null,
+  contact: ContactDetails,
+  intent: ConversationState['intent'],
+) {
+  if (contact.concern) {
+    return contact.concern;
+  }
+
+  const value = message.trim();
+  if (!value || isPureContactInput(value) || hasScheduleIntent(normalizeText(value))) {
+    return previous?.topic || previous?.collectedFields?.concern || null;
+  }
+
+  if (intent === 'lead' && isGenericLeadIntent(value)) {
+    return previous?.topic || previous?.collectedFields?.concern || null;
+  }
+
+  if (/\b(support|kundensupport|kundenservice)\b/i.test(value)) {
+    return mergeTopic(previous?.topic, 'Support');
+  }
+
+  if (/\b(ki|künstliche intelligenz|kuenstliche intelligenz|automatisierung|prozesse|kundengewinnung)\b/i.test(value)) {
+    return sanitizeConcern(value);
+  }
+
+  return previous?.topic || previous?.collectedFields?.concern || (intent ? sanitizeConcern(value) : null);
+}
+
+function mergeTopic(previous: string | null | undefined, next: string) {
+  if (!previous) {
+    return next;
+  }
+  if (normalizeText(previous).includes(normalizeText(next))) {
+    return previous;
+  }
+  return `${previous} / ${next}`;
+}
+
+function inferUrgency(text: string) {
+  if (/(sehr groß|sehr gross|dringend|akut|sofort|\bhoch\b|wichtig|eilig)/i.test(text)) {
+    return 'high';
+  }
+  if (/\b(mittel|normal|bald)\b/i.test(text)) {
+    return 'medium';
+  }
+  if (/\b(niedrig|nicht dringend|später|spaeter)\b/i.test(text)) {
+    return 'low';
+  }
+  return null;
+}
+
+function removeEmptyContactFields(contact: ContactDetails): ContactDetails {
+  return Object.fromEntries(
+    Object.entries(contact).filter(([, value]) => value !== undefined && value !== ''),
+  );
 }
 
 function buildPendingLeadState(params: {
@@ -732,6 +1140,42 @@ function compactPendingLeadState(state: PendingLeadState) {
   );
 }
 
+function compactConversationState(state: ConversationState) {
+  const collectedFields = Object.fromEntries(
+    Object.entries(state.collectedFields || {}).filter(([, value]) => value !== undefined && value !== ''),
+  );
+  const hasSemanticState = Boolean(
+    state.intent ||
+      state.stage ||
+      state.topic ||
+      state.urgency ||
+      state.goal ||
+      Object.keys(collectedFields).length > 0 ||
+      state.lastUserIntent,
+  );
+  if (!hasSemanticState) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries({
+      ...state,
+      collectedFields,
+    }).filter(([, value]) => {
+      if (value === undefined || value === null || value === '') {
+        return false;
+      }
+      if (Array.isArray(value)) {
+        return value.length > 0;
+      }
+      if (typeof value === 'object') {
+        return Object.keys(value).length > 0;
+      }
+      return true;
+    }),
+  );
+}
+
 function getMissingContactFields(contact: ContactDetails) {
   const missing: string[] = [];
   if (!contact.concern) {
@@ -753,7 +1197,7 @@ function buildMissingFieldsQuestion(missing: string[], scheduleIntent: boolean) 
 
   if (missing.includes('name') && missing.includes('contact')) {
     return scheduleIntent
-      ? 'Gerne. Wie heißt du und wie kann man dich für den Termin am besten erreichen - per E-Mail oder Telefon?'
+      ? 'Perfekt. Wie können wir dich am besten erreichen - per E-Mail oder Telefon?'
       : 'Klar, gerne. Wie heißt du und wie kann man dich am besten erreichen - per E-Mail oder Telefon?';
   }
 

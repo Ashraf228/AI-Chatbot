@@ -48,6 +48,16 @@ function createHarness({
         return { rows: [] };
       }
 
+      if (/UPDATE conversations\s+SET metadata = COALESCE\(metadata/i.test(sql)) {
+        const conversation = conversations.get(params[0]) || { metadata: {} };
+        conversation.metadata = {
+          ...conversation.metadata,
+          ...JSON.parse(params[1]),
+        };
+        conversations.set(params[0], conversation);
+        return { rows: [] };
+      }
+
       if (/SELECT id\s+FROM widget_leads/i.test(sql)) {
         const [siteId, sessionId, email, phone] = params;
         const existing = leads.find((lead) =>
@@ -244,6 +254,59 @@ test('ChatAgentOrchestratorService marks schedule intent and prepares contact ha
   assert.equal(leads.length, 1);
   assert.equal(contactRequests.length, 1);
   assert.equal(contactRequests[0].preferredChannel, 'email');
+});
+
+test('ChatAgentOrchestratorService keeps context when appointment intent follows discovery', async () => {
+  const { decide, conversations, auditLogs } = createHarness();
+
+  await decide('Ich brauche eine KI für mein Unternehmen');
+  await decide('um Support');
+  await decide('sehr groß');
+  const result = await decide('einen termin');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'ask_for_contact');
+  assert.doesNotMatch(result.answer, /Worum geht es genau/i);
+  assert.match(result.answer, /E-Mail oder Telefon/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.scheduleIntent, true);
+  assert.match(conversations.get('conversation-1').metadata.pendingLead.concern, /KI/i);
+  assert.match(conversations.get('conversation-1').metadata.pendingLead.concern, /Support/i);
+  assert.equal(conversations.get('conversation-1').metadata.conversationState.goal, 'schedule_call');
+  assert.equal(conversations.get('conversation-1').metadata.conversationState.intent, 'appointment');
+  assert.equal(conversations.get('conversation-1').metadata.conversationState.urgency, 'high');
+  assert.ok(auditLogs.some((entry) => entry.action === 'schedule_intent_detected'));
+});
+
+test('ChatAgentOrchestratorService returns schedule link when appointment lead is complete', async () => {
+  const { decide, leads, contactRequests } = createHarness({
+    scheduleUrl: 'https://example.com/book',
+  });
+
+  await decide('Ich brauche eine KI für mein Unternehmen');
+  await decide('um Support');
+  const contactReply = await decide('einen termin');
+  const nameReply = await decide('max@example.de');
+  const finalReply = await decide('Max Mustermann');
+
+  assert.match(contactReply.answer, /E-Mail oder Telefon/i);
+  assert.match(nameReply.answer, /Wie heißt du/i);
+  assert.equal(finalReply.action, 'suggest_schedule');
+  assert.match(finalReply.answer, /https:\/\/example.com\/book/);
+  assert.equal(leads.length, 1);
+  assert.equal(contactRequests.length, 1);
+});
+
+test('ChatAgentOrchestratorService asks for contact when appointment has context but no schedule link', async () => {
+  const { decide, leads } = createHarness();
+
+  await decide('Ich brauche eine KI für mein Unternehmen');
+  await decide('um Support');
+  const result = await decide('einen termin');
+
+  assert.equal(result.action, 'ask_for_contact');
+  assert.doesNotMatch(result.answer, /Worum geht es genau/i);
+  assert.match(result.answer, /E-Mail oder Telefon/i);
+  assert.equal(leads.length, 0);
 });
 
 test('ChatAgentOrchestratorService deduplicates repeated lead data in the same session', async () => {

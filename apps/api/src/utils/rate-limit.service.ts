@@ -24,4 +24,8 @@ export class RateLimitService {
 
     return { allowed: count <= limit, used: count };
   }
+
+  async ping(): Promise<'PONG' | string> {
+    return this.redis.ping();
+  }
 }

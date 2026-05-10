@@ -14,6 +14,13 @@ type ConversationListRow = {
   created_at: string;
   last_active_at: string;
   message_count: string;
+  last_message: string | null;
+  last_role: string | null;
+  has_lead: boolean;
+  has_handoff: boolean;
+  has_ticket: boolean;
+  tool_count: string;
+  decision_type: string | null;
 };
 
 type ConversationRow = {
@@ -77,7 +84,47 @@ export class ConversationsController {
         c.session_id,
         c.created_at,
         c.last_active_at,
-        COUNT(m.id) AS message_count
+        COUNT(m.id) AS message_count,
+        (
+          SELECT m2.content
+          FROM messages m2
+          WHERE m2.conversation_id = c.id
+          ORDER BY m2.created_at DESC
+          LIMIT 1
+        ) AS last_message,
+        (
+          SELECT m2.role
+          FROM messages m2
+          WHERE m2.conversation_id = c.id
+          ORDER BY m2.created_at DESC
+          LIMIT 1
+        ) AS last_role,
+        EXISTS (SELECT 1 FROM widget_leads wl WHERE wl.site_id = c.site_id AND wl.session_id = c.session_id) AS has_lead,
+        EXISTS (
+          SELECT 1 FROM agent_runs ar
+          WHERE ar.metadata->>'conversationId' = c.id
+            AND (ar.agent_key = 'handoff' OR ar.metadata->>'decisionType' = 'handoff')
+        ) AS has_handoff,
+        EXISTS (
+          SELECT 1 FROM agent_tickets at
+          JOIN agent_runs ar ON ar.id = at.agent_run_id
+          WHERE at.site_id = c.site_id
+            AND ar.metadata->>'conversationId' = c.id
+        ) AS has_ticket,
+        (
+          SELECT COUNT(*)::text
+          FROM tool_invocations ti
+          JOIN agent_runs ar ON ar.id = ti.agent_run_id
+          WHERE ar.metadata->>'conversationId' = c.id
+        ) AS tool_count,
+        (
+          SELECT ar.metadata->>'decisionType'
+          FROM agent_runs ar
+          WHERE ar.metadata->>'conversationId' = c.id
+            AND ar.metadata ? 'decisionType'
+          ORDER BY ar.created_at DESC
+          LIMIT 1
+        ) AS decision_type
       FROM conversations c
       LEFT JOIN messages m ON m.conversation_id = c.id
       ${where}

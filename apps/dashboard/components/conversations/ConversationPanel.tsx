@@ -5,6 +5,7 @@ import { Button } from "../shared/Button";
 import { EmptyState } from "../shared/EmptyState";
 import { ErrorState } from "../shared/ErrorState";
 import { Input } from "../shared/Input";
+import { Select } from "../shared/Select";
 
 type Conversation = {
   id: string;
@@ -14,6 +15,13 @@ type Conversation = {
   created_at: string;
   last_active_at: string;
   message_count: string;
+  last_message?: string;
+  last_role?: string;
+  has_lead?: boolean;
+  has_handoff?: boolean;
+  has_ticket?: boolean;
+  tool_count?: string;
+  decision_type?: string | null;
 };
 
 type Message = {
@@ -53,6 +61,8 @@ export function ConversationPanel({
   const [selectedId, setSelectedId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
 
   async function loadConversations(currentSiteId = siteId) {
     setErr(null);
@@ -148,6 +158,21 @@ export function ConversationPanel({
     loadConversations(initialSiteId);
   }, [initialSiteId, lockedSiteId]);
 
+  const filteredItems = items.filter((item) => {
+    if (filter === "with_lead" && !item.has_lead) return false;
+    if (filter === "handoff" && !item.has_handoff) return false;
+    if (filter === "ticket" && !item.has_ticket) return false;
+    if (filter === "unanswered") {
+      if (item.last_role !== "user") return false;
+    }
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return [item.site_id, item.session_id, item.last_message || "", item.decision_type || ""]
+      .join(" ")
+      .toLowerCase()
+      .includes(query);
+  });
+
   return (
     <div className="dashboard-stack">
       <div className="dashboard-card">
@@ -164,6 +189,26 @@ export function ConversationPanel({
             Chats exportieren
           </Button>
         </div>
+        <div className="dashboard-grid dashboard-grid--two" style={{ gap: 12 }}>
+          <label className="dashboard-field">
+            <span className="dashboard-field-label">Status filtern</span>
+            <Select value={filter} onChange={(event) => setFilter(event.target.value)}>
+              <option value="all">Alle Chats</option>
+              <option value="with_lead">Mit Anfrage</option>
+              <option value="handoff">Handoff</option>
+              <option value="ticket">Ticket erstellt</option>
+              <option value="unanswered">Unbeantwortet</option>
+            </Select>
+          </label>
+          <label className="dashboard-field">
+            <span className="dashboard-field-label">Suche</span>
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Nachricht, Session, Entscheidung"
+            />
+          </label>
+        </div>
 
         {lockedSiteId ? (
           <p className="dashboard-copy dashboard-copy--muted">
@@ -178,11 +223,11 @@ export function ConversationPanel({
         <div className="dashboard-card">
           <h2 className="dashboard-card-title">Chats</h2>
 
-          {items.length === 0 ? (
+          {filteredItems.length === 0 ? (
             <EmptyState title="Keine Chats gefunden." />
           ) : (
             <div className="dashboard-conversation-list">
-              {items.map((conv) => (
+              {filteredItems.map((conv) => (
                 <div key={conv.id}>
                   <button
                     onClick={() => loadMessages(conv.id)}
@@ -193,6 +238,16 @@ export function ConversationPanel({
                     </div>
                     <div className="dashboard-meta">session: {conv.session_id.slice(0, 8)}...</div>
                     <div className="dashboard-meta">Nachrichten: {conv.message_count}</div>
+                    {conv.last_message ? (
+                      <div className="dashboard-meta dashboard-breakword">Letzte Nachricht: {conv.last_message}</div>
+                    ) : null}
+                    <div className="dashboard-inline dashboard-wrap" style={{ gap: 6, marginTop: 8 }}>
+                      {conv.has_lead ? <span className="dashboard-status dashboard-status--success">Anfrage</span> : null}
+                      {conv.has_handoff ? <span className="dashboard-status dashboard-status--error">Handoff</span> : null}
+                      {conv.has_ticket ? <span className="dashboard-badge">Ticket</span> : null}
+                      {Number(conv.tool_count || 0) > 0 ? <span className="dashboard-badge">Aktionen: {conv.tool_count}</span> : null}
+                      {conv.decision_type ? <span className="dashboard-badge">{conv.decision_type}</span> : null}
+                    </div>
                     <div className="dashboard-meta dashboard-meta--subtle">
                       zuletzt aktiv: {new Date(conv.last_active_at).toLocaleString()}
                     </div>

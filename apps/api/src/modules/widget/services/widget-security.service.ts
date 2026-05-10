@@ -1,7 +1,7 @@
 import { ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../../db/prisma.service';
 import { RateLimitService } from '../../../utils/rate-limit.service';
-import { isDomainAllowed } from '../../../utils/cors';
+import { isDevelopmentOrigin, isDomainAllowed, resolveRequestOrigin } from '../../../utils/cors';
 import { WidgetConfigService } from './widget-config.service';
 
 @Injectable()
@@ -12,8 +12,9 @@ export class WidgetSecurityService {
     private readonly widgetConfigService: WidgetConfigService,
   ) {}
 
-  async isAllowedOrigin(siteKey: string, origin?: string) {
-    if (!origin) {
+  async isAllowedOrigin(siteKey: string, origin?: string, referer?: string) {
+    const requestOrigin = resolveRequestOrigin(origin, referer);
+    if (!requestOrigin) {
       return false;
     }
 
@@ -23,7 +24,11 @@ export class WidgetSecurityService {
       [site.id],
     );
 
-    return isDomainAllowed(origin, res.rows[0]?.allowed_domains || []);
+    if (isDevelopmentOrigin(requestOrigin)) {
+      return true;
+    }
+
+    return isDomainAllowed(requestOrigin, res.rows[0]?.allowed_domains || []);
   }
 
   async checkRateLimit(key: string, limit = 60, windowMs = 60_000) {
@@ -41,8 +46,8 @@ export class WidgetSecurityService {
     }
   }
 
-  async enforceOrigin(siteKey: string, origin?: string) {
-    const allowed = await this.isAllowedOrigin(siteKey, origin);
+  async enforceOrigin(siteKey: string, origin?: string, referer?: string) {
+    const allowed = await this.isAllowedOrigin(siteKey, origin, referer);
     if (!allowed) {
       throw new ForbiddenException('Origin not allowed');
     }
