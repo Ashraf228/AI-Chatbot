@@ -200,6 +200,30 @@ test('ChatAgentOrchestratorService lets normal chat continue untouched', async (
   assert.deepEqual(conversations.get('conversation-1').metadata, {});
 });
 
+test('ChatAgentOrchestratorService answers greetings without starting lead capture', async () => {
+  const { decide, leads, conversations } = createHarness();
+
+  const result = await decide('hallo');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /Wobei kann ich dich unterstützen/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+});
+
+test('ChatAgentOrchestratorService treats greeting typos as greeting', async () => {
+  const { decide, leads, conversations } = createHarness();
+
+  const result = await decide('hsallo');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /Wobei kann ich dich unterstützen/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+});
+
 test('ChatAgentOrchestratorService starts a pending lead and asks for the concern first', async () => {
   const { decide, conversations, auditLogs } = createHarness();
 
@@ -237,6 +261,75 @@ test('ChatAgentOrchestratorService captures a lead over multiple messages', asyn
     auditLogs.some((entry) => JSON.stringify(entry.metadata).includes('KI für Kundenanfragen')),
     false,
   );
+});
+
+test('ChatAgentOrchestratorService pauses pending lead on confusion instead of repeating contact prompt', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  await decide('Ich brauche Beratung');
+  const result = await decide('was soll das');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /zu früh nach Kontaktdaten/i);
+  assert.doesNotMatch(result.answer, /E-Mail oder Telefon/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'paused');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.leadCapturePaused, true);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService does not repeat contact question after refusal', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  await decide('Ich brauche Beratung');
+  await decide('Es geht um KI für Kundenanfragen');
+  const result = await decide('nein');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.doesNotMatch(result.answer, /E-Mail oder Telefon/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'paused');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.pauseReason, 'refusal');
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService qualifies broad AI need before asking for contact', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  const result = await decide('Ich brauche eine KI für mein Unternehmen');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /Support, Kundengewinnung oder interne Prozesse/i);
+  assert.doesNotMatch(result.answer, /E-Mail oder Telefon/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.conversationState.stage, 'qualification');
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService allows offer intent to enter lead flow', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  const result = await decide('Ich möchte ein Angebot');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'ask_for_contact');
+  assert.match(result.answer, /Worum geht es genau/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService captures when user provides email in pending lead flow', async () => {
+  const { decide, leads } = createHarness();
+
+  await decide('Ich brauche Beratung');
+  await decide('Es geht um KI für Kundenanfragen');
+  await decide('Max Mustermann');
+  const result = await decide('max@example.de');
+
+  assert.equal(result.action, 'capture_lead');
+  assert.equal(leads.length, 1);
+  assert.equal(leads[0].email, 'max@example.de');
 });
 
 test('ChatAgentOrchestratorService marks schedule intent and prepares contact handoff', async () => {
@@ -351,6 +444,33 @@ test('ChatAgentOrchestratorService turns preferred phone channel into a concrete
   assert.match(phoneChannelReply.answer, /Telefonnummer/i);
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.preferredContact, 'phone');
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.scheduleIntent, true);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService stops lead prompt after one unanswered contact request', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  await decide('Ich brauche Beratung');
+  await decide('Es geht um KI für Kundenanfragen');
+  const result = await decide('ok');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.doesNotMatch(result.answer, /E-Mail oder Telefon/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'paused');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.pauseReason, 'prompt_limit');
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService recovers from bot complaint without capture', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  await decide('Ich brauche Beratung');
+  const result = await decide('du wiederholst dich');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /normal weiterhelfen/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'paused');
   assert.equal(leads.length, 0);
 });
 

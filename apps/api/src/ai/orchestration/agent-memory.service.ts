@@ -145,6 +145,10 @@ function extractCompany(text: string) {
 }
 
 function extractConcern(text: string) {
+  if (hasGreetingIntent(text) || hasRecoveryIntent(text) || hasRefusalIntent(text)) {
+    return undefined;
+  }
+
   const stripped = text
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '')
     .replace(/(?:\+?\d[\d\s()./-]{6,}\d)/g, '')
@@ -158,6 +162,23 @@ function extractConcern(text: string) {
   }
 
   return stripped;
+}
+
+function hasGreetingIntent(text: string) {
+  const normalized = text.toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}\s]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  return /^(h+a+l+o+|hsallo|hi+|hey+|guten tag|servus|moin|moinsen|tach|hello)$/i.test(normalized);
+}
+
+function hasRecoveryIntent(text: string) {
+  return /\b(was soll das|warum fragst du|warum|hä|hae|ich verstehe nicht|verstehe ich nicht|du wiederholst dich|wiederholst dich|nerv nicht|nervt|komisch|quatsch|unsinn)\b/i.test(
+    text.toLowerCase().normalize('NFKC'),
+  );
+}
+
+function hasRefusalIntent(text: string) {
+  return /\b(nein|nope|kein interesse|keine interesse|stop|stopp|lass das|nicht kontaktieren|keine daten|will ich nicht|möchte ich nicht|moechte ich nicht)\b/i.test(
+    text.toLowerCase().normalize('NFKC'),
+  );
 }
 
 function inferUrgency(text: string): AgentMemory['urgency'] | undefined {

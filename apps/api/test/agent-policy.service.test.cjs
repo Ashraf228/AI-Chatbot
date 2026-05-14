@@ -45,6 +45,33 @@ test('AgentPolicyService returns answer decision for normal informational chat',
   assert.ok(decision.suggestedTools.includes('query_knowledge'));
 });
 
+test('AgentPolicyService treats greeting as answer without lead tools', () => {
+  const policy = new AgentPolicyService();
+
+  const decision = policy.decide(createPolicyContext('hsallo'));
+
+  assert.equal(decision.type, 'answer');
+  assert.equal(decision.nextAction, 'continue_answer');
+  assert.deepEqual(decision.suggestedTools, []);
+  assert.match(decision.message, /Wobei kann ich dich/i);
+});
+
+test('AgentPolicyService recovers from confused pending lead without contact tool', () => {
+  const policy = new AgentPolicyService();
+
+  const decision = policy.decide(createPolicyContext('was soll das', {
+    memory: {
+      pendingLeadStatus: 'pending',
+      concern: 'KI Beratung',
+    },
+  }));
+
+  assert.equal(decision.type, 'ask_followup');
+  assert.equal(decision.nextAction, 'ask_for_missing_context');
+  assert.deepEqual(decision.suggestedTools, []);
+  assert.doesNotMatch(decision.message, /Wie koennen wir dich/i);
+});
+
 test('AgentPolicyService asks follow-up for incomplete lead intent', () => {
   const policy = new AgentPolicyService();
 

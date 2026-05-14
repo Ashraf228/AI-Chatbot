@@ -16,6 +16,32 @@ export class AgentPolicyService {
     const hasContact = Boolean(collectedFields.email || collectedFields.phone);
     const leadEnabled = isLeadEnabled(context);
 
+    if (hasGreetingIntent(text)) {
+      return this.buildDecision({
+        type: 'answer',
+        confidence: 0.86,
+        reason: 'User greeted the assistant without a business or contact intent.',
+        message: 'Hi, ich helfe dir bei Fragen zu Websites, KI-Automatisierung, Support-Systemen oder individuellen Softwareloesungen. Wobei kann ich dich unterstuetzen?',
+        collectedFields,
+        requiredFields: [],
+        suggestedTools: [],
+        nextAction: 'continue_answer',
+      });
+    }
+
+    if (hasRecoveryIntent(text) || hasRefusalIntent(text)) {
+      return this.buildDecision({
+        type: 'ask_followup',
+        confidence: 0.84,
+        reason: 'User is confused, annoyed, or declined contact capture.',
+        message: 'Du hast recht, ich frage gerade zu frueh nach Kontaktdaten. Ich kann dir auch erst einmal normal weiterhelfen. Geht es bei dir eher um Website, KI-Automatisierung, Support oder Beratung?',
+        collectedFields,
+        requiredFields: ['intent'],
+        suggestedTools: [],
+        nextAction: 'ask_for_missing_context',
+      });
+    }
+
     if (hasExplicitToolIntent(text)) {
       return this.buildDecision({
         type: 'trigger_tool',
@@ -236,6 +262,19 @@ function hasExplicitToolIntent(text: string) {
 
 function hasLowConfidence(text: string) {
   return text.length > 0 && text.length < 12 && !/\b(ja|nein|ok|okay|termin|support|angebot)\b/i.test(text);
+}
+
+function hasGreetingIntent(text: string) {
+  const normalized = text.replace(/[^\p{L}\p{N}\s]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  return /^(h+a+l+o+|hsallo|hi+|hey+|guten tag|servus|moin|moinsen|tach|hello)$/i.test(normalized);
+}
+
+function hasRecoveryIntent(text: string) {
+  return /\b(was soll das|warum fragst du|warum|hä|hae|ich verstehe nicht|verstehe ich nicht|du wiederholst dich|wiederholst dich|nerv nicht|nervt|komisch|quatsch|unsinn)\b/i.test(text);
+}
+
+function hasRefusalIntent(text: string) {
+  return /\b(nein|nope|kein interesse|keine interesse|stop|stopp|lass das|nicht kontaktieren|keine daten|will ich nicht|möchte ich nicht|moechte ich nicht)\b/i.test(text);
 }
 
 function buildLeadFollowup(requiredFields: string[]) {

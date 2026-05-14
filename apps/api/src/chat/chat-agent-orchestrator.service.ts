@@ -25,9 +25,14 @@ type LeadCaptureResult = {
 };
 
 type PendingLeadState = ContactDetails & {
-  status?: 'pending' | 'completed';
+  status?: 'pending' | 'completed' | 'paused';
   intent?: 'lead' | 'schedule';
   scheduleIntent?: boolean;
+  leadPromptCount?: number;
+  lastLeadPromptAt?: string;
+  leadCapturePaused?: boolean;
+  pausedAt?: string;
+  pauseReason?: string;
   startedAt?: string;
   updatedAt?: string;
   completedAt?: string;
@@ -112,6 +117,9 @@ export class ChatAgentOrchestratorService {
     const pendingLead = metadataState.pendingLead;
     const pendingActive = pendingLead?.status === 'pending';
     const contactFromMessage = extractContactDetails(params.message, pendingLead);
+    const greetingIntent = hasGreetingIntent(text);
+    const recoveryIntent = hasRecoveryIntent(text);
+    const refusalIntent = hasRefusalIntent(text);
     const conversationState = buildConversationState({
       previous: metadataState.conversationState,
       message: params.message,
@@ -126,11 +134,51 @@ export class ChatAgentOrchestratorService {
       siteConfig.setupGoal === 'appointments' ||
       siteConfig.leadCaptureEnabled !== false;
 
+    if ((pendingActive || askedForContact) && shouldPauseLeadCapture(text, contactFromMessage)) {
+      const pausedState = buildPausedLeadState({
+        previous: pendingLead,
+        contact: mergeContactDetails(pendingLead, contactFromMessage),
+        reason: recoveryIntent ? 'recovery' : refusalIntent ? 'refusal' : greetingIntent ? 'greeting' : 'unclear',
+      });
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: pausedState,
+        conversationState: buildConversationState({
+          previous: conversationState,
+          message: params.message,
+          contact: pausedState,
+          leadIntent: false,
+          scheduleIntent: false,
+          stage: 'discovery',
+        }),
+      });
+
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: recoveryIntent || refusalIntent
+          ? buildRecoveryAnswer()
+          : buildGreetingAnswer(),
+        decision: structuredDecision,
+      };
+    }
+
     if (!leadFeatureEnabled) {
       await this.saveConversationMetadata(params.conversationId, {
         conversationState,
       });
       return { action: 'normal_answer', handled: false, decision: structuredDecision };
+    }
+
+    if (!pendingActive && greetingIntent && !leadIntent && !scheduleIntent && !hasContactSignal(contactFromMessage)) {
+      await this.saveConversationMetadata(params.conversationId, {
+        conversationState,
+      });
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildGreetingAnswer(),
+        decision: structuredDecision,
+      };
     }
 
     if (
@@ -187,6 +235,17 @@ export class ChatAgentOrchestratorService {
     );
     const missing = getMissingContactFields(contact);
     const cta = buildLeadCta(moduleContext.ctaLabel, moduleContext.ctaDescription, siteConfig.ctaText);
+    const leadPromptCount = pendingLead?.leadPromptCount || 0;
+    const shouldAskForContactDetails = canAskForLeadDetails({
+      missing,
+      contact,
+      pendingActive,
+      leadIntent,
+      scheduleIntent: effectiveScheduleIntent,
+      contactFromMessage,
+      leadPromptCount,
+      text,
+    });
     const activeConversationState = buildConversationState({
       previous: conversationState,
       message: params.message,
@@ -203,6 +262,55 @@ export class ChatAgentOrchestratorService {
     });
 
     if (missing.length > 0) {
+      if (
+        !pendingActive &&
+        !effectiveScheduleIntent &&
+        shouldQualifyBeforeContact(text, contact) &&
+        missing.includes('name') &&
+        missing.includes('contact')
+      ) {
+        await this.saveConversationMetadata(params.conversationId, {
+          conversationState: {
+            ...activeConversationState,
+            stage: 'qualification',
+            nextExpectedField: 'topic',
+          },
+        });
+
+        return {
+          action: 'normal_answer',
+          handled: true,
+          answer: buildBusinessNeedQualificationAnswer(),
+          decision: structuredDecision,
+        };
+      }
+
+      if (!shouldAskForContactDetails) {
+        const pausedState = buildPausedLeadState({
+          previous: pendingLead,
+          contact,
+          reason: leadPromptCount >= 1 ? 'prompt_limit' : 'weak_intent',
+        });
+        await this.saveConversationMetadata(params.conversationId, {
+          pendingLead: pausedState,
+          conversationState: buildConversationState({
+            previous: activeConversationState,
+            message: params.message,
+            contact,
+            leadIntent: false,
+            scheduleIntent: false,
+            stage: 'discovery',
+          }),
+        });
+
+        return {
+          action: 'normal_answer',
+          handled: true,
+          answer: buildConsultingResetAnswer(),
+          decision: structuredDecision,
+        };
+      }
+
       const nextState = buildPendingLeadState({
         previous: pendingLead,
         contact,
@@ -249,6 +357,23 @@ export class ChatAgentOrchestratorService {
         ),
         decision: structuredDecision,
         cta,
+      };
+    }
+
+    if (!hasLeadCaptureQuality(contact)) {
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: buildPausedLeadState({
+          previous: pendingLead,
+          contact,
+          reason: 'weak_lead_quality',
+        }),
+        conversationState: activeConversationState,
+      });
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildConsultingResetAnswer(),
+        decision: structuredDecision,
       };
     }
 
@@ -744,7 +869,11 @@ function parsePendingLeadState(value: unknown): PendingLeadState | null {
   }
 
   return {
-    status: pendingLead.status === 'completed' ? 'completed' : 'pending',
+    status: pendingLead.status === 'completed'
+      ? 'completed'
+      : pendingLead.status === 'paused'
+        ? 'paused'
+        : 'pending',
     intent: pendingLead.intent === 'schedule' ? 'schedule' : 'lead',
     scheduleIntent: pendingLead.scheduleIntent === true,
     name: asString(pendingLead.name) || undefined,
@@ -752,6 +881,13 @@ function parsePendingLeadState(value: unknown): PendingLeadState | null {
     phone: asString(pendingLead.phone) || undefined,
     preferredContact: parsePreferredContact(asString(pendingLead.preferredContact)),
     concern: asString(pendingLead.concern) || undefined,
+    leadPromptCount: Number.isFinite(Number(pendingLead.leadPromptCount))
+      ? Number(pendingLead.leadPromptCount)
+      : undefined,
+    lastLeadPromptAt: asString(pendingLead.lastLeadPromptAt) || undefined,
+    leadCapturePaused: pendingLead.leadCapturePaused === true,
+    pausedAt: asString(pendingLead.pausedAt) || undefined,
+    pauseReason: asString(pendingLead.pauseReason) || undefined,
     startedAt: asString(pendingLead.startedAt) || undefined,
     updatedAt: asString(pendingLead.updatedAt) || undefined,
     completedAt: asString(pendingLead.completedAt) || undefined,
@@ -830,7 +966,7 @@ function asString(value: unknown) {
 }
 
 function hasLeadIntent(text: string) {
-  return /\b(beratung|beraten|kontakt|kontaktiert|angebot|kostet|kosten|preis|preise|interesse|interessiere|rueckruf|rückruf|anrufen|rufen sie|melden|anfrage|demo|erstgespraech|erstgespräch)\b/i.test(
+  return /\b(beratung|beraten|kontakt|kontaktiert|angebot|kostet|kosten|preis|preise|interesse|interessiere|rueckruf|rückruf|anrufen|rufen sie|melden|anfrage|demo|erstgespraech|erstgespräch|lösung|loesung|brauche|benötige|benoetige)\b/i.test(
     text,
   );
 }
@@ -854,6 +990,52 @@ function wasContactRequested(history: ChatHistoryEntry[]) {
 
 function hasContactSignal(contact: ContactDetails) {
   return Boolean(contact.name || contact.email || contact.phone);
+}
+
+function hasGreetingIntent(text: string) {
+  const normalized = text.replace(/[^\p{L}\p{N}\s]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return false;
+  }
+
+  return /^(h+a+l+o+|hsallo|hi+|hey+|guten tag|servus|moin|moinsen|tach|hello)$/i.test(normalized);
+}
+
+function hasRecoveryIntent(text: string) {
+  return /\b(was soll das|warum fragst du|warum|hä|hae|ich verstehe nicht|verstehe ich nicht|du wiederholst dich|wiederholst dich|nerv nicht|nervt|komisch|quatsch|unsinn)\b/i.test(
+    text,
+  );
+}
+
+function hasRefusalIntent(text: string) {
+  return /\b(nein|nope|kein interesse|keine interesse|stop|stopp|lass das|nicht kontaktieren|keine daten|will ich nicht|möchte ich nicht|moechte ich nicht)\b/i.test(
+    text,
+  );
+}
+
+function hasBusinessNeedSignal(text: string) {
+  return /\b(ki|künstliche intelligenz|kuenstliche intelligenz|automatisierung|support|kundenservice|kundengewinnung|website|webseite|software|unternehmen|firma|projekt|prozess|prozesse|angebot|beratung|lösung|loesung|preis|kosten|termin|rückruf|rueckruf|demo)\b/i.test(
+    text,
+  );
+}
+
+function isUnclearInput(text: string) {
+  const compact = text.replace(/[^\p{L}\p{N}]+/gu, '').trim();
+  if (!compact) {
+    return true;
+  }
+  if (compact.length < 4 && !/\b(ki|ja|ok)\b/i.test(compact)) {
+    return true;
+  }
+  return /^[a-z]{4,10}$/i.test(compact) && !hasBusinessNeedSignal(text) && !hasGreetingIntent(text);
+}
+
+function shouldPauseLeadCapture(text: string, contact: ContactDetails) {
+  if (hasContactSignal(contact) || contact.preferredContact) {
+    return false;
+  }
+
+  return hasRecoveryIntent(text) || hasRefusalIntent(text) || hasGreetingIntent(text) || isUnclearInput(text);
 }
 
 function extractContactDetails(message: string, pendingLead: PendingLeadState | null): ContactDetails {
@@ -1178,6 +1360,30 @@ function buildPendingLeadState(params: {
     phone: params.contact.phone,
     concern: params.contact.concern,
     preferredContact: params.contact.preferredContact,
+    leadPromptCount: (params.previous?.leadPromptCount || 0) + 1,
+    lastLeadPromptAt: now,
+    leadCapturePaused: false,
+    startedAt: params.previous?.startedAt || now,
+    updatedAt: now,
+  };
+}
+
+function buildPausedLeadState(params: {
+  previous: PendingLeadState | null;
+  contact: ContactDetails;
+  reason: string;
+}): PendingLeadState {
+  const now = new Date().toISOString();
+  return {
+    ...params.contact,
+    status: 'paused',
+    intent: params.previous?.intent || 'lead',
+    scheduleIntent: Boolean(params.previous?.scheduleIntent),
+    leadPromptCount: params.previous?.leadPromptCount || 0,
+    lastLeadPromptAt: params.previous?.lastLeadPromptAt,
+    leadCapturePaused: true,
+    pauseReason: params.reason,
+    pausedAt: now,
     startedAt: params.previous?.startedAt || now,
     updatedAt: now,
   };
@@ -1239,6 +1445,75 @@ function getMissingContactFields(contact: ContactDetails) {
   return missing;
 }
 
+function canAskForLeadDetails(params: {
+  missing: string[];
+  contact: ContactDetails;
+  pendingActive: boolean;
+  leadIntent: boolean;
+  scheduleIntent: boolean;
+  contactFromMessage: ContactDetails;
+  leadPromptCount: number;
+  text: string;
+}) {
+  if (params.missing.length === 0) {
+    return true;
+  }
+
+  if (hasRecoveryIntent(params.text) || hasRefusalIntent(params.text) || hasGreetingIntent(params.text)) {
+    return false;
+  }
+
+  if (
+    params.leadPromptCount >= 1 &&
+    !hasContactSignal(params.contactFromMessage) &&
+    !params.contactFromMessage.preferredContact &&
+    !hasBusinessNeedSignal(params.text)
+  ) {
+    return false;
+  }
+
+  if (params.pendingActive && hasLeadProgressSignal(params.contactFromMessage, params.text)) {
+    return true;
+  }
+
+  if (params.scheduleIntent) {
+    return Boolean(params.contact.concern || hasBusinessNeedSignal(params.text));
+  }
+
+  if (params.leadIntent) {
+    return hasBusinessNeedSignal(params.text) || Boolean(params.contact.concern);
+  }
+
+  return false;
+}
+
+function hasLeadProgressSignal(contact: ContactDetails, text: string) {
+  return Boolean(
+    hasContactSignal(contact) ||
+      contact.concern ||
+      contact.preferredContact ||
+      hasBusinessNeedSignal(text),
+  );
+}
+
+function hasLeadCaptureQuality(contact: ContactDetails) {
+  return Boolean(
+    (contact.email || contact.phone) &&
+      (contact.name || contact.concern) &&
+      contact.concern,
+  );
+}
+
+function shouldQualifyBeforeContact(text: string, contact: ContactDetails) {
+  return Boolean(
+    contact.concern &&
+      /\b(ki|künstliche intelligenz|kuenstliche intelligenz|automatisierung|unternehmen|firma|software|lösung|loesung)\b/i.test(
+        text,
+      ) &&
+      !/\b(angebot|preis|kosten|termin|rückruf|rueckruf|kontakt|demo)\b/i.test(text),
+  );
+}
+
 function buildMissingFieldsQuestion(
   missing: string[],
   scheduleIntent: boolean,
@@ -1297,6 +1572,22 @@ function buildCapturedLeadAnswer(params: {
   }
 
   return `${base} Wir melden uns schnellstmöglich bei dir.`;
+}
+
+function buildGreetingAnswer() {
+  return 'Hi, ich helfe dir bei Fragen zu Websites, KI-Automatisierung, Support-Systemen oder individuellen Softwarelösungen. Wobei kann ich dich unterstützen?';
+}
+
+function buildRecoveryAnswer() {
+  return 'Du hast recht, ich frage gerade zu früh nach Kontaktdaten. Ich kann dir auch erst einmal normal weiterhelfen. Geht es bei dir eher um Website, KI-Automatisierung, Support oder Beratung?';
+}
+
+function buildConsultingResetAnswer() {
+  return 'Kein Problem. Ich kann dir Fragen zu Websites, KI-Automatisierung, Support-Automatisierung oder individuellen Softwarelösungen beantworten. Worum geht es bei dir konkret?';
+}
+
+function buildBusinessNeedQualificationAnswer() {
+  return 'Das kann in mehreren Bereichen sinnvoll sein: Support, Kundengewinnung oder interne Prozesse. Wo hast du aktuell den größten Aufwand?';
 }
 
 function buildLeadCta(label?: string, description?: string, ctaText?: string) {
