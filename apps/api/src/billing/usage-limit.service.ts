@@ -34,6 +34,14 @@ const LIMIT_LABELS: Record<LimitKey, string> = {
   maxIntegrations: 'Verbindungen',
 };
 
+const LIMIT_UPGRADE_MESSAGES: Record<LimitKey, (limit: number) => string> = {
+  maxSites: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Kunden. Upgrade erforderlich.`,
+  monthlyMessages: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Nachrichten pro Monat. Upgrade erforderlich.`,
+  monthlyLeads: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Anfragen pro Monat. Upgrade erforderlich.`,
+  maxKnowledgeSources: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Wissensquellen. Upgrade erforderlich.`,
+  maxIntegrations: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Verbindungen. Upgrade erforderlich.`,
+};
+
 @Injectable()
 export class UsageLimitService {
   constructor(
@@ -202,13 +210,17 @@ export class UsageLimitService {
       return;
     }
 
+    const message = check.limit === null
+      ? `Plan-Limit erreicht: ${LIMIT_LABELS[limitKey]}.`
+      : LIMIT_UPGRADE_MESSAGES[limitKey](check.limit);
+
     throw new HttpException(
       {
-        message: `Plan-Limit erreicht: ${LIMIT_LABELS[limitKey]}.`,
-        code: 'plan_limit_exceeded',
+        message,
+        code: 'limit_exceeded',
         limit: check,
       },
-      HttpStatus.PAYMENT_REQUIRED,
+      HttpStatus.FORBIDDEN,
     );
   }
 

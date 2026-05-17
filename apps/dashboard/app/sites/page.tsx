@@ -108,12 +108,13 @@ export default function SitesPage() {
     setTenants(items);
 
     if (items.length > 0) {
+      const defaultTenant = items.find((tenant) => tenant.id === DEFAULT_TENANT.id);
       setForm((current) => ({
         ...current,
         tenantId:
           current.tenantId && items.some((tenant) => tenant.id === current.tenantId)
             ? current.tenantId
-            : items[0].id,
+            : defaultTenant?.id || items[0].id,
       }));
     } else {
       setForm((current) => ({
@@ -497,9 +498,17 @@ function formatApiError(data: unknown, fallback: string) {
 
   if (data && typeof data === "object" && "message" in data) {
     const message = String((data as { message?: unknown }).message || "");
+    const code = "code" in data ? String((data as { code?: unknown }).code || "") : "";
+    const limit = "limit" in data && typeof (data as { limit?: unknown }).limit === "object"
+      ? (data as { limit?: { key?: unknown; limit?: unknown } }).limit
+      : null;
 
     if (message === "tenantId not found") {
       return "Der interne Mandant wurde nicht gefunden. Bitte versuche es erneut oder lege einen Mandanten manuell an.";
+    }
+
+    if (code === "limit_exceeded" && limit?.key === "maxSites" && typeof limit.limit === "number") {
+      return `Dein aktueller Plan erlaubt nur ${limit.limit} Kunden. Upgrade erforderlich.`;
     }
 
     if (message) {

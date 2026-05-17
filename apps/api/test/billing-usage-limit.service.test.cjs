@@ -78,7 +78,7 @@ test('UsageLimitService blocks usage over limit', async () => {
 
   await assert.rejects(
     () => service.assertWithinLimit('tenant-1', 'monthlyMessages', 1),
-    (error) => error.status === 402,
+    (error) => error.status === 403 && error.response.code === 'limit_exceeded',
   );
 });
 
