@@ -40,7 +40,7 @@ type Tenant = {
 };
 
 const DEFAULT_TENANT = {
-  id: "t_default",
+  id: "t-default",
   name: "Interner Mandant",
 };
 
