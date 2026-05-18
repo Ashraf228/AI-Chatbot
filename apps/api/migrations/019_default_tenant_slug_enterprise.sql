@@ -23,12 +23,11 @@ SET
   is_active = true,
   updated_at = NOW();
 
-INSERT INTO tenants (id, name, created_at, updated_at)
-VALUES ('t-default', 'Interner Mandant', NOW(), NOW())
+INSERT INTO tenants (id, name, created_at)
+VALUES ('t-default', 'Interner Mandant', NOW())
 ON CONFLICT (id) DO UPDATE
 SET
-  name = COALESCE(NULLIF(tenants.name, ''), EXCLUDED.name),
-  updated_at = NOW();
+  name = COALESCE(NULLIF(tenants.name, ''), EXCLUDED.name);
 
 UPDATE tenant_subscriptions
 SET
