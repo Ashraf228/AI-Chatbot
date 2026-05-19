@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "../shared/Button";
 import { ErrorState } from "../shared/ErrorState";
@@ -24,6 +25,21 @@ type AgentDefinition = {
   tools: AgentTool[];
   isAvailable: boolean;
   missingModules: string[];
+};
+
+type AgentExperienceCard = {
+  key: string;
+  title: string;
+  benefit: string;
+  whatItDoes: string;
+  goodFor: string;
+  collectedData: string;
+  afterSuccess: string;
+  missingHint: string;
+  sourceAgent?: AgentDefinition;
+  requiredModuleKeys: string[];
+  toolLabels: string[];
+  setupHref: "modules" | "integrations";
 };
 
 type AgentRun = {
@@ -163,7 +179,10 @@ function statusTone(status: string) {
     case "failed":
       return "dashboard-status dashboard-status--error";
     case "processing":
+    case "queued":
       return "dashboard-badge";
+    case "sent":
+      return "dashboard-status dashboard-status--success";
     default:
       return "dashboard-copy dashboard-copy--muted";
   }
@@ -175,6 +194,141 @@ function formatDate(value?: string | null) {
   }
 
   return new Date(value).toLocaleString("de-DE");
+}
+
+const MODULE_LABELS: Record<string, string> = {
+  "lead-sales": "Anfragen sammeln",
+  "knowledge-faq": "Wissensbasis",
+  "ecommerce-product-advisor": "Produktberatung",
+  "property-ticketing": "Tickets",
+  integrations: "Verbindungen",
+  webhook: "externe Übergabe",
+};
+
+function formatModuleLabel(key: string) {
+  return MODULE_LABELS[key] || key.replaceAll("-", " ");
+}
+
+function formatStatusLabel(status: string) {
+  switch (status) {
+    case "completed":
+    case "sent":
+      return "Erfolgreich";
+    case "failed":
+      return "Fehler";
+    case "processing":
+      return "In Bearbeitung";
+    case "queued":
+      return "Wartet";
+    case "new":
+      return "Neu";
+    case "open":
+      return "Offen";
+    case "in_progress":
+      return "In Bearbeitung";
+    case "resolved":
+      return "Gelöst";
+    case "closed":
+      return "Geschlossen";
+    default:
+      return status;
+  }
+}
+
+function buildMissingRequirementMessage(card: AgentExperienceCard, agent?: AgentDefinition) {
+  const missing = agent?.missingModules?.length
+    ? agent.missingModules.map(formatModuleLabel)
+    : card.requiredModuleKeys.map(formatModuleLabel);
+
+  if (missing.some((item) => item.toLowerCase().includes("wissensbasis"))) {
+    return "Für diesen Agenten muss zuerst eine Wissensbasis angelegt werden.";
+  }
+
+  if (missing.length === 0) {
+    return card.missingHint;
+  }
+
+  return `${card.missingHint} Fehlend: ${missing.join(", ")}.`;
+}
+
+function buildAgentExperienceCards(agents: AgentDefinition[]): AgentExperienceCard[] {
+  const byKey = new Map(agents.map((agent) => [agent.key, agent]));
+  const leadAgent = byKey.get("lead-sales-agent");
+  const ecommerceAgent = byKey.get("ecommerce-product-advisor");
+  const ticketAgent = byKey.get("property-ticket-agent");
+
+  return [
+    {
+      key: "lead-agent",
+      title: "Lead-Erfassung",
+      benefit: "Macht aus klaren Anfragen verwertbare Kontakte.",
+      whatItDoes: "Erkennt, wenn Besucher Beratung, ein Angebot oder eine Lösung suchen.",
+      goodFor: "Sinnvoll, wenn die Website neue Anfragen erzeugen soll.",
+      collectedData: "Name, E-Mail oder Telefon, Anliegen und gewünschter Kontaktweg.",
+      afterSuccess: "Die Anfrage wird gespeichert und kann im Dashboard weiterbearbeitet werden.",
+      missingHint: "Aktiviere zuerst Anfragen sammeln und eine Wissensbasis.",
+      sourceAgent: leadAgent,
+      requiredModuleKeys: leadAgent?.requiredModuleKeys ?? ["lead-sales", "knowledge-faq"],
+      toolLabels: leadAgent?.tools.map((tool) => tool.label) ?? ["Anfrage speichern", "Wissensbasis nutzen"],
+      setupHref: "modules",
+    },
+    {
+      key: "schedule-agent",
+      title: "Rückruf-/Kontakt-Agent",
+      benefit: "Leitet Kontaktwünsche sauber an dein Team weiter.",
+      whatItDoes: "Erkennt Rückruf-, Termin- und Kontaktwünsche und fragt fehlende Kontaktdaten ab.",
+      goodFor: "Sinnvoll für Beratung, Erstgespräche und Rückrufwünsche.",
+      collectedData: "Kontaktart, Name, E-Mail oder Telefon und Thema des Gesprächs.",
+      afterSuccess: "Der Kontaktwunsch wird vorgemerkt und kann weitergegeben werden.",
+      missingHint: "Aktiviere zuerst die Lead-Erfassung und hinterlege einen Kontaktweg.",
+      sourceAgent: leadAgent,
+      requiredModuleKeys: leadAgent?.requiredModuleKeys ?? ["lead-sales", "knowledge-faq"],
+      toolLabels: ["Kontaktwunsch vorbereiten", "Anfrage speichern"],
+      setupHref: "modules",
+    },
+    {
+      key: "ecommerce-agent",
+      title: "E-Commerce-Beratung",
+      benefit: "Hilft Besuchern bei Produktfragen und Kaufentscheidungen.",
+      whatItDoes: "Beantwortet Produktfragen und bereitet passende Empfehlungen vor.",
+      goodFor: "Sinnvoll für Shops, Sortimente und wiederkehrende Produktberatung.",
+      collectedData: "Produktwunsch, Größe, Farbe, Budget und Verfügbarkeit.",
+      afterSuccess: "Der Besucher erhält eine passende Orientierung oder wird zur Anfrage geführt.",
+      missingHint: "Aktiviere zuerst Produktberatung und eine Wissensbasis.",
+      sourceAgent: ecommerceAgent,
+      requiredModuleKeys: ecommerceAgent?.requiredModuleKeys ?? ["ecommerce-product-advisor", "knowledge-faq"],
+      toolLabels: ecommerceAgent?.tools.map((tool) => tool.label) ?? ["Produkte prüfen", "Wissensbasis nutzen"],
+      setupHref: "modules",
+    },
+    {
+      key: "ticket-agent",
+      title: "IT-Support-/Ticket-Agent",
+      benefit: "Wandelt Supportfälle in klare Aufgaben um.",
+      whatItDoes: "Erkennt Probleme, sammelt die wichtigsten Angaben und bereitet ein Ticket vor.",
+      goodFor: "Sinnvoll für Support, Reklamationen, Störungen und interne Servicefälle.",
+      collectedData: "Thema, Beschreibung, Priorität, Kontakt und betroffener Bereich.",
+      afterSuccess: "Ein Ticket wird erstellt und kann intern weiterverfolgt werden.",
+      missingHint: "Aktiviere zuerst Tickets und eine Wissensbasis.",
+      sourceAgent: ticketAgent,
+      requiredModuleKeys: ticketAgent?.requiredModuleKeys ?? ["property-ticketing", "knowledge-faq"],
+      toolLabels: ticketAgent?.tools.map((tool) => tool.label) ?? ["Ticket erstellen", "Wissensbasis nutzen"],
+      setupHref: "modules",
+    },
+    {
+      key: "handoff-agent",
+      title: "Externe Übergabe",
+      benefit: "Gibt wichtige Ereignisse an andere Systeme oder Menschen weiter.",
+      whatItDoes: "Übergibt Anfragen, Tickets oder Kontaktwünsche an angebundene Systeme.",
+      goodFor: "Sinnvoll, wenn Leads oder Supportfälle automatisch im Team landen sollen.",
+      collectedData: "Anliegen, Kontaktdaten, Status und die für die Übergabe nötigen Informationen.",
+      afterSuccess: "Die Daten werden an die konfigurierte Verbindung übergeben.",
+      missingHint: "Richte zuerst eine passende Verbindung ein.",
+      sourceAgent: ticketAgent,
+      requiredModuleKeys: ["integrations", "webhook"],
+      toolLabels: ["Externe Übergabe starten", "Übergabe vorbereiten"],
+      setupHref: "integrations",
+    },
+  ];
 }
 
 function summarizeToolOutput(tool: ToolInvocation) {
@@ -197,7 +351,7 @@ function summarizeToolOutput(tool: ToolInvocation) {
   }
 
   if (typeof output.webhookJobId === "string") {
-    return `Webhook ${output.webhookJobId}`;
+    return `Übergabe ${output.webhookJobId}`;
   }
 
   return "";
@@ -415,6 +569,8 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
     return webhookJobs.filter((job) => job.status === webhookStatusFilter);
   }, [webhookJobs, webhookStatusFilter]);
 
+  const agentExperienceCards = useMemo(() => buildAgentExperienceCards(agents), [agents]);
+
   async function loadRunTools(runId: string, force = false) {
     if (!force && toolDetails[runId]) {
       setExpandedRuns((current) => ({ ...current, [runId]: !current[runId] }));
@@ -429,7 +585,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
       const data = await res.json().catch(() => []);
 
       if (!res.ok) {
-        setError((data as { message?: string })?.message || "Tool-Schritte konnten nicht geladen werden.");
+        setError((data as { message?: string })?.message || "Automatische Aktionen konnten nicht geladen werden.");
         return;
       }
 
@@ -481,7 +637,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
       draft.query,
       draft.size ? `Groesse ${draft.size}` : "",
       draft.color,
-      draft.availableOnly ? "nur verfuegbar" : "",
+      draft.availableOnly ? "nur verfügbar" : "",
       draft.maxPrice ? `unter ${draft.maxPrice}` : "",
       draft.note,
     ].filter(Boolean);
@@ -607,7 +763,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
 
       const data = (await res.json().catch(() => ({}))) as Partial<WebhookJob> & { message?: string };
       if (!res.ok) {
-        setError(data?.message || "Webhook-Job konnte nicht erneut eingereiht werden.");
+        setError(data?.message || "Externe Übergabe konnte nicht erneut vorbereitet werden.");
         return;
       }
 
@@ -616,7 +772,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
           current.map((job) => (job.id === data.id ? ({ ...job, ...data } as WebhookJob) : job)),
         );
       }
-      setMessage(`Webhook-Job ${jobId} erneut eingereiht.`);
+      setMessage(`Externe Übergabe wurde erneut vorbereitet.`);
     } finally {
       setActionKey(null);
     }
@@ -641,7 +797,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
       };
 
       if (!res.ok) {
-        setError(data?.message || "Agentenlauf konnte nicht ausgeführt werden.");
+        setError(data?.message || "Automatische Aktion konnte nicht ausgeführt werden.");
         return;
       }
 
@@ -671,8 +827,8 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
       await loadOverview(false);
       setMessage(
         toolSummary
-          ? `Agentenlauf für ${agentKey} ausgeführt. ${toolSummary}`
-          : `Agentenlauf für ${agentKey} ausgeführt.`,
+          ? `Automatische Aktion wurde ausgeführt. ${toolSummary}`
+          : "Automatische Aktion wurde ausgeführt.",
       );
     } finally {
       setSavingKey(null);
@@ -688,7 +844,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
             <label className="dashboard-field">
               <span className="dashboard-field-label">Bedarf / Anlass</span>
               <Input
-                placeholder="z. B. KI fuer Kundensupport"
+                placeholder="z. B. KI für Kundensupport"
                 value={draft.need}
                 onChange={(event) =>
                   setLeadDrafts((current) => ({
@@ -781,7 +937,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
           <label className="dashboard-field">
             <span className="dashboard-field-label">Produktsuche</span>
             <Input
-              placeholder="z. B. Sneaker fuer Herren"
+              placeholder="z. B. Sneaker für Herren"
               value={draft.query}
               onChange={(event) =>
                 setEcommerceDrafts((current) => ({
@@ -833,7 +989,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                 }
               />
             </label>
-            <label className="dashboard-field dashboard-checkbox" style={{ marginTop: 30 }}>
+            <label className="dashboard-field dashboard-checkbox dashboard-checkbox--offset">
               <input
                 type="checkbox"
                 checked={draft.availableOnly}
@@ -967,7 +1123,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                 }))
               }
             />
-            <span>Zusätzlich an Ticket-Webhook weiterleiten</span>
+            <span>Zusätzlich an externe Übergabe weiterleiten</span>
           </label>
         </>
       );
@@ -988,14 +1144,13 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
     <div className="dashboard-stack">
       <div className="dashboard-card dashboard-stack">
         <div>
-          <h2 className="dashboard-card-title">Agenten-Steuerung</h2>
+          <h2 className="dashboard-card-title">Business-Agenten</h2>
           <p className="dashboard-copy">
-            Hier startest du echte Testläufe mit strukturierten Eingaben. Die Daten werden direkt in
-            den passenden Agentenplan und die Tool-Schritte übergeben.
+            Aktiviere die Funktionen, die im Chat automatisch helfen sollen. Details und Testläufe bleiben einklappbar.
           </p>
         </div>
 
-        <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 16 }}>
+        <div className="dashboard-grid dashboard-grid--metrics-4 agent-metric-grid">
           <div className="dashboard-card dashboard-card--soft">
             <strong>{stats.total}</strong>
             <p className="dashboard-copy dashboard-copy--muted">Gesamte Läufe</p>
@@ -1018,54 +1173,110 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
           </div>
           <div className="dashboard-card dashboard-card--soft">
             <strong>{stats.queuedWebhooks}</strong>
-            <p className="dashboard-copy dashboard-copy--muted">Webhook-Jobs aktiv</p>
+            <p className="dashboard-copy dashboard-copy--muted">Übergaben aktiv</p>
           </div>
           <div className="dashboard-card dashboard-card--soft">
             <strong>{stats.failedWebhooks}</strong>
-            <p className="dashboard-copy dashboard-copy--muted">Webhook-Fehler</p>
+            <p className="dashboard-copy dashboard-copy--muted">Übergabe-Fehler</p>
           </div>
         </div>
 
-        <div className="dashboard-stack dashboard-stack--sm">
-          {agents.map((agent) => (
-            <div key={agent.key} className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-              <div>
-                <h3 className="dashboard-card-title dashboard-card-title--sm">{agent.label}</h3>
-                <p className="dashboard-copy dashboard-copy--muted">{agent.description}</p>
-                <p className="dashboard-copy dashboard-copy--muted">
-                  {agent.category} · {agent.key}
-                </p>
-              </div>
+        <div className="agent-card-list">
+          {agentExperienceCards.map((card) => {
+            const agent = card.sourceAgent;
+            const isAvailable = agent?.isAvailable === true;
 
-              <div className="dashboard-copy dashboard-copy--muted">
-                <strong>Benötigte Module:</strong>{" "}
-                {agent.requiredModuleKeys.length > 0 ? agent.requiredModuleKeys.join(", ") : "-"}
-              </div>
-              <div className="dashboard-copy dashboard-copy--muted">
-                <strong>Tools im Plan:</strong>{" "}
-                {agent.tools.length > 0
-                  ? agent.tools.map((tool) => tool.label).join(" → ")
-                  : agent.toolKeys.join(" → ")}
-              </div>
+            return (
+              <details key={card.key} className="dashboard-accordion agent-card">
+                <summary className="dashboard-accordion__summary agent-card__summary">
+                  <span>
+                    <strong>{card.title}</strong>
+                    <small>{card.benefit}</small>
+                  </span>
+                  <span className={isAvailable ? "dashboard-status dashboard-status--success" : "dashboard-badge"}>
+                    {isAvailable ? "Aktiv" : "Unvollständig"}
+                  </span>
+                </summary>
+                <div className="dashboard-accordion__content agent-card__content">
+                  <div className="agent-card__body">
+                    <div>
+                      <span className="dashboard-field-label">Was macht dieser Agent?</span>
+                      <p className="dashboard-copy dashboard-no-margin-bottom">{card.whatItDoes}</p>
+                    </div>
+                    <div>
+                      <span className="dashboard-field-label">Wann ist er sinnvoll?</span>
+                      <p className="dashboard-copy dashboard-no-margin-bottom">{card.goodFor}</p>
+                    </div>
+                    <div>
+                      <span className="dashboard-field-label">Welche Daten werden erfasst?</span>
+                      <p className="dashboard-copy dashboard-no-margin-bottom">{card.collectedData}</p>
+                    </div>
+                    <div>
+                      <span className="dashboard-field-label">Was passiert danach?</span>
+                      <p className="dashboard-copy dashboard-no-margin-bottom">{card.afterSuccess}</p>
+                    </div>
+                  </div>
 
-              {agent.isAvailable ? (
-                <p className="dashboard-status dashboard-status--success">Agent bereit</p>
-              ) : (
-                <p className="dashboard-error">
-                  Noch nicht bereit. Es fehlen: {agent.missingModules.join(", ")}
-                </p>
-              )}
+                  <div className="agent-card__activation">
+                    <div>
+                      <strong>{isAvailable ? "Aktiviert" : "Noch nicht bereit"}</strong>
+                      <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                        {isAvailable
+                          ? "Alle benötigten Funktionen sind aktiv."
+                          : buildMissingRequirementMessage(card, agent)}
+                      </p>
+                    </div>
+                    <div className="agent-card__actions">
+                      <span className="dashboard-badge">
+                        {card.requiredModuleKeys.length > 0
+                          ? card.requiredModuleKeys.map(formatModuleLabel).join(", ")
+                          : "Keine Voraussetzung"}
+                      </span>
+                      <Link
+                        href={`/sites/${siteId}/${card.setupHref}`}
+                        className="dashboard-button dashboard-button--secondary"
+                      >
+                        {isAvailable ? "Anpassen / deaktivieren" : "Aktivieren"}
+                      </Link>
+                    </div>
+                  </div>
 
-              {renderStructuredFields(agent)}
+                  <div className="dashboard-copy dashboard-copy--muted">
+                    <strong>Automatische Aktionen:</strong>{" "}
+                    {card.toolLabels.length > 0 ? card.toolLabels.join(" / ") : "Keine Aktionen hinterlegt"}
+                  </div>
 
-              <Button
-                onClick={() => executeRun(agent.key)}
-                disabled={!agent.isAvailable || savingKey === agent.key}
-              >
-                {savingKey === agent.key ? "Lauf wird ausgeführt..." : "Testlauf ausführen"}
-              </Button>
-            </div>
-          ))}
+                  {agent && !isAvailable ? (
+                    <p className="dashboard-error">
+                      {buildMissingRequirementMessage(card, agent)}
+                    </p>
+                  ) : null}
+
+                  {agent ? (
+                    <details className="dashboard-accordion dashboard-accordion--subtle">
+                      <summary className="dashboard-accordion__summary">Technische Details und Testlauf</summary>
+                      <div className="dashboard-accordion__content">
+                        <p className="dashboard-copy dashboard-copy--muted">
+                          {agent.category} · {agent.key}
+                        </p>
+                        {renderStructuredFields(agent)}
+                        <Button
+                          onClick={() => executeRun(agent.key)}
+                          disabled={!agent.isAvailable || savingKey === agent.key}
+                        >
+                          {savingKey === agent.key ? "Test läuft..." : "Testlauf ausführen"}
+                        </Button>
+                      </div>
+                    </details>
+                  ) : (
+                    <p className="dashboard-copy dashboard-copy--muted">
+                      Diese Funktion wird sichtbar, sobald die passenden Voraussetzungen verfügbar sind.
+                    </p>
+                  )}
+                </div>
+              </details>
+            );
+          })}
         </div>
 
         {message ? <p className="dashboard-status dashboard-status--success">{message}</p> : null}
@@ -1103,8 +1314,8 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                   {" · "}
                   Run-ID: <span className="dashboard-mono">{ticket.agentRunId}</span>
                 </div>
-                <div className="dashboard-inline" style={{ alignItems: "end", gap: 12 }}>
-                  <label className="dashboard-field" style={{ flex: 1, marginBottom: 0 }}>
+                <div className="dashboard-inline dashboard-inline--end dashboard-gap-12">
+                  <label className="dashboard-field dashboard-field--grow">
                     <span className="dashboard-field-label">Status ändern</span>
                     <Select
                       value={ticketStatusDrafts[ticket.id] || ticket.status}
@@ -1138,32 +1349,32 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
 
       <div className="dashboard-card dashboard-stack">
         <div>
-          <h2 className="dashboard-card-title">Webhook-Monitoring</h2>
+          <h2 className="dashboard-card-title">Externe Übergaben</h2>
           <p className="dashboard-copy">
-            Externe Weiterleitungen aus Agenten-Tools. Hier siehst du Queue-, Versand- und Fehlerstatus.
+            Hier siehst du, welche Informationen an angebundene Systeme weitergegeben wurden.
           </p>
         </div>
 
-        <label className="dashboard-field" style={{ maxWidth: 280 }}>
+        <label className="dashboard-field dashboard-field--narrow">
           <span className="dashboard-field-label">Status filtern</span>
           <Select value={webhookStatusFilter} onChange={(event) => setWebhookStatusFilter(event.target.value)}>
             <option value="all">Alle</option>
-            <option value="failed">failed</option>
-            <option value="queued">queued</option>
-            <option value="sent">sent</option>
-            <option value="processing">processing</option>
+            <option value="failed">Fehler</option>
+            <option value="queued">Wartet</option>
+            <option value="sent">Erfolgreich</option>
+            <option value="processing">In Bearbeitung</option>
           </Select>
         </label>
 
         {filteredWebhookJobs.length === 0 ? (
-          <p className="dashboard-copy dashboard-copy--muted">Noch keine Webhook-Jobs vorhanden.</p>
+          <p className="dashboard-copy dashboard-copy--muted">Noch keine externen Übergaben vorhanden.</p>
         ) : (
           <div className="dashboard-stack dashboard-stack--sm">
             {filteredWebhookJobs.slice(0, 20).map((job) => (
               <div key={job.id} className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
                 <div className="dashboard-info-row">
                   <strong>{job.providerKey}</strong>
-                  <span className={statusTone(job.status)}>{job.status}</span>
+                  <span className={statusTone(job.status)}>{formatStatusLabel(job.status)}</span>
                 </div>
                 <div className="dashboard-copy dashboard-copy--muted">
                   Verbindung {job.connectionKey} · erstellt: {formatDate(job.createdAt)} · beendet:{" "}
@@ -1171,22 +1382,22 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                 </div>
                 {job.endpointUrl ? (
                   <div className="dashboard-copy dashboard-copy--muted">
-                    Endpoint: <span className="dashboard-mono">{job.endpointUrl}</span>
+                    Zieladresse: <span className="dashboard-mono">{job.endpointUrl}</span>
                   </div>
                 ) : null}
                 <div className="dashboard-copy dashboard-copy--muted">
-                  Retries {job.retryCount}/{job.maxAttempts}
+                  Wiederholungen {job.retryCount}/{job.maxAttempts}
                 </div>
                 {job.lastResponseStatus !== null && job.lastResponseStatus !== undefined ? (
                   <div className="dashboard-copy dashboard-copy--muted">
-                    Letzte Response: HTTP {job.lastResponseStatus}
+                    Letzte Antwort: HTTP {job.lastResponseStatus}
                   </div>
                 ) : null}
                 {job.lastError ? <div className="dashboard-error">{job.lastError}</div> : null}
                 {job.lastResponseBody ? (
                   <div className="dashboard-stack dashboard-stack--xs">
-                    <div className="dashboard-copy dashboard-copy--muted">Letzter Response-Body</div>
-                    <pre className="dashboard-textarea dashboard-mono" style={{ minHeight: 100, margin: 0 }}>
+                    <div className="dashboard-copy dashboard-copy--muted">Letzte technische Antwort</div>
+                    <pre className="dashboard-textarea dashboard-mono dashboard-code-block dashboard-code-block--sm">
 {job.lastResponseBody}
                     </pre>
                   </div>
@@ -1200,17 +1411,17 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                     </>
                   ) : null}
                 </div>
-                <div className="dashboard-inline" style={{ justifyContent: "space-between" }}>
-                  <span className="dashboard-copy dashboard-copy--muted">Letzter Payload</span>
+                <div className="dashboard-inline dashboard-inline--spaced">
+                  <span className="dashboard-copy dashboard-copy--muted">Zuletzt übergebene Daten</span>
                   <Button
                     variant="secondary"
                     onClick={() => togglePayload(`webhook:${job.id}`)}
                   >
-                    {expandedPayloads[`webhook:${job.id}`] ? "Payload ausblenden" : "Payload anzeigen"}
+                    {expandedPayloads[`webhook:${job.id}`] ? "Daten ausblenden" : "Daten anzeigen"}
                   </Button>
                 </div>
                 {expandedPayloads[`webhook:${job.id}`] ? (
-                  <pre className="dashboard-textarea dashboard-mono" style={{ minHeight: 140, margin: 0 }}>
+                  <pre className="dashboard-textarea dashboard-mono dashboard-code-block dashboard-code-block--md">
 {prettyJson(job.payload || {})}
                   </pre>
                 ) : null}
@@ -1233,14 +1444,13 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
 
       <div className="dashboard-card dashboard-stack">
         <div>
-          <h2 className="dashboard-card-title">Run-Monitoring</h2>
+          <h2 className="dashboard-card-title">Automationsprotokoll</h2>
           <p className="dashboard-copy">
-            Diese Übersicht zeigt den tatsächlichen Run-Status, die Tool-Schritte und das Ergebnis
-            je Agentenlauf.
+            Diese Übersicht zeigt ausgeführte Agenten, automatische Aktionen und Ergebnisse.
           </p>
         </div>
 
-        <div className="dashboard-grid dashboard-grid--two" style={{ gap: 12 }}>
+        <div className="dashboard-grid dashboard-grid--two dashboard-grid--tight">
           <label className="dashboard-field">
             <span className="dashboard-field-label">Status filtern</span>
             <Select value={runStatusFilter} onChange={(event) => setRunStatusFilter(event.target.value)}>
@@ -1248,7 +1458,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
               <option value="completed">Abgeschlossen</option>
               <option value="failed">Fehlgeschlagen</option>
               <option value="processing">In Bearbeitung</option>
-              <option value="queued">Queued</option>
+              <option value="queued">Wartet</option>
             </Select>
           </label>
           <label className="dashboard-field">
@@ -1262,7 +1472,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
         </div>
 
         {filteredRuns.length === 0 ? (
-          <p className="dashboard-copy dashboard-copy--muted">Noch keine Agentenläufe vorhanden.</p>
+          <p className="dashboard-copy dashboard-copy--muted">Noch keine automatischen Aktionen vorhanden.</p>
         ) : (
           <div className="dashboard-stack dashboard-stack--sm">
             {filteredRuns.map((run) => {
@@ -1274,7 +1484,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                 <div key={run.id} className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
                   <div className="dashboard-info-row">
                     <strong>{run.agentLabel}</strong>
-                    <span className={statusTone(run.status)}>{run.status}</span>
+                    <span className={statusTone(run.status)}>{formatStatusLabel(run.status)}</span>
                   </div>
 
                   <div className="dashboard-copy dashboard-copy--muted">
@@ -1301,17 +1511,17 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                     </div>
                   ) : null}
 
-                  <div className="dashboard-inline" style={{ justifyContent: "space-between" }}>
+                  <div className="dashboard-inline dashboard-inline--spaced">
                     <Button
                       variant="secondary"
                       onClick={() => loadRunTools(run.id)}
                       disabled={loadingRunId === run.id}
                     >
                       {loadingRunId === run.id
-                        ? "Tool-Schritte laden..."
+                        ? "Aktionen laden..."
                         : isExpanded
-                          ? "Tool-Schritte ausblenden"
-                          : "Tool-Schritte anzeigen"}
+                          ? "Automatische Aktionen ausblenden"
+                          : "Automatische Aktionen anzeigen"}
                     </Button>
 
                     {tools.length > 0 ? (
@@ -1322,7 +1532,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                   {isExpanded ? (
                     tools.length === 0 ? (
                       <p className="dashboard-copy dashboard-copy--muted">
-                        Für diesen Lauf wurden noch keine Tool-Schritte geladen oder aufgezeichnet.
+                        Für diesen Lauf wurden noch keine automatischen Aktionen geladen oder aufgezeichnet.
                       </p>
                     ) : (
                       <div className="dashboard-stack dashboard-stack--xs">
@@ -1330,7 +1540,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                           <div key={tool.id} className="dashboard-card">
                             <div className="dashboard-info-row">
                               <strong>{tool.toolLabel}</strong>
-                              <span className={statusTone(tool.status)}>{tool.status}</span>
+                              <span className={statusTone(tool.status)}>{formatStatusLabel(tool.status)}</span>
                             </div>
                             {summarizeToolOutput(tool) ? (
                               <div className="dashboard-copy">
@@ -1338,7 +1548,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                               </div>
                             ) : null}
                             {renderToolDetails(tool)}
-                            <div className="dashboard-inline" style={{ justifyContent: "space-between" }}>
+                            <div className="dashboard-inline dashboard-inline--spaced">
                               <span className="dashboard-copy dashboard-copy--muted">
                                 {tool.createdAt ? `Gestartet: ${formatDate(tool.createdAt)}` : ""}
                                 {tool.completedAt ? ` · Beendet: ${formatDate(tool.completedAt)}` : ""}
@@ -1347,20 +1557,20 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                                 variant="secondary"
                                 onClick={() => togglePayload(`tool:${tool.id}`)}
                               >
-                                {expandedPayloads[`tool:${tool.id}`] ? "Payload ausblenden" : "Payload anzeigen"}
+                                {expandedPayloads[`tool:${tool.id}`] ? "Daten ausblenden" : "Daten anzeigen"}
                               </Button>
                             </div>
                             {expandedPayloads[`tool:${tool.id}`] ? (
-                              <div className="dashboard-grid dashboard-grid--two" style={{ gap: 12, marginTop: 8 }}>
+                              <div className="dashboard-grid dashboard-grid--two dashboard-grid--tight dashboard-mt-8">
                                 <div>
-                                  <div className="dashboard-copy"><strong>Input</strong></div>
-                                  <pre className="dashboard-textarea dashboard-mono" style={{ minHeight: 140, margin: 0 }}>
+                                  <div className="dashboard-copy"><strong>Eingehende Daten</strong></div>
+                                  <pre className="dashboard-textarea dashboard-mono dashboard-code-block dashboard-code-block--md">
 {prettyJson(tool.inputPayload || {})}
                                   </pre>
                                 </div>
                                 <div>
-                                  <div className="dashboard-copy"><strong>Output</strong></div>
-                                  <pre className="dashboard-textarea dashboard-mono" style={{ minHeight: 140, margin: 0 }}>
+                                  <div className="dashboard-copy"><strong>Ergebnisdaten</strong></div>
+                                  <pre className="dashboard-textarea dashboard-mono dashboard-code-block dashboard-code-block--md">
 {prettyJson(tool.outputPayload || {})}
                                   </pre>
                                 </div>
@@ -1373,7 +1583,7 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                     )
                   ) : null}
 
-                  <div className="dashboard-inline" style={{ justifyContent: "space-between" }}>
+                  <div className="dashboard-inline dashboard-inline--spaced">
                     <span className="dashboard-copy dashboard-copy--muted">
                       Run-ID: <span className="dashboard-mono">{run.id}</span>
                     </span>
@@ -1381,11 +1591,11 @@ export function SiteAgentsForm({ siteId }: { siteId: string }) {
                       variant="secondary"
                       onClick={() => togglePayload(`run:${run.id}`)}
                     >
-                      {expandedPayloads[`run:${run.id}`] ? "Run-Details ausblenden" : "Run-Details anzeigen"}
+                      {expandedPayloads[`run:${run.id}`] ? "Technische Details ausblenden" : "Technische Details anzeigen"}
                     </Button>
                   </div>
                   {expandedPayloads[`run:${run.id}`] ? (
-                    <pre className="dashboard-textarea dashboard-mono" style={{ minHeight: 180, margin: 0 }}>
+                    <pre className="dashboard-textarea dashboard-mono dashboard-code-block dashboard-code-block--lg">
 {prettyJson(run.metadata || {})}
                     </pre>
                   ) : null}

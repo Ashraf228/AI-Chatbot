@@ -13,7 +13,7 @@ export function EmptyStateCard({ title, description, href, actionLabel }: EmptyS
       <strong>{title}</strong>
       {description ? <p>{description}</p> : null}
       {href && actionLabel ? (
-        <Link href={href} className="dashboard-button dashboard-button--secondary">
+        <Link href={href} className="dashboard-button dashboard-button--secondary empty-state-card__action">
           {actionLabel}
         </Link>
       ) : null}

@@ -18,6 +18,38 @@ export function getDashboardNav(role: DashboardSessionRole = "admin") {
 
 export const dashboardNav = DASHBOARD_NAV_ITEMS;
 
+const DASHBOARD_NAV_GROUPS = [
+  {
+    label: "Arbeitsbereich",
+    items: [
+      { href: "/", label: "Heute" },
+      { href: "/inbox", label: "Inbox" },
+      { href: "/analytics", label: "Auswertung" },
+    ],
+  },
+  {
+    label: "Kunden-Setup",
+    defaultOpen: true,
+    items: [
+      { href: "/sites", label: "Kunden" },
+      { href: "/sites", label: "Chatbot einrichten" },
+      { href: "/inbox", label: "Anfragen & Chats" },
+    ],
+  },
+  {
+    label: "Einstellungen",
+    adminOnly: true,
+    items: [
+      { href: "/settings", label: "Allgemein" },
+      { href: "/billing", label: "Plan & Nutzung" },
+    ],
+  },
+];
+
+export function getDashboardNavGroups(role: DashboardSessionRole = "admin") {
+  return DASHBOARD_NAV_GROUPS.filter((group) => !group.adminOnly || role === "admin");
+}
+
 export const siteNavGroups = [
   {
     slug: "",
@@ -28,10 +60,11 @@ export const siteNavGroups = [
     slug: "setup",
     label: "Einrichtung",
     items: [
-      { slug: "setup", label: "Setup" },
+      { slug: "setup", label: "Assistent" },
       { slug: "knowledge", label: "Wissen" },
       { slug: "widget", label: "Verhalten" },
       { slug: "branding", label: "Design" },
+      { slug: "agents", label: "Agenten" },
       { slug: "embedding", label: "Einbindung" },
     ],
   },
@@ -61,7 +94,6 @@ export const siteNavGroups = [
       { slug: "privacy", label: "Datenschutz" },
       { slug: "integrations", label: "Verbindungen" },
       { slug: "modules", label: "Funktionen" },
-      { slug: "agents", label: "Automationen" },
       { slug: "advanced", label: "Erweitert" },
     ],
   },

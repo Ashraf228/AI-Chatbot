@@ -8,6 +8,12 @@ type SidebarNavItem = {
   label: string;
 };
 
+type SidebarNavGroup = {
+  label: string;
+  defaultOpen?: boolean;
+  items: SidebarNavItem[];
+};
+
 function isActive(pathname: string, href: string) {
   if (href === "/") {
     return pathname === "/";
@@ -29,20 +35,42 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SidebarNav({ items }: { items: SidebarNavItem[] }) {
+function isGroupActive(pathname: string, group: SidebarNavGroup) {
+  return group.items.some((item) => isActive(pathname, item.href));
+}
+
+export function SidebarNav({ groups }: { groups: SidebarNavGroup[] }) {
   const pathname = usePathname();
 
   return (
     <nav className="dashboard-sidebar-nav">
-      {items.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={`dashboard-nav-link${isActive(pathname, item.href) ? " dashboard-nav-link--active" : ""}`}
-        >
-          {item.label}
-        </Link>
-      ))}
+      {groups.map((group) => {
+        const active = isGroupActive(pathname, group);
+
+        return (
+          <details
+            key={group.label}
+            className={`dashboard-nav-group${active ? " dashboard-nav-group--active" : ""}`}
+            open={group.defaultOpen || active}
+          >
+            <summary className="dashboard-nav-group__summary">
+              <span>{group.label}</span>
+              <span aria-hidden="true">v</span>
+            </summary>
+            <div className="dashboard-nav-group__items">
+              {group.items.map((item) => (
+                <Link
+                  key={`${group.label}-${item.href}-${item.label}`}
+                  href={item.href}
+                  className={`dashboard-nav-link${isActive(pathname, item.href) ? " dashboard-nav-link--active" : ""}`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </details>
+        );
+      })}
     </nav>
   );
 }

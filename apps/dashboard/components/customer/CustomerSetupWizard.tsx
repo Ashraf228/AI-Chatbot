@@ -107,7 +107,7 @@ type KnowledgeSource = {
   createdAt: string;
 };
 
-type WizardStepKey = "profile" | "goal" | "knowledge" | "design" | "launch";
+type WizardStepKey = "profile" | "knowledge" | "design" | "test" | "agents" | "launch";
 type KnowledgeMethod = "manual" | "url" | "pdf";
 
 type TestChatMessage = {
@@ -117,11 +117,12 @@ type TestChatMessage = {
 };
 
 const WIZARD_STEPS: Array<{ key: WizardStepKey; label: string; description: string }> = [
-  { key: "profile", label: "Grundlagen", description: "Firma, Website und Domain" },
-  { key: "goal", label: "Ziel & Verhalten", description: "Branche, Aufgabe und Ton" },
-  { key: "knowledge", label: "Wissen", description: "Text, Website oder PDF" },
-  { key: "design", label: "Design", description: "Branding und Widget-Vorschau" },
-  { key: "launch", label: "Test & Go-Live", description: "Prüfen, einbinden, live schalten" },
+  { key: "profile", label: "Chatbot", description: "Name, Branche, Begrüßung und Ziel" },
+  { key: "knowledge", label: "Wissen", description: "PDF, Website, FAQ oder eigene Texte" },
+  { key: "design", label: "Design", description: "Farben, Button, Position und Logo" },
+  { key: "test", label: "Testen", description: "Beispielfragen und Testchat prüfen" },
+  { key: "agents", label: "Agenten", description: "Lead-Agent und automatische Aktionen" },
+  { key: "launch", label: "Einbindung", description: "Domain, Script-Code und Status" },
 ];
 
 const GOAL_OPTIONS: Array<{ value: PrimaryGoal | ""; label: string; help: string }> = [
@@ -144,9 +145,9 @@ const TONE_OPTIONS: Array<{ value: Tone | ""; label: string }> = [
 ];
 
 const KNOWLEDGE_MODE_OPTIONS: Array<{ value: KnowledgeMode; label: string; help: string }> = [
-  { value: "flexible", label: "Flexibel", help: "Antwortet allgemein und nutzt Wissen, wenn es passt." },
-  { value: "grounded", label: "Quellenbasiert", help: "Antwortet primär aus hinterlegtem Unternehmenswissen." },
-  { value: "strict", label: "Strikt", help: "Antwortet nur, wenn passende Wissensquellen gefunden werden." },
+  { value: "flexible", label: "Flexibel", help: "Antwortet frei und nutzt die Wissensbasis, wenn sie passt." },
+  { value: "grounded", label: "Mit Wissensbasis", help: "Antwortet vorrangig mit hinterlegten Kundeninformationen." },
+  { value: "strict", label: "Nur mit Wissensbasis", help: "Antwortet nur, wenn passende Kundeninformationen vorhanden sind." },
 ];
 
 const FALLBACK_OPTIONS: Array<{ value: FallbackBehavior; label: string }> = [
@@ -156,11 +157,21 @@ const FALLBACK_OPTIONS: Array<{ value: FallbackBehavior; label: string }> = [
 ];
 
 const STATUS_STEP_GROUPS: Record<WizardStepKey, string[]> = {
-  profile: ["basics", "template"],
-  goal: ["behavior"],
+  profile: ["basics", "template", "behavior"],
   knowledge: ["knowledge"],
   design: ["design"],
-  launch: ["embed", "test", "live"],
+  test: ["test"],
+  agents: ["behavior"],
+  launch: ["embed", "live"],
+};
+
+const STEP_EXPLANATIONS: Record<WizardStepKey, string> = {
+  profile: "So versteht der Chatbot, für wen er spricht und welches Ziel das Gespräch haben soll.",
+  knowledge: "Die Wissensbasis sorgt dafür, dass Antworten verlässlich und kundenspezifisch bleiben.",
+  design: "Ein passendes Design schafft Vertrauen und macht das Widget auf der Website wiedererkennbar.",
+  test: "Mit Testfragen prüfst du, ob der Chatbot verständlich und hilfreich antwortet.",
+  agents: "Agenten übernehmen automatische Aktionen wie Anfragen erkennen oder Kontaktwünsche vorbereiten.",
+  launch: "Zum Schluss wird geprüft, ob Domain, Einbindung und Live-Status vollständig sind.",
 };
 
 function formatDate(value: string | null | undefined) {
@@ -273,6 +284,22 @@ function statusForWizardStep(status: CustomerApiStatus | null, step: WizardStepK
   return "pending";
 }
 
+function wizardStepStatusLabel(status: CustomerApiStatus | null, step: WizardStepKey) {
+  const keys = STATUS_STEP_GROUPS[step];
+  const related = status?.steps?.filter((entry) => keys.includes(entry.key)) || [];
+
+  if (related.some((entry) => entry.status === "blocked")) {
+    return "Fehler";
+  }
+  if (related.some((entry) => entry.status === "warning")) {
+    return "Unvollständig";
+  }
+  if (related.length > 0 && related.every((entry) => entry.status === "complete")) {
+    return "Abgeschlossen";
+  }
+  return "Offen";
+}
+
 function statusLabel(source: KnowledgeSource) {
   if (!source.isActive || source.status === "disabled") {
     return getStatusLabel("disabled");
@@ -311,6 +338,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   const [copied, setCopied] = useState(false);
   const [profileForm, setProfileForm] = useState({
     companyName: "",
+    botName: "",
     industry: "",
     websiteUrl: "",
     allowedDomains: "",
@@ -409,6 +437,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       }
       setProfileForm({
         companyName: nextSite.companyName || nextSite.name,
+        botName: nextSite.botName,
         industry: nextSite.industry,
         websiteUrl: nextSite.websiteUrl,
         allowedDomains: nextSite.allowedDomains.join("\n"),
@@ -473,7 +502,11 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       async () => {
         const [siteResult, brandingResult, configResult] = await Promise.all([
           updateSiteBasics(siteId, { name: companyName || site?.name || siteId, allowedDomains }),
-          updateSiteBranding(siteId, { companyName: companyName || site?.companyName || site?.name || "" }),
+          updateSiteBranding(siteId, {
+            companyName: companyName || site?.companyName || site?.name || "",
+            botName: profileForm.botName.trim() || site?.botName || "Service-Assistent",
+            welcomeMessage: designForm.welcomeMessage.trim() || site?.welcomeMessage || "",
+          }),
           updateSiteSettings(siteId, {
             websiteUrl: profileForm.websiteUrl.trim(),
             domain: websiteDomain,
@@ -756,7 +789,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      setError("Einbindungscode konnte nicht kopiert werden.");
+      setError("Script-Code konnte nicht kopiert werden.");
     }
   }
 
@@ -770,9 +803,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   async function saveCurrentStep() {
     switch (activeStep.key) {
       case "profile":
-        return saveProfile();
-      case "goal":
-        return saveGoal();
+        return (await saveProfile()) && (await saveGoal());
       case "design":
         return saveDesign();
       default:
@@ -805,31 +836,44 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         return (
           <section className="dashboard-card dashboard-stack" id="setup-step-basics">
             <StepIntro
-              title="Basisdaten festlegen"
-              description="Lege die wichtigsten Angaben für diesen Kunden fest."
+              title="Chatbot einrichten"
+              description="Lege fest, wie der Chatbot heißt, wie er startet und welches Ziel er verfolgt."
+              explanation={STEP_EXPLANATIONS.profile}
               status={statusForWizardStep(serverStatus, "profile")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "profile")}
             />
             <div className="dashboard-grid dashboard-grid--two">
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Unternehmensname *</span>
+                <span className="dashboard-field-label">Kunde / Projekt (Pflicht)</span>
                 <Input
                   value={profileForm.companyName}
                   onChange={(event) => setProfileForm((current) => ({ ...current, companyName: event.target.value }))}
                   placeholder="Muster GmbH"
                 />
+                <span className="dashboard-field-hint">Dieser Name erscheint intern und hilft bei der Zuordnung.</span>
               </label>
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Website *</span>
+                <span className="dashboard-field-label">Website (Pflicht)</span>
                 <Input
                   value={profileForm.websiteUrl}
                   onChange={(event) => setProfileForm((current) => ({ ...current, websiteUrl: event.target.value }))}
                   placeholder="https://www.kunde.de"
                 />
+                <span className="dashboard-field-hint">Die Website wird für Domain-Freigabe und Einbindung genutzt.</span>
               </label>
             </div>
             <div className="dashboard-grid dashboard-grid--two">
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Sprache</span>
+                <span className="dashboard-field-label">Chatbot-Name (Pflicht)</span>
+                <Input
+                  value={profileForm.botName}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, botName: event.target.value }))}
+                  placeholder="Service-Assistent"
+                />
+                <span className="dashboard-field-hint">So wird der Assistent im Chat angezeigt.</span>
+              </label>
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Sprache (Pflicht)</span>
                 <Select
                   value={profileForm.language}
                   onChange={(event) =>
@@ -845,7 +889,18 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
               </label>
             </div>
             <label className="dashboard-field">
-              <span className="dashboard-field-label">Erlaubte Domains *</span>
+              <span className="dashboard-field-label">Begrüßung (Pflicht)</span>
+              <textarea
+                className="dashboard-textarea wizard-textarea-compact"
+                rows={3}
+                value={designForm.welcomeMessage}
+                onChange={(event) => setDesignForm((current) => ({ ...current, welcomeMessage: event.target.value }))}
+                placeholder="Hallo! Wie kann ich dir helfen?"
+              />
+              <span className="dashboard-field-hint">Diese Nachricht sieht der Besucher als Erstes.</span>
+            </label>
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">Erlaubte Domains (Pflicht)</span>
               <textarea
                 className="dashboard-textarea"
                 rows={3}
@@ -853,10 +908,11 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                 onChange={(event) => setProfileForm((current) => ({ ...current, allowedDomains: event.target.value }))}
                 placeholder="kunde.de&#10;www.kunde.de"
               />
+              <span className="dashboard-field-hint">Nur diese Websites dürfen den Chatbot anzeigen.</span>
             </label>
             <div className="dashboard-grid dashboard-grid--two">
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Support-E-Mail optional</span>
+                <span className="dashboard-field-label">Support-E-Mail (optional)</span>
                 <Input
                   type="email"
                   value={profileForm.supportEmail}
@@ -865,7 +921,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                 />
               </label>
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Telefon optional</span>
+                <span className="dashboard-field-label">Telefon (optional)</span>
                 <Input
                   value={profileForm.phone}
                   onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
@@ -873,21 +929,17 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                 />
               </label>
             </div>
-          </section>
-        );
-
-      case "goal":
-        return (
-          <section className="dashboard-card dashboard-stack" id="setup-step-goal">
-            <StepIntro
-              title="Ziel und Verhalten festlegen"
-              description="Wähle Branche, Aufgabe und Gesprächsverhalten der KI."
-              status={statusForWizardStep(serverStatus, "goal")}
-            />
-            <section className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+            <div className="setup-module-card dashboard-stack dashboard-stack--sm">
+              <StepIntro
+                title="Ziel und Verhalten"
+                description="Wähle Branche, Ton und gewünschtes Ergebnis der Gespräche."
+                explanation="Diese Angaben steuern, ob der Chatbot eher berät, Support gibt oder Anfragen vorbereitet."
+                status={statusForWizardStep(serverStatus, "profile")}
+                statusLabel={wizardStepStatusLabel(serverStatus, "profile")}
+              />
               <div className="dashboard-grid dashboard-grid--two">
                 <label className="dashboard-field">
-                  <span className="dashboard-field-label">Branche *</span>
+                  <span className="dashboard-field-label">Branche (Pflicht)</span>
                   <Select
                     value={profileForm.industry}
                     onChange={(event) => setProfileForm((current) => ({ ...current, industry: event.target.value }))}
@@ -900,12 +952,12 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     ))}
                   </Select>
                 </label>
-                <div>
+                <div className="setup-template-panel">
                   <strong>{selectedTemplate?.label || "Noch keine Vorlage ausgewählt"}</strong>
-                  <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 10 }}>
+                  <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
                     {site.templateId
-                      ? `Angewendet: ${site.templateId} v${site.templateVersion || "?"}, ${formatDate(site.templateAppliedAt)}`
-                      : "Vorlagen setzen Ziel, Tonalität, CTA und typische Fragen."}
+                      ? `Vorlage angewendet am ${formatDate(site.templateAppliedAt)}`
+                      : "Eine Vorlage setzt passende Startwerte für Ziel, Ton und typische Fragen."}
                   </p>
                   <Button
                     type="button"
@@ -917,116 +969,100 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                   </Button>
                 </div>
               </div>
-            </section>
-            <div className="dashboard-grid dashboard-grid--two">
+              <div className="dashboard-grid dashboard-grid--two">
+                <label className="dashboard-field">
+                <span className="dashboard-field-label">Ziel des Chatbots (Pflicht)</span>
+                  <Select
+                    value={goalForm.primaryGoal}
+                    onChange={(event) =>
+                      setGoalForm((current) => ({
+                        ...current,
+                        primaryGoal: event.target.value as SiteDetails["primaryGoal"],
+                      }))
+                    }
+                  >
+                    {GOAL_OPTIONS.map((option) => (
+                      <option key={option.value || "empty"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <label className="dashboard-field">
+                <span className="dashboard-field-label">Tonalität (Pflicht)</span>
+                  <Select
+                    value={goalForm.tone}
+                    onChange={(event) =>
+                      setGoalForm((current) => ({ ...current, tone: event.target.value as SiteDetails["tone"] }))
+                    }
+                  >
+                    {TONE_OPTIONS.map((option) => (
+                      <option key={option.value || "empty"} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              </div>
+              <div className="dashboard-grid dashboard-grid--two">
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Antwortverhalten mit Wissen</span>
+                  <Select
+                    value={goalForm.knowledgeMode}
+                    onChange={(event) =>
+                      setGoalForm((current) => ({ ...current, knowledgeMode: event.target.value as KnowledgeMode }))
+                    }
+                  >
+                    {KNOWLEDGE_MODE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Wenn der Chatbot unsicher ist</span>
+                  <Select
+                    value={goalForm.fallbackBehavior}
+                    onChange={(event) =>
+                      setGoalForm((current) => ({
+                        ...current,
+                        fallbackBehavior: event.target.value as FallbackBehavior,
+                      }))
+                    }
+                  >
+                    {FALLBACK_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              </div>
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Hauptziel *</span>
-                <Select
-                  value={goalForm.primaryGoal}
-                  onChange={(event) =>
-                    setGoalForm((current) => ({
-                      ...current,
-                      primaryGoal: event.target.value as SiteDetails["primaryGoal"],
-                    }))
-                  }
-                >
-                  {GOAL_OPTIONS.map((option) => (
-                    <option key={option.value || "empty"} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Tonalität *</span>
-                <Select
-                  value={goalForm.tone}
-                  onChange={(event) =>
-                    setGoalForm((current) => ({ ...current, tone: event.target.value as SiteDetails["tone"] }))
-                  }
-                >
-                  {TONE_OPTIONS.map((option) => (
-                    <option key={option.value || "empty"} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            </div>
-            <div className="dashboard-grid dashboard-grid--two">
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Wissensmodus</span>
-                <Select
-                  value={goalForm.knowledgeMode}
-                  onChange={(event) =>
-                    setGoalForm((current) => ({ ...current, knowledgeMode: event.target.value as KnowledgeMode }))
-                  }
-                >
-                  {KNOWLEDGE_MODE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Wenn die KI unsicher ist</span>
-                <Select
-                  value={goalForm.fallbackBehavior}
-                  onChange={(event) =>
-                    setGoalForm((current) => ({
-                      ...current,
-                      fallbackBehavior: event.target.value as FallbackBehavior,
-                    }))
-                  }
-                >
-                  {FALLBACK_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            </div>
-            <label className="dashboard-field">
-              <span className="dashboard-field-label">CTA / nächster Schritt</span>
-              <Input
-                value={goalForm.ctaText}
-                onChange={(event) => setGoalForm((current) => ({ ...current, ctaText: event.target.value }))}
-                placeholder="Kontakt aufnehmen, Termin vereinbaren, Anfrage aufnehmen"
-              />
-            </label>
-            <div className="dashboard-grid dashboard-grid--two">
-              {GOAL_OPTIONS.filter((option) => option.value === goalForm.primaryGoal).map((option) => (
-                <div key={option.value || "empty"} className="dashboard-card dashboard-card--soft">
-                  <strong>Auswirkung</strong>
-                  <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                    {option.help}
-                  </p>
-                </div>
-              ))}
-              {KNOWLEDGE_MODE_OPTIONS.filter((option) => option.value === goalForm.knowledgeMode).map((option) => (
-                <div key={option.value} className="dashboard-card dashboard-card--soft">
-                  <strong>Wissensmodus</strong>
-                  <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                    {option.help}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <details className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-              <summary style={{ cursor: "pointer", fontWeight: 700 }}>Erweiterte Gesprächsanweisung</summary>
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Systemhinweis</span>
-                <textarea
-                  className="dashboard-textarea"
-                  rows={4}
-                  value={goalForm.systemPrompt}
-                  onChange={(event) => setGoalForm((current) => ({ ...current, systemPrompt: event.target.value }))}
-                  placeholder="Beispiel: Stelle maximal eine Rückfrage, bleibe professionell und leite bei konkretem Interesse zur Kontaktaufnahme."
+                <span className="dashboard-field-label">Nächster Schritt für Besucher (optional)</span>
+                <Input
+                  value={goalForm.ctaText}
+                  onChange={(event) => setGoalForm((current) => ({ ...current, ctaText: event.target.value }))}
+                  placeholder="Kontakt aufnehmen, Termin vereinbaren, Anfrage aufnehmen"
                 />
               </label>
-            </details>
+              <details className="dashboard-accordion">
+                <summary className="dashboard-accordion__summary">Erweiterte Gesprächsregel</summary>
+                <div className="dashboard-accordion__content">
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Interne Gesprächsregel (optional)</span>
+                    <textarea
+                      className="dashboard-textarea"
+                      rows={4}
+                      value={goalForm.systemPrompt}
+                      onChange={(event) => setGoalForm((current) => ({ ...current, systemPrompt: event.target.value }))}
+                      placeholder="Beispiel: Stelle maximal eine Rückfrage, bleibe professionell und leite bei konkretem Interesse zur Kontaktaufnahme."
+                    />
+                  </label>
+                </div>
+              </details>
+            </div>
           </section>
         );
 
@@ -1034,20 +1070,22 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         return (
           <section className="dashboard-card dashboard-stack" id="setup-step-knowledge">
             <StepIntro
-              title="Wissen hinzufügen"
-              description="Diese Informationen nutzt die KI für zuverlässige Antworten."
+              title="Wissensbasis aufbauen"
+              description="Füge Inhalte hinzu, aus denen der Chatbot sichere Antworten formuliert."
+              explanation={STEP_EXPLANATIONS.knowledge}
               status={statusForWizardStep(serverStatus, "knowledge")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "knowledge")}
             />
             <div className="dashboard-grid dashboard-grid--metrics-3">
-              <CompactMetricCard label="Quellen gesamt" value={sources.length} />
-              <CompactMetricCard label="Aktiv & bereit" value={readyActiveSources.length} />
-              <CompactMetricCard label="Wissensmodus" value={getKnowledgeModeLabel(goalForm.knowledgeMode)} />
+              <CompactMetricCard label="Einträge gesamt" value={sources.length} />
+              <CompactMetricCard label="Bereit nutzbar" value={readyActiveSources.length} />
+              <CompactMetricCard label="Antwortverhalten" value={getKnowledgeModeLabel(goalForm.knowledgeMode)} />
             </div>
             <div className="wizard-method-grid">
               {[
-                { key: "manual" as KnowledgeMethod, title: "Text / FAQ hinzufügen", text: "Kurze Antworten oder FAQ direkt einfügen." },
-                { key: "url" as KnowledgeMethod, title: "Website-URL importieren", text: "Eine einzelne Seite als Wissensquelle übernehmen." },
-                { key: "pdf" as KnowledgeMethod, title: "PDF hochladen", text: "Ein PDF als Wissensquelle verarbeiten." },
+                { key: "manual" as KnowledgeMethod, title: "FAQ oder Text einfügen", text: "Kurze Fragen, Antworten oder freie Texte direkt speichern." },
+                { key: "url" as KnowledgeMethod, title: "Website importieren", text: "Eine einzelne Webseite in die Wissensbasis übernehmen." },
+                { key: "pdf" as KnowledgeMethod, title: "PDF hochladen", text: "Ein Dokument als Wissensbasis verarbeiten." },
               ].map((method) => (
                 <button
                   key={method.key}
@@ -1063,32 +1101,32 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
               {knowledgeMethod === "manual" ? (
                 <>
-                  <h3 className="dashboard-card-title dashboard-card-title--sm">Text / FAQ</h3>
+                  <h3 className="dashboard-card-title dashboard-card-title--sm">FAQ oder eigener Text</h3>
                   <Input
                     value={knowledgeForm.title}
                     onChange={(event) => setKnowledgeForm((current) => ({ ...current, title: event.target.value }))}
-                    placeholder="Titel"
+                    placeholder="Titel, z. B. Leistungen oder Preise"
                   />
                   <Input
                     value={knowledgeForm.question}
                     onChange={(event) => setKnowledgeForm((current) => ({ ...current, question: event.target.value }))}
-                    placeholder="Frage optional"
+                    placeholder="Frage (optional)"
                   />
                   <textarea
                     className="dashboard-textarea wizard-textarea-compact"
                     value={knowledgeForm.content}
                     onChange={(event) => setKnowledgeForm((current) => ({ ...current, content: event.target.value }))}
-                    placeholder="Antwort, FAQ oder Wissenstext einfügen"
+                    placeholder="Antwort, FAQ oder Wissenstext einfügen (Pflicht)"
                   />
                   <Button type="button" onClick={addManualKnowledge} disabled={savingKey === "manual"}>
-                    {savingKey === "manual" ? "Speichert..." : "Text speichern"}
+                    {savingKey === "manual" ? "Speichert..." : "In Wissensbasis speichern"}
                   </Button>
                 </>
               ) : null}
 
               {knowledgeMethod === "url" ? (
                 <>
-                  <h3 className="dashboard-card-title dashboard-card-title--sm">Website-URL</h3>
+                  <h3 className="dashboard-card-title dashboard-card-title--sm">Website-Seite importieren</h3>
                   <Input
                     value={knowledgeForm.url}
                     onChange={(event) => setKnowledgeForm((current) => ({ ...current, url: event.target.value }))}
@@ -1097,7 +1135,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                   <Input
                     value={knowledgeForm.urlTitle}
                     onChange={(event) => setKnowledgeForm((current) => ({ ...current, urlTitle: event.target.value }))}
-                    placeholder="Titel optional"
+                    placeholder="Titel (optional)"
                   />
                   <Button type="button" onClick={addUrlKnowledge} disabled={savingKey === "url"}>
                     {savingKey === "url" ? "Importiert..." : "Website importieren"}
@@ -1107,7 +1145,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
 
               {knowledgeMethod === "pdf" ? (
                 <>
-                  <h3 className="dashboard-card-title dashboard-card-title--sm">PDF</h3>
+                  <h3 className="dashboard-card-title dashboard-card-title--sm">PDF-Dokument</h3>
                   <input
                     type="file"
                     accept="application/pdf"
@@ -1115,28 +1153,28 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     onChange={(event) => setPdfFile(event.target.files?.[0] ?? null)}
                   />
                   <Button type="button" variant="secondary" onClick={addPdfKnowledge} disabled={savingKey === "pdf"}>
-                    {savingKey === "pdf" ? "Lädt hoch..." : "PDF hochladen"}
+                    {savingKey === "pdf" ? "Lädt hoch..." : "PDF in Wissensbasis hochladen"}
                   </Button>
                 </>
               ) : null}
             </div>
             <div className="dashboard-stack dashboard-stack--sm">
               <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
-                <h3 className="dashboard-card-title dashboard-card-title--sm">Wissensquellen</h3>
+                <h3 className="dashboard-card-title dashboard-card-title--sm">Wissensbasis</h3>
                 <Link href={`/sites/${siteSlug}/knowledge`} className="dashboard-button dashboard-button--secondary">
-                  Wissensbereich öffnen
+                  Alle Inhalte öffnen
                 </Link>
               </div>
               {sources.length === 0 ? (
-                <EmptyStateCard title="Noch kein Wissen hinterlegt" description="Starte mit FAQ oder Website-URL." />
+                <EmptyStateCard title="Noch keine Wissensbasis" description="Starte mit FAQ, Website oder PDF, damit der Chatbot zuverlässiger antwortet." />
               ) : (
                 <div className="wizard-source-list">
                   {sources.map((source) => (
                     <div key={source.id} className="wizard-source-row">
                       <div>
-                        <strong>{source.title || source.label || "Wissensquelle"}</strong>
-                        <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                          {source.type.toUpperCase()} · {source.url || source.sourceUrl || "Manueller Inhalt"}
+                        <strong>{source.title || source.label || "Wissenseintrag"}</strong>
+                        <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                          {source.type.toUpperCase()} · {source.url || source.sourceUrl || "Eigener Inhalt"}
                         </p>
                       </div>
                       <CustomerStatusBadge status={sourceTone(source)} label={statusLabel(source)} />
@@ -1155,7 +1193,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                           onClick={() => resyncSource(source)}
                           disabled={savingKey === `resync-${source.id}`}
                         >
-                          Neu synchronisieren
+                          Erneut verarbeiten
                         </Button>
                         <Button
                           type="button"
@@ -1179,26 +1217,17 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         return (
           <section className="dashboard-card dashboard-stack" id="setup-step-design">
             <StepIntro
-              title="Widget gestalten"
-              description="Stelle Begrüßung, Farben und Position ein."
+              title="Design anpassen"
+              description="Passe Farben, Button, Position und Logo an die Kundenwebsite an."
+              explanation={STEP_EXPLANATIONS.design}
               status={statusForWizardStep(serverStatus, "design")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "design")}
             />
             <div className="dashboard-grid dashboard-grid--form-preview">
               <div className="dashboard-stack">
-                <label className="dashboard-field">
-                  <span className="dashboard-field-label">Begrüßung *</span>
-                  <textarea
-                    className="dashboard-textarea"
-                    rows={3}
-                    value={designForm.welcomeMessage}
-                    onChange={(event) =>
-                      setDesignForm((current) => ({ ...current, welcomeMessage: event.target.value }))
-                    }
-                  />
-                </label>
                 <div className="dashboard-grid dashboard-grid--two">
                   <label className="dashboard-field">
-                    <span className="dashboard-field-label">Eingabe-Platzhalter</span>
+                    <span className="dashboard-field-label">Text im Eingabefeld (optional)</span>
                     <Input
                       value={designForm.placeholderText}
                       onChange={(event) =>
@@ -1207,7 +1236,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     />
                   </label>
                   <label className="dashboard-field">
-                    <span className="dashboard-field-label">Button-Text</span>
+                    <span className="dashboard-field-label">Button-Text (optional)</span>
                     <Input
                       value={designForm.launcherLabel}
                       onChange={(event) => setDesignForm((current) => ({ ...current, launcherLabel: event.target.value }))}
@@ -1216,7 +1245,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                 </div>
                 <div className="dashboard-grid dashboard-grid--two">
                   <label className="dashboard-field">
-                    <span className="dashboard-field-label">Primärfarbe</span>
+                    <span className="dashboard-field-label">Hauptfarbe (Pflicht)</span>
                     <Input
                       type="color"
                       value={designForm.brandColor}
@@ -1224,7 +1253,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     />
                   </label>
                   <label className="dashboard-field">
-                    <span className="dashboard-field-label">Position</span>
+                    <span className="dashboard-field-label">Position (Pflicht)</span>
                     <Select
                       value={designForm.widgetPosition}
                       onChange={(event) =>
@@ -1240,9 +1269,9 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                   </label>
                 </div>
                 <details className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-                  <summary style={{ cursor: "pointer", fontWeight: 700 }}>Erweiterte Designfelder</summary>
+                  <summary className="dashboard-accordion__summary">Optionale Designfelder</summary>
                   <label className="dashboard-field">
-                    <span className="dashboard-field-label">Logo URL optional</span>
+                    <span className="dashboard-field-label">Logo-URL (optional)</span>
                     <Input
                       value={designForm.logoUrl}
                       onChange={(event) => setDesignForm((current) => ({ ...current, logoUrl: event.target.value }))}
@@ -1250,7 +1279,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     />
                   </label>
                   <label className="dashboard-field">
-                    <span className="dashboard-field-label">Datenschutz-URL</span>
+                    <span className="dashboard-field-label">Datenschutz-URL (empfohlen)</span>
                     <Input
                       value={designForm.privacyUrl}
                       onChange={(event) => setDesignForm((current) => ({ ...current, privacyUrl: event.target.value }))}
@@ -1258,7 +1287,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     />
                   </label>
                   <label className="dashboard-field">
-                    <span className="dashboard-field-label">Akzentfarbe</span>
+                    <span className="dashboard-field-label">Akzentfarbe (optional)</span>
                     <Input
                       type="color"
                       value={designForm.accentColor}
@@ -1266,7 +1295,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     />
                   </label>
                   <label className="dashboard-field">
-                    <span className="dashboard-field-label">Datenschutz-Hinweis optional</span>
+                    <span className="dashboard-field-label">Datenschutz-Hinweis (optional)</span>
                     <textarea
                       className="dashboard-textarea"
                       rows={3}
@@ -1279,7 +1308,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                   </label>
                 </details>
                 <Button type="button" onClick={saveDesign} disabled={savingKey === "design"}>
-                  {savingKey === "design" ? "Speichert..." : "Design speichern"}
+                  {savingKey === "design" ? "Speichert..." : "Design speichern & Vorschau prüfen"}
                 </Button>
               </div>
               <WidgetPreview
@@ -1298,79 +1327,154 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
           </section>
         );
 
+      case "test":
+        return (
+          <section className="dashboard-card dashboard-stack" id="setup-step-test">
+            <StepIntro
+              title="Chat testen"
+              description="Teste echte Besucherfragen, bevor der Chatbot auf die Website kommt."
+              explanation={STEP_EXPLANATIONS.test}
+              status={statusForWizardStep(serverStatus, "test")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "test")}
+            />
+            <div className="setup-module-card dashboard-stack dashboard-stack--sm">
+              <h3 className="dashboard-card-title dashboard-card-title--sm">Test-Chat</h3>
+              <div className="dashboard-inline dashboard-wrap">
+                {testQuestionChips.slice(0, 3).map((question) => (
+                  <Button key={question} type="button" variant="secondary" onClick={() => setTestQuestion(question)}>
+                    {question}
+                  </Button>
+                ))}
+              </div>
+              <div className="dashboard-stack dashboard-stack--sm">
+                {testMessages.length === 0 ? (
+                  <EmptyStateCard title="Noch kein Test gestartet" description="Wähle eine Beispielfrage oder schreibe eine eigene Frage." />
+                ) : (
+                  testMessages.map((entry, index) => (
+                    <div key={`${entry.role}-${index}`} className="dashboard-card dashboard-card--compact">
+                      <strong>{entry.role === "user" ? "Testfrage" : "Antwort"}</strong>
+                      <p className="dashboard-copy dashboard-no-margin-bottom">{entry.text}</p>
+                      {entry.sources?.length ? (
+                        <p className="dashboard-copy dashboard-copy--muted dashboard-mt-4 dashboard-no-margin-bottom">
+                          Genutzte Wissensbasis: {entry.sources.map((source) => source.title || source.url || "Eintrag").join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+              <textarea
+                className="dashboard-textarea wizard-textarea-compact"
+                rows={2}
+                value={testQuestion}
+                onChange={(event) => setTestQuestion(event.target.value)}
+                placeholder="Testfrage eingeben"
+              />
+              <Button type="button" onClick={sendTestMessage} disabled={savingKey === "test-chat"}>
+                {savingKey === "test-chat" ? "Test läuft..." : "Testfrage senden"}
+              </Button>
+              <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                Letzter Test: {formatDate(site.lastTestedAt)}
+              </p>
+            </div>
+          </section>
+        );
+
+      case "agents":
+        return (
+          <section className="dashboard-card dashboard-stack" id="setup-step-agents">
+            <StepIntro
+              title="Automatische Aktionen aktivieren"
+              description="Starte mit dem Lead-Agent. Weitere Agenten kannst du später ergänzen."
+              explanation={STEP_EXPLANATIONS.agents}
+              status={statusForWizardStep(serverStatus, "agents")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "agents")}
+            />
+            <div className="setup-agent-grid">
+              {[
+                {
+                  title: "Lead-Agent",
+                  text: "Erkennt konkrete Anfragen und bereitet neue Kontakte vor.",
+                  href: `/sites/${siteSlug}/modules`,
+                  status: "Über Funktionen aktivieren",
+                },
+                {
+                  title: "Termin-/Kontakt-Agent",
+                  text: "Bereitet Rückruf, Terminwunsch oder Kontaktaufnahme vor.",
+                  href: `/sites/${siteSlug}/widget`,
+                  status: "Kontaktziel prüfen",
+                },
+                {
+                  title: "E-Commerce-Agent",
+                  text: "Berät später zu Produkten und Shop-Fragen.",
+                  href: `/sites/${siteSlug}/agents`,
+                  status: "Optional",
+                },
+                {
+                  title: "IT-Support-/Ticket-Agent",
+                  text: "Erkennt Supportfälle und bereitet Tickets vor.",
+                  href: `/sites/${siteSlug}/agents`,
+                  status: "Optional",
+                },
+                {
+                  title: "Webhook-/Übergabe-Agent",
+                  text: "Übergibt wichtige Ereignisse an Verbindungen oder Menschen.",
+                  href: `/sites/${siteSlug}/integrations`,
+                  status: "Verbindungen prüfen",
+                },
+              ].map((agent) => (
+                <Link key={agent.title} href={agent.href} className="setup-agent-card">
+                  <span className="dashboard-badge">{agent.status}</span>
+                  <strong>{agent.title}</strong>
+                  <span>{agent.text}</span>
+                </Link>
+              ))}
+            </div>
+            <div className="dashboard-inline dashboard-wrap">
+              <Link href={`/sites/${siteSlug}/modules`} className="dashboard-button dashboard-button--secondary">
+                Funktionen aktivieren
+              </Link>
+              <Link href={`/sites/${siteSlug}/agents`} className="dashboard-button dashboard-button--secondary">
+                Agenten ansehen
+              </Link>
+              <Link href={`/sites/${siteSlug}/integrations`} className="dashboard-button dashboard-button--secondary">
+                Verbindungen öffnen
+              </Link>
+            </div>
+          </section>
+        );
+
       case "launch":
         return (
           <section className="dashboard-card dashboard-stack" id="setup-step-live">
             <StepIntro
-              title="Abschluss prüfen"
-              description="Teste den Chat, kopiere den Einbindungscode und schalte nur live, wenn alles bereit ist."
+              title="Website einbinden"
+              description="Kopiere den Script-Code, prüfe die Domain und schalte den Chatbot live."
+              explanation={STEP_EXPLANATIONS.launch}
               status={statusForWizardStep(serverStatus, "launch")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "launch")}
             />
-            <div className="dashboard-grid dashboard-grid--two">
-              <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-                <h3 className="dashboard-card-title dashboard-card-title--sm">Test-Chat</h3>
-                <div className="dashboard-inline dashboard-wrap">
-                  {testQuestionChips.slice(0, 3).map((question) => (
-                    <Button key={question} type="button" variant="secondary" onClick={() => setTestQuestion(question)}>
-                      {question}
-                    </Button>
-                  ))}
-                </div>
-                <div className="dashboard-stack dashboard-stack--sm">
-                  {testMessages.length === 0 ? (
-                    <p className="dashboard-copy dashboard-copy--muted">Stelle eine typische Kundenfrage, bevor du live schaltest.</p>
-                  ) : (
-                    testMessages.map((entry, index) => (
-                      <div key={`${entry.role}-${index}`} className="dashboard-card">
-                        <strong>{entry.role === "user" ? "Testfrage" : "Antwort"}</strong>
-                        <p className="dashboard-copy" style={{ marginBottom: 0 }}>
-                          {entry.text}
-                        </p>
-                        {entry.sources?.length ? (
-                          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0, marginTop: 6 }}>
-                            Quellen: {entry.sources.map((source) => source.title || source.url || "Quelle").join(", ")}
-                          </p>
-                        ) : null}
-                      </div>
-                    ))
-                  )}
-                </div>
-                <textarea
-                  className="dashboard-textarea"
-                  rows={2}
-                  value={testQuestion}
-                  onChange={(event) => setTestQuestion(event.target.value)}
-                  placeholder="Testfrage eingeben"
-                />
-                <Button type="button" onClick={sendTestMessage} disabled={savingKey === "test-chat"}>
-                  {savingKey === "test-chat" ? "Test läuft..." : "Testfrage senden"}
-                </Button>
-                <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                  Letzter Test: {formatDate(site.lastTestedAt)}
-                </p>
+            <div className="setup-module-card dashboard-stack dashboard-stack--sm">
+              <h3 className="dashboard-card-title dashboard-card-title--sm">Einbindung</h3>
+              <div className="dashboard-info-row">
+                <strong>Script-Code</strong>
+                <span className="dashboard-breakword dashboard-mono">{site.siteKey}</span>
               </div>
-              <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-                <h3 className="dashboard-card-title dashboard-card-title--sm">Einbindung</h3>
-                <div className="dashboard-info-row">
-                  <strong>Einbindungscode</strong>
-                  <span className="dashboard-breakword dashboard-mono">{site.siteKey}</span>
-                </div>
-                <textarea className="dashboard-textarea dashboard-mono" readOnly value={embedCode} rows={5} />
-                <Button type="button" onClick={copyEmbedCode}>
-                  Einbindungscode kopieren
-                </Button>
-                {copied ? <p className="dashboard-status dashboard-status--success">Einbindungscode kopiert.</p> : null}
-                <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                  Erlaubte Domains: {site.allowedDomains.length ? site.allowedDomains.join(", ") : "Noch nicht gesetzt"}
-                </p>
-              </div>
+              <textarea className="dashboard-textarea dashboard-mono" readOnly value={embedCode} rows={5} />
+              <Button type="button" onClick={copyEmbedCode}>
+                Script-Code kopieren
+              </Button>
+              {copied ? <p className="dashboard-status dashboard-status--success">Script-Code kopiert.</p> : null}
+              <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                Erlaubte Domains: {site.allowedDomains.length ? site.allowedDomains.join(", ") : "Noch nicht gesetzt"}
+              </p>
             </div>
             <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
               <div className="dashboard-info-row">
                 <div>
-                  <strong>Live-Checkliste</strong>
-                  <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                    Der Backend-Status entscheidet, ob Go-Live möglich ist.
+                <strong>Status vor dem Livegang</strong>
+                <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                    Das System prüft automatisch, ob alle wichtigen Punkte erledigt sind.
                   </p>
                 </div>
                 <CustomerStatusBadge
@@ -1393,18 +1497,18 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
               </div>
               {serverStatus?.missingSteps?.length ? (
                 <p className="dashboard-status dashboard-status--error">
-                  Noch nicht bereit:{" "}
+                  Noch unvollständig:{" "}
                   {serverStatus.missingSteps
                     .map((key) => serverStatus.steps.find((step) => step.key === key)?.label || key)
                     .join(", ")}
                 </p>
               ) : null}
               <Button type="button" onClick={goLive} disabled={!canGoLive || liveDone || savingKey === "live"}>
-                {savingKey === "live" ? "Schaltet live..." : liveDone ? "Bereits live" : "Kunde live schalten"}
+                {savingKey === "live" ? "Schaltet live..." : liveDone ? "Bereits live" : "Chatbot live schalten"}
               </Button>
               {liveDone ? (
-                <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
-                  Nächster Schritt: Widget auf der Kundenwebsite einbauen und erste echte Chats prüfen.
+                <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                  Nächster Schritt: Script-Code auf der Kundenwebsite einbauen und erste echte Chats prüfen.
                 </p>
               ) : null}
             </div>
@@ -1427,13 +1531,23 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         <section className="dashboard-card dashboard-card--compact dashboard-stack">
           <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
             <div>
-              <h2 className="dashboard-card-title">Setup Wizard</h2>
-              <p className="dashboard-copy dashboard-copy--muted">Führe den Kunden in fünf klaren Schritten bis zum Go-Live.</p>
+              <h2 className="dashboard-card-title">Setup-Assistent</h2>
+              <p className="dashboard-copy dashboard-copy--muted">Führe den Kunden in sechs klaren Modulen bis zur Website-Einbindung.</p>
             </div>
             <CustomerStatusBadge
               status={serverStatus ? mapStatusSeverityToTone(serverStatus.severity) : mapOverallStatusToTone(overallStatus)}
               label={serverStatus?.label || overallStatus}
             />
+          </div>
+
+          <div className="dashboard-setup-progress" aria-label="Setup-Fortschritt">
+            <div>
+              <strong>
+                Schritt {activeStepIndex + 1} von {WIZARD_STEPS.length}: {activeStep.label}
+              </strong>
+              <span>{serverStatus?.progress ?? 0}% bereit</span>
+            </div>
+            <progress className="dashboard-setup-progress__meter" value={serverStatus?.progress ?? 0} max={100} />
           </div>
 
           <div className="dashboard-setup-steps dashboard-setup-steps--compact">
@@ -1452,7 +1566,10 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     <strong>{step.label}</strong>
                     <span>{step.description}</span>
                   </span>
-                  <CustomerStatusBadge status={statusForWizardStep(serverStatus, step.key)} />
+                  <CustomerStatusBadge
+                    status={statusForWizardStep(serverStatus, step.key)}
+                    label={wizardStepStatusLabel(serverStatus, step.key)}
+                  />
                 </button>
               );
             })}
@@ -1479,7 +1596,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             </Button>
             {activeStep.key !== "launch" ? (
               <Button type="button" variant="secondary" onClick={() => setActiveStepIndex((current) => current + 1)}>
-                Überspringen
+                Später erledigen
               </Button>
             ) : null}
             <Button
@@ -1487,7 +1604,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
               onClick={activeStep.key === "launch" ? goLive : nextStep}
               disabled={Boolean(savingKey) || (activeStep.key === "launch" && (!canGoLive || liveDone))}
             >
-              {activeStep.key === "launch" ? "Live schalten" : "Weiter"}
+              {activeStep.key === "launch" ? "Chatbot live schalten" : "Speichern & weiter"}
             </Button>
           </div>
         </section>
@@ -1513,10 +1630,10 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
               )}
             </div>
           ) : (
-            <p className="dashboard-status dashboard-status--success">Bereit für Go-Live</p>
+            <p className="dashboard-status dashboard-status--success">Bereit zum Live-Schalten</p>
           )}
           {!canGoLive && !liveDone ? (
-            <p className="dashboard-copy dashboard-copy--muted">Noch nicht bereit: {serverStatus?.label || "Setup prüfen"}.</p>
+            <p className="dashboard-copy dashboard-copy--muted">Noch unvollständig: {serverStatus?.label || "Setup prüfen"}.</p>
           ) : null}
         </section>
         <SetupReadinessChecklist siteId={siteId} status={serverStatus} />
@@ -1528,19 +1645,24 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
 function StepIntro({
   title,
   description,
+  explanation,
   status,
+  statusLabel,
 }: {
   title: string;
   description: string;
+  explanation?: string;
   status: CustomerStatusTone;
+  statusLabel?: string;
 }) {
   return (
     <div className="dashboard-info-row">
       <div>
         <h3 className="dashboard-card-title dashboard-card-title--sm">{title}</h3>
         <p className="dashboard-copy dashboard-copy--muted">{description}</p>
+        {explanation ? <p className="setup-step-why">{explanation}</p> : null}
       </div>
-      <CustomerStatusBadge status={status} />
+      <CustomerStatusBadge status={status} label={statusLabel} />
     </div>
   );
 }

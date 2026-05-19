@@ -11,8 +11,8 @@ export function CustomerStatusBadge({ status, label }: CustomerStatusBadgeProps)
   }
 
   if (status === "attention") {
-    return <span className="dashboard-status dashboard-status--error">{label || "Achtung"}</span>;
+    return <span className="dashboard-status dashboard-status--warning">{label || "Achtung"}</span>;
   }
 
-  return <span className="dashboard-badge">{label || "Offen"}</span>;
+  return <span className="dashboard-status dashboard-status--pending">{label || "Offen"}</span>;
 }

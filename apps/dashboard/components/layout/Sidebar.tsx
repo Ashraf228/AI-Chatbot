@@ -1,12 +1,12 @@
 import { BrandLogo } from "./BrandLogo";
-import { getDashboardNav } from "../../lib/dashboard-config";
+import { getDashboardNavGroups } from "../../lib/dashboard-config";
 import { Button } from "../shared/Button";
 import { getDashboardSession } from "@/lib/auth";
 import { SidebarNav } from "./SidebarNav";
 
 export async function Sidebar() {
   const session = await getDashboardSession();
-  const navigation = getDashboardNav(session?.role ?? "admin");
+  const navigation = getDashboardNavGroups(session?.role ?? "admin");
 
   if (!session) {
     return null;
@@ -14,11 +14,13 @@ export async function Sidebar() {
 
   return (
     <aside className="dashboard-sidebar">
-      <BrandLogo size={56} />
+      <div className="dashboard-sidebar__brand">
+        <BrandLogo size={56} />
+      </div>
 
-      <SidebarNav items={navigation} />
+      <SidebarNav groups={navigation} />
 
-      <form action="/api/auth/logout" method="POST" style={{ marginTop: "auto" }}>
+      <form action="/api/auth/logout" method="POST" className="dashboard-sidebar__logout">
         <Button type="submit" variant="ghost" fullWidth className="dashboard-nav-link">
           Abmelden
         </Button>
