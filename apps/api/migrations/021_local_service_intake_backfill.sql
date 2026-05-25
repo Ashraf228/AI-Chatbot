@@ -115,7 +115,7 @@ SET config = jsonb_set(
   CASE
     WHEN s.config->'suggestedQuestionsByPath' IS NULL
       OR s.config->'suggestedQuestionsByPath' = '{}'::jsonb
-      OR s.config->'suggestedQuestionsByPath'::text ~* '(projekt|support|business|automatisierung|beratungsgespräch)'
+      OR (s.config->'suggestedQuestionsByPath')::text ~* '(projekt|support|business|automatisierung|beratungsgespräch)'
       THEN local_service_intake.suggested_questions
     ELSE s.config->'suggestedQuestionsByPath'
   END,
