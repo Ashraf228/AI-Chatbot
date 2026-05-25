@@ -113,6 +113,10 @@ export class IndustryTemplatesService {
         fillMissingOnly && Object.keys(site.suggestedQuestionsByPath || {}).length > 0
           ? site.suggestedQuestionsByPath
           : template.recommendedQuestions,
+      conversationFlow:
+        fillMissingOnly && Object.keys(site.conversationFlow || {}).length > 0
+          ? site.conversationFlow
+          : template.conversationFlow,
       tone: fillMissingOnly && site.tone ? site.tone : template.tone,
       ctaText: fillMissingOnly && site.ctaText ? site.ctaText : template.ctaText,
       reportKpis: fillMissingOnly && site.reportKpis.length > 0 ? site.reportKpis : template.reportKpis,

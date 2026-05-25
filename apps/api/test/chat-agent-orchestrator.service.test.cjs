@@ -1,6 +1,128 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ChatAgentOrchestratorService } = require('../dist/chat/chat-agent-orchestrator.service.js');
+const {
+  DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+} = require('../dist/site-modules/module-configs.js');
+
+const FORBIDDEN_LOCAL_SERVICE_TERMS =
+  /Projekt|Support-Anfrage|Business-Prozess|Automatisierung|Beratungsgespräch/i;
+const DRAIN_CLEANING_TERMS =
+  /Toilette|Abfluss|Keller|Kanal|Rohr|Rückstau|rueckstau|Verstopfung/i;
+
+function buildLocalServiceFlow(overrides = {}) {
+  return {
+    ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+    ...overrides,
+    genericLocalServiceKeywords:
+      overrides.genericLocalServiceKeywords ||
+      DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.genericLocalServiceKeywords,
+    problemKeywords:
+      overrides.problemKeywords ||
+      DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.problemKeywords,
+    pricingKeywords:
+      overrides.pricingKeywords ||
+      DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.pricingKeywords,
+    callbackKeywords:
+      overrides.callbackKeywords ||
+      DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.callbackKeywords,
+    questionTexts: {
+      ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.questionTexts,
+      ...(overrides.questionTexts || {}),
+    },
+  };
+}
+
+const ELECTRICIAN_INTAKE_FLOW = buildLocalServiceFlow({
+  subIndustry: 'electrician',
+  problemKeywords: [
+    'strom',
+    'stromausfall',
+    'sicherung',
+    'kurzschluss',
+    'elektriker',
+    'steckdose',
+    'licht',
+    'verteilerkasten',
+  ],
+  questionTexts: {
+    problem: 'Was genau ist betroffen - Stromausfall, Sicherung, Steckdose oder Licht?',
+    location: 'In welchem Ort oder welcher PLZ wird ein Elektriker benötigt?',
+    urgency: 'Wie dringend ist es aktuell - Notfall, heute noch oder planbarer Termin?',
+    phone: 'Unter welcher Telefonnummer kann der Elektriker Sie zurückrufen?',
+    name: 'Auf welchen Namen dürfen wir die Anfrage aufnehmen?',
+    callback: 'Gerne. Geht es um einen akuten Stromausfall oder um eine allgemeine Anfrage?',
+  },
+  pricingAnswerTemplate:
+    'Die Kosten hängen vom Einsatz, der Dringlichkeit und dem benötigten Aufwand vor Ort ab. Eine genaue Einschätzung ist nach kurzer Problembeschreibung möglich.',
+});
+
+const SHK_INTAKE_FLOW = buildLocalServiceFlow({
+  subIndustry: 'shk_heating',
+  genericLocalServiceKeywords: [
+    ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.genericLocalServiceKeywords,
+    'notfall',
+    'hilfe',
+  ],
+  problemKeywords: [
+    'heizung',
+    'heizungsausfall',
+    'warmes wasser',
+    'warmwasser',
+    'sanitär',
+    'sanitaer',
+    'therme',
+    'boiler',
+    'wasserhahn',
+  ],
+  questionTexts: {
+    problem: 'Was genau ist betroffen - Heizung, Warmwasser, Sanitär oder ein anderes Problem?',
+    location: 'In welchem Ort oder welcher PLZ wird Hilfe benötigt?',
+    urgency: 'Wie dringend ist es aktuell - Notfall, heute noch oder planbarer Termin?',
+    phone: 'Unter welcher Telefonnummer kann der Fachbetrieb Sie zurückrufen?',
+    name: 'Auf welchen Namen dürfen wir die Anfrage aufnehmen?',
+    callback: 'Gerne. Geht es um einen akuten Ausfall oder um eine allgemeine Anfrage?',
+  },
+  pricingAnswerTemplate:
+    'Die Kosten hängen vom Problem, der Dringlichkeit und dem Aufwand vor Ort ab. Eine genaue Einschätzung ist nach kurzer Problembeschreibung möglich.',
+});
+
+const CLEANING_INTAKE_FLOW = buildLocalServiceFlow({
+  subIndustry: 'building_cleaning',
+  genericLocalServiceKeywords: [
+    'einsatz',
+    'einsatzort',
+    'rückruf',
+    'rueckruf',
+    'kosten',
+    'preis',
+    'termin',
+    'regelmäßig',
+    'regelmaessig',
+  ],
+  problemKeywords: [
+    'reinigung',
+    'büroreinigung',
+    'bueroereinigung',
+    'büro',
+    'buero',
+    'gebäudereinigung',
+    'gebaeudereinigung',
+    'unterhaltsreinigung',
+    'treppenhaus',
+    'praxisreinigung',
+  ],
+  questionTexts: {
+    problem: 'Um welche Reinigung geht es - Büro, Praxis, Treppenhaus oder ein anderes Objekt?',
+    location: 'In welchem Ort oder welcher PLZ befindet sich das Objekt?',
+    urgency: 'Geht es um einen einmaligen Einsatz oder eine regelmäßige Reinigung?',
+    phone: 'Unter welcher Telefonnummer können wir Sie für die Rücksprache erreichen?',
+    name: 'Auf welchen Namen dürfen wir die Anfrage aufnehmen?',
+    callback: 'Gerne. Geht es um eine regelmäßige Reinigung oder um eine einmalige Anfrage?',
+  },
+  pricingAnswerTemplate:
+    'Die Kosten hängen von Objektgröße, Umfang und Häufigkeit der Reinigung ab. Eine genaue Einschätzung ist nach kurzer Beschreibung möglich.',
+});
 
 function createHarness({
   smtpConfigured = true,
@@ -8,6 +130,7 @@ function createHarness({
   scheduleUrl = '',
   usageLimits,
   siteName = 'Demo Kunde',
+  intakeFlow,
 } = {}) {
   const conversations = new Map([
     ['conversation-1', { metadata: {} }],
@@ -29,6 +152,7 @@ function createHarness({
                 leadNotificationEmail,
                 ctaText: 'Kontakt aufnehmen',
                 scheduleUrl,
+                conversationFlow: intakeFlow || {},
               },
             },
           ],
@@ -147,6 +271,7 @@ function createHarness({
               primaryGoal: 'lead_capture',
               ctaLabel: 'Kontaktdaten hinterlassen',
               ctaDescription: 'Wir nehmen deine Anfrage auf.',
+              intakeFlow,
             },
           },
         ];
@@ -245,7 +370,9 @@ test('ChatAgentOrchestratorService starts a pending lead and asks for the concer
 });
 
 test('ChatAgentOrchestratorService starts local service intake without price or time promises', async () => {
-  const { decide, conversations, leads } = createHarness();
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
 
   const result = await decide('Meine Toilette ist verstopft');
 
@@ -263,7 +390,9 @@ test('ChatAgentOrchestratorService starts local service intake without price or 
 });
 
 test('ChatAgentOrchestratorService handles local service free-text intake step by step', async () => {
-  const { decide, conversations, leads } = createHarness();
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
 
   const first = await decide('Mein Abfluss läuft nicht ab');
   const location = await decide('Frankfurt');
@@ -281,7 +410,9 @@ test('ChatAgentOrchestratorService handles local service free-text intake step b
 });
 
 test('ChatAgentOrchestratorService asks for the affected problem when local notdienst lacks details', async () => {
-  const { decide, conversations, leads } = createHarness();
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
 
   const result = await decide('Ich brauche Notdienst in Frankfurt');
 
@@ -295,7 +426,9 @@ test('ChatAgentOrchestratorService asks for the affected problem when local notd
 });
 
 test('ChatAgentOrchestratorService answers local service pricing without lead pressure', async () => {
-  const { decide, leads, conversations } = createHarness();
+  const { decide, leads, conversations } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
 
   const result = await decide('Was kostet eine Rohrreinigung?');
 
@@ -308,8 +441,25 @@ test('ChatAgentOrchestratorService answers local service pricing without lead pr
   assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
 });
 
+test('ChatAgentOrchestratorService uses local service pricing answer from template config', async () => {
+  const templatePricingAnswer = 'Template-Preisantwort fuer lokale Dienstleister.';
+  const { decide } = createHarness({
+    intakeFlow: {
+      ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+      pricingAnswerTemplate: templatePricingAnswer,
+    },
+  });
+
+  const result = await decide('Was kostet eine Rohrreinigung?');
+
+  assert.match(result.answer, new RegExp(templatePricingAnswer));
+});
+
 test('ChatAgentOrchestratorService handles local service meter billing question without lead pressure', async () => {
-  const { decide, leads, conversations } = createHarness({ siteName: 'Rohrreinigung-ffm24' });
+  const { decide, leads, conversations } = createHarness({
+    siteName: 'Rohrreinigung-ffm24',
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
 
   const result = await decide('Rechnen Sie nach laufenden Metern ab?');
 
@@ -322,7 +472,10 @@ test('ChatAgentOrchestratorService handles local service meter billing question 
 });
 
 test('ChatAgentOrchestratorService lets standalone service area statements use normal knowledge flow', async () => {
-  const { decide, leads } = createHarness({ siteName: 'Rohrreinigung-ffm24' });
+  const { decide, leads } = createHarness({
+    siteName: 'Rohrreinigung-ffm24',
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
 
   const result = await decide('Ich wohne in Offenbach');
 
@@ -333,7 +486,10 @@ test('ChatAgentOrchestratorService lets standalone service area statements use n
 
 test('ChatAgentOrchestratorService clarifies callback urgency before asking for phone on local sites', async () => {
   for (const message of ['Ich möchte zurückgerufen werden', 'Können Sie mich anrufen?']) {
-    const { decide, leads } = createHarness({ siteName: 'Rohrreinigung-ffm24' });
+    const { decide, leads } = createHarness({
+      siteName: 'Rohrreinigung-ffm24',
+      intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+    });
 
     const result = await decide(message);
 
@@ -343,6 +499,121 @@ test('ChatAgentOrchestratorService clarifies callback urgency before asking for 
     assert.doesNotMatch(result.answer, /Telefonnummer|E-Mail|Name/i, message);
     assert.equal(leads.length, 0, message);
   }
+});
+
+test('ChatAgentOrchestratorService supports electrician local service intake from config', async () => {
+  const { decide, conversations, leads } = createHarness({
+    siteName: 'Elektro Musterbetrieb',
+    intakeFlow: ELECTRICIAN_INTAKE_FLOW,
+  });
+
+  const first = await decide('Bei mir ist der Strom ausgefallen');
+  const location = await decide('Kassel');
+  const urgency = await decide('heute noch');
+  const callback = await decide('Können Sie mich zurückrufen?');
+
+  assert.equal(first.action, 'ask_for_contact');
+  assert.match(first.answer, /Ort|PLZ|Elektriker/i);
+  assert.match(location.answer, /dringend|Notfall|planbarer Termin/i);
+  assert.match(urgency.answer, /Telefonnummer|zurückrufen/i);
+  assert.match(callback.answer, /Telefonnummer|zurückrufen/i);
+  assert.doesNotMatch(first.answer, DRAIN_CLEANING_TERMS);
+  assert.doesNotMatch(location.answer, DRAIN_CLEANING_TERMS);
+  assert.doesNotMatch(urgency.answer, DRAIN_CLEANING_TERMS);
+  assert.doesNotMatch(`${first.answer} ${location.answer} ${urgency.answer}`, FORBIDDEN_LOCAL_SERVICE_TERMS);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'Bei mir ist der Strom ausgefallen');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.location, 'Kassel');
+});
+
+test('ChatAgentOrchestratorService answers electrician pricing without aggressive lead capture', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: ELECTRICIAN_INTAKE_FLOW,
+  });
+
+  const result = await decide('Was kostet ein Einsatz?');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /Kosten hängen vom Einsatz/i);
+  assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i);
+  assert.doesNotMatch(result.answer, DRAIN_CLEANING_TERMS);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+});
+
+test('ChatAgentOrchestratorService supports SHK heating and sanitary intake from config', async () => {
+  for (const message of [
+    'Meine Heizung funktioniert nicht',
+    'Ich habe kein warmes Wasser',
+    'Ich brauche heute noch Hilfe',
+  ]) {
+    const { decide, leads } = createHarness({
+      siteName: 'SHK Musterbetrieb',
+      intakeFlow: SHK_INTAKE_FLOW,
+    });
+
+    const result = await decide(message);
+
+    assert.equal(result.handled, true, message);
+    assert.equal(result.action, 'ask_for_contact', message);
+    assert.match(result.answer, /Ort|PLZ|Hilfe|Notfall|allgemeine Anfrage/i, message);
+    assert.doesNotMatch(result.answer, DRAIN_CLEANING_TERMS, message);
+    assert.doesNotMatch(result.answer, FORBIDDEN_LOCAL_SERVICE_TERMS, message);
+    assert.equal(leads.length, 0, message);
+  }
+});
+
+test('ChatAgentOrchestratorService treats SHK emergency questions as clarification, not unsafe certainty', async () => {
+  const { decide, leads } = createHarness({
+    siteName: 'SHK Musterbetrieb',
+    intakeFlow: SHK_INTAKE_FLOW,
+  });
+
+  const result = await decide('Ist das ein Notfall?');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'ask_for_contact');
+  assert.match(result.answer, /Was genau ist betroffen|Heizung|Warmwasser|Sanitär|Notfall/i);
+  assert.doesNotMatch(result.answer, /garantiert|muss sofort|sicher ein Notfall/i);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService supports building cleaning intake without forcing emergency language', async () => {
+  const firstHarness = createHarness({
+    siteName: 'Gebäudereinigung Muster',
+    intakeFlow: CLEANING_INTAKE_FLOW,
+  });
+  const priceHarness = createHarness({
+    siteName: 'Gebäudereinigung Muster',
+    intakeFlow: CLEANING_INTAKE_FLOW,
+  });
+  const recurringHarness = createHarness({
+    siteName: 'Gebäudereinigung Muster',
+    intakeFlow: CLEANING_INTAKE_FLOW,
+  });
+  const callbackHarness = createHarness({
+    siteName: 'Gebäudereinigung Muster',
+    intakeFlow: CLEANING_INTAKE_FLOW,
+  });
+
+  const first = await firstHarness.decide('Ich brauche eine Büroreinigung');
+  const price = await priceHarness.decide('Was kostet eine Reinigung?');
+  const recurring = await recurringHarness.decide('Wir suchen regelmäßige Reinigung für ein Büro');
+  const callback = await callbackHarness.decide('Können Sie mich zurückrufen?');
+
+  assert.match(first.answer, /Ort|PLZ|Objekt/i);
+  assert.match(price.answer, /Objektgröße|Umfang|Häufigkeit/i);
+  assert.match(recurring.answer, /Ort|PLZ|Objekt|regelmäßige Reinigung/i);
+  assert.match(callback.answer, /regelmäßige Reinigung|einmalige Anfrage/i);
+  assert.doesNotMatch(`${first.answer} ${price.answer} ${recurring.answer} ${callback.answer}`, /Notdienst|akuter Notfall/i);
+  assert.doesNotMatch(`${first.answer} ${price.answer} ${recurring.answer} ${callback.answer}`, DRAIN_CLEANING_TERMS);
+  assert.doesNotMatch(`${first.answer} ${price.answer} ${recurring.answer} ${callback.answer}`, FORBIDDEN_LOCAL_SERVICE_TERMS);
+  assert.equal(firstHarness.leads.length, 0);
+  assert.equal(priceHarness.leads.length, 0);
+  assert.equal(recurringHarness.leads.length, 0);
+  assert.equal(callbackHarness.leads.length, 0);
+  assert.equal(firstHarness.conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
 });
 
 test('ChatAgentOrchestratorService captures a lead over multiple messages', async () => {

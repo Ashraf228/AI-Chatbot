@@ -1,3 +1,5 @@
+import type { LocalServiceIntakeFlowConfig } from '../../site-modules/module-configs';
+
 export type AgentDecisionType =
   | 'answer'
   | 'ask_followup'
@@ -75,6 +77,7 @@ export type AgentPolicyContext = {
     propertyTicketingEnabled: boolean;
     supportEnabled: boolean;
     primaryGoal?: string;
+    intakeFlow?: LocalServiceIntakeFlowConfig;
   };
   siteConfig: {
     setupGoal?: string;
@@ -82,6 +85,7 @@ export type AgentPolicyContext = {
     scheduleUrl?: string;
     contactUrl?: string;
     leadCaptureEnabled?: boolean;
+    intakeFlow?: LocalServiceIntakeFlowConfig;
   };
 };
 

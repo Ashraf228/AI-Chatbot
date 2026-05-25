@@ -1,3 +1,8 @@
+import {
+  DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+} from '../site-modules/module-configs';
+import type { LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
+
 export type SiteModulePatch = {
   key: string;
   isEnabled: boolean;
@@ -24,6 +29,7 @@ export type IndustryTemplate = {
   topTestQuestions: string[];
   reportKpis: string[];
   brandingDefaults: BrandingDefaults;
+  conversationFlow?: LocalServiceIntakeFlowConfig;
   modules: SiteModulePatch[];
 };
 
@@ -57,7 +63,7 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
         'In welchem Ort wird Hilfe benötigt?',
       ],
     },
-    topTestQuestions: ['Meine Toilette ist verstopft', 'Ich brauche Notdienst in Frankfurt', 'Was kostet eine Rohrreinigung?'],
+    topTestQuestions: ['Mein Abfluss läuft nicht ab', 'Ich brauche heute Notdienst', 'Was kostet ein Einsatz?'],
     reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
     brandingDefaults: {
       brandColor: '#b55400',
@@ -65,7 +71,23 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
       fontFamily: 'system',
       botName: 'Service-Assistent',
     },
-    modules: baseModules({}),
+    conversationFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+    modules: baseModules({
+      'lead-sales': {
+        key: 'lead-sales',
+        isEnabled: true,
+        config: {
+          primaryGoal: 'lead_capture',
+          ctaLabel: 'Rückruf anfragen',
+          ctaDescription: 'Wir nehmen den Einsatz kurz auf.',
+          qualificationFocus:
+            'Kläre Problem, Einsatzort und Dringlichkeit in einer Frage nach der anderen.',
+          handoffInstruction:
+            'Frage erst nach Problem, Einsatzort und Dringlichkeit, danach nach Telefonnummer und Name.',
+          intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+        },
+      },
+    }),
   },
   'ecommerce-shopify': {
     key: 'ecommerce-shopify',

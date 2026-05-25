@@ -1,6 +1,47 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resolveChatRoute } = require('../dist/chat-routing/chat-route-resolver.js');
+const {
+  DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+} = require('../dist/site-modules/module-configs.js');
+
+function buildLocalServiceFlow(overrides = {}) {
+  return {
+    ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+    ...overrides,
+    genericLocalServiceKeywords:
+      overrides.genericLocalServiceKeywords ||
+      DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.genericLocalServiceKeywords,
+    problemKeywords:
+      overrides.problemKeywords ||
+      DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.problemKeywords,
+    pricingKeywords:
+      overrides.pricingKeywords ||
+      DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.pricingKeywords,
+    callbackKeywords:
+      overrides.callbackKeywords ||
+      DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.callbackKeywords,
+    questionTexts: {
+      ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.questionTexts,
+      ...(overrides.questionTexts || {}),
+    },
+  };
+}
+
+const ELECTRICIAN_INTAKE_FLOW = buildLocalServiceFlow({
+  subIndustry: 'electrician',
+  problemKeywords: ['strom', 'stromausfall', 'elektriker', 'sicherung', 'kurzschluss'],
+  pricingAnswerTemplate:
+    'Die Kosten hängen vom Einsatz und dem benötigten Aufwand vor Ort ab.',
+});
+
+const CLEANING_INTAKE_FLOW = buildLocalServiceFlow({
+  subIndustry: 'building_cleaning',
+  genericLocalServiceKeywords: ['einsatz', 'einsatzort', 'rückruf', 'rueckruf', 'kosten', 'preis', 'termin', 'regelmäßig', 'regelmaessig'],
+  problemKeywords: ['reinigung', 'büroreinigung', 'bueroereinigung', 'büro', 'buero', 'gebäudereinigung', 'gebaeudereinigung'],
+  pricingAnswerTemplate:
+    'Die Kosten hängen von Objektgröße, Umfang und Häufigkeit ab.',
+});
 
 test('chat route resolver uses ecommerce advisor when shop intent and module are enabled', async () => {
   const decision = resolveChatRoute({
@@ -154,6 +195,7 @@ test('chat route resolver uses hybrid sales path for local service emergency int
         'lead-sales': {
           ctaLabel: 'Rückruf anfragen',
           ctaDescription: 'Wir nehmen den Fall kurz auf.',
+          intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
         },
       },
     });
@@ -161,6 +203,52 @@ test('chat route resolver uses hybrid sales path for local service emergency int
     assert.equal(decision.route, 'hybrid', message);
     assert.equal(decision.agentKey, 'lead-sales-agent', message);
     assert.equal(decision.cta?.label, 'Rückruf anfragen', message);
+  }
+});
+
+test('chat route resolver uses configurable local service keywords beyond drain cleaning', async () => {
+  for (const [message, intakeFlow] of [
+    ['Bei mir ist der Strom ausgefallen', ELECTRICIAN_INTAKE_FLOW],
+    ['Ich brauche einen Elektriker Notdienst', ELECTRICIAN_INTAKE_FLOW],
+    ['Ich brauche eine Büroreinigung', CLEANING_INTAKE_FLOW],
+    ['Wir suchen regelmäßige Reinigung für ein Büro', CLEANING_INTAKE_FLOW],
+  ]) {
+    const decision = resolveChatRoute({
+      message,
+      enabledModuleKeys: ['knowledge-faq', 'lead-sales'],
+      history: [],
+      moduleConfigs: {
+        'lead-sales': {
+          ctaLabel: 'Rückruf anfragen',
+          intakeFlow,
+        },
+      },
+    });
+
+    assert.equal(decision.route, 'hybrid', message);
+    assert.equal(decision.agentKey, 'lead-sales-agent', message);
+  }
+});
+
+test('chat route resolver keeps configurable local service pricing in faq mode', async () => {
+  for (const [message, intakeFlow] of [
+    ['Was kostet ein Einsatz?', ELECTRICIAN_INTAKE_FLOW],
+    ['Was kostet eine Reinigung?', CLEANING_INTAKE_FLOW],
+  ]) {
+    const decision = resolveChatRoute({
+      message,
+      enabledModuleKeys: ['knowledge-faq', 'lead-sales'],
+      history: [],
+      moduleConfigs: {
+        'lead-sales': {
+          ctaLabel: 'Rückruf anfragen',
+          intakeFlow,
+        },
+      },
+    });
+
+    assert.equal(decision.route, 'faq', message);
+    assert.equal(decision.agentKey, undefined, message);
   }
 });
 
@@ -176,6 +264,7 @@ test('chat route resolver keeps local service pricing questions in faq mode', as
       moduleConfigs: {
         'lead-sales': {
           ctaLabel: 'Rückruf anfragen',
+          intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
         },
       },
     });

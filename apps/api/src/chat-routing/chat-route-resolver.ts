@@ -4,13 +4,14 @@ import {
   normalizeLeadSalesModuleConfig,
   normalizePropertyTicketingModuleConfig,
 } from '../site-modules/module-configs';
+import type { LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
 
 const ECOMMERCE_PATTERN =
   /\b(shop|shopify|produkt|produkte|artikel|kaufen|bestellen|bestellung|kollektion|variante|groesse|größe|farbe|lieferung|versand|retoure|retouren|rueckgabe|rückgabe|umtausch|preis|preise|kostet|verfuegbar|verfügbar|verfuegbarkeit|verfügbarkeit|lager)\b/i;
 const PROPERTY_PATTERN =
   /\b(mieter|wohnung|schaden|reparatur|heizung|wasser|leckt|leck|ticket|stoerung|störung|hausverwaltung|defekt|passwort|kennwort|mfa|2fa|vpn|wlan|wifi|netzwerk|outlook|e-mail|email|drucker|printer|geraet|gerät|laptop|pc|software|zugriff|berechtigung|login|anmeldung|server|systemausfall|datenverlust|sicherheitsvorfall|phishing|malware|virus|ransomware)\b/i;
 const SALES_PATTERN =
-  /\b(ki|support|marketing|prozess|prozesse|automatisierung|mitarbeiter|entlast|vertrieb|lead|kundenservice|beratung|kontakt|termin|angebot|anfrage|rueckruf|rückruf|notdienst|notfall|soforthilfe|rohrreinigung|kanalreinigung|abfluss|abflussreinigung|wc|toilette|verstopft|verstopfung|rueckstau|rückstau|wasserschaden|keller|ueberflutet|überflutet|rohrbruch|kanalproblem|wasser läuft nicht ab|wasser laeuft nicht ab|läuft nicht ab|laeuft nicht ab)\b/i;
+  /\b(ki|support|marketing|prozess|prozesse|automatisierung|mitarbeiter|entlast|vertrieb|lead|kundenservice|beratung|kontakt|termin|angebot|anfrage|rueckruf|rückruf)\b/i;
 const AFFIRMATION_PATTERN = /^(ja|jap|yes|bitte|gern|gerne|okay|ok|klingt gut|passt)\b/i;
 const CONTACT_CTA_PATTERN = /\b(termin|anfrage|kontakt|rueckruf|rückruf|whatsapp|telefon)\b/i;
 
@@ -32,12 +33,51 @@ function hasModule(enabledModuleKeys: string[], key: string) {
   return enabledModuleKeys.includes(key);
 }
 
-function isLocalServicePricingQuestion(text: string) {
+function normalizeKeyword(value: string) {
+  return compact(value).toLowerCase().normalize('NFKC');
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchesKeyword(text: string, keywords: string[] = []) {
+  const normalized = normalizeKeyword(text);
+  return keywords.some((keyword) => {
+    const candidate = normalizeKeyword(keyword);
+    if (!candidate) {
+      return false;
+    }
+    return candidate.includes(' ')
+      ? normalized.includes(candidate)
+      : new RegExp(`\\b${escapeRegExp(candidate)}\\b`, 'i').test(normalized);
+  });
+}
+
+function getLocalServiceKeywords(intakeFlow?: LocalServiceIntakeFlowConfig) {
+  if (!intakeFlow) {
+    return [];
+  }
+
+  return [
+    ...intakeFlow.genericLocalServiceKeywords,
+    ...intakeFlow.problemKeywords,
+    ...intakeFlow.callbackKeywords,
+  ];
+}
+
+function isLocalServicePricingQuestion(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
+  if (!intakeFlow) {
+    return false;
+  }
+
   return (
-    /\b(kostet|kosten|preis|preise|abrechnung|abrechnen|meter|metern|laufende[nr]? meter|laufende[nr]? metern)\b/i.test(text) &&
-    /\b(rohr|rohrreinigung|kanal|kanalreinigung|abfluss|wc|toilette|verstopfung|notdienst|einsatz)\b/i.test(
-      text,
-    )
+    (matchesKeyword(text, intakeFlow.pricingKeywords) ||
+      /\b(kostet|kosten|preis|preise|abrechnung|abrechnen)\b/i.test(text)) &&
+    matchesKeyword(text, [
+      ...intakeFlow.problemKeywords,
+      ...intakeFlow.genericLocalServiceKeywords,
+    ])
   );
 }
 
@@ -108,8 +148,9 @@ export function resolveChatRoute(context: ChatRouteContext): ChatRouteDecision {
 
   if (
     hasModule(context.enabledModuleKeys, 'lead-sales') &&
-    !isLocalServicePricingQuestion(normalizedMessage) &&
+    !isLocalServicePricingQuestion(normalizedMessage, leadSalesConfig.intakeFlow) &&
     (SALES_PATTERN.test(normalizedMessage) ||
+      matchesKeyword(normalizedMessage, getLocalServiceKeywords(leadSalesConfig.intakeFlow)) ||
       (AFFIRMATION_PATTERN.test(normalizedMessage) && CONTACT_CTA_PATTERN.test(assistantText)))
   ) {
     return {

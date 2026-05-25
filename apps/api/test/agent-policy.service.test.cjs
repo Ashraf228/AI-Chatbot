@@ -4,6 +4,9 @@ const { AgentPolicyService } = require('../dist/ai/orchestration/agent-policy.se
 const { AgentOrchestratorService } = require('../dist/ai/orchestration/agent-orchestrator.service.js');
 const { AgentMemoryService } = require('../dist/ai/orchestration/agent-memory.service.js');
 const { AgentRunLoggerService } = require('../dist/ai/orchestration/agent-run-logger.service.js');
+const {
+  DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+} = require('../dist/site-modules/module-configs.js');
 
 function createPolicyContext(message, overrides = {}) {
   return {
@@ -105,7 +108,11 @@ test('AgentPolicyService treats local service emergencies as qualified lead foll
     'Meine Toilette ist verstopft',
     'Ich brauche Notdienst in Frankfurt',
   ]) {
-    const decision = policy.decide(createPolicyContext(message));
+    const decision = policy.decide(createPolicyContext(message, {
+      moduleContext: {
+        intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+      },
+    }));
 
     assert.equal(decision.type, 'ask_followup', message);
     assert.equal(decision.nextAction, 'ask_for_contact_details', message);
@@ -123,7 +130,11 @@ test('AgentPolicyService keeps local service price and area questions in knowled
     'Rechnen Sie nach laufenden Metern ab?',
     'Ich wohne in Offenbach, kommen Sie auch dahin?',
   ]) {
-    const decision = policy.decide(createPolicyContext(message));
+    const decision = policy.decide(createPolicyContext(message, {
+      moduleContext: {
+        intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+      },
+    }));
 
     assert.equal(decision.type, 'answer', message);
     assert.equal(decision.nextAction, 'continue_answer', message);

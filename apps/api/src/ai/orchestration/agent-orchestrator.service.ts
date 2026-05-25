@@ -6,6 +6,7 @@ import { AgentDecision } from './agent-decision.types';
 import { AgentMemoryService } from './agent-memory.service';
 import { AgentPolicyService } from './agent-policy.service';
 import { AgentRunLoggerService } from './agent-run-logger.service';
+import { normalizeLocalServiceIntakeFlowConfig } from '../../site-modules/module-configs';
 
 type SiteConfigRow = {
   config: Record<string, unknown> | null;
@@ -79,6 +80,9 @@ export class AgentOrchestratorService {
         enabled.has('property-ticketing') || enabled.has('property_ticket_agent'),
       supportEnabled: enabled.has('support-agent') || enabled.has('support_agent') || enabled.has('knowledge-faq'),
       primaryGoal: asString(leadConfig.primaryGoal) || undefined,
+      intakeFlow: leadConfig.intakeFlow
+        ? normalizeLocalServiceIntakeFlowConfig(leadConfig.intakeFlow)
+        : undefined,
     };
   }
 
@@ -106,6 +110,10 @@ export class AgentOrchestratorService {
         undefined,
       leadCaptureEnabled:
         typeof config.leadCaptureEnabled === 'boolean' ? config.leadCaptureEnabled : undefined,
+      intakeFlow:
+        Object.keys(conversationFlow).length > 0
+          ? normalizeLocalServiceIntakeFlowConfig(conversationFlow)
+          : undefined,
     };
   }
 }

@@ -6,11 +6,13 @@ import {
   AgentDecisionType,
   AgentPolicyContext,
 } from './agent-decision.types';
+import type { LocalServiceIntakeFlowConfig } from '../../site-modules/module-configs';
 
 @Injectable()
 export class AgentPolicyService {
   decide(context: AgentPolicyContext): AgentDecision {
     const text = normalizeText(context.message);
+    const intakeFlow = getIntakeFlow(context);
     const collectedFields = this.collectFields(context);
     const missingContactFields = getMissingContactFields(collectedFields);
     const hasContact = Boolean(collectedFields.email || collectedFields.phone);
@@ -89,7 +91,7 @@ export class AgentPolicyService {
       });
     }
 
-    if (hasScheduleIntent(text)) {
+    if (hasScheduleIntent(text, intakeFlow)) {
       return this.buildDecision({
         type: 'schedule_contact',
         confidence: hasContact ? 0.9 : 0.8,
@@ -104,7 +106,7 @@ export class AgentPolicyService {
       });
     }
 
-    if (hasServiceKnowledgeQuestion(text)) {
+    if (hasServiceKnowledgeQuestion(text, intakeFlow)) {
       return this.buildDecision({
         type: 'answer',
         confidence: 0.78,
@@ -117,7 +119,7 @@ export class AgentPolicyService {
       });
     }
 
-    if (hasLeadIntent(text) || context.memory.pendingLeadStatus === 'pending') {
+    if (hasLeadIntent(text, intakeFlow) || context.memory.pendingLeadStatus === 'pending') {
       const requiredFields = [
         ...(!collectedFields.concern ? ['concern'] : []),
         ...(!collectedFields.name ? ['name'] : []),
@@ -241,6 +243,10 @@ function isLeadEnabled(context: AgentPolicyContext) {
   );
 }
 
+function getIntakeFlow(context: AgentPolicyContext) {
+  return context.moduleContext.intakeFlow || context.siteConfig.intakeFlow;
+}
+
 function getMissingContactFields(fields: AgentCollectedFields) {
   const missing: string[] = [];
   if (!fields.email && !fields.phone) {
@@ -249,23 +255,33 @@ function getMissingContactFields(fields: AgentCollectedFields) {
   return missing;
 }
 
-function hasLeadIntent(text: string) {
-  return /\b(beratung|beraten|angebot|kostet|kosten|preis|preise|interesse|interessiere|kundenanfrage|kundengewinnung|mehr kunden|demo|erstgespraech|erstgespräch|ki für mein unternehmen|ki fuer mein unternehmen|notdienst|notfall|soforthilfe|rohrreinigung|kanalreinigung|abfluss|abflussreinigung|wc|toilette|verstopft|verstopfung|rueckstau|rückstau|wasserschaden|keller|ueberflutet|überflutet|rohrbruch|kanalproblem|wasser läuft nicht ab|wasser laeuft nicht ab|läuft nicht ab|laeuft nicht ab)\b/i.test(text);
-}
-
-function hasScheduleIntent(text: string) {
-  return /\b(termin|meeting|kalender|buchen|buchung|telefonat|rueckruf|rückruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|anrufen|demo|sprechen|kontaktaufnahme|erstgespraech|erstgespräch)\b/i.test(text);
-}
-
-function hasServiceKnowledgeQuestion(text: string) {
+function hasLeadIntent(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
   return (
-    /\b(laufende[nr]? meter|laufende[nr]? metern|abrechnung|abrechnen|einsatzgebiet|kommen sie auch|wohne in|fahrtkosten|anfahrt)\b/i.test(
-      text,
-    ) ||
+    /\b(beratung|beraten|angebot|kostet|kosten|preis|preise|interesse|interessiere|kundenanfrage|kundengewinnung|mehr kunden|demo|erstgespraech|erstgespräch|ki für mein unternehmen|ki fuer mein unternehmen)\b/i.test(text) ||
+    matchesKeyword(text, [
+      ...(intakeFlow?.genericLocalServiceKeywords || []),
+      ...(intakeFlow?.problemKeywords || []),
+      ...(intakeFlow?.callbackKeywords || []),
+    ])
+  );
+}
+
+function hasScheduleIntent(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
+  return (
+    /\b(termin|meeting|kalender|buchen|buchung|telefonat|rueckruf|rückruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|anrufen|demo|sprechen|kontaktaufnahme|erstgespraech|erstgespräch)\b/i.test(text) ||
+    matchesKeyword(text, intakeFlow?.callbackKeywords || [])
+  );
+}
+
+function hasServiceKnowledgeQuestion(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
+  return (
+    /\b(einsatzgebiet|kommen sie auch|wohne in|fahrtkosten|anfahrt)\b/i.test(text) ||
+    matchesKeyword(text, intakeFlow?.pricingKeywords || []) ||
     (/\b(kostet|kosten|preis|preise)\b/i.test(text) &&
-      /\b(rohr|rohrreinigung|kanal|kanalreinigung|abfluss|wc|toilette|verstopfung|notdienst|notfall|einsatz)\b/i.test(
-        text,
-      ))
+      matchesKeyword(text, [
+        ...(intakeFlow?.problemKeywords || []),
+        ...(intakeFlow?.genericLocalServiceKeywords || []),
+      ]))
   );
 }
 
@@ -287,6 +303,27 @@ function hasExplicitToolIntent(text: string) {
 
 function hasLowConfidence(text: string) {
   return text.length > 0 && text.length < 12 && !/\b(ja|nein|ok|okay|termin|support|angebot)\b/i.test(text);
+}
+
+function normalizeKeyword(value: string) {
+  return value.toLowerCase().normalize('NFKC').replace(/\s+/g, ' ').trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchesKeyword(text: string, keywords: string[]) {
+  const normalized = normalizeKeyword(text);
+  return keywords.some((keyword) => {
+    const candidate = normalizeKeyword(keyword);
+    if (!candidate) {
+      return false;
+    }
+    return candidate.includes(' ')
+      ? normalized.includes(candidate)
+      : new RegExp(`\\b${escapeRegExp(candidate)}\\b`, 'i').test(normalized);
+  });
 }
 
 function hasGreetingIntent(text: string) {

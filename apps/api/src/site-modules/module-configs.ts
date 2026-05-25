@@ -4,6 +4,22 @@ export type LeadSalesModuleConfig = {
   ctaDescription: string;
   qualificationFocus: string;
   handoffInstruction: string;
+  intakeFlow?: LocalServiceIntakeFlowConfig;
+};
+
+export type LocalServiceIntakeFlowConfig = {
+  templateKey?: string;
+  subIndustry?: string;
+  requiredFields: string[];
+  questionOrder: string[];
+  genericLocalServiceKeywords: string[];
+  preferredVocabulary: string[];
+  forbiddenGenericTerms: string[];
+  problemKeywords: string[];
+  pricingKeywords: string[];
+  callbackKeywords: string[];
+  questionTexts: Record<string, string>;
+  pricingAnswerTemplate: string;
 };
 
 export type EcommerceProductAdvisorModuleConfig = {
@@ -32,6 +48,67 @@ export const DEFAULT_LEAD_SALES_MODULE_CONFIG: LeadSalesModuleConfig = {
     'Verstehe Bedarf, Einsatzbereich und Dringlichkeit in wenigen Rueckfragen.',
   handoffInstruction:
     'Fuehre sichtbar Richtung Kontakt, Termin oder strukturierte Datenerfassung, sobald der Bedarf klar ist.',
+};
+
+export const DEFAULT_LOCAL_SERVICE_INTAKE_FLOW: LocalServiceIntakeFlowConfig = {
+  templateKey: 'local-services',
+  subIndustry: 'drain_cleaning',
+  requiredFields: ['problem', 'location', 'urgency', 'phone', 'name'],
+  questionOrder: ['problem', 'location', 'urgency', 'phone', 'name'],
+  genericLocalServiceKeywords: [
+    'notdienst',
+    'einsatz',
+    'einsatzort',
+    'rückruf',
+    'rueckruf',
+    'kosten',
+    'preis',
+    'dringend',
+    'heute',
+    'morgen',
+    'termin',
+  ],
+  preferredVocabulary: ['Einsatz', 'Problem', 'Einsatzort', 'Dringlichkeit', 'Rückruf', 'Notdienst'],
+  forbiddenGenericTerms: ['Projekt', 'Support-Anfrage', 'Business-Prozess', 'Automatisierung', 'Beratungsgespräch'],
+  problemKeywords: [
+    'toilette',
+    'wc',
+    'abfluss',
+    'rohrreinigung',
+    'kanalreinigung',
+    'rohr',
+    'rückstau',
+    'rueckstau',
+    'keller',
+    'kanal',
+    'rohrbruch',
+    'verstopft',
+    'wasser läuft nicht ab',
+    'wasser laeuft nicht ab',
+    'überflutet',
+    'ueberflutet',
+  ],
+  pricingKeywords: [
+    'laufende meter',
+    'laufenden metern',
+    'meter',
+    'abrechnung',
+    'abrechnen',
+    'kosten',
+    'preis',
+    'rohrreinigung kostet',
+  ],
+  callbackKeywords: ['rückruf', 'rueckruf', 'zurückrufen', 'zurueckrufen', 'anrufen', 'kontaktiert werden'],
+  questionTexts: {
+    problem: 'Was genau ist betroffen - Toilette, Abfluss, Keller oder Kanal?',
+    location: 'In welchem Ort oder welcher PLZ befindet sich der Einsatzort?',
+    urgency: 'Wie dringend ist es aktuell - Notfall, heute noch oder Terminwunsch?',
+    phone: 'Unter welcher Telefonnummer kann der Notdienst Sie zurückrufen?',
+    name: 'Auf welchen Namen dürfen wir die Anfrage aufnehmen?',
+    callback: 'Gerne. Geht es um einen akuten Notfall oder um eine allgemeine Anfrage?',
+  },
+  pricingAnswerTemplate:
+    'Die Kosten hängen vom Aufwand, der Verstopfung und den benötigten laufenden Metern ab. Eine genaue Einschätzung ist nach kurzer Problembeschreibung möglich.',
 };
 
 export const DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_MODULE_CONFIG: EcommerceProductAdvisorModuleConfig =
@@ -65,6 +142,47 @@ function asNonEmptyString(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
 
+function asStringArray(value: unknown, fallback: string[]) {
+  return Array.isArray(value)
+    ? value
+        .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+        .map((entry) => entry.trim())
+    : fallback;
+}
+
+function normalizeQuestionTexts(value: unknown, fallback: Record<string, string>) {
+  const source = asObject(value as Record<string, unknown> | null | undefined);
+  return {
+    ...fallback,
+    ...Object.fromEntries(
+      Object.entries(source).filter(([, entry]) => typeof entry === 'string' && entry.trim()),
+    ),
+  } as Record<string, string>;
+}
+
+export function normalizeLocalServiceIntakeFlowConfig(value: unknown): LocalServiceIntakeFlowConfig {
+  const source = asObject(value as Record<string, unknown> | null | undefined);
+  const fallback = DEFAULT_LOCAL_SERVICE_INTAKE_FLOW;
+
+  return {
+    templateKey: asNonEmptyString(source.templateKey, fallback.templateKey || 'local-services'),
+    subIndustry: asNonEmptyString(source.subIndustry, fallback.subIndustry || 'drain_cleaning'),
+    requiredFields: asStringArray(source.requiredFields, fallback.requiredFields),
+    questionOrder: asStringArray(source.questionOrder, fallback.questionOrder),
+    genericLocalServiceKeywords: asStringArray(
+      source.genericLocalServiceKeywords,
+      fallback.genericLocalServiceKeywords,
+    ),
+    preferredVocabulary: asStringArray(source.preferredVocabulary, fallback.preferredVocabulary),
+    forbiddenGenericTerms: asStringArray(source.forbiddenGenericTerms, fallback.forbiddenGenericTerms),
+    problemKeywords: asStringArray(source.problemKeywords, fallback.problemKeywords),
+    pricingKeywords: asStringArray(source.pricingKeywords, fallback.pricingKeywords),
+    callbackKeywords: asStringArray(source.callbackKeywords, fallback.callbackKeywords),
+    questionTexts: normalizeQuestionTexts(source.questionTexts, fallback.questionTexts),
+    pricingAnswerTemplate: asNonEmptyString(source.pricingAnswerTemplate, fallback.pricingAnswerTemplate),
+  };
+}
+
 export function normalizeLeadSalesModuleConfig(
   config: Record<string, unknown> | null | undefined,
 ): LeadSalesModuleConfig {
@@ -87,6 +205,9 @@ export function normalizeLeadSalesModuleConfig(
       source.handoffInstruction,
       DEFAULT_LEAD_SALES_MODULE_CONFIG.handoffInstruction,
     ),
+    intakeFlow: source.intakeFlow
+      ? normalizeLocalServiceIntakeFlowConfig(source.intakeFlow)
+      : undefined,
   };
 }
 
