@@ -23,6 +23,11 @@ ${routeDecision.guide}
   }
 
   buildConversationGuide(history: ChatPipelineHistoryEntry[], conversationFlow: unknown) {
+    const localServiceGuide = buildLocalServiceConversationGuide(history, conversationFlow);
+    if (localServiceGuide) {
+      return localServiceGuide;
+    }
+
     return buildConversationGuide(history, parseConversationFlow(conversationFlow));
   }
 
@@ -119,6 +124,61 @@ Varianten: ${product.variantSummary || 'nicht angegeben'}${variants ? `\nBekannt
   buildParts(input: Parameters<typeof buildResponseParts>[0]) {
     return buildResponseParts(input);
   }
+}
+
+function buildLocalServiceConversationGuide(
+  history: ChatPipelineHistoryEntry[],
+  conversationFlow: unknown,
+) {
+  if (!conversationFlow || typeof conversationFlow !== 'object' || Array.isArray(conversationFlow)) {
+    return undefined;
+  }
+
+  const flow = conversationFlow as Record<string, unknown>;
+  const questionTexts = flow.questionTexts && typeof flow.questionTexts === 'object' && !Array.isArray(flow.questionTexts)
+    ? flow.questionTexts as Record<string, unknown>
+    : {};
+  const preferredVocabulary = asStringArray(flow.preferredVocabulary);
+  const forbiddenTerms = asStringArray(flow.forbiddenGenericTerms);
+  const recentHistory = history
+    .slice(-6)
+    .map((entry) => `${entry.role === 'user' ? 'Nutzer' : 'Assistent'}: ${compactText(entry.content || '')}`)
+    .join('\n');
+
+  if (!Array.isArray(flow.requiredFields) || !Array.isArray(flow.questionOrder)) {
+    return undefined;
+  }
+
+  return `
+Gesprächsphase: local_service_intake
+Gesprächsregel: Behandle diese Unterhaltung als lokalen Dienstleister-Erstkontakt. Nutze konkrete Dienstleister-Sprache und keine generische B2B-Beratung.
+Bevorzugte Begriffe: ${preferredVocabulary.join(', ') || 'Einsatz, Problem, Einsatzort, Dringlichkeit, Rückruf'}
+Verbotene Begriffe: ${forbiddenTerms.join(', ') || 'Projekt, Support-Anfrage, Business-Prozess, Automatisierung, Beratungsgespräch'}
+Rückfrage-Reihenfolge: ${asStringArray(flow.questionOrder).join(' -> ')}
+Standardfragen:
+- Problem: ${asString(questionTexts.problem) || 'Was genau ist betroffen?'}
+- Einsatzort: ${asString(questionTexts.location) || 'In welchem Ort oder welcher PLZ befindet sich der Einsatzort?'}
+- Dringlichkeit: ${asString(questionTexts.urgency) || 'Wie dringend ist es aktuell?'}
+
+Wenn du eine Wissensfrage beantwortest, hänge keine allgemeine Auswahl wie "Support, Prozesse oder Marketing" an. Stelle nur eine passende lokale Rückfrage, falls sie wirklich nötig ist.
+
+Letzte Nachrichten:
+${recentHistory || '(kein Verlauf vorhanden)'}
+`.trim();
+}
+
+function asStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+    : [];
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function compactText(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 function formatCatalogPrice(priceMin?: string, priceMax?: string, currencyCode?: string) {

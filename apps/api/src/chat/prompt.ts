@@ -51,15 +51,15 @@ export function buildSystemPrompt(override?: string | null, conversationGuide?: 
   const custom = override?.trim();
   const guide = conversationGuide?.trim();
   if (!custom) {
-    return [DEFAULT_SYSTEM_PROMPT, guide, CONVERSION_GUARDRAILS].filter(Boolean).join('\n\n');
+    return [DEFAULT_SYSTEM_PROMPT, CONVERSION_GUARDRAILS, guide].filter(Boolean).join('\n\n');
   }
 
   return [
     DEFAULT_SYSTEM_PROMPT,
     "Kundenspezifische Vorgaben:",
     custom,
-    guide,
     CONVERSION_GUARDRAILS,
+    guide,
   ].join("\n\n");
 }
 
