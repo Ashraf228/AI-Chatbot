@@ -131,6 +131,7 @@ function createHarness({
   usageLimits,
   siteName = 'Demo Kunde',
   intakeFlow,
+  industry,
 } = {}) {
   const conversations = new Map([
     ['conversation-1', { metadata: {} }],
@@ -152,6 +153,7 @@ function createHarness({
                 leadNotificationEmail,
                 ctaText: 'Kontakt aufnehmen',
                 scheduleUrl,
+                industry,
                 conversationFlow: intakeFlow || {},
               },
             },
@@ -471,7 +473,7 @@ test('ChatAgentOrchestratorService handles local service meter billing question 
   assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
 });
 
-test('ChatAgentOrchestratorService lets standalone service area statements use normal knowledge flow', async () => {
+test('ChatAgentOrchestratorService routes standalone service area statements into local intake', async () => {
   const { decide, leads } = createHarness({
     siteName: 'Rohrreinigung-ffm24',
     intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
@@ -479,8 +481,24 @@ test('ChatAgentOrchestratorService lets standalone service area statements use n
 
   const result = await decide('Ich wohne in Offenbach');
 
-  assert.equal(result.handled, false);
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'ask_for_contact');
+  assert.match(result.answer, /Was genau ist betroffen|Toilette|Abfluss|Keller|Kanal/i);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService falls back to local service intake from site industry', async () => {
+  const { decide, leads } = createHarness({
+    siteName: 'Rohrreinigung-ffm24',
+    industry: 'local-services',
+  });
+
+  const result = await decide('Was kostet eine Rohrreinigung?');
+
+  assert.equal(result.handled, true);
   assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /Kosten hängen vom Aufwand/i);
+  assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i);
   assert.equal(leads.length, 0);
 });
 

@@ -25,6 +25,15 @@ type WidgetConfigRow = {
   suggested_questions_by_path: Record<string, string[]>;
   conversation_flow: Record<string, unknown>;
   system_prompt: string;
+  industry: string;
+};
+
+const LOCAL_SERVICE_SUGGESTED_QUESTIONS = {
+  '/': [
+    'Was ist gerade betroffen?',
+    'Was kostet der Einsatz?',
+    'Ich brauche einen Rückruf',
+  ],
 };
 
 @Injectable()
@@ -59,7 +68,7 @@ export class WidgetConfigService {
         fontFamily: site.fontFamily,
       },
       suggestedQuestionsByPath:
-        site.suggestedQuestionsByPath || {
+        normalizeSuggestedQuestions(site.industry, site.suggestedQuestionsByPath) || {
           '/': ['Was kostet der Service?', 'Wie schnell koennt ihr helfen?'],
         },
       privacyUrl: site.privacyUrl,
@@ -79,6 +88,7 @@ export class WidgetConfigService {
       suggestedQuestionsByPath?: Record<string, string[]>;
       conversationFlow?: unknown;
       systemPrompt?: string;
+      industry?: string;
     }
   > {
     const res = await this.db.query<WidgetConfigRow>(
@@ -86,7 +96,7 @@ export class WidgetConfigService {
               site_key,
               privacy_url, is_active, company_name, bot_name, logo_url, public_key,
               widget_bundle_url, consent_required, lead_capture_enabled, suggested_questions_by_path,
-              lead_notification_email, conversation_flow, system_prompt
+              lead_notification_email, conversation_flow, system_prompt, industry
        FROM (
          SELECT
            s.id,
@@ -110,7 +120,8 @@ export class WidgetConfigService {
            COALESCE(s.config->'suggestedQuestionsByPath', '{}'::jsonb) AS suggested_questions_by_path,
            COALESCE(s.config->>'leadNotificationEmail', '') AS lead_notification_email,
            COALESCE(s.config->'conversationFlow', '{}'::jsonb) AS conversation_flow,
-           COALESCE(s.config->>'systemPrompt', '') AS system_prompt
+           COALESCE(s.config->>'systemPrompt', '') AS system_prompt,
+           COALESCE(s.config->>'industry', s.config->>'industryTemplate', '') AS industry
          FROM sites s
          WHERE s.site_key = $1
          LIMIT 1
@@ -150,6 +161,32 @@ export class WidgetConfigService {
       suggestedQuestionsByPath: row.suggested_questions_by_path,
       conversationFlow: row.conversation_flow,
       systemPrompt: row.system_prompt || undefined,
+      industry: row.industry || undefined,
     };
   }
+}
+
+function normalizeSuggestedQuestions(
+  industry: string | undefined,
+  questions: Record<string, string[]> | undefined,
+) {
+  if (!isLocalServiceIndustry(industry || '')) {
+    return questions;
+  }
+
+  if (!questions || Object.keys(questions).length === 0 || hasGenericBusinessQuestions(questions)) {
+    return LOCAL_SERVICE_SUGGESTED_QUESTIONS;
+  }
+
+  return questions;
+}
+
+function hasGenericBusinessQuestions(questions: Record<string, string[]>) {
+  return Object.values(questions)
+    .flat()
+    .some((question) => /projekt|support|business|automatisierung|beratungsgespräch/i.test(question));
+}
+
+function isLocalServiceIndustry(value: string) {
+  return ['local-services', 'local_service', 'local-service', 'local_services'].includes(value);
 }

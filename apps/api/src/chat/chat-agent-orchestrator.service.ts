@@ -10,6 +10,7 @@ import { logEvent } from '../utils/logger';
 import { LeadMailerService } from '../modules/widget/services/lead-mailer.service';
 import { ReportMailerService } from '../modules/widget/services/report-mailer.service';
 import {
+  DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
   normalizeLocalServiceIntakeFlowConfig,
 } from '../site-modules/module-configs';
 import type { LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
@@ -241,7 +242,8 @@ export class ChatAgentOrchestratorService {
       !pendingActive &&
       !leadIntent &&
       !scheduleIntent &&
-      !(askedForContact && hasContactSignal(contactFromMessage))
+      !(askedForContact && hasContactSignal(contactFromMessage)) &&
+      !shouldStartLocalServiceIntakeFromContext(localServiceFlow, contactFromMessage)
     ) {
       await this.saveConversationMetadata(params.conversationId, {
         conversationState,
@@ -640,6 +642,10 @@ export class ChatAgentOrchestratorService {
     ]);
     const contactUrl = findFirstUrl(config, ['contactUrl', 'ctaUrl', 'contactFormUrl', 'kontaktUrl']);
 
+    const industry = asString(config.industry) || asString(config.industryTemplate);
+    const hasConversationFlow = Object.keys(conversationFlow).length > 0;
+    const isLocalService = isLocalServiceIndustry(industry);
+
     return {
       siteName: res.rows[0]?.name || '',
       setupGoal: asString(config.setupGoal),
@@ -649,9 +655,10 @@ export class ChatAgentOrchestratorService {
         asString(config.notificationEmail) ||
         asString(config.contactEmail),
       ctaText: asString(config.ctaText) || asString(conversationFlow.ctaText),
-      intakeFlow:
-        Object.keys(conversationFlow).length > 0
-          ? normalizeLocalServiceIntakeFlowConfig(conversationFlow)
+      intakeFlow: hasConversationFlow
+        ? normalizeLocalServiceIntakeFlowConfig(conversationFlow)
+        : isLocalService
+          ? DEFAULT_LOCAL_SERVICE_INTAKE_FLOW
           : undefined,
       scheduleUrl: scheduleUrl || findFirstUrl(conversationFlow, [
         'scheduleUrl',
@@ -1220,6 +1227,14 @@ function isLocalServiceFlow(params: {
       hasLocalServiceSignal(params.text, params.intakeFlow) ||
       hasLocalServiceSiteSignal(params.siteName || '', params.intakeFlow),
   );
+}
+
+function shouldStartLocalServiceIntakeFromContext(localServiceFlow: boolean, contact: ContactDetails) {
+  return Boolean(localServiceFlow && (contact.location || contact.urgency));
+}
+
+function isLocalServiceIndustry(value: string) {
+  return ['local-services', 'local_service', 'local-service', 'local_services'].includes(value);
 }
 
 function hasLocalServiceSiteSignal(value: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
@@ -1888,6 +1903,10 @@ function canAskForLeadDetails(params: {
         hasBusinessNeedSignal(params.text, params.intakeFlow) ||
         (params.localServiceFlow && hasLocalServiceSiteSignal(params.text, params.intakeFlow)),
     );
+  }
+
+  if (params.localServiceFlow && (params.contact.location || params.contact.urgency)) {
+    return true;
   }
 
   if (params.leadIntent) {
