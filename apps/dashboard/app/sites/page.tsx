@@ -39,6 +39,22 @@ type Tenant = {
   name: string;
 };
 
+type LimitCheck = {
+  key: string;
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  allowed: boolean;
+};
+
+type BillingLimitOverview = {
+  plan?: {
+    code: string;
+    name: string;
+  } | null;
+  checks?: LimitCheck[];
+};
+
 const DEFAULT_TENANT = {
   id: "t-default",
   name: "Interner Mandant",
@@ -63,8 +79,15 @@ export default function SitesPage() {
   });
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [limitOverview, setLimitOverview] = useState<BillingLimitOverview | null>(null);
   const [tenantSaving, setTenantSaving] = useState(false);
   const templateLabels = templatesByKey(templates);
+  const maxSitesLimit = limitOverview?.checks?.find((check) => check.key === "maxSites") || null;
+  const isSiteLimitReached =
+    typeof maxSitesLimit?.limit === "number" && maxSitesLimit.used >= maxSitesLimit.limit;
+  const maxSitesLimitMessage = isSiteLimitReached
+    ? `Dein aktueller Plan erlaubt maximal ${maxSitesLimit.limit} Kunden. Upgrade erforderlich.`
+    : null;
 
   async function loadSites() {
     setErr(null);
@@ -131,6 +154,15 @@ export default function SitesPage() {
     loadBusinessSummary();
   }, []);
 
+  useEffect(() => {
+    if (!form.tenantId) {
+      setLimitOverview(null);
+      return;
+    }
+
+    loadBillingLimits(form.tenantId);
+  }, [form.tenantId]);
+
   async function loadBusinessSummary() {
     const response = await fetch("/api/dashboard/summary", { cache: "no-store" });
     const data = await response.json().catch(() => ({}));
@@ -149,10 +181,27 @@ export default function SitesPage() {
     }
   }
 
+  async function loadBillingLimits(tenantId: string) {
+    const response = await fetch(`/api/billing/limits?tenantId=${encodeURIComponent(tenantId)}`, { cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+
+    if (response.ok) {
+      setLimitOverview(data);
+      return;
+    }
+
+    setLimitOverview(null);
+  }
+
   async function createSite(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
     setMsg(null);
+
+    if (isSiteLimitReached) {
+      setErr(maxSitesLimitMessage || "Dein aktueller Plan erlaubt keine weiteren Kunden. Upgrade erforderlich.");
+      return;
+    }
 
     const templateMap = templatesByKey(templates);
 
@@ -328,13 +377,16 @@ export default function SitesPage() {
               form={form}
               tenantOptions={tenants}
               industryOptions={templates}
+              submitDisabled={isSiteLimitReached}
+              limitMessage={maxSitesLimitMessage}
+              planLabel={limitOverview?.plan?.name || null}
               onChange={setForm}
               onSubmit={createSite}
             />
 
-            <details className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm" style={{ marginTop: 16 }}>
-              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Interne Mandantenverwaltung</summary>
-              <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+            <details className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm dashboard-mt-14">
+              <summary className="dashboard-accordion__summary">Interne Mandantenverwaltung</summary>
+              <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
                 Nur für interne Strukturen nötig. Für normale Kundenanlage wird dieser Bereich in der Regel nicht gebraucht.
               </p>
               <div className="dashboard-field">
@@ -391,7 +443,7 @@ export default function SitesPage() {
                       <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
                         <div>
                           <strong>{site.name}</strong>
-                          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+                          <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
                             {site.allowed_domains.join(", ") || "Keine Domain hinterlegt"}
                           </p>
                         </div>
@@ -404,7 +456,7 @@ export default function SitesPage() {
                         <InfoRow label="Branche" value={templateLabels[status.industry]?.label || status.industry} />
                       ) : null}
                       {status?.setupGoal ? <InfoRow label="Bot-Ziel" value={formatGoal(status.setupGoal)} /> : null}
-                      <div className="dashboard-grid dashboard-grid--metrics-4" style={{ gap: 10 }}>
+                      <div className="dashboard-grid dashboard-grid--metrics-4 dashboard-grid--compact">
                         <MiniMetric label="Chats 7 Tage" value={formatNumber(metrics?.conversations7d || 0)} />
                         <MiniMetric label="Anfragen 7 Tage" value={formatNumber(metrics?.leads7d || 0)} />
                         <MiniMetric label="Conversion" value={formatPercent(metrics?.conversionRate || 0)} />
@@ -464,7 +516,7 @@ function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="dashboard-card dashboard-card--soft">
       <strong>{value}</strong>
-      <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0, fontSize: 12 }}>
+      <p className="dashboard-copy dashboard-copy--muted dashboard-copy--xs dashboard-no-margin-bottom">
         {label}
       </p>
     </div>
@@ -508,7 +560,7 @@ function formatApiError(data: unknown, fallback: string) {
     }
 
     if (code === "limit_exceeded" && limit?.key === "maxSites" && typeof limit.limit === "number") {
-      return `Dein aktueller Plan erlaubt nur ${limit.limit} Kunden. Upgrade erforderlich.`;
+      return `Dein aktueller Plan erlaubt maximal ${limit.limit} Kunden. Upgrade erforderlich.`;
     }
 
     if (message) {

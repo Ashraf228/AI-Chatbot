@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { AgentDecision } from '../ai/orchestration/agent-decision.types';
 import { AgentOrchestratorService } from '../ai/orchestration/agent-orchestrator.service';
 import { PrismaService } from '../db/prisma.service';
+import { UsageLimitService } from '../billing/usage-limit.service';
 import { SiteModulesService } from '../site-modules/site-modules.service';
 import { logEvent } from '../utils/logger';
 import { LeadMailerService } from '../modules/widget/services/lead-mailer.service';
@@ -71,6 +72,8 @@ type ContactDetails = {
   email?: string;
   phone?: string;
   concern?: string;
+  location?: string;
+  urgency?: string;
   preferredContact?: 'email' | 'phone';
 };
 
@@ -95,6 +98,7 @@ export class ChatAgentOrchestratorService {
     private readonly siteModules: SiteModulesService,
     private readonly leadMailer: LeadMailerService,
     private readonly reportMailer: ReportMailerService,
+    private readonly usageLimits: UsageLimitService,
     @Optional() private readonly decisionOrchestrator?: AgentOrchestratorService,
   ) {}
 
@@ -120,6 +124,13 @@ export class ChatAgentOrchestratorService {
     const greetingIntent = hasGreetingIntent(text);
     const recoveryIntent = hasRecoveryIntent(text);
     const refusalIntent = hasRefusalIntent(text);
+    const localServiceFlow = isLocalServiceFlow({
+      text,
+      siteName: siteConfig.siteName,
+      pendingLead,
+      contact: contactFromMessage,
+      conversationState: metadataState.conversationState,
+    });
     const conversationState = buildConversationState({
       previous: metadataState.conversationState,
       message: params.message,
@@ -133,6 +144,23 @@ export class ChatAgentOrchestratorService {
       siteConfig.setupGoal === 'lead_capture' ||
       siteConfig.setupGoal === 'appointments' ||
       siteConfig.leadCaptureEnabled !== false;
+
+    if (
+      (isLocalServicePricingQuestion(text) || (localServiceFlow && isServicePricingOrBillingQuestion(text))) &&
+      !pendingActive &&
+      !scheduleIntent &&
+      !hasContactSignal(contactFromMessage)
+    ) {
+      await this.saveConversationMetadata(params.conversationId, {
+        conversationState,
+      });
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildLocalServicePricingAnswer(),
+        decision: structuredDecision,
+      };
+    }
 
     if ((pendingActive || askedForContact) && shouldPauseLeadCapture(text, contactFromMessage)) {
       const pausedState = buildPausedLeadState({
@@ -233,7 +261,7 @@ export class ChatAgentOrchestratorService {
       conversationState,
       effectiveScheduleIntent,
     );
-    const missing = getMissingContactFields(contact);
+    const missing = getMissingContactFields(contact, localServiceFlow);
     const cta = buildLeadCta(moduleContext.ctaLabel, moduleContext.ctaDescription, siteConfig.ctaText);
     const leadPromptCount = pendingLead?.leadPromptCount || 0;
     const shouldAskForContactDetails = canAskForLeadDetails({
@@ -245,6 +273,7 @@ export class ChatAgentOrchestratorService {
       contactFromMessage,
       leadPromptCount,
       text,
+      localServiceFlow,
     });
     const activeConversationState = buildConversationState({
       previous: conversationState,
@@ -354,6 +383,8 @@ export class ChatAgentOrchestratorService {
           effectiveScheduleIntent,
           Boolean(contact.concern),
           contact.preferredContact,
+          localServiceFlow,
+          Boolean(contact.urgency),
         ),
         decision: structuredDecision,
         cta,
@@ -377,11 +408,33 @@ export class ChatAgentOrchestratorService {
       };
     }
 
-    const leadCapture = await this.captureLead({
-      siteId: params.siteId,
-      sessionId: params.sessionId,
-      contact,
-    });
+    let leadCapture: LeadCaptureResult;
+    try {
+      leadCapture = await this.captureLead({
+        tenantId: params.tenantId,
+        siteId: params.siteId,
+        sessionId: params.sessionId,
+        contact,
+      });
+    } catch (error) {
+      const limitError = extractLimitExceeded(error);
+      if (!limitError) {
+        throw error;
+      }
+
+      logEvent('lead_capture_limit_exceeded', {
+        tenantId: params.tenantId,
+        siteId: params.siteId,
+        source: 'chat_agent_orchestrator',
+      });
+
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: limitError.message,
+        decision: structuredDecision,
+      };
+    }
 
     if (leadCapture.created) {
       await this.saveConversationMetadata(params.conversationId, {
@@ -591,6 +644,7 @@ export class ChatAgentOrchestratorService {
   }
 
   private async captureLead(params: {
+    tenantId: string | null | undefined;
     siteId: string;
     sessionId: string;
     contact: ContactDetails;
@@ -615,29 +669,51 @@ export class ChatAgentOrchestratorService {
     }
 
     const leadId = randomUUID();
-    await this.db.query(
-      `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', now())`,
-      [
-        leadId,
-        params.siteId,
-        params.sessionId,
-        params.contact.name || 'Unbekannt',
-        params.contact.email || '',
-        params.contact.phone || null,
-        params.contact.concern || 'Kontaktanfrage aus dem Chat',
-      ],
-    );
+    return this.usageLimits.withMonthlyLeadLimit(params.tenantId, async (db, assertLimit) => {
+      const duplicate = await db.query<{ id: string }>(
+        `SELECT id
+         FROM widget_leads
+         WHERE site_id = $1
+           AND session_id = $2
+           AND (
+             ($3 <> '' AND email = $3)
+             OR ($4 <> '' AND phone = $4)
+           )
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [params.siteId, params.sessionId, params.contact.email || '', params.contact.phone || ''],
+      );
 
-    await this.db.query(
-      `UPDATE widget_sessions
-       SET lead_captured = true,
-           last_seen_at = now()
-       WHERE id = $1 AND site_id = $2`,
-      [params.sessionId, params.siteId],
-    );
+      const duplicateId = duplicate.rows[0]?.id;
+      if (duplicateId) {
+        return { leadId: duplicateId, created: false };
+      }
 
-    return { leadId, created: true };
+      await assertLimit();
+      await db.query(
+        `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', now())`,
+        [
+          leadId,
+          params.siteId,
+          params.sessionId,
+          params.contact.name || 'Unbekannt',
+          params.contact.email || '',
+          params.contact.phone || null,
+          summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat'),
+        ],
+      );
+
+      await db.query(
+        `UPDATE widget_sessions
+         SET lead_captured = true,
+             last_seen_at = now()
+         WHERE id = $1 AND site_id = $2`,
+        [params.sessionId, params.siteId],
+      );
+
+      return { leadId, created: true };
+    });
   }
 
   private async createContactRequest(params: {
@@ -682,7 +758,7 @@ export class ChatAgentOrchestratorService {
         params.contact.email || null,
         params.contact.phone || null,
         params.contact.email ? 'email' : 'phone',
-        `Widget session: ${params.sessionId}\n${params.contact.concern || 'Terminanfrage aus dem Chat'}`,
+        `Widget session: ${params.sessionId}\n${summarizeLeadConcern(params.contact, 'Terminanfrage aus dem Chat')}`,
       ],
     );
 
@@ -814,7 +890,7 @@ export class ChatAgentOrchestratorService {
           name: params.contact.name || 'Unbekannt',
           email: params.contact.email || '',
           phone: params.contact.phone || null,
-          message: params.contact.concern || 'Kontaktanfrage aus dem Chat',
+          message: summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat'),
         },
       });
 
@@ -881,6 +957,8 @@ function parsePendingLeadState(value: unknown): PendingLeadState | null {
     phone: asString(pendingLead.phone) || undefined,
     preferredContact: parsePreferredContact(asString(pendingLead.preferredContact)),
     concern: asString(pendingLead.concern) || undefined,
+    location: asString(pendingLead.location) || undefined,
+    urgency: asString(pendingLead.urgency) || undefined,
     leadPromptCount: Number.isFinite(Number(pendingLead.leadPromptCount))
       ? Number(pendingLead.leadPromptCount)
       : undefined,
@@ -914,6 +992,8 @@ function parseConversationState(value: unknown): ConversationState | null {
       phone: asString(collectedFields.phone) || undefined,
       preferredContact: parsePreferredContact(asString(collectedFields.preferredContact)),
       concern: asString(collectedFields.concern) || undefined,
+      location: asString(collectedFields.location) || undefined,
+      urgency: asString(collectedFields.urgency) || undefined,
       company: asString(collectedFields.company) || undefined,
     },
     missingFields: Array.isArray(state.missingFields)
@@ -965,14 +1045,28 @@ function asString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function extractLimitExceeded(error: unknown): { message: string } | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  const response = 'response' in error ? (error as { response?: unknown }).response : null;
+  const responseObject = asObject(response);
+  if (responseObject.code !== 'limit_exceeded') {
+    return null;
+  }
+
+  return { message: asString(responseObject.message) || 'Plan-Limit erreicht.' };
+}
+
 function hasLeadIntent(text: string) {
-  return /\b(beratung|beraten|kontakt|kontaktiert|angebot|kostet|kosten|preis|preise|interesse|interessiere|rueckruf|rückruf|anrufen|rufen sie|melden|anfrage|demo|erstgespraech|erstgespräch|lösung|loesung|brauche|benötige|benoetige)\b/i.test(
+  return /\b(beratung|beraten|kontakt|kontaktiert|angebot|kostet|kosten|preis|preise|interesse|interessiere|rueckruf|rückruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|anrufen|rufen sie|melden|anfrage|demo|erstgespraech|erstgespräch|lösung|loesung|brauche|benötige|benoetige|notdienst|notfall|soforthilfe|rohrreinigung|kanalreinigung|abfluss|abflussreinigung|wc|toilette|verstopft|verstopfung|rueckstau|rückstau|wasserschaden|keller|ueberflutet|überflutet|rohrbruch|kanalproblem|wasser läuft nicht ab|wasser laeuft nicht ab|läuft nicht ab|laeuft nicht ab)\b/i.test(
     text,
   );
 }
 
 function hasScheduleIntent(text: string) {
-  return /\b(termin|meeting|kalender|buchen|buchung|telefonat|erstgespraech|erstgespräch|beratungsgespraech|beratungsgespräch)\b/i.test(
+  return /\b(termin|meeting|kalender|buchen|buchung|telefonat|rueckruf|rückruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|anrufen|rufen sie|erstgespraech|erstgespräch|beratungsgespraech|beratungsgespräch)\b/i.test(
     text,
   );
 }
@@ -1014,7 +1108,51 @@ function hasRefusalIntent(text: string) {
 }
 
 function hasBusinessNeedSignal(text: string) {
-  return /\b(ki|künstliche intelligenz|kuenstliche intelligenz|automatisierung|support|kundenservice|kundengewinnung|website|webseite|software|unternehmen|firma|projekt|prozess|prozesse|angebot|beratung|lösung|loesung|preis|kosten|termin|rückruf|rueckruf|demo)\b/i.test(
+  return /\b(ki|künstliche intelligenz|kuenstliche intelligenz|automatisierung|support|kundenservice|kundengewinnung|website|webseite|software|unternehmen|firma|projekt|prozess|prozesse|angebot|beratung|lösung|loesung|preis|kosten|termin|rückruf|rueckruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|demo|notdienst|notfall|soforthilfe|rohrreinigung|kanalreinigung|abfluss|abflussreinigung|wc|toilette|verstopft|verstopfung|rueckstau|rückstau|wasserschaden|keller|ueberflutet|überflutet|rohrbruch|kanalproblem|wasser läuft nicht ab|wasser laeuft nicht ab|läuft nicht ab|laeuft nicht ab)\b/i.test(
+    text,
+  );
+}
+
+function isLocalServicePricingQuestion(text: string) {
+  return (
+    isServicePricingOrBillingQuestion(text) &&
+    /\b(rohr|rohrreinigung|kanal|kanalreinigung|abfluss|wc|toilette|verstopfung|notdienst|einsatz)\b/i.test(
+      text,
+    )
+  );
+}
+
+function isServicePricingOrBillingQuestion(text: string) {
+  return /\b(kostet|kosten|preis|preise|abrechnung|abrechnen|meter|metern|laufende[nr]? meter|laufende[nr]? metern)\b/i.test(
+    text,
+  );
+}
+
+function isLocalServiceFlow(params: {
+  text: string;
+  siteName?: string;
+  pendingLead: PendingLeadState | null;
+  contact: ContactDetails;
+  conversationState: ConversationState | null;
+}) {
+  return Boolean(
+    params.pendingLead?.location ||
+      params.pendingLead?.urgency ||
+      params.contact.location ||
+      params.contact.urgency ||
+      params.conversationState?.collectedFields?.location ||
+      params.conversationState?.collectedFields?.urgency ||
+      hasLocalServiceSignal(params.text) ||
+      hasLocalServiceSiteSignal(params.siteName || ''),
+  );
+}
+
+function hasLocalServiceSiteSignal(value: string) {
+  return /\b(rohr|rohrreinigung|kanal|kanalreinigung|abfluss|notdienst|dienstleister)\b/i.test(value);
+}
+
+function hasLocalServiceSignal(text: string) {
+  return /\b(notdienst|notfall|soforthilfe|rohrreinigung|kanalreinigung|abfluss|abflussreinigung|wc|toilette|verstopft|verstopfung|rueckstau|rückstau|wasserschaden|keller|ueberflutet|überflutet|rohrbruch|kanalproblem|wasser läuft nicht ab|wasser laeuft nicht ab|läuft nicht ab|laeuft nicht ab)\b/i.test(
     text,
   );
 }
@@ -1031,7 +1169,7 @@ function isUnclearInput(text: string) {
 }
 
 function shouldPauseLeadCapture(text: string, contact: ContactDetails) {
-  if (hasContactSignal(contact) || contact.preferredContact) {
+  if (hasContactSignal(contact) || contact.location || contact.urgency || contact.preferredContact) {
     return false;
   }
 
@@ -1042,6 +1180,8 @@ function extractContactDetails(message: string, pendingLead: PendingLeadState | 
   const email = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
   const phone = message.match(/(?:\+?\d[\d\s()./-]{6,}\d)/)?.[0]?.replace(/\s+/g, ' ').trim();
   const name = extractName(message) || inferNameFromPendingAnswer(message, pendingLead);
+  const location = extractServiceLocation(message);
+  const urgency = extractServiceUrgency(message);
   const concern = extractConcern(message, pendingLead);
   const preferredContact = extractPreferredContact(message);
 
@@ -1050,12 +1190,48 @@ function extractContactDetails(message: string, pendingLead: PendingLeadState | 
     email,
     phone,
     concern,
+    location,
+    urgency,
     preferredContact,
   };
 }
 
+function extractServiceLocation(message: string) {
+  const value = message.trim();
+  const zip = value.match(/\b\d{5}\b/)?.[0];
+  if (zip) {
+    return zip;
+  }
+
+  const cityPattern =
+    /\b(frankfurt(?: am main)?|offenbach(?: am main)?|wiesbaden|mainz|darmstadt|hanau|neu-isenburg|eschborn|bad homburg|oberursel|rüsselsheim|ruesselsheim|hofheim|maintal)\b/i;
+  const city = value.match(cityPattern)?.[0];
+  if (city) {
+    return cleanExtractedText(city);
+  }
+
+  const location = value.match(/\b(?:in|aus|bei|wohne in|bin in)\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,2})\b/)?.[1];
+  return location ? cleanExtractedText(location) : undefined;
+}
+
+function extractServiceUrgency(message: string) {
+  if (/\b(notdienst|notfall|sofort|akut|dringend|eilig|rueckstau|rückstau|ueberflutet|überflutet|wasser steht|läuft über|laeuft ueber|rohrbruch)\b/i.test(message)) {
+    return 'akut';
+  }
+
+  if (/\b(planbar|nicht dringend|morgen|später|spaeter|allgemeine anfrage|nur eine frage)\b/i.test(message)) {
+    return 'planbar';
+  }
+
+  if (/\b(normal|bald|zeitnah)\b/i.test(message)) {
+    return 'normal';
+  }
+
+  return undefined;
+}
+
 function extractPreferredContact(message: string): ContactDetails['preferredContact'] | undefined {
-  if (/\b(telefon|telefonisch|phone|handy|anruf|anrufen|rueckruf|rückruf|whatsapp)\b/i.test(message)) {
+  if (/\b(telefon|telefonisch|phone|handy|anruf|anrufen|rueckruf|rückruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|whatsapp)\b/i.test(message)) {
     return 'phone';
   }
 
@@ -1088,6 +1264,10 @@ function inferNameFromPendingAnswer(message: string, pendingLead: PendingLeadSta
     return undefined;
   }
 
+  if ((!pendingLead.location && extractServiceLocation(message)) || (!pendingLead.urgency && extractServiceUrgency(message))) {
+    return undefined;
+  }
+
   const clean = cleanExtractedText(message.trim());
   if (!clean || clean.length > 60 || clean.includes('@') || /\d/.test(clean)) {
     return undefined;
@@ -1111,12 +1291,30 @@ function extractConcern(message: string, pendingLead: PendingLeadState | null) {
     return undefined;
   }
 
+  const normalized = normalizeText(value);
+  if (hasScheduleIntent(normalized) && (isGenericScheduleIntent(value) || hasCallbackOnlyIntent(value))) {
+    return undefined;
+  }
+
+  if (isGenericLocalServiceIntent(value)) {
+    return undefined;
+  }
+
+  if (pendingLead?.status === 'pending' && pendingLead.concern) {
+    if (!pendingLead.location && extractServiceLocation(value)) {
+      return undefined;
+    }
+    if (!pendingLead.urgency && extractServiceUrgency(value)) {
+      return undefined;
+    }
+  }
+
   if (pendingLead?.status === 'pending' && !pendingLead.concern && !inferNameFromPendingAnswer(value, pendingLead)) {
     return sanitizeConcern(value);
   }
 
   if (
-    (hasLeadIntent(normalizeText(value)) || hasScheduleIntent(normalizeText(value))) &&
+    (hasLeadIntent(normalized) || hasScheduleIntent(normalized)) &&
     !isGenericLeadIntent(value)
   ) {
     return sanitizeConcern(value);
@@ -1149,6 +1347,40 @@ function isGenericLeadIntent(value: string) {
   return withoutIntentWords.length < 8;
 }
 
+function isGenericScheduleIntent(value: string) {
+  const withoutIntentWords = normalizeText(value)
+    .replace(
+      /\b(ich|wir|moechte|möchte|will|wollen|gern|gerne|bitte|können|koennen|sie|mich|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|anrufen|rueckruf|rückruf|kontakt|telefon|telefonisch|werden)\b/g,
+      '',
+    )
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+
+  return withoutIntentWords.length < 8;
+}
+
+function hasCallbackOnlyIntent(value: string) {
+  return (
+    /\b(rueckruf|rückruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|anrufen|rufen sie mich|telefonisch)\b/i.test(
+      value,
+    ) && !hasLocalServiceSignal(value)
+  );
+}
+
+function isGenericLocalServiceIntent(value: string) {
+  const location = extractServiceLocation(value);
+  const withoutIntentWords = normalizeText(value)
+    .replace(location ? normalizeText(location) : '', '')
+    .replace(
+      /\b(ich|wir|brauche|brauchen|benoetige|benötige|bitte|notdienst|notfall|soforthilfe|schnelle hilfe|akut|dringend|sofort|in|aus|bei|wohne|bin)\b/g,
+      '',
+    )
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+
+  return hasLocalServiceSignal(value) && withoutIntentWords.length < 8;
+}
+
 function looksLikeContactOnly(value: string) {
   const withoutEmail = value.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '');
   const withoutPhone = withoutEmail.replace(/(?:\+?\d[\d\s()./-]{6,}\d)/g, '');
@@ -1179,6 +1411,8 @@ function mergeContactDetails(
     email: current.email || pendingLead?.email,
     phone: current.phone || pendingLead?.phone,
     concern: current.concern || pendingLead?.concern,
+    location: current.location || pendingLead?.location,
+    urgency: current.urgency || pendingLead?.urgency,
     preferredContact: current.preferredContact || pendingLead?.preferredContact,
   };
 }
@@ -1190,6 +1424,8 @@ function mergeContactDetailsFromState(contact: ContactDetails, state: Conversati
     email: contact.email || collected.email,
     phone: contact.phone || collected.phone,
     concern: contact.concern || collected.concern || state?.topic || undefined,
+    location: contact.location || collected.location,
+    urgency: contact.urgency || collected.urgency || state?.urgency || undefined,
     preferredContact: contact.preferredContact || collected.preferredContact,
   };
 }
@@ -1237,6 +1473,8 @@ function buildConversationState(params: {
     email: collectedFields.email,
     phone: collectedFields.phone,
     concern: collectedFields.concern,
+    location: collectedFields.location,
+    urgency: collectedFields.urgency,
   };
   const missingFields = hasContext ? getMissingContactFields(normalizedContact) : [];
   const goal = params.scheduleIntent
@@ -1300,7 +1538,7 @@ function inferTopic(
     return previous?.topic || previous?.collectedFields?.concern || null;
   }
 
-  if (intent === 'lead' && isGenericLeadIntent(value)) {
+  if (intent === 'lead' && (isGenericLeadIntent(value) || isGenericLocalServiceIntent(value))) {
     return previous?.topic || previous?.collectedFields?.concern || null;
   }
 
@@ -1359,6 +1597,8 @@ function buildPendingLeadState(params: {
     email: params.contact.email,
     phone: params.contact.phone,
     concern: params.contact.concern,
+    location: params.contact.location,
+    urgency: params.contact.urgency,
     preferredContact: params.contact.preferredContact,
     leadPromptCount: (params.previous?.leadPromptCount || 0) + 1,
     lastLeadPromptAt: now,
@@ -1431,11 +1671,28 @@ function compactConversationState(state: ConversationState) {
   );
 }
 
-function getMissingContactFields(contact: ContactDetails) {
+function getMissingContactFields(contact: ContactDetails, localServiceFlow = false) {
   const missing: string[] = [];
   if (!contact.concern) {
     missing.push('concern');
   }
+
+  if (localServiceFlow) {
+    if (!contact.location) {
+      missing.push('location');
+    }
+    if (!contact.urgency) {
+      missing.push('urgency');
+    }
+    if (!contact.email && !contact.phone) {
+      missing.push('contact');
+    }
+    if (!contact.name) {
+      missing.push('name');
+    }
+    return missing;
+  }
+
   if (!contact.name) {
     missing.push('name');
   }
@@ -1454,6 +1711,7 @@ function canAskForLeadDetails(params: {
   contactFromMessage: ContactDetails;
   leadPromptCount: number;
   text: string;
+  localServiceFlow: boolean;
 }) {
   if (params.missing.length === 0) {
     return true;
@@ -1465,7 +1723,7 @@ function canAskForLeadDetails(params: {
 
   if (
     params.leadPromptCount >= 1 &&
-    !hasContactSignal(params.contactFromMessage) &&
+    !hasLeadProgressSignal(params.contactFromMessage, params.text) &&
     !params.contactFromMessage.preferredContact &&
     !hasBusinessNeedSignal(params.text)
   ) {
@@ -1477,7 +1735,12 @@ function canAskForLeadDetails(params: {
   }
 
   if (params.scheduleIntent) {
-    return Boolean(params.contact.concern || hasBusinessNeedSignal(params.text));
+    return Boolean(
+      params.contact.concern ||
+        params.contact.preferredContact ||
+        hasBusinessNeedSignal(params.text) ||
+        (params.localServiceFlow && hasLocalServiceSiteSignal(params.text)),
+    );
   }
 
   if (params.leadIntent) {
@@ -1491,6 +1754,8 @@ function hasLeadProgressSignal(contact: ContactDetails, text: string) {
   return Boolean(
     hasContactSignal(contact) ||
       contact.concern ||
+      contact.location ||
+      contact.urgency ||
       contact.preferredContact ||
       hasBusinessNeedSignal(text),
   );
@@ -1502,6 +1767,16 @@ function hasLeadCaptureQuality(contact: ContactDetails) {
       (contact.name || contact.concern) &&
       contact.concern,
   );
+}
+
+function summarizeLeadConcern(contact: ContactDetails, fallback: string) {
+  const parts = [
+    contact.concern,
+    contact.location ? `Einsatzort: ${contact.location}` : '',
+    contact.urgency ? `Dringlichkeit: ${contact.urgency}` : '',
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join('\n') : fallback;
 }
 
 function shouldQualifyBeforeContact(text: string, contact: ContactDetails) {
@@ -1519,7 +1794,34 @@ function buildMissingFieldsQuestion(
   scheduleIntent: boolean,
   hasKnownConcern = false,
   preferredContact?: ContactDetails['preferredContact'],
+  localServiceFlow = false,
+  hasKnownUrgency = false,
 ) {
+  if (localServiceFlow) {
+    if (missing[0] === 'concern') {
+      return scheduleIntent
+        ? hasKnownUrgency
+          ? 'Was genau ist betroffen - Toilette, Abfluss, Keller oder Kanal?'
+          : 'Gerne. Geht es um einen akuten Notfall oder um eine allgemeine Anfrage?'
+        : 'Was genau ist betroffen - Toilette, Abfluss, Keller oder Kanal?';
+    }
+    if (missing[0] === 'location') {
+      return 'In welchem Ort oder welcher PLZ befindet sich der Einsatzort?';
+    }
+    if (missing[0] === 'urgency') {
+      return 'Wie dringend ist es - läuft Wasser zurück oder ist es planbar?';
+    }
+    if (missing[0] === 'contact' || missing.includes('contact')) {
+      if (preferredContact === 'email') {
+        return 'Über welche E-Mail-Adresse können wir Sie erreichen?';
+      }
+      return 'Unter welcher Telefonnummer können wir Sie für den Rückruf erreichen?';
+    }
+    if (missing[0] === 'name' || missing.includes('name')) {
+      return 'Wie ist Ihr Name?';
+    }
+  }
+
   if (missing.includes('contact') && preferredContact === 'phone') {
     return 'Gerne. Wie lautet deine Telefonnummer?';
   }
@@ -1572,6 +1874,10 @@ function buildCapturedLeadAnswer(params: {
   }
 
   return `${base} Wir melden uns schnellstmöglich bei dir.`;
+}
+
+function buildLocalServicePricingAnswer() {
+  return 'Die Kosten hängen vom Aufwand, der Verstopfung und den benötigten laufenden Metern ab. Eine genaue Einschätzung ist nach kurzer Problembeschreibung möglich. Wenn Sie möchten, können Sie kurz schildern, was genau verstopft ist.';
 }
 
 function buildGreetingAnswer() {

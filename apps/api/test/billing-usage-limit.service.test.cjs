@@ -155,3 +155,39 @@ test('SubscriptionService creates a default starter subscription for tenants wit
   assert.equal(subscription.status, 'active');
   assert.equal(queries.some((entry) => /INSERT INTO tenant_subscriptions/i.test(entry.sql)), true);
 });
+
+test('SubscriptionService creates an internal enterprise subscription for normalized default tenant', async () => {
+  const service = new SubscriptionService({
+    async query(sql, params = []) {
+      if (/FROM tenant_subscriptions/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/SELECT id FROM plans/i.test(sql)) {
+        assert.equal(params[0], 'enterprise');
+        return { rows: [{ id: 'plan-enterprise' }] };
+      }
+      if (/INSERT INTO tenant_subscriptions/i.test(sql)) {
+        return {
+          rows: [
+            {
+              id: params[0],
+              tenant_id: params[1],
+              plan_id: params[2],
+              status: params[3],
+              current_period_start: '2026-05-01',
+              current_period_end: '2026-06-01',
+              trial_ends_at: null,
+              metadata: { source: 'auto-default' },
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    },
+  });
+
+  const subscription = await service.getCurrentSubscription('t-default');
+  assert.equal(subscription.tenantId, 't-default');
+  assert.equal(subscription.planId, 'plan-enterprise');
+  assert.equal(subscription.status, 'internal');
+});

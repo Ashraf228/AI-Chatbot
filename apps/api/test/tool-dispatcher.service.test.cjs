@@ -3,12 +3,14 @@ const assert = require('node:assert/strict');
 const { ToolDispatcherService } = require('../dist/tools/tool-dispatcher.service.js');
 
 function createDispatcher(overrides = {}) {
-  return new ToolDispatcherService(
-    overrides.db || {
-      async query() {
-        return { rows: [] };
-      },
+  const db = overrides.db || {
+    async query() {
+      return { rows: [] };
     },
+  };
+
+  return new ToolDispatcherService(
+    db,
     overrides.sites || {
       async getSite(id) {
         return { id, name: 'Default Site', tenant_id: 'tenant-1' };
@@ -37,6 +39,11 @@ function createDispatcher(overrides = {}) {
     overrides.propertyTicketing || {
       async getConfigForSite() {
         return { intakeMode: 'email_handoff' };
+      },
+    },
+    overrides.usageLimits || {
+      async withMonthlyLeadLimit(_tenantId, callback) {
+        return callback(db, async () => undefined);
       },
     },
   );

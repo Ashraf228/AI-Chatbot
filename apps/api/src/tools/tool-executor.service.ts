@@ -115,6 +115,19 @@ export class ToolExecutorService {
 
       return this.finish(auditEntry, result);
     } catch (error) {
+      const limitError = extractLimitExceeded(error);
+      if (limitError) {
+        return this.finish(auditEntry, {
+          toolName,
+          status: 'failed',
+          message: limitError.message,
+          error: {
+            code: 'limit_exceeded',
+            message: limitError.message,
+          },
+        });
+      }
+
       return this.finish(auditEntry, {
         toolName,
         status: 'failed',
@@ -205,25 +218,52 @@ export class ToolExecutorService {
       };
     }
 
-    await this.usageLimits.assertWithinLimit(context.tenantId, 'monthlyLeads');
     const leadId = randomUUID();
-    await this.db.query(
-      `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', now())`,
-      [
-        leadId,
-        context.siteId,
-        conversation.session_id,
-        text(input.name) || 'Unbekannt',
-        email || '',
-        phone || null,
-        text(input.need) || 'Kontaktanfrage aus dem Chat',
-      ],
-    );
+    const captured = await this.usageLimits.withMonthlyLeadLimit(context.tenantId, async (db, assertLimit) => {
+      const duplicate = await db.query<{ id: string }>(
+        `SELECT id
+         FROM widget_leads
+         WHERE site_id = $1
+           AND session_id = $2
+           AND (($3 <> '' AND email = $3) OR ($4 <> '' AND phone = $4))
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [context.siteId, conversation.session_id, email, phone],
+      );
+      const duplicateId = duplicate.rows[0]?.id;
+      if (duplicateId) {
+        return { leadId: duplicateId, created: false };
+      }
 
-    await this.markLeadCaptured(context, leadId, input);
+      await assertLimit();
+      await db.query(
+        `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', now())`,
+        [
+          leadId,
+          context.siteId,
+          conversation.session_id,
+          text(input.name) || 'Unbekannt',
+          email || '',
+          phone || null,
+          text(input.need) || 'Kontaktanfrage aus dem Chat',
+        ],
+      );
+      return { leadId, created: true };
+    });
+
+    await this.markLeadCaptured(context, captured.leadId, input);
+    if (!captured.created) {
+      return {
+        toolName: 'capture_lead',
+        status: 'skipped',
+        message: 'Lead existiert bereits.',
+        data: { leadId: captured.leadId },
+      };
+    }
+
     await this.dispatchIntegrationEvent('lead.created', {
-      leadId,
+      leadId: captured.leadId,
       name: text(input.name) || 'Unbekannt',
       email,
       phone,
@@ -234,7 +274,7 @@ export class ToolExecutorService {
       toolName: 'capture_lead',
       status: 'success',
       message: 'Lead wurde gespeichert.',
-      data: { leadId },
+      data: { leadId: captured.leadId },
     };
   }
 
@@ -596,4 +636,19 @@ function getNestedString(input: Record<string, unknown>, path: string[]) {
 
 function normalizePriority(value: string) {
   return ['low', 'normal', 'high', 'urgent'].includes(value) ? value : 'normal';
+}
+
+function extractLimitExceeded(error: unknown): { message: string } | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  const response = 'response' in error ? (error as { response?: unknown }).response : null;
+  const responseObject = asObject(response);
+  if (responseObject.code !== 'limit_exceeded') {
+    return null;
+  }
+
+  const message = text(responseObject.message) || 'Plan-Limit erreicht.';
+  return { message };
 }

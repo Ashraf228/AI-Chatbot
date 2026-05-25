@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EcommerceProductAdvisorService } = require('../dist/modules/ecommerce-product-advisor/ecommerce-product-advisor.service.js');
+const { ResponseComposerService } = require('../dist/ai/chat-pipeline/response-composer.service.js');
 
 test('EcommerceProductAdvisorService asks a clarification question for broad category queries', async () => {
   const service = new EcommerceProductAdvisorService(
@@ -51,6 +52,54 @@ test('EcommerceProductAdvisorService asks a clarification question for broad cat
   assert.equal(result.products.length, 0);
   assert.equal(result.collections.length, 2);
   assert.match(result.clarificationQuestion || '', /Sneaker/);
+});
+
+test('EcommerceProductAdvisorService is transparent when product data is missing', async () => {
+  const service = new EcommerceProductAdvisorService(
+    {
+      async query() {
+        return { rows: [] };
+      },
+    },
+    {
+      async getSite() {
+        return {
+          tenant_id: 'tenant-1',
+        };
+      },
+    },
+    {
+      async listForSite() {
+        return [
+          {
+            key: 'ecommerce-product-advisor',
+            config: {
+              catalogMode: 'shopify_catalog',
+            },
+          },
+        ];
+      },
+    },
+    {
+      async searchProductsForSite() {
+        return [];
+      },
+      async searchCollectionsForSite() {
+        return [];
+      },
+    },
+  );
+
+  const result = await service.buildRecommendationContextForSite({
+    siteId: 'site-1',
+    query: 'Was kostet der Premium Hoodie?',
+    limit: 3,
+  });
+
+  assert.equal(result.products.length, 0);
+  assert.equal(result.collections.length, 0);
+  assert.match(result.clarificationQuestion || '', /keine verifizierten Produktdaten/i);
+  assert.match(result.stateGuide, /Erfinde keine Produkte, Preise, Lieferzeiten/i);
 });
 
 test('EcommerceProductAdvisorService combines short follow-up answers with previous user intent', async () => {
@@ -166,6 +215,55 @@ test('EcommerceProductAdvisorService enters ready_to_recommend when a variant cu
 
   assert.equal(result.state, 'ready_to_recommend');
   assert.equal(result.clarificationQuestion, undefined);
+});
+
+test('ResponseComposerService includes verified price, availability and variants in catalog context', async () => {
+  const composer = new ResponseComposerService();
+
+  const context = composer.buildCatalogContext({
+    state: 'ready_to_recommend',
+    stateGuide: '',
+    products: [
+      {
+        id: 'p1',
+        title: 'Premium Hoodie',
+        handle: 'premium-hoodie',
+        url: 'https://shop/products/premium-hoodie',
+        vendor: 'Demo',
+        productType: 'Hoodies',
+        priceMin: '79.00',
+        priceMax: '89.00',
+        currencyCode: 'EUR',
+        availableForSale: true,
+        variantSummary: 'M · L',
+        variants: [
+          {
+            id: 'v1',
+            title: 'M / Schwarz',
+            url: 'https://shop/products/premium-hoodie?variant=v1',
+            price: '79.00',
+            currencyCode: 'EUR',
+            availableForSale: true,
+          },
+          {
+            id: 'v2',
+            title: 'L / Schwarz',
+            url: 'https://shop/products/premium-hoodie?variant=v2',
+            price: '89.00',
+            currencyCode: 'EUR',
+            availableForSale: false,
+          },
+        ],
+      },
+    ],
+    collections: [],
+  });
+
+  assert.match(context, /Verifizierte Produktdaten/);
+  assert.match(context, /Preis: 79.00 - 89.00 EUR/);
+  assert.match(context, /Status: verfuegbar/);
+  assert.match(context, /M \/ Schwarz, Preis: 79.00 EUR/);
+  assert.match(context, /L \/ Schwarz, Preis: 89.00 EUR, Status: nicht verfuegbar/);
 });
 
 test('EcommerceProductAdvisorService carries refinement-only follow-ups across advisor turns', async () => {

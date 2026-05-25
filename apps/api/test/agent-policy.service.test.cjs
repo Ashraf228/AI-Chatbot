@@ -98,6 +98,40 @@ test('AgentPolicyService prepares capture_lead when lead fields are complete', (
   assert.ok(decision.suggestedTools.includes('capture_lead'));
 });
 
+test('AgentPolicyService treats local service emergencies as qualified lead follow-up', () => {
+  const policy = new AgentPolicyService();
+
+  for (const message of [
+    'Meine Toilette ist verstopft',
+    'Ich brauche Notdienst in Frankfurt',
+  ]) {
+    const decision = policy.decide(createPolicyContext(message));
+
+    assert.equal(decision.type, 'ask_followup', message);
+    assert.equal(decision.nextAction, 'ask_for_contact_details', message);
+    assert.deepEqual(decision.suggestedTools, [], message);
+    assert.ok(decision.requiredFields.includes('email'), message);
+    assert.ok(decision.requiredFields.includes('phone'), message);
+  }
+});
+
+test('AgentPolicyService keeps local service price and area questions in knowledge mode', () => {
+  const policy = new AgentPolicyService();
+
+  for (const message of [
+    'Was kostet eine Rohrreinigung?',
+    'Rechnen Sie nach laufenden Metern ab?',
+    'Ich wohne in Offenbach, kommen Sie auch dahin?',
+  ]) {
+    const decision = policy.decide(createPolicyContext(message));
+
+    assert.equal(decision.type, 'answer', message);
+    assert.equal(decision.nextAction, 'continue_answer', message);
+    assert.deepEqual(decision.requiredFields, [], message);
+    assert.ok(decision.suggestedTools.includes('query_knowledge'), message);
+  }
+});
+
 test('AgentPolicyService prepares schedule_contact for appointment intent', () => {
   const policy = new AgentPolicyService();
 
@@ -130,6 +164,42 @@ test('AgentPolicyService prepares create_ticket for support cases', () => {
   assert.equal(decision.type, 'create_ticket');
   assert.equal(decision.nextAction, 'prepare_ticket');
   assert.ok(decision.suggestedTools.includes('create_ticket'));
+});
+
+test('AgentPolicyService prepares tickets for common IT support cases', () => {
+  const policy = new AgentPolicyService();
+
+  for (const message of [
+    'Mein Passwort funktioniert nicht mehr',
+    'VPN verbindet nicht',
+    'Outlook sendet keine E-Mails',
+    'Unser WLAN ist ausgefallen',
+    'Der Drucker druckt nicht',
+    'Ich habe keine Berechtigung auf die Freigabe',
+  ]) {
+    const decision = policy.decide(createPolicyContext(message, {
+      memory: {
+        knownEmail: 'user@example.de',
+        concern: message,
+      },
+    }));
+
+    assert.equal(decision.type, 'create_ticket', message);
+    assert.equal(decision.nextAction, 'prepare_ticket', message);
+    assert.ok(decision.suggestedTools.includes('create_ticket'), message);
+  }
+});
+
+test('AgentPolicyService escalates security incidents instead of giving risky instructions', () => {
+  const policy = new AgentPolicyService();
+
+  const decision = policy.decide(createPolicyContext('Wir haben einen Phishing Sicherheitsvorfall und Datenverlust'));
+
+  assert.equal(decision.type, 'handoff');
+  assert.equal(decision.nextAction, 'ask_for_contact_details');
+  assert.deepEqual(decision.suggestedTools, []);
+  assert.doesNotMatch(decision.message, /passwort/i);
+  assert.doesNotMatch(decision.message, /powershell|terminal/i);
 });
 
 test('AgentPolicyService recommends handoff when user asks for a human', () => {

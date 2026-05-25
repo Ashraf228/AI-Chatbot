@@ -52,11 +52,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     ctaText: 'Kontakt aufnehmen',
     recommendedQuestions: {
       '/': [
-        'Worum geht es bei deinem Anliegen?',
-        'Geht es um ein neues Projekt, Support oder eine konkrete Anfrage?',
+        'Was ist gerade verstopft oder betroffen?',
+        'Brauchen Sie schnelle Hilfe oder eine planbare Rückmeldung?',
+        'In welchem Ort wird Hilfe benötigt?',
       ],
     },
-    topTestQuestions: ['Was bietet ihr an?', 'Wie schnell kann ich Kontakt bekommen?', 'Was kostet eine Beratung?'],
+    topTestQuestions: ['Meine Toilette ist verstopft', 'Ich brauche Notdienst in Frankfurt', 'Was kostet eine Rohrreinigung?'],
     reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
     brandingDefaults: {
       brandColor: '#b55400',

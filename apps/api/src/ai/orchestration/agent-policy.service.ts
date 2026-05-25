@@ -104,6 +104,19 @@ export class AgentPolicyService {
       });
     }
 
+    if (hasServiceKnowledgeQuestion(text)) {
+      return this.buildDecision({
+        type: 'answer',
+        confidence: 0.78,
+        reason: 'User asked an informational service question that should be answered from knowledge first.',
+        message: '',
+        collectedFields,
+        requiredFields: [],
+        suggestedTools: ['query_knowledge'],
+        nextAction: 'continue_answer',
+      });
+    }
+
     if (hasLeadIntent(text) || context.memory.pendingLeadStatus === 'pending') {
       const requiredFields = [
         ...(!collectedFields.concern ? ['concern'] : []),
@@ -237,19 +250,31 @@ function getMissingContactFields(fields: AgentCollectedFields) {
 }
 
 function hasLeadIntent(text: string) {
-  return /\b(beratung|beraten|angebot|kostet|kosten|preis|preise|interesse|interessiere|kundenanfrage|kundengewinnung|mehr kunden|demo|erstgespraech|erstgespräch|ki für mein unternehmen|ki fuer mein unternehmen)\b/i.test(text);
+  return /\b(beratung|beraten|angebot|kostet|kosten|preis|preise|interesse|interessiere|kundenanfrage|kundengewinnung|mehr kunden|demo|erstgespraech|erstgespräch|ki für mein unternehmen|ki fuer mein unternehmen|notdienst|notfall|soforthilfe|rohrreinigung|kanalreinigung|abfluss|abflussreinigung|wc|toilette|verstopft|verstopfung|rueckstau|rückstau|wasserschaden|keller|ueberflutet|überflutet|rohrbruch|kanalproblem|wasser läuft nicht ab|wasser laeuft nicht ab|läuft nicht ab|laeuft nicht ab)\b/i.test(text);
 }
 
 function hasScheduleIntent(text: string) {
-  return /\b(termin|meeting|kalender|buchen|buchung|telefonat|rueckruf|rückruf|anrufen|demo|sprechen|kontaktaufnahme|erstgespraech|erstgespräch)\b/i.test(text);
+  return /\b(termin|meeting|kalender|buchen|buchung|telefonat|rueckruf|rückruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|anrufen|demo|sprechen|kontaktaufnahme|erstgespraech|erstgespräch)\b/i.test(text);
+}
+
+function hasServiceKnowledgeQuestion(text: string) {
+  return (
+    /\b(laufende[nr]? meter|laufende[nr]? metern|abrechnung|abrechnen|einsatzgebiet|kommen sie auch|wohne in|fahrtkosten|anfahrt)\b/i.test(
+      text,
+    ) ||
+    (/\b(kostet|kosten|preis|preise)\b/i.test(text) &&
+      /\b(rohr|rohrreinigung|kanal|kanalreinigung|abfluss|wc|toilette|verstopfung|notdienst|notfall|einsatz)\b/i.test(
+        text,
+      ))
+  );
 }
 
 function hasTicketIntent(text: string) {
-  return /\b(ticket|supportfall|problem mit|bestellung|schaden|schadensmeldung|reparatur|defekt|stoerung|störung|mieter|hausverwaltung|beschwerde)\b/i.test(text);
+  return /\b(ticket|supportfall|problem mit|bestellung|schaden|schadensmeldung|reparatur|defekt|stoerung|störung|mieter|hausverwaltung|beschwerde|passwort|kennwort|mfa|2fa|vpn|wlan|wifi|netzwerk|outlook|e-mail|email|drucker|printer|geraet|gerät|laptop|pc|software|zugriff|berechtigung|login|anmeldung)\b/i.test(text);
 }
 
 function hasHandoffIntent(text: string) {
-  return /\b(mensch|mitarbeiter|berater|support sprechen|jemand echten|eskalieren|chef|unzufrieden|beschweren)\b/i.test(text);
+  return /\b(mensch|mitarbeiter|berater|support sprechen|jemand echten|eskalieren|chef|unzufrieden|beschweren|sicherheitsvorfall|phishing|malware|virus|ransomware|datenverlust|serverausfall|systemausfall|netzwerkausfall|komplett down|mfa gesperrt|2fa gesperrt|konto gesperrt|login blockiert)\b/i.test(text);
 }
 
 function hasServiceRecommendationIntent(text: string) {

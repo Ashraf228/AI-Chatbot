@@ -234,7 +234,7 @@ export class EcommerceProductAdvisorService {
     }
 
     if (state === 'broad_search' && products.length === 0 && collections.length === 0) {
-      return 'Welche Produktart oder Kategorie suchst du genau? Dann kann ich gezielter passende Produkte empfehlen.';
+      return 'Dazu habe ich aktuell keine verifizierten Produktdaten gefunden. Welche Produktart oder Kategorie suchst du genau? Dann kann ich gezielter pruefen.';
     }
 
     return undefined;
@@ -243,14 +243,14 @@ export class EcommerceProductAdvisorService {
   private buildStateGuide(state: RecommendationState) {
     switch (state) {
       case 'broad_search':
-        return 'Advisor-Zustand: broad_search. Stelle zuerst eine fokussierende Rueckfrage und vermeide vorschnelle Produktempfehlungen.';
+        return 'Advisor-Zustand: broad_search. Stelle zuerst eine fokussierende Rueckfrage und vermeide vorschnelle Produktempfehlungen. Erfinde keine Produkte, Preise, Lieferzeiten, Rabatte oder Verfuegbarkeit.';
       case 'category_selected':
-        return 'Advisor-Zustand: category_selected. Eine Richtung ist erkennbar. Empfiehl passende Produkte oder Kategorien und halte Rueckfragen knapp.';
+        return 'Advisor-Zustand: category_selected. Eine Richtung ist erkennbar. Empfiehl nur Produkte oder Kategorien aus dem Produktkatalog oder Unternehmenswissen und halte Rueckfragen knapp.';
       case 'variant_refinement':
-        return 'Advisor-Zustand: variant_refinement. Passende Produkte sind gefunden, aber Varianten muessen noch eingegrenzt werden.';
+        return 'Advisor-Zustand: variant_refinement. Passende Produkte sind gefunden, aber Varianten muessen noch eingegrenzt werden. Nenne nur bekannte Varianten und Preise.';
       case 'ready_to_recommend':
       default:
-        return 'Advisor-Zustand: ready_to_recommend. Die Anfrage ist konkret genug fuer direkte Produktempfehlungen.';
+        return 'Advisor-Zustand: ready_to_recommend. Die Anfrage ist konkret genug fuer direkte Produktempfehlungen. Verwende ausschliesslich verifizierte Katalog- oder Wissensdaten.';
     }
   }
 

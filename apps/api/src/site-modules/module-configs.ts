@@ -49,12 +49,12 @@ export const DEFAULT_ECOMMERCE_PRODUCT_ADVISOR_MODULE_CONFIG: EcommerceProductAd
 export const DEFAULT_PROPERTY_TICKETING_MODULE_CONFIG: PropertyTicketingModuleConfig = {
   intakeMode: 'email_handoff',
   urgencyStyle: 'structured',
-  ctaLabel: 'Schadensmeldung aufnehmen',
+  ctaLabel: 'Supportfall aufnehmen',
   ctaDescription: 'Wir erfassen den Fall und leiten ihn an das zustaendige Team weiter.',
   incidentInstruction:
-    'Klaere Problem, Ort, Betroffenheit und Dringlichkeit in einer klaren Reihenfolge.',
+    'Klaere betroffenes System oder Geraet, Fehlerbild, Zeitpunkt, Dringlichkeit und Auswirkungen in einer klaren Reihenfolge.',
   handoffInstruction:
-    'Fuehre nach einer kurzen Qualifizierung sichtbar in die Fallaufnahme oder Weiterleitung.',
+    'Fuehre nach einer kurzen Qualifizierung sichtbar in die Fallaufnahme oder Weiterleitung. Frage niemals nach Passwoertern, MFA-Codes oder Admin-Zugangsdaten.',
 };
 
 function asObject(config: Record<string, unknown> | null | undefined) {

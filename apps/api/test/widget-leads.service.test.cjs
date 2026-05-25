@@ -51,6 +51,17 @@ function createService({ leadNotificationEmail = 'hello@soulesmartbusiness.com' 
     },
     {
       async assertWithinLimit() {},
+      async withMonthlyLeadLimit(_tenantId, callback) {
+        return callback(
+          {
+            async query(sql, params) {
+              dbCalls.push({ sql, params });
+              return { rows: [] };
+            },
+          },
+          async () => undefined,
+        );
+      },
     },
   );
 

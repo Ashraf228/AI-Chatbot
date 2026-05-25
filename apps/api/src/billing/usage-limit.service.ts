@@ -1,5 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
+import type { Queryable } from '../db/database.service';
+import { logEvent } from '../utils/logger';
 import { LimitCheck, PlanFeatures, PlanLimits } from './billing.types';
 import { SubscriptionService } from './subscription.service';
 
@@ -35,11 +37,11 @@ const LIMIT_LABELS: Record<LimitKey, string> = {
 };
 
 const LIMIT_UPGRADE_MESSAGES: Record<LimitKey, (limit: number) => string> = {
-  maxSites: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Kunden. Upgrade erforderlich.`,
-  monthlyMessages: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Nachrichten pro Monat. Upgrade erforderlich.`,
-  monthlyLeads: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Anfragen pro Monat. Upgrade erforderlich.`,
-  maxKnowledgeSources: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Wissensquellen. Upgrade erforderlich.`,
-  maxIntegrations: (limit) => `Dein aktueller Plan erlaubt nur ${limit} Verbindungen. Upgrade erforderlich.`,
+  maxSites: (limit) => `Dein aktueller Plan erlaubt maximal ${limit} Kunden. Upgrade erforderlich.`,
+  monthlyMessages: (limit) => `Dein aktueller Plan erlaubt maximal ${limit} Nachrichten pro Monat. Upgrade erforderlich.`,
+  monthlyLeads: (limit) => `Dein aktueller Plan erlaubt maximal ${limit} Anfragen pro Monat. Upgrade erforderlich.`,
+  maxKnowledgeSources: (limit) => `Dein aktueller Plan erlaubt maximal ${limit} Wissensquellen. Upgrade erforderlich.`,
+  maxIntegrations: (limit) => `Dein aktueller Plan erlaubt maximal ${limit} Verbindungen. Upgrade erforderlich.`,
 };
 
 @Injectable()
@@ -62,7 +64,7 @@ export class UsageLimitService {
     return context.plan.features?.[featureKey as keyof PlanFeatures] === true;
   }
 
-  async getUsageSummary(tenantId: string): Promise<UsageSummary> {
+  async getUsageSummary(tenantId: string, db: Queryable = this.db): Promise<UsageSummary> {
     const period = await this.currentPeriod();
     const [
       messages,
@@ -78,12 +80,14 @@ export class UsageLimitService {
          FROM usage_daily
          WHERE tenant_id = $1 AND day >= date_trunc('month', CURRENT_DATE)::date`,
         [tenantId],
+        db,
       ),
       this.scalar(
         `SELECT COUNT(*)::bigint AS count
          FROM conversations
          WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`,
         [tenantId],
+        db,
       ),
       this.scalar(
         `SELECT COUNT(*)::bigint AS count
@@ -91,26 +95,30 @@ export class UsageLimitService {
          JOIN sites s ON s.id = wl.site_id
          WHERE s.tenant_id = $1 AND wl.created_at >= date_trunc('month', now())`,
         [tenantId],
+        db,
       ),
       this.scalar(
         `SELECT COUNT(*)::bigint AS count
          FROM tool_invocations
          WHERE tenant_id = $1 AND created_at >= date_trunc('month', now())`,
         [tenantId],
+        db,
       ),
       this.scalar(
         `SELECT COUNT(*)::bigint AS count
          FROM knowledge_sources
          WHERE tenant_id = $1`,
         [tenantId],
+        db,
       ),
       this.scalar(
         `SELECT COUNT(*)::bigint AS count
          FROM integration_connections
          WHERE tenant_id = $1`,
         [tenantId],
+        db,
       ),
-      this.scalar(`SELECT COUNT(*)::bigint AS count FROM sites WHERE tenant_id = $1`, [tenantId]),
+      this.scalar(`SELECT COUNT(*)::bigint AS count FROM sites WHERE tenant_id = $1`, [tenantId], db),
     ]);
 
     return {
@@ -184,10 +192,10 @@ export class UsageLimitService {
     };
   }
 
-  async checkLimit(tenantId: string, limitKey: LimitKey, increment = 1): Promise<LimitCheck> {
+  async checkLimit(tenantId: string, limitKey: LimitKey, increment = 1, db: Queryable = this.db): Promise<LimitCheck> {
     const limits = await this.getPlanLimits(tenantId);
     const limit = normalizeLimit(limits?.[limitKey]);
-    const usage = await this.getUsageSummary(tenantId);
+    const usage = await this.getUsageSummary(tenantId, db);
     const used = Number(usage[LIMIT_USAGE_MAP[limitKey]] || 0);
     const remaining = limit === null ? null : Math.max(0, limit - used);
 
@@ -200,12 +208,17 @@ export class UsageLimitService {
     };
   }
 
-  async assertWithinLimit(tenantId: string | null | undefined, limitKey: LimitKey, increment = 1) {
+  async assertWithinLimit(
+    tenantId: string | null | undefined,
+    limitKey: LimitKey,
+    increment = 1,
+    db: Queryable = this.db,
+  ) {
     if (!tenantId) {
       return;
     }
 
-    const check = await this.checkLimit(tenantId, limitKey, increment);
+    const check = await this.checkLimit(tenantId, limitKey, increment, db);
     if (check.allowed) {
       return;
     }
@@ -213,6 +226,14 @@ export class UsageLimitService {
     const message = check.limit === null
       ? `Plan-Limit erreicht: ${LIMIT_LABELS[limitKey]}.`
       : LIMIT_UPGRADE_MESSAGES[limitKey](check.limit);
+
+    logEvent('usage_limit_exceeded', {
+      tenantId,
+      limitKey,
+      limit: check.limit,
+      used: check.used,
+      remaining: check.remaining,
+    });
 
     throw new HttpException(
       {
@@ -236,6 +257,20 @@ export class UsageLimitService {
     };
   }
 
+  async withMonthlyLeadLimit<T>(
+    tenantId: string | null | undefined,
+    callback: (db: Queryable, assertLimit: () => Promise<void>) => Promise<T>,
+  ): Promise<T> {
+    if (!tenantId) {
+      return callback(this.db, async () => undefined);
+    }
+
+    return this.db.transaction(async (tx) => {
+      await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`usage:monthlyLeads:${tenantId}`]);
+      return callback(tx, () => this.assertWithinLimit(tenantId, 'monthlyLeads', 1, tx));
+    });
+  }
+
   private async currentPeriod() {
     const res = await this.db.query<{ period_start: string; period_end: string }>(
       `SELECT date_trunc('month', now())::date::text AS period_start,
@@ -244,8 +279,8 @@ export class UsageLimitService {
     return res.rows[0] || { period_start: '', period_end: '' };
   }
 
-  private async scalar(sql: string, params: unknown[] = []) {
-    const res = await this.db.query<{ count: string | number }>(sql, params);
+  private async scalar(sql: string, params: unknown[] = [], db: Queryable = this.db) {
+    const res = await db.query<{ count: string | number }>(sql, params);
     return Number(res.rows[0]?.count || 0);
   }
 }

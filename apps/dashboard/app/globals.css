@@ -265,6 +265,10 @@ body:has(.dashboard-auth) .dashboard-surface {
   gap: 12px;
 }
 
+.dashboard-grid--compact {
+  gap: 10px;
+}
+
 .dashboard-stack {
   display: grid;
   gap: var(--dash-space-section);
@@ -811,6 +815,10 @@ body:has(.dashboard-auth) .dashboard-surface {
 
 .dashboard-copy--muted {
   color: #6b7280;
+}
+
+.dashboard-copy--xs {
+  font-size: 12px;
 }
 
 .dashboard-field {

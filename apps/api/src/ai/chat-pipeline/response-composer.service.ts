@@ -73,9 +73,29 @@ ${params.advisorStateGuide ? `\n\nAdvisor-Zustand:\n${params.advisorStateGuide}`
     }
 
     return [
+      'Verifizierte Produktdaten. Verwende nur diese Produkte, Kategorien, Preise, Varianten und Verfuegbarkeiten. Wenn eine Information hier fehlt, sage das transparent.',
       ...advisorContext.products.map(
-        (product, idx) =>
-          `# Produkt ${idx + 1}\nTitel: ${product.title}\nURL: ${product.url}\nAnbieter: ${product.vendor || '-'}\nTyp: ${product.productType || '-'}`,
+        (product, idx) => {
+          const price = formatCatalogPrice(product.priceMin, product.priceMax, product.currencyCode);
+          const availability = product.availableForSale === false ? 'nicht verfuegbar' : 'verfuegbar oder nicht sicher angegeben';
+          const variants = (product.variants || [])
+            .slice(0, 5)
+            .map((variant) => {
+              const variantPrice = formatCatalogPrice(variant.price, undefined, variant.currencyCode);
+              const variantAvailability = variant.availableForSale === false ? 'nicht verfuegbar' : 'verfuegbar oder nicht sicher angegeben';
+              return `- ${variant.title}${variantPrice ? `, Preis: ${variantPrice}` : ''}, Status: ${variantAvailability}, URL: ${variant.url}`;
+            })
+            .join('\n');
+
+          return `# Produkt ${idx + 1}
+Titel: ${product.title}
+URL: ${product.url}
+Anbieter: ${product.vendor || '-'}
+Typ: ${product.productType || '-'}
+Preis: ${price || 'nicht angegeben'}
+Status: ${availability}
+Varianten: ${product.variantSummary || 'nicht angegeben'}${variants ? `\nBekannte Varianten:\n${variants}` : ''}`;
+        },
       ),
       ...advisorContext.collections.map(
         (collection, idx) =>
@@ -99,4 +119,17 @@ ${params.advisorStateGuide ? `\n\nAdvisor-Zustand:\n${params.advisorStateGuide}`
   buildParts(input: Parameters<typeof buildResponseParts>[0]) {
     return buildResponseParts(input);
   }
+}
+
+function formatCatalogPrice(priceMin?: string, priceMax?: string, currencyCode?: string) {
+  if (!priceMin && !priceMax) {
+    return undefined;
+  }
+
+  const currency = currencyCode || 'EUR';
+  if (priceMin && priceMax && priceMin !== priceMax) {
+    return `${priceMin} - ${priceMax} ${currency}`;
+  }
+
+  return `${priceMin || priceMax} ${currency}`;
 }

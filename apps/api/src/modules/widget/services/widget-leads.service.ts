@@ -33,22 +33,24 @@ export class WidgetLeadsService {
     const site = await this.widgetConfigService.getSiteByKey(dto.siteKey);
     await this.widgetSecurityService.enforceOrigin(dto.siteKey, origin);
     await this.widgetSecurityService.assertSessionBelongsToSite(site.id, dto.sessionId);
-    await this.usageLimits.assertWithinLimit(site.tenantId, 'monthlyLeads');
     const id = randomUUID();
 
-    await this.db.query(
-      `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`,
-      [id, site.id, dto.sessionId, dto.name, dto.email, dto.phone || null, dto.message || null, dto.status || 'new'],
-    );
+    await this.usageLimits.withMonthlyLeadLimit(site.tenantId, async (db, assertLimit) => {
+      await assertLimit();
+      await db.query(
+        `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`,
+        [id, site.id, dto.sessionId, dto.name, dto.email, dto.phone || null, dto.message || null, dto.status || 'new'],
+      );
 
-    await this.db.query(
-      `UPDATE widget_sessions
-       SET lead_captured = true,
-           last_seen_at = now()
-       WHERE site_id = $1 AND id = $2`,
-      [site.id, dto.sessionId],
-    );
+      await db.query(
+        `UPDATE widget_sessions
+         SET lead_captured = true,
+             last_seen_at = now()
+         WHERE site_id = $1 AND id = $2`,
+        [site.id, dto.sessionId],
+      );
+    });
 
     if (site.leadNotificationEmail) {
       if (!this.reportMailer.isConfigured()) {

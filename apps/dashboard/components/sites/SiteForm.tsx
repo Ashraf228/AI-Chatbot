@@ -16,11 +16,23 @@ type SiteFormProps = {
   form: SiteFormValues;
   tenantOptions: Array<{ id: string; name: string }>;
   industryOptions: IndustryTemplate[];
+  submitDisabled?: boolean;
+  limitMessage?: string | null;
+  planLabel?: string | null;
   onChange: (next: SiteFormValues) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void | Promise<void>;
 };
 
-export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSubmit }: SiteFormProps) {
+export function SiteForm({
+  form,
+  tenantOptions,
+  industryOptions,
+  submitDisabled = false,
+  limitMessage = null,
+  planLabel = null,
+  onChange,
+  onSubmit,
+}: SiteFormProps) {
   const selectedTemplate = industryOptions.find((industry) => industry.key === form.industry);
   const enabledModules =
     selectedTemplate?.modules.filter((module) => module.isEnabled).map((module) => module.key) || [];
@@ -97,24 +109,18 @@ export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSub
         </div>
       ) : (
         <div className="dashboard-card dashboard-card--soft">
-          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+          <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
             Wähle eine Branche aus. Danach werden Ziel, Begrüßung, Standardfragen und empfohlene Funktionen automatisch vorbereitet.
           </p>
         </div>
       )}
 
       <details className="dashboard-card dashboard-card--soft">
-        <summary
-          style={{
-            cursor: "pointer",
-            fontWeight: 600,
-            listStyle: "none",
-          }}
-        >
+        <summary className="dashboard-accordion__summary">
           Erweiterte Angaben
         </summary>
-        <div className="dashboard-stack dashboard-stack--sm" style={{ marginTop: 14 }}>
-          <p className="dashboard-copy dashboard-copy--muted" style={{ marginBottom: 0 }}>
+        <div className="dashboard-stack dashboard-stack--sm dashboard-mt-14">
+          <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
             Diese Angaben werden nur selten direkt benötigt und können später angepasst werden.
           </p>
 
@@ -153,7 +159,15 @@ export function SiteForm({ form, tenantOptions, industryOptions, onChange, onSub
         </div>
       </details>
 
-      <Button type="submit">Kunde mit Vorlage anlegen</Button>
+      {planLabel || limitMessage ? (
+        <div className={limitMessage ? "dashboard-status dashboard-status--warning" : "dashboard-status"}>
+          {limitMessage || `Aktueller Plan: ${planLabel}`}
+        </div>
+      ) : null}
+
+      <Button type="submit" disabled={submitDisabled}>
+        {submitDisabled ? "Limit erreicht" : "Kunde mit Vorlage anlegen"}
+      </Button>
     </form>
   );
 }

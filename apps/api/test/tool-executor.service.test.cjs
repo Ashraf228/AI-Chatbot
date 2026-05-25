@@ -6,7 +6,7 @@ const { ToolRegistryService } = require('../dist/tools/tool-registry.service.js'
 const { ChatPipelineService } = require('../dist/ai/chat-pipeline/chat-pipeline.service.js');
 const { ResponseComposerService } = require('../dist/ai/chat-pipeline/response-composer.service.js');
 
-function createToolHarness() {
+function createToolHarness({ usageLimits } = {}) {
   const conversations = new Map([
     ['conversation-1', { id: 'conversation-1', session_id: 'session-1', metadata: {} }],
   ]);
@@ -187,7 +187,12 @@ function createToolHarness() {
     new ToolRegistryService(),
     new ToolAuditService(db),
     integrationEvents,
-    { async assertWithinLimit() {} },
+    usageLimits || {
+      async assertWithinLimit() {},
+      async withMonthlyLeadLimit(_tenantId, callback) {
+        return callback(db, async () => undefined);
+      },
+    },
   );
 
   const context = {
@@ -234,6 +239,49 @@ test('ToolExecutorService capture_lead returns missing_fields without contact', 
 
   assert.equal(result.status, 'missing_fields');
   assert.deepEqual(result.missingFields, ['email', 'phone']);
+  assert.equal(leads.length, 0);
+});
+
+test('ToolExecutorService capture_lead returns limit_exceeded without storing lead', async () => {
+  const { service, context, leads } = createToolHarness({
+    usageLimits: {
+      async assertWithinLimit() {},
+      async withMonthlyLeadLimit(_tenantId, callback) {
+        return callback(
+          {
+            async query(sql, params = []) {
+              if (/SELECT id\s+FROM widget_leads/i.test(sql)) {
+                return { rows: [] };
+              }
+              if (/INSERT INTO widget_leads/i.test(sql)) {
+                leads.push({ id: params[0] });
+                return { rows: [] };
+              }
+              return { rows: [] };
+            },
+          },
+          async () => {
+            const error = new Error('Dein aktueller Plan erlaubt maximal 1 Anfragen pro Monat. Upgrade erforderlich.');
+            error.response = {
+              code: 'limit_exceeded',
+              message: 'Dein aktueller Plan erlaubt maximal 1 Anfragen pro Monat. Upgrade erforderlich.',
+            };
+            throw error;
+          },
+        );
+      },
+    },
+  });
+
+  const result = await service.executeTool('capture_lead', {
+    name: 'Max Mustermann',
+    email: 'max@example.de',
+    need: 'KI Support',
+  }, context);
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error.code, 'limit_exceeded');
+  assert.match(result.message, /maximal 1 Anfragen/i);
   assert.equal(leads.length, 0);
 });
 

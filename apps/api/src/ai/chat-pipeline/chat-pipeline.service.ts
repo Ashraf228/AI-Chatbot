@@ -51,6 +51,17 @@ export class ChatPipelineService {
     }
 
     const routed = await this.prepareRoutedAnswer(normalized, conversation.id);
+    if (routed.advisorFallbackAnswer) {
+      return this.persistAndReturnRuleBasedAnswer({
+        input: normalized,
+        conversation,
+        answer: routed.advisorFallbackAnswer,
+        route: routed.routeDecision.route,
+        sources: routed.sources,
+        model: 'rule-based-advisor-no-data',
+      });
+    }
+
     if (routed.strictFallbackAnswer) {
       return this.persistAndReturnRuleBasedAnswer({
         input: normalized,
@@ -191,6 +202,27 @@ export class ChatPipelineService {
     }
 
     const routed = await this.prepareRoutedAnswer(normalized, conversation.id);
+    if (routed.advisorFallbackAnswer) {
+      const result = await this.persistAndReturnRuleBasedAnswer({
+        input: normalized,
+        conversation,
+        answer: routed.advisorFallbackAnswer,
+        route: routed.routeDecision.route,
+        sources: routed.sources,
+        model: 'rule-based-advisor-no-data',
+      });
+      await emit({ type: 'token', delta: result.answer });
+      await emit({
+        type: 'message_end',
+        answer: result.answer,
+        sessionId: result.sessionId,
+        conversationId: result.conversationId,
+        parts: result.parts,
+        sources: result.sources,
+      });
+      return;
+    }
+
     if (routed.strictFallbackAnswer) {
       const result = await this.persistAndReturnRuleBasedAnswer({
         input: normalized,
@@ -573,6 +605,13 @@ export class ChatPipelineService {
       strictFallbackAnswer:
         knowledgeMode === 'strict' && hits.length === 0
           ? 'Dazu habe ich gerade keine passende Information im Unternehmenswissen gefunden. Bitte hinterlasse kurz deine Anfrage, dann kann ein Mensch das pruefen.'
+          : undefined,
+      advisorFallbackAnswer:
+        routeDecision.route === 'advisor' &&
+        hits.length === 0 &&
+        advisorContext.products.length === 0 &&
+        advisorContext.collections.length === 0
+          ? 'Dazu habe ich aktuell keine verifizierten Produktdaten gefunden. Bitte beschreibe kurz, wonach du suchst, oder hinterlasse eine Anfrage, damit ein Mitarbeiter das pruefen kann.'
           : undefined,
     };
   }

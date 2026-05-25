@@ -115,3 +115,58 @@ test('ChatPipeline strict knowledgeMode returns safe answer without LLM when ret
   assert.equal(calls.llm, 0);
   assert.match(result.answer, /keine passende Information/i);
 });
+
+test('ChatPipeline advisor route returns safe product fallback without catalog or knowledge', async () => {
+  const calls = { llm: 0 };
+  const db = {
+    async query() {
+      return { rows: [] };
+    },
+  };
+  const conversationState = {
+    async ensureConversation() {
+      return { id: 'conversation-1', sessionId: 'session-1' };
+    },
+    async touchWidgetSession() {},
+    async appendMessage() {},
+    async loadHistory() {
+      return [];
+    },
+    async touchConversation() {},
+  };
+  const pipeline = new ChatPipelineService(
+    db,
+    { async embed() { return [0.1]; } },
+    { async search() { return []; } },
+    { async answer() { calls.llm += 1; return { text: 'LLM', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, model: 'm', latencyMs: 1 }; } },
+    { async resolveForSite() { return { route: 'advisor', reason: 'ecommerce_product_intent', guide: '' }; } },
+    {
+      async buildRecommendationContextForSite() {
+        return {
+          products: [],
+          collections: [],
+          state: 'broad_search',
+          stateGuide: 'Advisor-Zustand: broad_search.',
+          clarificationQuestion: 'Dazu habe ich aktuell keine verifizierten Produktdaten gefunden.',
+        };
+      },
+    },
+    { async decide() { return { action: 'normal_answer', handled: false }; } },
+    conversationState,
+    new ResponseComposerService(),
+    { async executeTool() { return { toolName: 'noop', status: 'skipped', message: 'noop' }; } },
+    { async assertWithinLimit() {} },
+  );
+
+  const result = await pipeline.process({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    sessionId: 'session-1',
+    source: 'widget',
+    message: 'Was kostet der Premium Hoodie?',
+    siteConfig: { knowledgeMode: 'flexible' },
+  });
+
+  assert.equal(calls.llm, 0);
+  assert.match(result.answer, /keine verifizierten Produktdaten/i);
+});

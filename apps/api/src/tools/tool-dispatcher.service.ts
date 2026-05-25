@@ -12,6 +12,7 @@ import { ShopifyCatalogService } from '../integrations/shopify/shopify-catalog.s
 import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { PropertyTicketingService } from '../modules/property-ticketing/property-ticketing.service';
+import { UsageLimitService } from '../billing/usage-limit.service';
 
 type AgentRunRow = {
   id: string;
@@ -56,6 +57,7 @@ export class ToolDispatcherService {
     private readonly embedder: EmbeddingService,
     private readonly vector: VectorService,
     private readonly propertyTicketing: PropertyTicketingService,
+    private readonly usageLimits: UsageLimitService,
   ) {}
 
   private async getRun(runId: string) {
@@ -208,17 +210,36 @@ export class ToolDispatcherService {
     const leadId = randomUUID();
     const sessionId = `agent-run:${run.id}`;
 
-    await this.db.query(
-      `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`,
-      [leadId, run.site_id, sessionId, name, email, phone, message, status],
-    );
+    const captured = await this.usageLimits.withMonthlyLeadLimit(run.tenant_id, async (db, assertLimit) => {
+      const existing = await db.query<{ id: string }>(
+        `SELECT id
+         FROM widget_leads
+         WHERE site_id = $1
+           AND session_id = $2
+           AND email = $3
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [run.site_id, sessionId, email],
+      );
+      const existingId = existing.rows[0]?.id;
+      if (existingId) {
+        return { leadId: existingId, created: false };
+      }
+
+      await assertLimit();
+      await db.query(
+        `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`,
+        [leadId, run.site_id, sessionId, name, email, phone, message, status],
+      );
+      return { leadId, created: true };
+    });
 
     const siteConfig = normalizeObject(site.config);
     const leadNotificationEmail = normalizeString(siteConfig.leadNotificationEmail);
     const companyName = normalizeString(siteConfig.companyName) || site.name;
 
-    if (leadNotificationEmail) {
+    if (captured.created && leadNotificationEmail) {
       if (this.reportMailer.isConfigured()) {
         const mailPayload = this.leadMailer.buildLeadNotification({
           recipientEmail: leadNotificationEmail,
@@ -241,9 +262,10 @@ export class ToolDispatcherService {
     }
 
     return {
-      leadId,
+      leadId: captured.leadId,
       status,
-      queuedNotification: Boolean(leadNotificationEmail && this.reportMailer.isConfigured()),
+      created: captured.created,
+      queuedNotification: Boolean(captured.created && leadNotificationEmail && this.reportMailer.isConfigured()),
     };
   }
 
@@ -574,10 +596,32 @@ export class ToolDispatcherService {
       return this.finalizeInvocation(invocationId, 'completed', outputPayload);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown tool execution error';
+      const limitError = extractLimitExceeded(error);
+      const safeMessage = limitError?.message || message;
       if (payload.controlRunStatus !== false) {
-        await this.updateRunStatus(run.id, 'failed', undefined, message);
+        await this.updateRunStatus(run.id, 'failed', undefined, safeMessage);
       }
-      return this.finalizeInvocation(invocationId, 'failed', {}, message);
+      return this.finalizeInvocation(
+        invocationId,
+        'failed',
+        limitError ? { code: 'limit_exceeded', message: limitError.message } : {},
+        safeMessage,
+      );
     }
   }
+}
+
+function extractLimitExceeded(error: unknown): { message: string } | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  const response = 'response' in error ? (error as { response?: unknown }).response : null;
+  const responseObject = normalizeObject(response as Record<string, unknown> | null | undefined);
+  if (responseObject.code !== 'limit_exceeded') {
+    return null;
+  }
+
+  const message = normalizeString(responseObject.message) || 'Plan-Limit erreicht.';
+  return { message };
 }

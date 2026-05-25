@@ -94,7 +94,7 @@ export class SubscriptionService {
   }
 
   private async ensureDefaultSubscription(tenantId: string) {
-    const planCode = tenantId === 't_default' ? 'enterprise' : 'starter';
+    const planCode = isInternalTenant(tenantId) ? 'enterprise' : 'starter';
     const plan = await this.db.query<{ id: string }>(
       `SELECT id FROM plans WHERE code = $1 AND is_active = true LIMIT 1`,
       [planCode],
@@ -114,6 +114,10 @@ export class SubscriptionService {
     );
     return mapSubscription(inserted.rows[0]);
   }
+}
+
+function isInternalTenant(tenantId: string) {
+  return tenantId === 't_default' || tenantId === 't-default';
 }
 
 function mapSubscription(row: SubscriptionRow): TenantSubscription {

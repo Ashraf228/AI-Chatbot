@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../db/prisma.service';
+import type { Queryable } from '../db/database.service';
 import { randomBytes, randomUUID } from 'crypto';
 import { SiteConfigInput } from './dto';
 import { resolveSiteKey } from './site-key';
@@ -55,7 +56,7 @@ export class SitesService {
     };
   }
 
-  private async assertUniqueSiteKey(siteKey: string, excludeId?: string) {
+  private async assertUniqueSiteKey(siteKey: string, excludeId?: string, db: Queryable = this.db) {
     const values = [siteKey];
     let query = `
       SELECT id
@@ -70,7 +71,7 @@ export class SitesService {
 
     query += ` LIMIT 1`;
 
-    const existing = await this.db.query<{ id: string }>(query, values);
+    const existing = await db.query<{ id: string }>(query, values);
     if (existing.rows[0]) {
       throw new BadRequestException('siteKey already exists');
     }
@@ -86,31 +87,34 @@ export class SitesService {
   }) {
     const name = params.name.trim();
     const tenantId = await this.tenants.ensureTenantExists(params.tenantId.trim());
-    await this.usageLimits.assertWithinLimit(tenantId, 'maxSites');
     const id = params.id?.trim() || randomUUID();
     const config = parseSiteConfig(params.config);
     const resolvedSiteKey =
       resolveSiteKey(params.siteKey, name) ||
       `site-${id.slice(0, 8)}`;
 
-    await this.assertUniqueSiteKey(resolvedSiteKey, id);
-
     const publicKey = 'pk_' + randomBytes(32).toString('hex');
     const { siteKey: _legacySiteKey, ...nextConfig } = config as SiteConfigInput & {
       siteKey?: unknown;
     };
 
-    await this.db.query(
-      `INSERT INTO sites(id, site_key, tenant_id, name, allowed_domains, public_key, config)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (id) DO UPDATE SET
-         site_key=EXCLUDED.site_key,
-         tenant_id=EXCLUDED.tenant_id,
-         name=EXCLUDED.name,
-         allowed_domains=EXCLUDED.allowed_domains,
-         config=(sites.config - 'siteKey') || EXCLUDED.config`,
-      [id, resolvedSiteKey, tenantId, name, params.allowedDomains, publicKey, nextConfig],
-    );
+    await this.db.transaction(async (tx) => {
+      await tx.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`sites:maxSites:${tenantId}`]);
+      await this.usageLimits.assertWithinLimit(tenantId, 'maxSites');
+      await this.assertUniqueSiteKey(resolvedSiteKey, id, tx);
+
+      await tx.query(
+        `INSERT INTO sites(id, site_key, tenant_id, name, allowed_domains, public_key, config)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (id) DO UPDATE SET
+           site_key=EXCLUDED.site_key,
+           tenant_id=EXCLUDED.tenant_id,
+           name=EXCLUDED.name,
+           allowed_domains=EXCLUDED.allowed_domains,
+           config=(sites.config - 'siteKey') || EXCLUDED.config`,
+        [id, resolvedSiteKey, tenantId, name, params.allowedDomains, publicKey, nextConfig],
+      );
+    });
 
     return this.getSite(id);
   }

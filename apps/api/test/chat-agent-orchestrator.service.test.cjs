@@ -6,6 +6,8 @@ function createHarness({
   smtpConfigured = true,
   leadNotificationEmail = 'leads@example.com',
   scheduleUrl = '',
+  usageLimits,
+  siteName = 'Demo Kunde',
 } = {}) {
   const conversations = new Map([
     ['conversation-1', { metadata: {} }],
@@ -21,7 +23,7 @@ function createHarness({
         return {
           rows: [
             {
-              name: 'Demo Kunde',
+              name: siteName,
               config: {
                 setupGoal: 'lead_capture',
                 leadNotificationEmail,
@@ -165,6 +167,11 @@ function createHarness({
         return smtpConfigured;
       },
     },
+    usageLimits || {
+      async withMonthlyLeadLimit(_tenantId, callback) {
+        return callback(db, async () => undefined);
+      },
+    },
   );
 
   async function decide(message, history = []) {
@@ -235,6 +242,107 @@ test('ChatAgentOrchestratorService starts a pending lead and asks for the concer
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
   assert.equal(auditLogs[0].action, 'lead_pending_started');
   assert.deepEqual(auditLogs[0].metadata.missingFields, ['concern', 'name', 'contact']);
+});
+
+test('ChatAgentOrchestratorService starts local service intake without price or time promises', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  const result = await decide('Meine Toilette ist verstopft');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'ask_for_contact');
+  assert.match(result.answer, /Ort|PLZ|Einsatzort/i);
+  assert.doesNotMatch(result.answer, /E-Mail|Telefon|Name|erreichen/i);
+  assert.doesNotMatch(result.answer, /garantiert|kostenlos|in \d+ minuten|festpreis/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(
+    conversations.get('conversation-1').metadata.pendingLead.concern,
+    'Meine Toilette ist verstopft',
+  );
+});
+
+test('ChatAgentOrchestratorService handles local service free-text intake step by step', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  const first = await decide('Mein Abfluss läuft nicht ab');
+  const location = await decide('Frankfurt');
+  const urgency = await decide('akut, Wasser läuft zurück');
+  const phone = await decide('015511410215');
+
+  assert.match(first.answer, /Ort|PLZ|Einsatzort/i);
+  assert.match(location.answer, /dringend|Wasser|planbar/i);
+  assert.match(urgency.answer, /Telefonnummer|Rückruf/i);
+  assert.match(phone.answer, /Name/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'Mein Abfluss läuft nicht ab');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.location, 'Frankfurt');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
+});
+
+test('ChatAgentOrchestratorService asks for the affected problem when local notdienst lacks details', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  const result = await decide('Ich brauche Notdienst in Frankfurt');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'ask_for_contact');
+  assert.match(result.answer, /Toilette|Abfluss|Keller|Kanal/i);
+  assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.location, 'Frankfurt');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
+});
+
+test('ChatAgentOrchestratorService answers local service pricing without lead pressure', async () => {
+  const { decide, leads, conversations } = createHarness();
+
+  const result = await decide('Was kostet eine Rohrreinigung?');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /Kosten hängen vom Aufwand/i);
+  assert.match(result.answer, /kurz schildern/i);
+  assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+});
+
+test('ChatAgentOrchestratorService handles local service meter billing question without lead pressure', async () => {
+  const { decide, leads, conversations } = createHarness({ siteName: 'Rohrreinigung-ffm24' });
+
+  const result = await decide('Rechnen Sie nach laufenden Metern ab?');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /laufenden Metern/i);
+  assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+});
+
+test('ChatAgentOrchestratorService lets standalone service area statements use normal knowledge flow', async () => {
+  const { decide, leads } = createHarness({ siteName: 'Rohrreinigung-ffm24' });
+
+  const result = await decide('Ich wohne in Offenbach');
+
+  assert.equal(result.handled, false);
+  assert.equal(result.action, 'normal_answer');
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService clarifies callback urgency before asking for phone on local sites', async () => {
+  for (const message of ['Ich möchte zurückgerufen werden', 'Können Sie mich anrufen?']) {
+    const { decide, leads } = createHarness({ siteName: 'Rohrreinigung-ffm24' });
+
+    const result = await decide(message);
+
+    assert.equal(result.handled, true, message);
+    assert.equal(result.action, 'ask_for_contact', message);
+    assert.match(result.answer, /akuten Notfall|allgemeine Anfrage/i, message);
+    assert.doesNotMatch(result.answer, /Telefonnummer|E-Mail|Name/i, message);
+    assert.equal(leads.length, 0, message);
+  }
 });
 
 test('ChatAgentOrchestratorService captures a lead over multiple messages', async () => {
@@ -497,4 +605,44 @@ test('ChatAgentOrchestratorService stores lead when SMTP is missing and does not
   assert.equal(leads.length, 1);
   assert.equal(emailJobs.length, 0);
   assert.ok(auditLogs.some((entry) => entry.action === 'lead_captured'));
+});
+
+test('ChatAgentOrchestratorService returns a plan limit message without storing lead', async () => {
+  const { decide, leads } = createHarness({
+    usageLimits: {
+      async withMonthlyLeadLimit(_tenantId, callback) {
+        return callback(
+          {
+            async query(sql) {
+              if (/SELECT id\s+FROM widget_leads/i.test(sql)) {
+                return { rows: [] };
+              }
+              if (/INSERT INTO widget_leads/i.test(sql)) {
+                leads.push({ id: 'should-not-store' });
+                return { rows: [] };
+              }
+              return { rows: [] };
+            },
+          },
+          async () => {
+            const error = new Error('Dein aktueller Plan erlaubt maximal 1 Anfragen pro Monat. Upgrade erforderlich.');
+            error.response = {
+              code: 'limit_exceeded',
+              message: 'Dein aktueller Plan erlaubt maximal 1 Anfragen pro Monat. Upgrade erforderlich.',
+            };
+            throw error;
+          },
+        );
+      },
+    },
+  });
+
+  const result = await decide(
+    'Ich brauche Beratung zu KI Automatisierung. Mein Name ist Max Mustermann, max@example.de',
+  );
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /maximal 1 Anfragen/i);
+  assert.equal(leads.length, 0);
 });
