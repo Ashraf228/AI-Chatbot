@@ -160,7 +160,7 @@ Standardfragen:
 - Einsatzort: ${asString(questionTexts.location) || 'In welchem Ort oder welcher PLZ befindet sich der Einsatzort?'}
 - Dringlichkeit: ${asString(questionTexts.urgency) || 'Wie dringend ist es aktuell?'}
 
-Wenn du eine Wissensfrage beantwortest, hänge keine allgemeine Auswahl wie "Support, Prozesse oder Marketing" an. Stelle nur eine passende lokale Rückfrage, falls sie wirklich nötig ist.
+Wenn Sie eine Wissensfrage beantworten, hängen Sie keine allgemeine Auswahl wie "Support, Prozesse oder Marketing" an. Stellen Sie nur eine passende lokale Rückfrage, falls sie wirklich nötig ist.
 
 Letzte Nachrichten:
 ${recentHistory || '(kein Verlauf vorhanden)'}

@@ -193,8 +193,8 @@ export class ChatAgentOrchestratorService {
         action: 'normal_answer',
         handled: true,
         answer: recoveryIntent || refusalIntent
-          ? buildRecoveryAnswer()
-          : buildGreetingAnswer(),
+          ? buildRecoveryAnswer(localServiceFlow)
+          : buildGreetingAnswer(localServiceFlow),
         decision: structuredDecision,
       };
     }
@@ -213,7 +213,7 @@ export class ChatAgentOrchestratorService {
       return {
         action: 'normal_answer',
         handled: true,
-        answer: buildGreetingAnswer(),
+        answer: buildGreetingAnswer(localServiceFlow),
         decision: structuredDecision,
       };
     }
@@ -273,7 +273,12 @@ export class ChatAgentOrchestratorService {
       effectiveScheduleIntent,
     );
     const missing = getMissingContactFields(contact, localServiceFlow, intakeFlow);
-    const cta = buildLeadCta(moduleContext.ctaLabel, moduleContext.ctaDescription, siteConfig.ctaText);
+    const cta = buildLeadCta(
+      moduleContext.ctaLabel,
+      moduleContext.ctaDescription,
+      siteConfig.ctaText,
+      localServiceFlow,
+    );
     const leadPromptCount = pendingLead?.leadPromptCount || 0;
     const shouldAskForContactDetails = canAskForLeadDetails({
       missing,
@@ -349,7 +354,7 @@ export class ChatAgentOrchestratorService {
         return {
           action: 'normal_answer',
           handled: true,
-          answer: buildConsultingResetAnswer(),
+          answer: buildConsultingResetAnswer(localServiceFlow),
           decision: structuredDecision,
         };
       }
@@ -418,7 +423,7 @@ export class ChatAgentOrchestratorService {
       return {
         action: 'normal_answer',
         handled: true,
-        answer: buildConsultingResetAnswer(),
+        answer: buildConsultingResetAnswer(localServiceFlow),
         decision: structuredDecision,
       };
     }
@@ -541,6 +546,7 @@ export class ChatAgentOrchestratorService {
         scheduleUrl,
         ctaText: siteConfig.ctaText,
         scheduleIntent: effectiveScheduleIntent,
+        localServiceFlow,
       }),
       decision: structuredDecision,
       leadId: leadCapture.leadId,
@@ -595,7 +601,7 @@ export class ChatAgentOrchestratorService {
           ? {
               action: 'lead_capture',
               label: 'Kontaktdaten hinterlassen',
-              description: 'Wir nehmen deine Anfrage auf.',
+              description: 'Wir nehmen die Anfrage auf.',
             }
           : undefined,
       };
@@ -2027,21 +2033,30 @@ function buildCapturedLeadAnswer(params: {
   scheduleUrl?: string;
   ctaText?: string;
   scheduleIntent: boolean;
+  localServiceFlow?: boolean;
 }) {
-  const base = 'Danke, ich habe deine Anfrage aufgenommen.';
+  const base = params.localServiceFlow
+    ? 'Danke, ich habe Ihre Anfrage aufgenommen.'
+    : 'Danke, ich habe deine Anfrage aufgenommen.';
   if (params.scheduleUrl) {
-    return `${base} Hier kannst du direkt einen passenden Termin buchen: ${params.scheduleUrl}`;
+    return params.localServiceFlow
+      ? `${base} Hier können Sie direkt einen passenden Termin buchen: ${params.scheduleUrl}`
+      : `${base} Hier kannst du direkt einen passenden Termin buchen: ${params.scheduleUrl}`;
   }
 
   if (params.scheduleIntent) {
-    return `${base} Wir melden uns zur Terminabstimmung bei dir.`;
+    return params.localServiceFlow
+      ? `${base} Wir melden uns zur Terminabstimmung bei Ihnen.`
+      : `${base} Wir melden uns zur Terminabstimmung bei dir.`;
   }
 
   if (params.ctaText) {
     return `${base} Nächster Schritt: ${params.ctaText}`;
   }
 
-  return `${base} Wir melden uns schnellstmöglich bei dir.`;
+  return params.localServiceFlow
+    ? `${base} Wir melden uns schnellstmöglich bei Ihnen.`
+    : `${base} Wir melden uns schnellstmöglich bei dir.`;
 }
 
 function buildLocalServicePricingAnswer(intakeFlow?: LocalServiceIntakeFlowConfig) {
@@ -2051,15 +2066,27 @@ function buildLocalServicePricingAnswer(intakeFlow?: LocalServiceIntakeFlowConfi
   return `${template} Wenn Sie möchten, können Sie kurz schildern, was genau betroffen ist.`;
 }
 
-function buildGreetingAnswer() {
+function buildGreetingAnswer(localServiceFlow = false) {
+  if (localServiceFlow) {
+    return 'Guten Tag, ich unterstütze Sie bei Fragen zum Einsatz, zu Kosten, Rückruf oder Notdienst. Wobei kann ich Ihnen helfen?';
+  }
+
   return 'Hi, ich helfe dir bei Fragen zu Websites, KI-Automatisierung, Support-Systemen oder individuellen Softwarelösungen. Wobei kann ich dich unterstützen?';
 }
 
-function buildRecoveryAnswer() {
+function buildRecoveryAnswer(localServiceFlow = false) {
+  if (localServiceFlow) {
+    return 'Entschuldigung, ich habe zu früh nach Kontaktdaten gefragt. Ich kann Ihnen auch erst einmal normal weiterhelfen. Geht es um einen akuten Notfall, eine Kostenfrage oder eine allgemeine Anfrage?';
+  }
+
   return 'Du hast recht, ich frage gerade zu früh nach Kontaktdaten. Ich kann dir auch erst einmal normal weiterhelfen. Geht es bei dir eher um Website, KI-Automatisierung, Support oder Beratung?';
 }
 
-function buildConsultingResetAnswer() {
+function buildConsultingResetAnswer(localServiceFlow = false) {
+  if (localServiceFlow) {
+    return 'Kein Problem. Ich kann Ihnen Fragen zum Einsatz, zu Kosten, Rückruf oder Notdienst beantworten. Worum geht es bei Ihrer Anfrage?';
+  }
+
   return 'Kein Problem. Ich kann dir Fragen zu Websites, KI-Automatisierung, Support-Automatisierung oder individuellen Softwarelösungen beantworten. Worum geht es bei dir konkret?';
 }
 
@@ -2067,11 +2094,18 @@ function buildBusinessNeedQualificationAnswer() {
   return 'Das kann in mehreren Bereichen sinnvoll sein: Support, Kundengewinnung oder interne Prozesse. Wo hast du aktuell den größten Aufwand?';
 }
 
-function buildLeadCta(label?: string, description?: string, ctaText?: string) {
+function buildLeadCta(
+  label?: string,
+  description?: string,
+  ctaText?: string,
+  localServiceFlow = false,
+) {
   return {
     action: 'lead_capture' as const,
     label: label || ctaText || 'Kontaktdaten hinterlassen',
-    description: description || 'Wir nehmen deine Anfrage direkt auf.',
+    description: description || (localServiceFlow
+      ? 'Wir nehmen Ihre Anfrage direkt auf.'
+      : 'Wir nehmen deine Anfrage direkt auf.'),
   };
 }
 

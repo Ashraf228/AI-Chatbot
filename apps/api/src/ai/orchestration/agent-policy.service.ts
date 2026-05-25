@@ -23,7 +23,9 @@ export class AgentPolicyService {
         type: 'answer',
         confidence: 0.86,
         reason: 'User greeted the assistant without a business or contact intent.',
-        message: 'Hi, ich helfe dir bei Fragen zu Websites, KI-Automatisierung, Support-Systemen oder individuellen Softwareloesungen. Wobei kann ich dich unterstuetzen?',
+        message: intakeFlow
+          ? 'Guten Tag, ich unterstuetze Sie bei Fragen zum Einsatz, zu Kosten, Rueckruf oder Notdienst. Wobei kann ich Ihnen helfen?'
+          : 'Hi, ich helfe dir bei Fragen zu Websites, KI-Automatisierung, Support-Systemen oder individuellen Softwareloesungen. Wobei kann ich dich unterstuetzen?',
         collectedFields,
         requiredFields: [],
         suggestedTools: [],
@@ -36,7 +38,9 @@ export class AgentPolicyService {
         type: 'ask_followup',
         confidence: 0.84,
         reason: 'User is confused, annoyed, or declined contact capture.',
-        message: 'Du hast recht, ich frage gerade zu frueh nach Kontaktdaten. Ich kann dir auch erst einmal normal weiterhelfen. Geht es bei dir eher um Website, KI-Automatisierung, Support oder Beratung?',
+        message: intakeFlow
+          ? 'Entschuldigung, ich habe zu frueh nach Kontaktdaten gefragt. Ich kann Ihnen auch erst einmal normal weiterhelfen. Geht es um einen akuten Notfall, eine Kostenfrage oder eine allgemeine Anfrage?'
+          : 'Du hast recht, ich frage gerade zu frueh nach Kontaktdaten. Ich kann dir auch erst einmal normal weiterhelfen. Geht es bei dir eher um Website, KI-Automatisierung, Support oder Beratung?',
         collectedFields,
         requiredFields: ['intent'],
         suggestedTools: [],
@@ -97,8 +101,12 @@ export class AgentPolicyService {
         confidence: hasContact ? 0.9 : 0.8,
         reason: 'User requested appointment, callback, demo, or direct contact.',
         message: context.siteConfig.scheduleUrl && hasContact
-          ? `Perfekt. Hier kannst du direkt einen Termin buchen: ${context.siteConfig.scheduleUrl}`
-          : 'Perfekt. Wie koennen wir dich am besten erreichen - per E-Mail oder Telefon?',
+          ? intakeFlow
+            ? `Perfekt. Hier koennen Sie direkt einen Termin buchen: ${context.siteConfig.scheduleUrl}`
+            : `Perfekt. Hier kannst du direkt einen Termin buchen: ${context.siteConfig.scheduleUrl}`
+          : intakeFlow
+            ? 'Perfekt. Wie koennen wir Sie am besten erreichen - per E-Mail oder Telefon?'
+            : 'Perfekt. Wie koennen wir dich am besten erreichen - per E-Mail oder Telefon?',
         collectedFields,
         requiredFields: hasContact ? [] : ['email', 'phone'],
         suggestedTools: hasContact ? ['schedule_contact'] : [],
@@ -133,8 +141,10 @@ export class AgentPolicyService {
           ? 'User provided enough contact and need information for lead capture.'
           : 'User has commercial or consultation intent, but required lead fields are missing.',
         message: complete
-          ? 'Perfekt, ich habe deine Anfrage aufgenommen.'
-          : buildLeadFollowup(requiredFields),
+          ? intakeFlow
+            ? 'Perfekt, ich habe Ihre Anfrage aufgenommen.'
+            : 'Perfekt, ich habe deine Anfrage aufgenommen.'
+          : buildLeadFollowup(requiredFields, intakeFlow),
         collectedFields,
         requiredFields,
         suggestedTools: complete && leadEnabled ? ['capture_lead'] : [],
@@ -339,15 +349,17 @@ function hasRefusalIntent(text: string) {
   return /\b(nein|nope|kein interesse|keine interesse|stop|stopp|lass das|nicht kontaktieren|keine daten|will ich nicht|möchte ich nicht|moechte ich nicht)\b/i.test(text);
 }
 
-function buildLeadFollowup(requiredFields: string[]) {
+function buildLeadFollowup(requiredFields: string[], intakeFlow?: LocalServiceIntakeFlowConfig) {
   if (requiredFields.includes('concern')) {
     return 'Klar. Worum geht es genau?';
   }
   if (requiredFields.includes('name')) {
-    return 'Wie heißt du?';
+    return intakeFlow ? 'Wie ist Ihr Name?' : 'Wie heißt du?';
   }
   if (requiredFields.includes('email') || requiredFields.includes('phone')) {
-    return 'Wie koennen wir dich am besten erreichen - per E-Mail oder Telefon?';
+    return intakeFlow
+      ? 'Wie koennen wir Sie am besten erreichen - per E-Mail oder Telefon?'
+      : 'Wie koennen wir dich am besten erreichen - per E-Mail oder Telefon?';
   }
   return 'Welche Information fehlt noch, damit ich das sauber aufnehmen kann?';
 }

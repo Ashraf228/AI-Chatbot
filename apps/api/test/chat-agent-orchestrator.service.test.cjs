@@ -400,15 +400,33 @@ test('ChatAgentOrchestratorService handles local service free-text intake step b
   const location = await decide('Frankfurt');
   const urgency = await decide('akut, Wasser läuft zurück');
   const phone = await decide('015511410215');
+  const final = await decide('Max Mustermann');
 
   assert.match(first.answer, /Ort|PLZ|Einsatzort/i);
   assert.match(location.answer, /dringend|Wasser|planbar/i);
   assert.match(urgency.answer, /Telefonnummer|Rückruf/i);
   assert.match(phone.answer, /Name/i);
-  assert.equal(leads.length, 0);
+  assert.match(final.answer, /Ihre Anfrage aufgenommen/i);
+  assert.doesNotMatch(final.answer, /\b(du|dir|dich|deine|deinen|deiner|deinem)\b/i);
+  assert.equal(leads.length, 1);
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'Mein Abfluss läuft nicht ab');
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.location, 'Frankfurt');
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
+});
+
+test('ChatAgentOrchestratorService uses formal fallback wording for local services', async () => {
+  const { decide, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  const greeting = await decide('hallo');
+  await decide('Meine Toilette ist verstopft');
+  const recovery = await decide('was soll das');
+
+  assert.match(greeting.answer, /Ihnen helfen/i);
+  assert.match(recovery.answer, /Ich kann Ihnen/i);
+  assert.doesNotMatch(`${greeting.answer} ${recovery.answer}`, /\b(du|dir|dich|deine|deinen|deiner|deinem)\b/i);
+  assert.equal(leads.length, 0);
 });
 
 test('ChatAgentOrchestratorService asks for the affected problem when local notdienst lacks details', async () => {

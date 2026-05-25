@@ -51,9 +51,9 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     version: 1,
     label: 'Lokaler Dienstleister',
     setupGoal: 'lead_capture',
-    welcomeMessage: 'Hi! Wie kann ich dir rund um unser Angebot weiterhelfen?',
+    welcomeMessage: 'Guten Tag! Wie kann ich Ihnen rund um unseren Service weiterhelfen?',
     systemPrompt:
-      'Führe kurze Beratungsgespräche für lokale Dienstleister. Kläre Bedarf, Einsatzort und Dringlichkeit und leite dann sichtbar Richtung Kontakt oder Termin.',
+      'Führe einen kurzen Erstkontakt für lokale Dienstleister. Kläre Bedarf, Einsatzort und Dringlichkeit und leite dann sichtbar Richtung Kontakt oder Termin.',
     tone: 'consultative',
     ctaText: 'Kontakt aufnehmen',
     recommendedQuestions: {
