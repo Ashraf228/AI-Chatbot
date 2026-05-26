@@ -146,11 +146,15 @@ export class ConversationsController {
     @Query('siteId') siteId?: string,
     @Query('actorId') actorId?: string,
     @Query('actorRole') actorRole?: string,
+    @Req() req?: { dashboardAuth?: unknown },
   ) {
     const params: string[] = [];
     const where: string[] = [];
 
     if (siteId) {
+      await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+        allowedRoles: ['admin'],
+      });
       params.push(siteId);
       where.push(`c.site_id = $${params.length}`);
     }
@@ -248,7 +252,12 @@ export class ConversationsController {
     @Param('id') id: string,
     @Query('actorId') actorId?: string,
     @Query('actorRole') actorRole?: string,
+    @Req() req?: { dashboardAuth?: unknown },
   ) {
+    await this.scope.assertConversationAccess(this.scope.getAuth(req), id, {
+      allowedRoles: ['admin'],
+    });
+
     const existing = await this.db.query<{ site_id: string; tenant_id: string }>(
       `SELECT site_id, tenant_id FROM conversations WHERE id = $1 LIMIT 1`,
       [id],
@@ -281,10 +290,15 @@ export class ConversationsController {
     @Query('siteId') siteId?: string,
     @Query('actorId') actorId?: string,
     @Query('actorRole') actorRole?: string,
+    @Req() req?: { dashboardAuth?: unknown },
   ) {
     if (!siteId) {
       return { message: 'siteId missing' };
     }
+
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin'],
+    });
 
     const deleted = await this.db.query<{ id: string; tenant_id: string }>(
       `DELETE FROM conversations WHERE site_id = $1 RETURNING id, tenant_id`,
