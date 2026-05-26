@@ -157,6 +157,108 @@ test('ToolDispatcherService capture_lead stores lead and queues notification mai
   assert.ok(dbCalls.some((call) => /UPDATE agent_runs/i.test(call.sql)));
 });
 
+test('ToolDispatcherService capture_lead stays completed when notification queue fails', async () => {
+  const dbCalls = [];
+
+  const service = createDispatcher({
+    db: {
+      async query(sql, params) {
+        dbCalls.push({ sql, params });
+
+        if (/SELECT id, tenant_id, site_id, status\s+FROM agent_runs/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'run-mail-fail',
+                tenant_id: 'tenant-1',
+                site_id: 'site-1',
+                status: 'queued',
+              },
+            ],
+          };
+        }
+
+        if (/SELECT\s+id,\s+agent_run_id,/i.test(sql) && /FROM tool_invocations/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'invocation-mail-fail',
+                agent_run_id: 'run-mail-fail',
+                tenant_id: 'tenant-1',
+                site_id: 'site-1',
+                tool_key: 'capture_lead',
+                status: 'completed',
+                input_payload: {
+                  name: 'TEST Lead',
+                  email: 'test@example.com',
+                },
+                output_payload: {
+                  leadId: 'lead-mail-fail',
+                  status: 'new',
+                  queuedNotification: false,
+                },
+                error_message: null,
+                created_at: '2026-05-04T10:00:00.000Z',
+                completed_at: '2026-05-04T10:00:01.000Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      },
+    },
+    sites: {
+      async getSite(id) {
+        return {
+          id,
+          name: 'SouleSmartBusiness',
+          tenant_id: 'tenant-1',
+          config: {
+            companyName: 'SouleSmartBusiness',
+            leadNotificationEmail: 'hello@soulesmartbusiness.com',
+          },
+        };
+      },
+    },
+    emailJobs: {
+      async enqueue() {
+        throw new Error('email queue unavailable');
+      },
+    },
+    leadMailer: {
+      buildLeadNotification() {
+        return {
+          to: 'hello@soulesmartbusiness.com',
+          subject: 'Neuer Lead',
+          html: '<p>Lead</p>',
+          text: 'Lead',
+        };
+      },
+    },
+    reportMailer: {
+      isConfigured() {
+        return true;
+      },
+    },
+  });
+
+  const result = await service.execute('run-mail-fail', {
+    toolKey: 'capture_lead',
+    inputPayload: {
+      name: 'TEST Lead',
+      email: 'test@example.com',
+      phone: '0000000000',
+      message: 'TEST Lead',
+    },
+  });
+
+  assert.equal(result.status, 'completed');
+  assert.equal(result.toolKey, 'capture_lead');
+  assert.equal(result.outputPayload.queuedNotification, false);
+  assert.ok(dbCalls.some((call) => /INSERT INTO widget_leads/i.test(call.sql)));
+});
+
 test('ToolDispatcherService search_catalog returns Shopify product matches', async () => {
   const service = createDispatcher({
     db: {

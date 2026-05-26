@@ -13,6 +13,7 @@ import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { PropertyTicketingService } from '../modules/property-ticketing/property-ticketing.service';
 import { UsageLimitService } from '../billing/usage-limit.service';
+import { logEvent } from '../utils/logger';
 
 type AgentRunRow = {
   id: string;
@@ -239,6 +240,7 @@ export class ToolDispatcherService {
     const leadNotificationEmail = normalizeString(siteConfig.leadNotificationEmail);
     const companyName = normalizeString(siteConfig.companyName) || site.name;
 
+    let queuedNotification = false;
     if (captured.created && leadNotificationEmail) {
       if (this.reportMailer.isConfigured()) {
         const mailPayload = this.leadMailer.buildLeadNotification({
@@ -249,15 +251,26 @@ export class ToolDispatcherService {
           lead: { name, email, phone, message },
         });
 
-        await this.emailJobs.enqueue({
-          kind: 'lead_notification',
-          ...mailPayload,
-          metadata: {
+        try {
+          await this.emailJobs.enqueue({
+            kind: 'lead_notification',
+            ...mailPayload,
+            metadata: {
+              siteId: run.site_id,
+              agentRunId: run.id,
+              leadEmail: email,
+            },
+          });
+          queuedNotification = true;
+        } catch (error) {
+          logEvent('lead_notification_failed', {
             siteId: run.site_id,
             agentRunId: run.id,
-            leadEmail: email,
-          },
-        });
+            recipientEmail: leadNotificationEmail,
+            reason: 'email_queue_failed',
+            error: error instanceof Error ? error.message : 'Unknown mail queue error',
+          });
+        }
       }
     }
 
@@ -265,7 +278,7 @@ export class ToolDispatcherService {
       leadId: captured.leadId,
       status,
       created: captured.created,
-      queuedNotification: Boolean(captured.created && leadNotificationEmail && this.reportMailer.isConfigured()),
+      queuedNotification,
     };
   }
 
