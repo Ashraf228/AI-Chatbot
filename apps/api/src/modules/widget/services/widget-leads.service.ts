@@ -73,15 +73,25 @@ export class WidgetLeadsService {
           },
         });
 
-        await this.emailJobs.enqueue({
-          kind: 'lead_notification',
-          ...messagePayload,
-          metadata: {
+        try {
+          await this.emailJobs.enqueue({
+            kind: 'lead_notification',
+            ...messagePayload,
+            metadata: {
+              siteId: site.id,
+              sessionId: dto.sessionId,
+              leadEmail: dto.email,
+            },
+          });
+        } catch (error) {
+          logEvent('lead_notification_failed', {
             siteId: site.id,
             sessionId: dto.sessionId,
-            leadEmail: dto.email,
-          },
-        });
+            recipientEmail: site.leadNotificationEmail,
+            reason: 'email_queue_failed',
+            error: error instanceof Error ? error.message : 'Unknown mail queue error',
+          });
+        }
       }
     }
 

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { WidgetLeadsService } = require('../dist/modules/widget/services/widget-leads.service.js');
 
-function createService({ leadNotificationEmail = 'hello@soulesmartbusiness.com' } = {}) {
+function createService({ leadNotificationEmail = 'hello@soulesmartbusiness.com', failEmailQueue = false } = {}) {
   const dbCalls = [];
   const queuedJobs = [];
 
@@ -41,6 +41,9 @@ function createService({ leadNotificationEmail = 'hello@soulesmartbusiness.com' 
     },
     {
       async enqueue(payload) {
+        if (failEmailQueue) {
+          throw new Error('email queue unavailable');
+        }
         queuedJobs.push(payload);
       },
     },
@@ -101,5 +104,25 @@ test('WidgetLeadsService.capture keeps working without notification email', asyn
     email: 'max@example.com',
   });
 
+  assert.equal(queuedJobs.length, 0);
+});
+
+test('WidgetLeadsService.capture keeps the stored lead when notification queue fails', async () => {
+  const { service, dbCalls, queuedJobs } = createService({ failEmailQueue: true });
+
+  const result = await service.capture({
+    siteKey: 'soule-smart-business',
+    sessionId: 'session-1',
+    name: 'TEST Lead',
+    email: 'test@example.com',
+    phone: '0000000000',
+    message: 'TEST - Meine Toilette ist verstopft',
+  });
+
+  assert.ok(result.id);
+  assert.equal(result.name, 'TEST Lead');
+  assert.equal(dbCalls.length, 2);
+  assert.match(dbCalls[0].sql, /INSERT INTO widget_leads/i);
+  assert.match(dbCalls[1].sql, /UPDATE widget_sessions/i);
   assert.equal(queuedJobs.length, 0);
 });
