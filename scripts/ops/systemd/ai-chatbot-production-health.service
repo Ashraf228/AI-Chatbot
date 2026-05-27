@@ -1,0 +1,15 @@
+[Unit]
+Description=AI Chatbot production health check
+Wants=docker.service network-online.target
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/AI-Chatbot
+Environment=PROJECT_DIR=/root/AI-Chatbot
+Environment=ENV_FILE=/root/AI-Chatbot/.env
+Environment=ALERT_ENV_FILE=/root/AI-Chatbot/.env
+Environment=ALERT_STATE_DIR=/var/lib/ai-chatbot-monitoring
+Environment=ALERT_COOLDOWN_SECONDS=3600
+ExecStart=/root/AI-Chatbot/scripts/ops/run-production-health-with-alert.sh
+Nice=10

@@ -10,7 +10,7 @@ Dieses Runbook beschreibt den minimalen Betriebscheck fuer den aktuellen Livebet
 - API `/healthz` prueft Datenbank und Redis.
 - Lokale taegliche PostgreSQL-Backups laufen ueber `ai-chatbot-backup.timer`.
 - Lokaler Backup-Healthcheck ist vorhanden.
-- Externes Alerting ist noch nicht aktiv.
+- Externes Health-Alerting ist per SMTP angebunden, sofern die SMTP-Werte in `/root/AI-Chatbot/.env` gesetzt sind.
 - Offsite-Backup ist noch nicht aktiv.
 
 ## Healthcheck-Skripte
@@ -56,6 +56,23 @@ Prueft nur aggregierte Counts:
 
 Es werden keine Empfaenger, Payloads, Lead-Daten oder personenbezogene Inhalte ausgegeben.
 
+Alerting:
+
+```bash
+TEST_ALERT=1 CHECK_NAME=manual-test CHECK_STATUS=OK CHECK_HINT="Manual monitoring test" scripts/ops/notify-production-health-failure.sh
+```
+
+Der Alert-Kanal nutzt SMTP aus der root-geschuetzten Datei `/root/AI-Chatbot/.env`. Es werden keine SMTP-Werte, Webhook-URLs oder Secrets im Repository gespeichert. Alerts enthalten nur technische Statusdaten: Host, Zeitpunkt, Check-Name, Status und einen kurzen Fehlerhinweis.
+
+Production-Health-Timer:
+
+```bash
+systemctl status ai-chatbot-production-health.timer --no-pager
+systemctl list-timers ai-chatbot-production-health.timer --no-pager
+```
+
+Der Timer startet `ai-chatbot-production-health.service` alle 15 Minuten. Das Wrapper-Skript sendet bei Exit-Code `1` oder `2` einen externen Alert und nutzt einen Cooldown von 3600 Sekunden, damit wiederholte Fehler keine Alert-Flut erzeugen. Exit-Code `2` steht fuer Warnungen, z. B. failed Jobs oder Disk-Warnungen.
+
 ## Manuelle Checks
 
 Container:
@@ -90,6 +107,8 @@ Backup:
 systemctl status ai-chatbot-backup.timer --no-pager
 journalctl -u ai-chatbot-backup.service -n 50 --no-pager
 ```
+
+Backup-Fehler loesen ueber `ai-chatbot-backup-failed.service` denselben externen Alert-Kanal aus.
 
 Speicherplatz:
 
@@ -135,6 +154,7 @@ Failed E-Mail-/Webhook-Jobs:
 2. Nur Counts bewerten, keine Payloads nach extern kopieren.
 3. SMTP-/Webhook-Konfiguration pruefen.
 4. Leads bleiben in der Datenbank gespeichert; Zustellfehler duerfen Lead-Speicherung nicht blockieren.
+5. Wenn der Production-Health-Timer wegen failed/pending Jobs alarmiert, zuerst die betroffene Queue anhand aggregierter Counts pruefen und erst danach gezielt im geschuetzten Admin-Kontext tiefer analysieren.
 
 Backup-Fehler:
 
@@ -150,6 +170,23 @@ Speicher voll:
 3. Retention-Regel und Offsite-Status pruefen.
 4. Erst alte Build-Caches/Images gezielt bereinigen, wenn sicher.
 
+False Positives und Wartung:
+
+1. Bei geplanten Wartungen Timer temporaer pausieren:
+
+```bash
+systemctl stop ai-chatbot-production-health.timer
+```
+
+2. Nach Wartung wieder aktivieren:
+
+```bash
+systemctl start ai-chatbot-production-health.timer
+```
+
+3. Bei wiederholten nicht-kritischen Warnungen Schwellenwerte nur nach Ursachenpruefung anpassen, z. B. `JOB_FAILED_WARN_COUNT`, `DISK_WARN_PERCENT` oder `ALERT_COOLDOWN_SECONDS`.
+4. Alerts nie mit Lead-Daten, Chatverlaeufen, Telefonnummern oder anderen personenbezogenen Daten anreichern.
+
 ## Commit-Identitaet
 
 API `/healthz` gibt aktuell Version, Datenbank, Redis und Uptime aus, aber keinen Commit-Hash.
@@ -158,8 +195,6 @@ Der Production-Healthcheck gibt den lokalen Server-Repo-Commit aus. Ein API-seit
 
 ## Offene Punkte vor zahlenden Kunden
 
-- externes Alerting aktivieren, z. B. Uptime Kuma, Better Stack, Slack/Teams/Discord Webhook oder E-Mail
-- Test-Alert senden und dokumentieren
 - Offsite-Backup aktivieren
 - Restore-Test aus Offsite-Kopie durchfuehren
 - externe HTTP-Uptime-Checks fuer API, Dashboard und Widget konfigurieren

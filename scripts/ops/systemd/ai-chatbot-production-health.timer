@@ -1,0 +1,12 @@
+[Unit]
+Description=Run AI Chatbot production health check every 15 minutes
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=15m
+RandomizedDelaySec=60s
+Persistent=true
+Unit=ai-chatbot-production-health.service
+
+[Install]
+WantedBy=timers.target
