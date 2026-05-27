@@ -13,7 +13,19 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+if [[ -z "$BACKUP_DIR" || "$BACKUP_DIR" == "/" ]]; then
+  echo "Refusing unsafe backup directory: $BACKUP_DIR" >&2
+  exit 1
+fi
+
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
+BACKUP_DIR="$(cd "$BACKUP_DIR" && pwd -P)"
+if [[ "$BACKUP_DIR" == "/" || "$BACKUP_DIR" == "$PROJECT_DIR" ]]; then
+  echo "Refusing unsafe backup directory: $BACKUP_DIR" >&2
+  exit 1
+fi
+
 umask 077
 
 timestamp="$(date -u +%Y%m%d_%H%M)"

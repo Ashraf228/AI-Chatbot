@@ -58,6 +58,74 @@ BACKUP_RETENTION_DAYS=14
 BACKUP_PREFIX=backup_postgres
 ```
 
+## Automatisierung mit systemd
+
+Auf dem aktuellen Server wird ein systemd Timer bevorzugt.
+
+Versionierte Unit-Dateien:
+
+- `scripts/ops/systemd/ai-chatbot-backup.service`
+- `scripts/ops/systemd/ai-chatbot-backup.timer`
+- `scripts/ops/systemd/ai-chatbot-backup-failed.service`
+
+Installation auf dem Server:
+
+```bash
+cp scripts/ops/systemd/ai-chatbot-backup*.service /etc/systemd/system/
+cp scripts/ops/systemd/ai-chatbot-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now ai-chatbot-backup.timer
+```
+
+Zeitplan:
+
+- taeglich um `02:15 UTC`
+- `RandomizedDelaySec=15m`
+- `Persistent=true`, damit ein verpasster Lauf nachgeholt wird
+
+Status pruefen:
+
+```bash
+systemctl list-timers ai-chatbot-backup.timer --no-pager
+systemctl status ai-chatbot-backup.timer --no-pager
+journalctl -u ai-chatbot-backup.service -n 50 --no-pager
+```
+
+Manuellen Lauf ohne Restore ausloesen:
+
+```bash
+systemctl start ai-chatbot-backup.service
+```
+
+Fehlerbehandlung:
+
+- systemd markiert den Service bei Fehlern als `failed`
+- `ai-chatbot-backup-failed.service` schreibt einen Fehler ins Journal
+- externe E-Mail-/Webhook-Benachrichtigung ist noch nicht aktiv, solange kein sicheres Benachrichtigungsziel konfiguriert ist
+
+## Backup-Healthcheck
+
+Der Healthcheck prueft, ob ein aktuelles Backup vorhanden und nicht leer ist:
+
+```bash
+scripts/ops/check-last-backup.sh
+```
+
+Default:
+
+- Prefix: `backup_postgres`
+- maximaler Backup-Alter: 48 Stunden
+- Mindestgroesse: 1000 Bytes
+
+Optionale Variablen:
+
+```bash
+BACKUP_DIR=/root/AI-Chatbot/backups
+BACKUP_PREFIX=backup_postgres
+BACKUP_MAX_AGE_HOURS=48
+BACKUP_MIN_SIZE_BYTES=1000
+```
+
 ## Restore-Test in isolierter Datenbank
 
 Nie direkt in die Produktionsdatenbank restoren.
@@ -98,6 +166,29 @@ Empfehlung fuer den ersten Kundengang:
 - zusaetzlich regelmaessige externe/offsite Sicherung
 - Backup-Dateien nicht oeffentlich ausliefern
 - Backup-Zugriff nur fuer Server-/Admin-Zugriff
+
+Aktuelle Retention im Backup-Script:
+
+- `BACKUP_RETENTION_DAYS=14`
+- geloescht werden nur Dateien mit Prefix `backup_postgres_*.sql.gz`
+- manuelle Sonderbackups mit anderem Prefix werden nicht automatisch geloescht
+
+## Offsite-Backup
+
+Offsite-Backup ist noch nicht aktiv, solange kein sicheres Ziel konfiguriert ist.
+
+Vorbereitete Optionen:
+
+- Hetzner Storage Box per `rsync` oder `rclone`
+- S3-kompatibler Speicher per `rclone`
+- `restic` mit verschluesseltem Repository
+
+Anforderungen fuer Aktivierung:
+
+- Credentials nur als Server-Secrets oder root-geschuetzte Env-Dateien
+- Testupload mit kleiner Testdatei
+- keine oeffentliche Auslieferung von Backup-Dateien
+- regelmaessiger Restore-Test aus Offsite-Kopie
 
 ## RPO/RTO
 

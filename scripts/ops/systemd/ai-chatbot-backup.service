@@ -1,0 +1,17 @@
+[Unit]
+Description=AI Chatbot PostgreSQL backup
+Wants=docker.service
+After=docker.service
+OnFailure=ai-chatbot-backup-failed.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/AI-Chatbot
+Environment=PROJECT_DIR=/root/AI-Chatbot
+Environment=ENV_FILE=/root/AI-Chatbot/.env
+Environment=BACKUP_DIR=/root/AI-Chatbot/backups
+Environment=BACKUP_PREFIX=backup_postgres
+Environment=BACKUP_RETENTION_DAYS=14
+ExecStart=/root/AI-Chatbot/scripts/ops/backup-postgres.sh
+Nice=10
+IOSchedulingClass=best-effort
