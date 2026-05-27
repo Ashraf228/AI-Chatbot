@@ -152,6 +152,7 @@ function buildLocalServiceConversationGuide(
   return `
 Gesprächsphase: local_service_intake
 Gesprächsregel: Behandle diese Unterhaltung als lokalen Dienstleister-Erstkontakt. Nutze konkrete Dienstleister-Sprache und keine generische B2B-Beratung.
+Ansprache: Verwenden Sie konsequent die formelle Sie-Ansprache mit "Sie", "Ihnen" und "Ihr". Verwenden Sie niemals "du", "dir", "dich", "dein" oder "bei dir". Formulieren Sie Wissensbasis-Inhalte entsprechend formal um.
 Bevorzugte Begriffe: ${preferredVocabulary.join(', ') || 'Einsatz, Problem, Einsatzort, Dringlichkeit, Rückruf'}
 Verbotene Begriffe: ${forbiddenTerms.join(', ') || 'Projekt, Support-Anfrage, Business-Prozess, Automatisierung, Beratungsgespräch'}
 Rückfrage-Reihenfolge: ${asStringArray(flow.questionOrder).join(' -> ')}

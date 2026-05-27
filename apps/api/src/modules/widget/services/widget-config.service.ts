@@ -52,7 +52,7 @@ export class WidgetConfigService {
       publicKey: site.publicKey || '',
       apiBase: process.env.PUBLIC_API_BASE_URL || '',
       title: site.name || 'Support',
-      greeting: site.welcomeMessage,
+      greeting: normalizeWelcomeMessage(site.industry, site.welcomeMessage),
       placeholder: 'Nachricht schreiben...',
       buttonText: 'Chat',
       position: 'bottom-right',
@@ -179,6 +179,26 @@ function normalizeSuggestedQuestions(
   }
 
   return questions;
+}
+
+function normalizeWelcomeMessage(industry: string | undefined, message: string) {
+  if (!isLocalServiceIndustry(industry || '')) {
+    return message;
+  }
+
+  return message
+    .replace(/^\s*hey!?/i, 'Guten Tag')
+    .replace(/\bbei dir\b/gi, 'bei Ihnen')
+    .replace(/\bfür dich\b/gi, 'für Sie')
+    .replace(/\bmit dir\b/gi, 'mit Ihnen')
+    .replace(/\bdeine\b/gi, 'Ihre')
+    .replace(/\bdeinen\b/gi, 'Ihren')
+    .replace(/\bdeinem\b/gi, 'Ihrem')
+    .replace(/\bdeiner\b/gi, 'Ihrer')
+    .replace(/\bdein\b/gi, 'Ihr')
+    .replace(/\bdir\b/gi, 'Ihnen')
+    .replace(/\bdich\b/gi, 'Sie')
+    .replace(/\bdu\b/gi, 'Sie');
 }
 
 function hasGenericBusinessQuestions(questions: Record<string, string[]>) {

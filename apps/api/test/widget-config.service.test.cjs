@@ -50,3 +50,46 @@ test('WidgetConfigService.getPublicConfig maps runtime-safe widget config', asyn
   assert.equal(config.privacyUrl, 'https://soulesmartbusiness.com/privacy');
   assert.deepEqual(config.suggestedQuestionsByPath['/'], ['Was kostet der Service?']);
 });
+
+test('WidgetConfigService.getPublicConfig normalizes local-service greeting to formal wording', async () => {
+  const db = {
+    async query() {
+      return {
+        rows: [
+          {
+            id: 'site-1',
+            site_key: 'rohrreinigung-ffm24',
+            tenant_id: 'tenant-1',
+            name: 'Rohrreinigung FFM24',
+            domain: 'rohrreinigung-ffm24.de',
+            brand_color: '#b55400',
+            accent_color: '#fff0d9',
+            font_family: 'system',
+            welcome_message: 'Hey!\nWas genau ist bei dir aktuell das Problem?',
+            privacy_url: 'https://rohrreinigung-ffm24.de/datenschutz',
+            is_active: true,
+            company_name: 'Rohrreinigung FFM24',
+            bot_name: 'Service-Assistent',
+            logo_url: '',
+            public_key: 'pk_test',
+            widget_bundle_url: 'https://widget.soulesmartbusiness.com/widget.js',
+            consent_required: true,
+            lead_capture_enabled: true,
+            lead_notification_email: '',
+            suggested_questions_by_path: {},
+            conversation_flow: {},
+            system_prompt: '',
+            industry: 'local-services',
+          },
+        ],
+      };
+    },
+  };
+
+  const service = new WidgetConfigService(db);
+  const config = await service.getPublicConfig('rohrreinigung-ffm24');
+
+  assert.match(config.greeting, /^Guten Tag/i);
+  assert.match(config.greeting, /bei Ihnen/i);
+  assert.doesNotMatch(config.greeting, /\b(hey|du|dir|dich|dein|deine|deinen|deiner|deinem|bei dir)\b/i);
+});
