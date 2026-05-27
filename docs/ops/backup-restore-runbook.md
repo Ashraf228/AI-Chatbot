@@ -175,7 +175,17 @@ Aktuelle Retention im Backup-Script:
 
 ## Offsite-Backup
 
-Offsite-Backup ist noch nicht aktiv, solange kein sicheres Ziel konfiguriert ist.
+Status am 2026-05-27: Offsite-Backup ist noch nicht aktiv.
+
+Geprueft wurde:
+
+- kein `restic` installiert
+- kein `rclone` installiert
+- kein `aws`, `s3cmd` oder `b2` CLI installiert
+- keine rclone-, AWS-, B2-, restic- oder Offsite-Env-Datei gefunden
+- `rsync` und `scp` sind vorhanden, aber es ist kein sicheres Ziel konfiguriert
+
+Damit gibt es aktuell keine echte externe Backup-Kopie. Das ist vor zahlenden Kunden ein offener Betriebsblocker.
 
 Vorbereitete Optionen:
 
@@ -189,6 +199,49 @@ Anforderungen fuer Aktivierung:
 - Testupload mit kleiner Testdatei
 - keine oeffentliche Auslieferung von Backup-Dateien
 - regelmaessiger Restore-Test aus Offsite-Kopie
+
+Empfohlener Pfad fuer den ersten Kundengang:
+
+1. Hetzner Storage Box oder S3-kompatibles Bucket anlegen.
+2. `restic` bevorzugen, damit Backups verschluesselt gespeichert werden.
+3. Credentials nur in einer root-geschuetzten Datei wie `/root/AI-Chatbot/.offsite.env` oder in systemd Credentials ablegen.
+4. Kleinen Testupload ausfuehren.
+5. Erst danach `sync-backups-offsite.sh` oder eine restic-Integration aktivieren.
+6. Restore-Test aus der Offsite-Kopie in isolierter Test-DB durchfuehren.
+
+Keine Offsite-Skripte aktivieren, solange Ziel und Credentials fehlen.
+
+## Externe Fehlerbenachrichtigung
+
+Status am 2026-05-27: Externe Fehlerbenachrichtigung ist noch nicht aktiv.
+
+Geprueft wurde:
+
+- kein lokales `mail`, `sendmail` oder `msmtp` installiert
+- kein Slack-, Discord-, Teams-, Uptime-Kuma- oder Webhook-Ziel konfiguriert
+- SMTP-Variablen sind fuer App-Funktionen vorhanden, aber kein dedizierter Ops-Alert-Kanal ist eingerichtet
+
+Aktueller Fehlerpfad:
+
+- `ai-chatbot-backup.service` wird bei Fehlern als failed markiert
+- `ai-chatbot-backup-failed.service` schreibt eine Meldung ins Systemjournal
+- manuelle Pruefung:
+
+```bash
+systemctl status ai-chatbot-backup.service --no-pager
+journalctl -u ai-chatbot-backup.service -n 50 --no-pager
+journalctl -t ai-chatbot-backup -n 50 --no-pager
+```
+
+Das reicht fuer Demo-Betrieb, aber nicht fuer zahlende Kunden ohne regelmaessige manuelle Kontrolle oder externes Monitoring.
+
+Empfohlene Aktivierung:
+
+1. dediziertes Alert-Ziel anlegen, z. B. Uptime Kuma Push, Slack/Discord/Teams Webhook oder SMTP-Mailbox
+2. Secret nur serverseitig speichern, nicht im Repo
+3. `notify-backup-failure.sh` erst danach ergaenzen
+4. systemd `OnFailure=` auf den echten Notify-Service zeigen lassen
+5. Test-Alert mit ungefaehrlicher Meldung senden
 
 ## RPO/RTO
 
