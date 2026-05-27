@@ -20,6 +20,8 @@ coverage/
 
 # docker
 pgdata/
+backups/
+certs/
 
 # macOS / archives
 .DS_Store

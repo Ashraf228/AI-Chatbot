@@ -1,5 +1,7 @@
 # Backup And Restore
 
+Das operative Runbook fuer Produktion liegt unter `docs/ops/backup-restore-runbook.md`.
+
 ## PostgreSQL Backup
 
 ```bash
