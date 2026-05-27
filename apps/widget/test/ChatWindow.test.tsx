@@ -39,6 +39,7 @@ describe("ChatWindow", () => {
         companyName="SouleSmartBusiness"
         botName="Service-Assistent"
         logoUrl=""
+        privacyUrl="https://example.com/datenschutz"
         suggestedQuestions={[]}
         placeholder="Nachricht schreiben..."
         messages={[
@@ -76,7 +77,7 @@ describe("ChatWindow", () => {
     await user.type(screen.getByPlaceholderText("Name"), "Max Mustermann");
     await user.type(screen.getByPlaceholderText("E-Mail"), "max@example.com");
     await user.type(
-      screen.getByPlaceholderText("Worum geht es? (optional)"),
+      screen.getByPlaceholderText("Anliegen oder Rückrufwunsch (optional)"),
       "Ich möchte einen Termin.",
     );
     await user.click(screen.getByRole("button", { name: "Anfrage senden" }));

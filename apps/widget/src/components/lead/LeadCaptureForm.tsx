@@ -5,10 +5,11 @@ import type { LeadPayload, LeadSubmissionState } from "../../types/lead";
 
 type LeadCaptureFormProps = {
   state: LeadSubmissionState;
+  privacyUrl?: string;
   onSubmit: (lead: LeadPayload) => void | Promise<void>;
 };
 
-export function LeadCaptureForm({ state, onSubmit }: LeadCaptureFormProps) {
+export function LeadCaptureForm({ state, privacyUrl, onSubmit }: LeadCaptureFormProps) {
   const [lead, setLead] = useState<LeadPayload>({
     name: "",
     email: "",
@@ -31,7 +32,7 @@ export function LeadCaptureForm({ state, onSubmit }: LeadCaptureFormProps) {
       <div>
         <div className="ssb-lead-form__title">Kontakt aufnehmen</div>
         <p className="ssb-lead-form__hint">
-          Hinterlasse kurz deine Daten. Wir melden uns mit einer passenden Antwort zurück.
+          Geben Sie nur die Kontaktdaten an, die für die Bearbeitung Ihrer Anfrage nötig sind.
         </p>
       </div>
       <Input
@@ -51,17 +52,25 @@ export function LeadCaptureForm({ state, onSubmit }: LeadCaptureFormProps) {
       />
       <Input
         value={lead.message || ""}
-        placeholder="Worum geht es? (optional)"
+        placeholder="Anliegen oder Rückrufwunsch (optional)"
         onChange={(event) => updateField("message", event.target.value)}
       />
       {state === "error" ? (
-        <div className="ssb-lead-form__error">Die Anfrage konnte nicht gesendet werden. Bitte versuche es erneut.</div>
+        <div className="ssb-lead-form__error">Die Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.</div>
       ) : null}
       <Button type="submit" disabled={state === "submitting"}>
         {state === "submitting" ? "Wird gesendet ..." : "Anfrage senden"}
       </Button>
       <p className="ssb-lead-form__privacy">
-        Wir verwenden deine Angaben nur zur Bearbeitung deiner Anfrage.
+        Ihre Angaben werden zur Bearbeitung Ihrer Anfrage gespeichert, verarbeitet und bei Bedarf an den Websitebetreiber weitergeleitet. Bitte geben Sie keine Passwörter, Zahlungsdaten oder Ausweisdaten ein.
+        {privacyUrl ? (
+          <>
+            {" "}
+            <a href={privacyUrl} target="_blank" rel="noreferrer">
+              Datenschutzerklärung öffnen
+            </a>
+          </>
+        ) : null}
       </p>
     </form>
   );

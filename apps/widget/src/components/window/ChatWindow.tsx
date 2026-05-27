@@ -107,7 +107,7 @@ export function ChatWindow({
                 onSelect={onSendMessage}
               />
               <p className="ssb-start-panel__hint">
-                Die KI kann Fehler machen. Bei Bedarf wird deine Anfrage weitergeleitet.
+                Die KI kann Fehler machen. Bei Bedarf wird Ihre Anfrage weitergeleitet. Bitte geben Sie keine Passwörter oder Zahlungsdaten ein.
               </p>
             </div>
           ) : null}
@@ -128,6 +128,7 @@ export function ChatWindow({
       <LeadCaptureModal
         open={isModalOpen}
         state={leadState}
+        privacyUrl={privacyUrl}
         onClose={closeLeadCapture}
         onSubmit={saveLead}
       />

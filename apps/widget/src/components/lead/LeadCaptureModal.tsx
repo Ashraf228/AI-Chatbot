@@ -4,6 +4,7 @@ import { LeadCaptureForm } from "./LeadCaptureForm";
 type LeadCaptureModalProps = {
   open: boolean;
   state: LeadSubmissionState;
+  privacyUrl?: string;
   onClose: () => void;
   onSubmit: (lead: LeadPayload) => void | Promise<void>;
 };
@@ -11,6 +12,7 @@ type LeadCaptureModalProps = {
 export function LeadCaptureModal({
   open,
   state,
+  privacyUrl,
   onClose,
   onSubmit,
 }: LeadCaptureModalProps) {
@@ -30,7 +32,7 @@ export function LeadCaptureModal({
         <button type="button" className="ssb-modal__close" aria-label="Schließen" onClick={onClose}>
           ×
         </button>
-        <LeadCaptureForm state={state} onSubmit={onSubmit} />
+        <LeadCaptureForm state={state} privacyUrl={privacyUrl} onSubmit={onSubmit} />
       </div>
     </div>
   );

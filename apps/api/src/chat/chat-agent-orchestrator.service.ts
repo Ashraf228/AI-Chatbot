@@ -147,6 +147,18 @@ export class ChatAgentOrchestratorService {
       intakeFlow,
     });
 
+    if (hasSensitiveDataInput(text)) {
+      await this.saveConversationMetadata(params.conversationId, {
+        conversationState,
+      });
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildSensitiveDataAnswer(),
+        decision: structuredDecision,
+      };
+    }
+
     const leadFeatureEnabled =
       moduleContext.leadSalesEnabled ||
       siteConfig.setupGoal === 'lead_capture' ||
@@ -1182,6 +1194,10 @@ function hasRefusalIntent(text: string) {
   );
 }
 
+function hasSensitiveDataInput(text: string) {
+  return /\b((passwort|kennwort)\s*(ist|lautet|:)|(?:mfa|2fa|tan|pin)(?:\s*code)?\s*(ist|lautet|:)|kreditkarte|kartennummer|cvv|cvc|iban|ausweisnummer|personalausweis|reisepass|zahlungsdaten)\b/i.test(text);
+}
+
 function hasBusinessNeedSignal(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
   return (
     /\b(ki|künstliche intelligenz|kuenstliche intelligenz|automatisierung|support|kundenservice|kundengewinnung|website|webseite|software|unternehmen|firma|projekt|prozess|prozesse|angebot|beratung|lösung|loesung|preis|kosten|termin|rückruf|rueckruf|zurueckrufen|zurückrufen|zurueckgerufen|zurückgerufen|demo)\b/i.test(
@@ -2072,6 +2088,10 @@ function buildGreetingAnswer(localServiceFlow = false) {
   }
 
   return 'Hi, ich helfe dir bei Fragen zu Websites, KI-Automatisierung, Support-Systemen oder individuellen Softwarelösungen. Wobei kann ich dich unterstützen?';
+}
+
+function buildSensitiveDataAnswer() {
+  return 'Bitte geben Sie hier keine Passwörter, MFA-Codes, Zahlungsdaten oder Ausweisdaten ein. Beschreiben Sie nur das Problem ohne solche Daten; falls nötig, übernimmt ein Mitarbeiter.';
 }
 
 function buildRecoveryAnswer(localServiceFlow = false) {

@@ -46,5 +46,7 @@ test('WidgetConfigService.getPublicConfig maps runtime-safe widget config', asyn
   assert.equal(config.apiBase, 'https://api.soulesmartbusiness.com');
   assert.equal(config.theme.fontFamily, 'inter');
   assert.equal(config.leadCaptureEnabled, true);
+  assert.equal(config.consentRequired, true);
+  assert.equal(config.privacyUrl, 'https://soulesmartbusiness.com/privacy');
   assert.deepEqual(config.suggestedQuestionsByPath['/'], ['Was kostet der Service?']);
 });

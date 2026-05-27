@@ -358,6 +358,21 @@ test('ChatAgentOrchestratorService treats greeting typos as greeting', async () 
   assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
 });
 
+test('ChatAgentOrchestratorService rejects sensitive credentials without storing a lead', async () => {
+  const { decide, leads, conversations } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  const result = await decide('Mein Passwort ist SuperSecret123');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /keine Passwörter|keine Passwoerter/i);
+  assert.match(result.answer, /MFA-Codes|Zahlungsdaten|Ausweisdaten/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+});
+
 test('ChatAgentOrchestratorService starts a pending lead and asks for the concern first', async () => {
   const { decide, conversations, auditLogs } = createHarness();
 

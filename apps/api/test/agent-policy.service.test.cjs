@@ -59,6 +59,24 @@ test('AgentPolicyService treats greeting as answer without lead tools', () => {
   assert.match(decision.message, /Wobei kann ich dich/i);
 });
 
+test('AgentPolicyService warns on sensitive credential or payment data without tools', () => {
+  const policy = new AgentPolicyService();
+
+  for (const message of [
+    'Mein Passwort ist SuperSecret123',
+    'Der MFA Code lautet 123456',
+    'Meine Kreditkarte ist 4111111111111111',
+  ]) {
+    const decision = policy.decide(createPolicyContext(message));
+
+    assert.equal(decision.type, 'ask_followup', message);
+    assert.equal(decision.nextAction, 'continue_answer', message);
+    assert.deepEqual(decision.suggestedTools, [], message);
+    assert.match(decision.message, /keine Passwoerter|keine Passwörter/i, message);
+    assert.match(decision.message, /MFA-Codes|Zahlungsdaten|Ausweisdaten/i, message);
+  }
+});
+
 test('AgentPolicyService recovers from confused pending lead without contact tool', () => {
   const policy = new AgentPolicyService();
 

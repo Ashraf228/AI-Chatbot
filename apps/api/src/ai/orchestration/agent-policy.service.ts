@@ -18,6 +18,20 @@ export class AgentPolicyService {
     const hasContact = Boolean(collectedFields.email || collectedFields.phone);
     const leadEnabled = isLeadEnabled(context);
 
+    if (hasSensitiveDataInput(text)) {
+      return this.buildDecision({
+        type: 'ask_followup',
+        confidence: 0.91,
+        reason: 'User entered or offered sensitive credentials, payment data, or identity data.',
+        message:
+          'Bitte geben Sie hier keine Passwörter, MFA-Codes, Zahlungsdaten oder Ausweisdaten ein. Beschreiben Sie nur das Problem ohne solche Daten; falls nötig, übernimmt ein Mitarbeiter.',
+        collectedFields,
+        requiredFields: [],
+        suggestedTools: [],
+        nextAction: 'continue_answer',
+      });
+    }
+
     if (hasGreetingIntent(text)) {
       return this.buildDecision({
         type: 'answer',
@@ -297,6 +311,10 @@ function hasServiceKnowledgeQuestion(text: string, intakeFlow?: LocalServiceInta
 
 function hasTicketIntent(text: string) {
   return /\b(ticket|supportfall|problem mit|bestellung|schaden|schadensmeldung|reparatur|defekt|stoerung|störung|mieter|hausverwaltung|beschwerde|passwort|kennwort|mfa|2fa|vpn|wlan|wifi|netzwerk|outlook|e-mail|email|drucker|printer|geraet|gerät|laptop|pc|software|zugriff|berechtigung|login|anmeldung)\b/i.test(text);
+}
+
+function hasSensitiveDataInput(text: string) {
+  return /\b((passwort|kennwort)\s*(ist|lautet|:)|(?:mfa|2fa|tan|pin)(?:\s*code)?\s*(ist|lautet|:)|kreditkarte|kartennummer|cvv|cvc|iban|ausweisnummer|personalausweis|reisepass|zahlungsdaten)\b/i.test(text);
 }
 
 function hasHandoffIntent(text: string) {
