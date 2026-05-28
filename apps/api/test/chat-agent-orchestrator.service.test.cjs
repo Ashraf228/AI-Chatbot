@@ -502,6 +502,22 @@ test('ChatAgentOrchestratorService does not treat a name as phone in local servi
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'completed');
 });
 
+test('ChatAgentOrchestratorService does not treat notdienst as a location when location is missing', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('mein klo ist verstopft');
+  const notdienstInsteadOfLocation = await decide('Notdienst');
+
+  assert.equal(notdienstInsteadOfLocation.action, 'ask_for_contact');
+  assert.match(notdienstInsteadOfLocation.answer, /Ort|PLZ|Einsatzort/i);
+  assert.doesNotMatch(notdienstInsteadOfLocation.answer, /Telefonnummer|Ihre Anfrage aufgenommen/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.location, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
+});
+
 test('ChatAgentOrchestratorService respects local service stop intent without lead capture', async () => {
   const { decide, conversations, leads } = createHarness({
     intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,

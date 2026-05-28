@@ -1471,6 +1471,9 @@ function extractServiceLocation(
     Boolean(intakeFlow) &&
     pendingLead.concern &&
     !pendingLead.location &&
+    !extractServiceUrgency(value, intakeFlow) &&
+    !hasLocalServiceSignal(value, intakeFlow) &&
+    !hasCallbackOnlyIntent(value, intakeFlow) &&
     !value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i) &&
     !value.match(/(?:\+?\d[\d\s()./-]{6,}\d)/)
   ) {
