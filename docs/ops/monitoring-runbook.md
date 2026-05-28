@@ -203,5 +203,6 @@ Der Production-Healthcheck gibt den lokalen Server-Repo-Commit aus. Ein API-seit
 
 - externe HTTP-Uptime-Checks fuer API, Dashboard und Widget konfigurieren
 - restic Retention/Prune nach separater Freigabe aktivieren
+- fachliche Retention erst nach juristischer/organisatorischer Freigabe aktivieren; vorher nur `scripts/ops/retention-dry-run.sh` nutzen
 - optional Speicher-/Docker-Volume-Monitoring automatisieren
 - API-seitigen Commit-Hash in `/healthz` optional ergaenzen

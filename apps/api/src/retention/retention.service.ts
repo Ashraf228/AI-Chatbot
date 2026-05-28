@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../db/prisma.service';
 
 @Injectable()
 export class RetentionService {
+  private readonly logger = new Logger(RetentionService.name);
+
   constructor(private db: PrismaService) {}
 
   async dryRun(siteId: string) {
@@ -71,6 +73,11 @@ export class RetentionService {
   // täglich 03:30 Uhr
   @Cron('30 3 * * *')
   async cleanup() {
+    if (process.env.RETENTION_CLEANUP_ENABLED !== 'true') {
+      this.logger.log('Retention cleanup skipped because RETENTION_CLEANUP_ENABLED is not true');
+      return { skipped: true, reason: 'disabled' };
+    }
+
     await this.db.query(
       `DELETE FROM conversations c
        USING sites s
@@ -107,8 +114,10 @@ export class RetentionService {
                THEN (s.config->>'reportRetentionDays')::int
              ELSE 365
            END)
-         )`,
+       )`,
     );
+
+    return { skipped: false };
   }
 
   private async countExpired(sql: string, params: unknown[]) {

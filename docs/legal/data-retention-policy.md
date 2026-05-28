@@ -38,18 +38,23 @@ Diese Policy ist ein Vorschlag fuer die rechtliche und organisatorische Abstimmu
 ## Automatische Loeschung
 
 - Automatische fachliche Loeschung wird in diesem Schritt nicht aktiviert.
+- Der technische Cleanup-Cron ist nur als explizites Opt-in vorgesehen und darf erst nach Freigabe mit `RETENTION_CLEANUP_ENABLED=true` laufen.
+- Vorher ist nur ein read-only Dry-Run vorgesehen: `scripts/ops/retention-dry-run.sh`.
 - Vor Aktivierung erforderlich:
   - finale Speicherfristen je Datenart.
   - Kundenfreigabe.
   - Test gegen Tenant-/Site-Scope.
   - Dokumentation, welche Daten geloescht oder anonymisiert werden.
   - Pruefung, wie Jobs, Reports, Usage und Backups betroffen sind.
+  - aktuelles lokales und Offsite-Backup pruefen.
 
 ## Offene Pruefpunkte
 
 - finale Speicherfristen je Kundentyp und Use Case.
 - gesetzliche Aufbewahrungspflichten fuer Billing/Vertrag/Kommunikation.
 - Backup-Retention fuer restic.
+- E-Mail-/Webhook-Job-Retention separat definieren.
+- Audit-Log-Retention separat definieren.
 - Umgang mit Testdaten in Demo- und Produktionsumgebungen.
 - Umgang mit versehentlich eingegebenen besonders sensiblen Daten.
 - Kundenwuensche fuer Export, Rueckgabe und Vertragsende.

@@ -276,6 +276,12 @@ Empfehlung fuer den naechsten optionalen Schritt:
 - erst nach separater Freigabe aktivieren; Offsite-Restore-Test wurde bereits erfolgreich durchgefuehrt
 - Retention nur mit Safety-Check und ohne globale Snapshot-Loeschung ausfuehren
 
+Fachliche Daten-Retention und Kandidaten-Counts werden separat ueber das Retention-Runbook geprueft:
+
+```bash
+scripts/ops/retention-dry-run.sh
+```
+
 ## Restore-Test aus Offsite-Kopie
 
 Der Restore-Test aus einer Offsite-Kopie wurde in Schritt 9.3 erfolgreich durchgefuehrt.
