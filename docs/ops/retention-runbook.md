@@ -15,6 +15,7 @@ Dieses Runbook beschreibt den technischen Stand der Datenaufbewahrung und einen 
 - Der Cleanup-Cron ist ab diesem Stand sicherheitshalber per `RETENTION_CLEANUP_ENABLED=true` explizit opt-in. Ohne diese Env-Einstellung wird keine automatische Retention-Loeschung ausgefuehrt.
 - Lokale DB-Backups haben aktive 14-Tage-Retention ueber `backup-postgres.sh`.
 - Offsite-Backups ueber restic sind aktiv, aber restic Retention/Prune ist noch nicht aktiv.
+- Fuer Offsite-Backups gibt es ein separates Dry-Run-Script: `scripts/ops/restic-retention-dry-run.sh`.
 
 ## Vorgeschlagene Speicherfristen
 
@@ -79,7 +80,7 @@ Der Dry-Run gibt keine Namen, Telefonnummern, E-Mail-Adressen, Chat-Inhalte, Lea
 | Usage/Billing | kein Cleanup, bewusst separat zu pruefen | nein | `tenant_id` und `site_id` vorhanden |
 | Audit Logs | kein Cleanup | nein | `tenant_id` und `site_id` vorhanden |
 | lokale Backups | 14-Tage-Retention beim Backup-Lauf | ja | Dateisystem, keine Einzelpersonen-Ausgabe |
-| Offsite-Backups | restic Snapshots aktiv, Prune nicht aktiv | nein | Prune nur nach separater Freigabe |
+| Offsite-Backups | restic Snapshots aktiv, Retention-Dry-Run vorhanden, Prune nicht aktiv | nein | nur Tags `ai-chatbot`, `postgres`, `production`; Prune nur nach separater Freigabe |
 | technische Logs | Docker/Journald separat pruefen | nicht durch App | aktuell kein App-Cleanup; keine personenbezogenen Inhalte in externe Tickets kopieren |
 
 ## Technische Logs
@@ -108,6 +109,34 @@ Status ab Schritt 11.2:
 6. Monitoring fuer Retention-Ergebnisse und Fehler vorbereiten.
 7. `RETENTION_CLEANUP_ENABLED=true` erst nach Freigabe setzen.
 8. Nach erstem Lauf Counts und Logs pruefen, ohne personenbezogene Inhalte zu exportieren.
+
+## Offsite-Retention-Dry-Run
+
+Offsite-Snapshots werden mit restic in der Hetzner Storage Box gespeichert. Eine echte restic-Retention ist noch nicht aktiv.
+
+Dry-Run:
+
+```bash
+scripts/ops/restic-retention-dry-run.sh
+```
+
+Standardregel:
+
+- `RESTIC_KEEP_DAILY=14`
+- `RESTIC_KEEP_WEEKLY=4`
+- Snapshot-Filter: Tags `ai-chatbot`, `postgres`, `production`
+
+Das Script fuehrt nur `restic forget --dry-run` aus. Es fuehrt kein `prune` aus und loescht keine Snapshots.
+
+Vor echter Aktivierung:
+
+1. Speicher- und Backup-Konzept freigeben.
+2. `scripts/ops/check-offsite-backup.sh` muss OK sein.
+3. `restic check` muss OK sein.
+4. Dry-Run pruefen und dokumentieren.
+5. Sicherstellen, dass keine Snapshots anderer Systeme vom Tag-Filter betroffen sind.
+6. Separat entscheiden, ob zusaetzlich `--keep-last` oder Monthly-Retention sinnvoll ist.
+7. `prune` erst nach separater Freigabe ausfuehren.
 
 ## Aktuell nicht freigegeben
 

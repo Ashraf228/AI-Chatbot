@@ -267,14 +267,45 @@ Fehlerbehandlung:
 
 ## Offsite-Retention
 
-Retention ist vorbereitet, aber in Schritt 9.2 bewusst noch nicht mit `prune` aktiviert.
+Retention ist vorbereitet, aber bewusst noch nicht mit `prune` aktiviert.
 
-Empfehlung fuer den naechsten optionalen Schritt:
+Dry-Run fuer die aktuelle Offsite-Retention:
+
+```bash
+scripts/ops/restic-retention-dry-run.sh
+```
+
+Das Script:
+
+- nutzt die serverseitige Offsite-Konfiguration aus `/root/AI-Chatbot/.offsite-backup.env`
+- nutzt nur Snapshots mit den Tags `ai-chatbot`, `postgres`, `production`
+- fuehrt ausschliesslich `restic forget --dry-run` aus
+- fuehrt kein `prune` aus
+- gibt keine Secret-Werte und keine Backup-Inhalte aus
+
+Vorgeschlagene Regel:
 
 - 14 taegliche Snapshots behalten
 - 4 woechentliche Snapshots behalten
-- erst nach separater Freigabe aktivieren; Offsite-Restore-Test wurde bereits erfolgreich durchgefuehrt
-- Retention nur mit Safety-Check und ohne globale Snapshot-Loeschung ausfuehren
+
+Letzter Dry-Run: 2026-05-28
+
+- passende Snapshots: 3
+- wuerden behalten: 3
+- wuerden vergessen: 0
+- geloescht wurde nichts
+- `prune` wurde nicht ausgefuehrt
+
+Vor echter Aktivierung von `forget`/`prune`:
+
+1. aktuelles lokales Backup pruefen
+2. Offsite-Healthcheck pruefen
+3. `restic check` erfolgreich ausfuehren
+4. `scripts/ops/restic-retention-dry-run.sh` pruefen
+5. Restore-Test aus Offsite-Kopie darf nicht veraltet sein
+6. echte Aktivierung separat freigeben
+
+Hinweis: `restic --keep-daily 14` behaelt pro Tag einen Snapshot. Falls mehrere Snapshots pro Tag dauerhaft erhalten bleiben sollen, muss die Regel vor Aktivierung angepasst werden, z. B. mit zusaetzlichem `--keep-last`.
 
 Fachliche Daten-Retention und Kandidaten-Counts werden separat ueber das Retention-Runbook geprueft:
 
