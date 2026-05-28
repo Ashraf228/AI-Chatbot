@@ -2,7 +2,6 @@ import type { ChatMessagePart } from "../../types/chat";
 
 type MessageRichContentProps = {
   parts: ChatMessagePart[];
-  onLeadCapture?: () => void | Promise<void>;
 };
 
 function renderInlinePart(part: ChatMessagePart, key: string) {
@@ -27,7 +26,7 @@ function renderInlinePart(part: ChatMessagePart, key: string) {
   return null;
 }
 
-export function MessageRichContent({ parts, onLeadCapture }: MessageRichContentProps) {
+export function MessageRichContent({ parts }: MessageRichContentProps) {
   const inlineParts = parts.filter(
     (part): part is Extract<ChatMessagePart, { kind: "text" | "link" }> =>
       part.kind === "text" || part.kind === "link",
@@ -47,9 +46,6 @@ export function MessageRichContent({ parts, onLeadCapture }: MessageRichContentP
   const variantCards = parts.filter(
     (part): part is Extract<ChatMessagePart, { kind: "variant-card" }> =>
       part.kind === "variant-card",
-  );
-  const ctas = parts.filter(
-    (part): part is Extract<ChatMessagePart, { kind: "cta" }> => part.kind === "cta",
   );
 
   return (
@@ -151,23 +147,6 @@ export function MessageRichContent({ parts, onLeadCapture }: MessageRichContentP
                 </span>
               ) : null}
             </a>
-          ))}
-        </div>
-      ) : null}
-      {ctas.length > 0 ? (
-        <div className="ssb-rich-message__ctas">
-          {ctas.map((cta, index) => (
-            <button
-              key={`${cta.action}-${index}`}
-              type="button"
-              className="ssb-rich-cta"
-              onClick={() => void onLeadCapture?.()}
-            >
-              <span className="ssb-rich-cta__label">{cta.label}</span>
-              {cta.description ? (
-                <span className="ssb-rich-cta__description">{cta.description}</span>
-              ) : null}
-            </button>
           ))}
         </div>
       ) : null}

@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
 vi.mock("../src/hooks/useWidgetConfig", () => ({
@@ -21,18 +20,10 @@ vi.mock("../src/app/providers/SessionProvider", () => ({
   }),
 }));
 
-const submitLeadMock = vi.fn().mockResolvedValue({ ok: true });
-
-vi.mock("../src/services/leadService", () => ({
-  submitLead: (...args: unknown[]) => submitLeadMock(...args),
-}));
-
 import { ChatWindow } from "../src/components/window/ChatWindow";
 
 describe("ChatWindow", () => {
-  test("opens the contact modal from an assistant CTA and submits lead data", async () => {
-    const onLeadSubmitted = vi.fn();
-
+  test("does not render the contact details CTA block from contact-oriented assistant text", () => {
     render(
       <ChatWindow
         title="Support"
@@ -57,49 +48,56 @@ describe("ChatWindow", () => {
         consentAccepted={true}
         onAcceptConsent={() => {}}
         onSendMessage={() => {}}
-        onLeadSubmitted={onLeadSubmitted}
         onClose={() => {}}
       />,
     );
 
-    const user = userEvent.setup();
+    expect(
+      screen.queryByRole("button", { name: /Kontaktdaten/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: /Kontaktdaten/i }),
+    ).not.toBeInTheDocument();
+  });
 
-    await user.click(
-      await screen.findByRole("button", {
-        name: "Kontaktdaten hier hinterlassen",
-      }),
+  test("does not render lead_capture rich CTA parts", () => {
+    render(
+      <ChatWindow
+        title="Support"
+        companyName="SouleSmartBusiness"
+        botName="Service-Assistent"
+        logoUrl=""
+        privacyUrl="https://example.com/datenschutz"
+        suggestedQuestions={[]}
+        placeholder="Nachricht schreiben..."
+        messages={[
+          {
+            id: "assistant-1",
+            role: "assistant",
+            content: "Ich kann die Anfrage aufnehmen.",
+            parts: [
+              { kind: "text", text: "Ich kann die Anfrage aufnehmen." },
+              {
+                kind: "cta",
+                action: "lead_capture",
+                label: "Kontaktdaten hinterlassen",
+              },
+            ],
+            createdAt: new Date().toISOString(),
+          },
+        ]}
+        isSending={false}
+        error={null}
+        consentRequired={false}
+        consentAccepted={true}
+        onAcceptConsent={() => {}}
+        onSendMessage={() => {}}
+        onClose={() => {}}
+      />,
     );
 
     expect(
-      await screen.findByRole("dialog", { name: "Kontaktdaten hinterlassen" }),
-    ).toBeInTheDocument();
-
-    await user.type(screen.getByPlaceholderText("Name"), "Max Mustermann");
-    await user.type(screen.getByPlaceholderText("E-Mail"), "max@example.com");
-    await user.type(
-      screen.getByPlaceholderText("Anliegen oder Rückrufwunsch (optional)"),
-      "Ich möchte einen Termin.",
-    );
-    await user.click(screen.getByRole("button", { name: "Anfrage senden" }));
-
-    await waitFor(() =>
-      expect(submitLeadMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          siteKey: "kunde-1",
-          apiBase: "https://api.soulesmartbusiness.com",
-        }),
-        "session-1",
-        expect.objectContaining({
-          name: "Max Mustermann",
-          email: "max@example.com",
-          message: "Ich möchte einen Termin.",
-        }),
-      ),
-    );
-
-    await waitFor(() => expect(onLeadSubmitted).toHaveBeenCalledTimes(1));
-    expect(
-      screen.queryByRole("dialog", { name: "Kontaktdaten hinterlassen" }),
+      screen.queryByRole("button", { name: /Kontaktdaten/i }),
     ).not.toBeInTheDocument();
   });
 });

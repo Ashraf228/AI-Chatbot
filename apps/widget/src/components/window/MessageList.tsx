@@ -4,15 +4,9 @@ import { MessageBubble } from "./MessageBubble";
 
 type MessageListProps = {
   messages: ChatMessage[];
-  contactCtaMessageId?: string | null;
-  onContactCtaClick?: () => void | Promise<void>;
 };
 
-export function MessageList({
-  messages,
-  contactCtaMessageId,
-  onContactCtaClick,
-}: MessageListProps) {
+export function MessageList({ messages }: MessageListProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -29,8 +23,6 @@ export function MessageList({
         <MessageBubble
           key={message.id}
           message={message}
-          showLeadLink={message.id === contactCtaMessageId}
-          onLeadLinkClick={onContactCtaClick}
         />
       ))}
     </div>

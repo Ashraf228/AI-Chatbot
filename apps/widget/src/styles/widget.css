@@ -249,11 +249,6 @@
   gap: 8px;
 }
 
-.ssb-rich-message__ctas {
-  display: grid;
-  gap: 8px;
-}
-
 .ssb-inline-link {
   color: var(--ssb-color-primary-strong);
   text-decoration: underline;
@@ -400,29 +395,6 @@
   color: #b55400;
 }
 
-.ssb-rich-cta {
-  display: grid;
-  gap: 2px;
-  width: 100%;
-  text-align: left;
-  border: 1px solid rgba(181, 84, 0, 0.18);
-  border-radius: 14px;
-  background: rgba(255, 245, 231, 0.92);
-  color: var(--ssb-color-text);
-  padding: 10px 12px;
-  cursor: pointer;
-}
-
-.ssb-rich-cta__label {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.ssb-rich-cta__description {
-  font-size: 11px;
-  color: var(--ssb-color-muted);
-}
-
 .ssb-message--user .ssb-message-bubble {
   background: var(--ssb-color-user);
   color: var(--ssb-color-user-text);
@@ -441,11 +413,6 @@
   background: #fff1f1;
   border-color: rgba(180, 35, 24, 0.22);
   color: #8a1f17;
-}
-
-.ssb-message-cta {
-  margin-top: 6px;
-  font-size: 12px;
 }
 
 .ssb-composer,
@@ -681,7 +648,6 @@
 
 .ssb-button:focus-visible,
 .ssb-input:focus-visible,
-.ssb-rich-cta:focus-visible,
 .ssb-modal__close:focus-visible,
 .ssb-modal__backdrop:focus-visible {
   outline: 3px solid rgba(var(--ssb-color-primary-rgb), 0.22);
