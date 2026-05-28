@@ -1,5 +1,12 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   proxy:
+    logging: *default-logging
     build:
       context: .
       dockerfile: ./infra/nginx/Dockerfile
@@ -34,6 +41,7 @@ services:
       - ${TLS_CERTS_DIR:-./infra/nginx/certs}:/etc/nginx/certs:ro
 
   db:
+    logging: *default-logging
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
@@ -52,6 +60,7 @@ services:
       - internal
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     restart: unless-stopped
     command:
@@ -74,6 +83,7 @@ services:
       - internal
 
   api:
+    logging: *default-logging
     build:
       context: ./apps/api
     init: true
@@ -127,6 +137,7 @@ services:
       - egress
 
   widget:
+    logging: *default-logging
     build:
       context: .
       dockerfile: ./apps/widget/Dockerfile
@@ -144,6 +155,7 @@ services:
       - internal
 
   dashboard:
+    logging: *default-logging
     build:
       context: ./apps/dashboard
     init: true
@@ -175,6 +187,7 @@ services:
       - internal
 
   reporter:
+    logging: *default-logging
     build:
       context: ./apps/reporter
     init: true

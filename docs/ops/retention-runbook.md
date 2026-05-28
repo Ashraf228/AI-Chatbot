@@ -84,17 +84,18 @@ Der Dry-Run gibt keine Namen, Telefonnummern, E-Mail-Adressen, Chat-Inhalte, Lea
 
 ## Technische Logs
 
-Aktueller Server-Befund aus Schritt 11:
+Server-Befund aus Schritt 11:
 
 - Docker nutzt `json-file`.
 - Fuer die laufenden App-Container sind keine `max-size`/`max-file` Log-Optionen gesetzt.
 - Eine explizite journald-Retention wurde nicht gefunden.
 
-Empfehlung:
+Status ab Schritt 11.2:
 
-- Docker-Logrotation separat konfigurieren, z. B. `max-size` und `max-file`.
-- journald-Retention separat festlegen, falls journald fuer Betriebslogs relevant ist.
-- Vor Aenderung Speicherplatz, Debug-Bedarf und Incident-Anforderungen abstimmen.
+- Docker-Logrotation ist in `docker-compose.yml` fuer App-Services ueber `json-file` mit `max-size=10m` und `max-file=5` konfiguriert.
+- Die Konfiguration gilt fuer neu erzeugte Container; bestehende Container muessen kontrolliert recreated werden, damit `LogConfig` aktualisiert wird.
+- journald-Retention ist serverseitig ueber `/etc/systemd/journald.conf.d/ai-chatbot.conf` mit `SystemMaxUse=500M` und `MaxRetentionSec=14day` begrenzt.
+- Logrotation ersetzt keine fachliche Retention fuer Kunden-/Chat-/Lead-Daten.
 - Keine Log-Inhalte mit personenbezogenen Daten in externe Tickets oder Chat-Tools kopieren.
 
 ## Vor Aktivierung automatischer fachlicher Loeschung

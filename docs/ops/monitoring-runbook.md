@@ -121,6 +121,34 @@ Speicherplatz:
 df -h / /root/AI-Chatbot /var/lib/docker
 ```
 
+Docker-Logrotation pruefen:
+
+```bash
+docker compose --project-directory /root/AI-Chatbot --env-file /root/AI-Chatbot/.env ps
+docker inspect --format '{{.Name}} {{json .HostConfig.LogConfig}}' $(docker compose --project-directory /root/AI-Chatbot --env-file /root/AI-Chatbot/.env ps -q api)
+```
+
+Erwartung ab Schritt 11.2: `json-file` mit `max-size=10m` und `max-file=5` fuer `api`, `dashboard`, `widget`, `proxy`, `db`, `redis` und `reporter` bei neu erzeugten Containern. Bestehende Container uebernehmen diese Werte erst nach kontrolliertem Recreate.
+
+Docker-JSON-Loggroessen pruefen, ohne Inhalte auszugeben:
+
+```bash
+for c in api dashboard widget proxy db redis; do
+  id=$(docker compose --project-directory /root/AI-Chatbot --env-file /root/AI-Chatbot/.env ps -q "$c")
+  path=$(docker inspect --format '{{.LogPath}}' "$id")
+  stat -c "$c %s bytes" "$path"
+done
+```
+
+Journald-Retention pruefen:
+
+```bash
+journalctl --disk-usage
+grep -E '^(SystemMaxUse|MaxRetentionSec)=' /etc/systemd/journald.conf.d/ai-chatbot.conf
+```
+
+Erwartung ab Schritt 11.2: `SystemMaxUse=500M` und `MaxRetentionSec=14day`. Die reproduzierbare Vorlage liegt im Repo unter `scripts/ops/systemd/ai-chatbot-journald.conf.example`; sie enthaelt keine Secrets und muss bei Bedarf serverseitig nach `/etc/systemd/journald.conf.d/ai-chatbot.conf` kopiert werden.
+
 Logs:
 
 ```bash
