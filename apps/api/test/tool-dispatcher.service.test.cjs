@@ -152,7 +152,9 @@ test('ToolDispatcherService capture_lead stores lead and queues notification mai
   assert.equal(queuedJobs.length, 1);
   assert.equal(queuedJobs[0].kind, 'lead_notification');
   assert.equal(queuedJobs[0].metadata.agentRunId, 'run-1');
-  assert.ok(dbCalls.some((call) => /INSERT INTO widget_leads/i.test(call.sql)));
+  const leadInsert = dbCalls.find((call) => /INSERT INTO widget_leads/i.test(call.sql));
+  assert.ok(leadInsert);
+  assert.equal(queuedJobs[0].metadata.leadId, leadInsert.params[0]);
   assert.ok(dbCalls.some((call) => /INSERT INTO tool_invocations/i.test(call.sql)));
   assert.ok(dbCalls.some((call) => /UPDATE agent_runs/i.test(call.sql)));
 });

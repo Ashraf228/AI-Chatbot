@@ -91,6 +91,7 @@ test('WidgetLeadsService.capture stores lead and queues notification email when 
   assert.equal(queuedJobs.length, 1);
   assert.equal(queuedJobs[0].kind, 'lead_notification');
   assert.equal(queuedJobs[0].to, 'hello@soulesmartbusiness.com');
+  assert.equal(queuedJobs[0].metadata.leadId, result.id);
   assert.equal(queuedJobs[0].metadata.leadEmail, 'max@example.com');
 });
 

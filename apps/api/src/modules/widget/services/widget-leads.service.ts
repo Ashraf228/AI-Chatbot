@@ -80,6 +80,7 @@ export class WidgetLeadsService {
             metadata: {
               siteId: site.id,
               sessionId: dto.sessionId,
+              leadId: id,
               leadEmail: dto.email,
             },
           });

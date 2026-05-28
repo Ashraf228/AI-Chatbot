@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { LeadFilters } from "./LeadFilters";
 import { LeadStatusBadge } from "./LeadStatusBadge";
+import { LeadDeliveryBadge } from "./LeadDeliveryBadge";
 import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
 import { Select } from "../shared/Select";
@@ -27,6 +28,15 @@ type LeadRow = {
   sessionId?: string;
   status: string;
   createdAt: string;
+  delivery?: {
+    stored?: boolean;
+    email?: "not_configured" | "pending" | "sent" | "failed" | "unknown";
+    webhook?: "not_configured" | "pending" | "sent" | "failed" | "unknown";
+    emailAttempts?: number | null;
+    webhookAttempts?: number | null;
+    emailUpdatedAt?: string | null;
+    webhookUpdatedAt?: string | null;
+  };
 };
 
 export function LeadTable({ siteId }: LeadTableProps) {
@@ -157,6 +167,7 @@ export function LeadTable({ siteId }: LeadTableProps) {
               </div>
               <div className="dashboard-stack dashboard-stack--sm">
                 <LeadStatusBadge status={lead.status} />
+                <LeadDeliveryBadge delivery={lead.delivery} />
                 <Select value={lead.status} onChange={(e) => updateStatus(lead.id, e.target.value)}>
                   <option value="new">Neu</option>
                   <option value="contacted">Kontaktiert</option>

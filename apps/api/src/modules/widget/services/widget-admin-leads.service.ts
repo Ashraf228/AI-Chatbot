@@ -14,6 +14,28 @@ type LeadRow = {
   status: string;
   created_at: string;
   site_name?: string;
+  email_delivery_status?: string | null;
+  email_retry_count?: number | string | null;
+  email_updated_at?: string | null;
+  email_sent_at?: string | null;
+  email_created_at?: string | null;
+  webhook_delivery_status?: string | null;
+  webhook_retry_count?: number | string | null;
+  webhook_updated_at?: string | null;
+  webhook_completed_at?: string | null;
+  webhook_created_at?: string | null;
+};
+
+type DeliveryChannelStatus = 'not_configured' | 'pending' | 'sent' | 'failed' | 'unknown';
+
+type LeadDelivery = {
+  stored: true;
+  email: DeliveryChannelStatus;
+  webhook: DeliveryChannelStatus;
+  emailAttempts: number | null;
+  webhookAttempts: number | null;
+  emailUpdatedAt: string | null;
+  webhookUpdatedAt: string | null;
 };
 
 @Injectable()
@@ -46,9 +68,58 @@ export class WidgetAdminLeadsService {
          l.message,
          l.status,
          l.created_at,
-         s.name AS site_name
+         s.name AS site_name,
+         email_job.status AS email_delivery_status,
+         email_job.retry_count AS email_retry_count,
+         email_job.sent_at AS email_sent_at,
+         email_job.updated_at AS email_updated_at,
+         email_job.created_at AS email_created_at,
+         webhook_job.status AS webhook_delivery_status,
+         webhook_job.retry_count AS webhook_retry_count,
+         webhook_job.completed_at AS webhook_completed_at,
+         webhook_job.updated_at AS webhook_updated_at,
+         webhook_job.created_at AS webhook_created_at
        FROM widget_leads l
        JOIN sites s ON s.id = l.site_id
+       LEFT JOIN LATERAL (
+         SELECT
+           ej.status,
+           ej.retry_count,
+           ej.sent_at,
+           ej.updated_at,
+           ej.created_at
+         FROM email_jobs ej
+         WHERE ej.kind = 'lead_notification'
+           AND (
+             ej.metadata->>'leadId' = l.id
+             OR (
+               ej.metadata->>'siteId' = l.site_id
+               AND ej.metadata->>'sessionId' = l.session_id
+               AND COALESCE(ej.metadata->>'leadEmail', '') <> ''
+               AND l.email <> ''
+               AND ej.metadata->>'leadEmail' = l.email
+             )
+           )
+         ORDER BY ej.created_at DESC
+         LIMIT 1
+       ) email_job ON true
+       LEFT JOIN LATERAL (
+         SELECT
+           wj.status,
+           wj.retry_count,
+           wj.completed_at,
+           wj.updated_at,
+           wj.created_at
+         FROM webhook_jobs wj
+         WHERE wj.site_id = l.site_id
+           AND wj.payload->>'eventType' = 'lead.created'
+           AND (
+             wj.payload->>'leadId' = l.id
+             OR wj.payload #>> '{payload,leadId}' = l.id
+           )
+         ORDER BY wj.created_at DESC
+         LIMIT 1
+       ) webhook_job ON true
        ${whereSql}
        ORDER BY l.created_at DESC
        LIMIT 200`,
@@ -66,6 +137,7 @@ export class WidgetAdminLeadsService {
       message: row.message,
       status: row.status,
       createdAt: row.created_at,
+      delivery: buildDelivery(row),
     }));
   }
 
@@ -188,4 +260,46 @@ export class WidgetAdminLeadsService {
       ],
     );
   }
+}
+
+function buildDelivery(row: LeadRow): LeadDelivery {
+  return {
+    stored: true,
+    email: normalizeDeliveryStatus(row.email_delivery_status),
+    webhook: normalizeDeliveryStatus(row.webhook_delivery_status),
+    emailAttempts: toNullableNumber(row.email_retry_count),
+    webhookAttempts: toNullableNumber(row.webhook_retry_count),
+    emailUpdatedAt: row.email_sent_at || row.email_updated_at || row.email_created_at || null,
+    webhookUpdatedAt: row.webhook_completed_at || row.webhook_updated_at || row.webhook_created_at || null,
+  };
+}
+
+function normalizeDeliveryStatus(status: string | null | undefined): DeliveryChannelStatus {
+  const normalized = (status || '').trim().toLowerCase();
+  if (!normalized) {
+    return 'not_configured';
+  }
+
+  if (['queued', 'processing', 'retrying', 'pending'].includes(normalized)) {
+    return 'pending';
+  }
+
+  if (['sent', 'delivered', 'completed', 'success'].includes(normalized)) {
+    return 'sent';
+  }
+
+  if (['failed', 'error', 'dead'].includes(normalized)) {
+    return 'failed';
+  }
+
+  return 'unknown';
+}
+
+function toNullableNumber(value: number | string | null | undefined) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }

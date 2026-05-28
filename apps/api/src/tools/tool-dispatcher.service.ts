@@ -258,6 +258,7 @@ export class ToolDispatcherService {
             metadata: {
               siteId: run.site_id,
               agentRunId: run.id,
+              leadId,
               leadEmail: email,
             },
           });
