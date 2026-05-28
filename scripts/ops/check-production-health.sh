@@ -97,6 +97,16 @@ if [[ "$api_code" == "200" ]] &&
 else
   fail "api health invalid http=${api_code:-request_failed}"
 fi
+api_commit="$(
+  node -e "const fs = require('fs'); try { const data = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); if (typeof data.commit === 'string') process.stdout.write(data.commit); } catch {}" "$api_body_file"
+)"
+if [[ -z "$api_commit" ]]; then
+  warn "api health commit missing"
+elif [[ "$api_commit" == "unknown" ]]; then
+  warn "api health commit=unknown"
+else
+  ok "api health commit=$api_commit"
+fi
 rm -f "$api_body_file"
 
 check_http_status "dashboard login" "$DASHBOARD_URL"

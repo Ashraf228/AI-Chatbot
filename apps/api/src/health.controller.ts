@@ -23,12 +23,24 @@ export class HealthController {
       status: ok ? 'ok' : 'error',
       service: 'api',
       version: process.env.APP_VERSION || process.env.npm_package_version || 'unknown',
+      commit: this.getCommitSha(),
       uptimeSeconds: Math.round(process.uptime()),
       database: database.status,
       redis: redis.status,
       checkedAt: new Date().toISOString(),
       latencyMs: Date.now() - startedAt,
     };
+  }
+
+  private getCommitSha() {
+    const commit =
+      process.env.APP_COMMIT_SHA ||
+      process.env.BUILD_COMMIT ||
+      process.env.GIT_COMMIT ||
+      '';
+
+    const normalizedCommit = commit.trim();
+    return /^[0-9a-f]{7,64}$/i.test(normalizedCommit) ? normalizedCommit : 'unknown';
   }
 
   private async checkDatabase() {

@@ -223,9 +223,18 @@ systemctl start ai-chatbot-production-health.timer
 
 ## Commit-Identitaet
 
-API `/healthz` gibt aktuell Version, Datenbank, Redis und Uptime aus, aber keinen Commit-Hash.
+API `/healthz` gibt Version, Commit, Datenbank, Redis und Uptime aus.
 
-Der Production-Healthcheck gibt den lokalen Server-Repo-Commit aus. Ein API-seitiger Commit-Hash sollte spaeter ueber eine Deployment-Env wie `APP_COMMIT_SHA` oder `BUILD_COMMIT` gesetzt und in `/healthz` angezeigt werden.
+Der API-Commit wird aus `APP_COMMIT_SHA` gelesen. Als Fallbacks werden `BUILD_COMMIT` und `GIT_COMMIT` akzeptiert. Es werden nur Git-SHA-artige Werte ausgegeben; wenn keine Build-Env gesetzt ist oder der Wert nicht wie ein Commit aussieht, zeigt `/healthz` `commit: "unknown"`.
+
+Empfohlener Deployment-Ablauf vor einem Rebuild:
+
+```bash
+export APP_COMMIT_SHA="$(git rev-parse HEAD)"
+docker compose --project-directory /root/AI-Chatbot --env-file /root/AI-Chatbot/.env up --build -d api
+```
+
+Der Production-Healthcheck warnt, wenn der API-Commit fehlt oder `unknown` ist, und gibt weiterhin den lokalen Server-Repo-Commit aus. Bei einem korrekt gesetzten `APP_COMMIT_SHA` sollten beide Werte identisch sein.
 
 ## Offene Punkte vor zahlenden Kunden
 
@@ -233,4 +242,3 @@ Der Production-Healthcheck gibt den lokalen Server-Repo-Commit aus. Ein API-seit
 - restic Retention/Prune nach separater Freigabe aktivieren
 - fachliche Retention erst nach juristischer/organisatorischer Freigabe aktivieren; vorher nur `scripts/ops/retention-dry-run.sh` nutzen
 - optional Speicher-/Docker-Volume-Monitoring automatisieren
-- API-seitigen Commit-Hash in `/healthz` optional ergaenzen
