@@ -57,6 +57,7 @@ Aktueller technischer Stand:
 - Offsite-Healthcheck ist aktiv.
 - Restore-Test aus Offsite-Kopie wurde erfolgreich in isolierter Test-DB durchgefuehrt.
 - Restore in Produktion nur mit Wartungsfenster, aktuellem Zusatzbackup und Freigabe.
+- restic Retention-Dry-Run ist vorhanden; aktueller Dry-Run wuerde alle vorhandenen Snapshots behalten.
 
 Retention/Prune fuer restic ist vorbereitet, aber separat freizugeben und zu testen.
 
@@ -70,6 +71,8 @@ Aktueller technischer Stand:
 - Offsite-Backup-Healthcheck.
 - SMTP-basiertes externes Alerting fuer Production-Health- und Backup-Fehler.
 - Alerts enthalten technische Statusdaten und keine Lead-Inhalte, Chatverlaeufe, Telefonnummern oder Secret-Werte.
+- Docker-Logrotation ist fuer App-Services konfiguriert.
+- journald-Retention ist serverseitig begrenzt.
 
 ## Protokollierung
 
@@ -77,6 +80,8 @@ Aktueller technischer Stand:
 - Logs sollen keine unnoetigen personenbezogenen Daten enthalten.
 - Externe Alerts und Monitoring-Hinweise sollen keine personenbezogenen Inhalte enthalten.
 - Bei tieferer Fehleranalyse sollen Rohdaten nur im geschuetzten Admin-/Server-Kontext ausgewertet werden.
+- Docker-Container-Logs werden ueber `json-file` mit `max-size=10m` und `max-file=5` begrenzt.
+- journald ist serverseitig mit `SystemMaxUse=500M` und `MaxRetentionSec=14day` konfiguriert.
 
 ## Sensitive-Data-Schutz
 
@@ -90,6 +95,8 @@ Aktueller technischer Stand:
 - Conversation Export/Delete ist site- und admin-scoped.
 - Site-spezifische Privacy-Export- und Delete-Funktionen sind vorhanden.
 - Leads koennen ueber die Admin-/Dashboard-Lead-Funktion geloescht werden, soweit im konkreten Admin-Flow freigegeben.
+- Automatische fachliche Retention ist durch `RETENTION_CLEANUP_ENABLED=true` explizit opt-in und aktuell ohne Freigabe nicht aktiv.
+- Retention-Dry-Run ist vorhanden und gibt nur aggregierte Counts aus.
 - Loesch- und Exportprozesse muessen je Kunde organisatorisch beschrieben und freigegeben werden.
 - Backups folgen einer separaten Retention; einzelne Loeschungen wirken nicht sofort auf bereits erstellte Backups.
 
@@ -115,4 +122,4 @@ Aktueller technischer Stand:
 - Verträge/DPA und Transfermechanismen je Unterauftragsverarbeiter.
 - Drittlandtransferbewertung je Anbieter.
 - restic Retention/Prune nach separater Freigabe aktivieren.
-- API-seitige Commit-Anzeige in `/healthz` optional ergaenzen.
+- regelmaessiger Review von Dependency-Risiken und Backup-/Restore-Nachweisen.

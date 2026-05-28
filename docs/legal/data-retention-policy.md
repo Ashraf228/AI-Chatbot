@@ -21,7 +21,7 @@ Diese Policy ist ein Vorschlag fuer die rechtliche und organisatorische Abstimmu
 | E-Mail-/Webhook-Jobs | 30 bis 90 Tage | technische Nachvollziehbarkeit von Zustellungen und Fehlern |
 | technische Logs | so kurz wie praktikabel | nur fuer Betrieb, Fehleranalyse und Sicherheit; keine unnoetigen personenbezogenen Inhalte |
 | lokale DB-Backups | aktuell 14 Tage | bestehende lokale Retention des Backup-Skripts |
-| Offsite-Backups | Vorschlag: 14 taegliche + 4 woechentliche Snapshots | erst nach separater restic Retention/Prune-Freigabe aktivieren |
+| Offsite-Backups | Vorschlag: 14 taegliche + 4 woechentliche Snapshots | Dry-Run vorhanden; echtes restic forget/prune erst nach separater Freigabe aktivieren |
 | Testdaten | zeitnah loeschen oder klar markieren | keine echten personenbezogenen Testdaten verwenden |
 | Billing/Usage | nach steuerlicher und vertraglicher Notwendigkeit pruefen | nicht pauschal festlegen |
 | Knowledge Sources | solange Vertrag/Kunde aktiv ist | bei Vertragsende loeschen oder zurueckgeben, je Vereinbarung |
@@ -40,6 +40,8 @@ Diese Policy ist ein Vorschlag fuer die rechtliche und organisatorische Abstimmu
 - Automatische fachliche Loeschung wird in diesem Schritt nicht aktiviert.
 - Der technische Cleanup-Cron ist nur als explizites Opt-in vorgesehen und darf erst nach Freigabe mit `RETENTION_CLEANUP_ENABLED=true` laufen.
 - Vorher ist nur ein read-only Dry-Run vorgesehen: `scripts/ops/retention-dry-run.sh`.
+- Offsite-restic-Retention ist ebenfalls nur als Dry-Run vorbereitet: `scripts/ops/restic-retention-dry-run.sh`.
+- Echtes `restic forget` ohne `--dry-run` und `restic prune` sind nicht aktiv.
 - Vor Aktivierung erforderlich:
   - finale Speicherfristen je Datenart.
   - Kundenfreigabe.
