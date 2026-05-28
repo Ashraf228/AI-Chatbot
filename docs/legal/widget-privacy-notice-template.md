@@ -1,44 +1,72 @@
 # Vorlage: Datenschutzhinweis fuer das Website-Chat-Widget
 
-Stand: technische Vorlage, keine Rechtsberatung. Text vor Einsatz an Kundenseite und Datenschutzerklaerung anpassen und juristisch pruefen lassen.
+Stand: 2026-05-28
+
+Diese Vorlage ist ein technischer Textentwurf fuer Kundenseiten. Sie ist keine Rechtsberatung und muss vor Einsatz an die konkrete Website, Datenschutzerklaerung und Rechtsgrundlage angepasst und juristisch geprueft werden.
+
+## Platzhalter
+
+- `[Unternehmen]`: Name des Websitebetreibers.
+- `[Datenschutzerklaerung URL]`: Link zur Datenschutzerklaerung des Websitebetreibers.
+- `[Kontakt E-Mail]`: Datenschutz- oder Kontaktadresse.
+- `[Speicherdauer]`: abgestimmte Speicherdauer oder Kriterien fuer die Loeschung.
+- `[Unterauftragsverarbeiter]`: freigegebene Liste oder Verweis auf die Datenschutzerklaerung.
 
 ## Kurztext im Widget
 
-Mit dem Start des Chats stimmen Sie zu, dass Ihre Angaben und der Chatverlauf zur Bearbeitung Ihrer Anfrage gespeichert, verarbeitet und bei Bedarf an den Websitebetreiber weitergeleitet werden. Bitte geben Sie keine Passwoerter, Zahlungsdaten oder Ausweisdaten ein. Weitere Informationen finden Sie in unserer Datenschutzerklaerung.
+Dieser digitale Assistent hilft bei Fragen und Kontaktanfragen an `[Unternehmen]`. Ihre Angaben und der Chatverlauf koennen zur Bearbeitung Ihrer Anfrage gespeichert, verarbeitet und an `[Unternehmen]` weitergeleitet werden.
 
-Link: `[Datenschutzerklaerung oeffnen]({privacyUrl})`
+Bitte geben Sie keine Passwoerter, Zahlungsdaten, MFA-Codes, Ausweisdaten oder besonders sensiblen Informationen ein.
+
+Weitere Informationen finden Sie in der Datenschutzerklaerung:
+
+`[Datenschutzerklaerung URL]`
+
+## Hinweis vor Kontakt- oder Rueckrufanfrage
+
+Wenn Sie eine Rueckmeldung wuenschen, koennen Name und Kontaktmoeglichkeit zur Bearbeitung Ihrer Anfrage gespeichert und an `[Unternehmen]` weitergeleitet werden. Bitte geben Sie nur die Daten ein, die fuer die Bearbeitung erforderlich sind.
+
+## Erfolgshinweis nach Anfrage
+
+Vielen Dank. Ihre Anfrage wurde aufgenommen und kann von `[Unternehmen]` zur Bearbeitung genutzt werden. Falls eine Rueckmeldung vorgesehen ist, erfolgt diese ueber die von Ihnen angegebene Kontaktmoeglichkeit.
 
 ## Ausfuehrlicher Hinweis fuer die Kundenseite
 
-Unser Chat-Assistent hilft Ihnen bei Fragen zu unseren Leistungen und bei Kontakt- oder Rueckrufanfragen. Wenn Sie den Chat nutzen, koennen folgende Daten verarbeitet werden:
+Auf dieser Website kann ein digitaler Chat-Assistent eingesetzt werden, um Fragen zu beantworten und Kontakt- oder Rueckrufanfragen aufzunehmen.
 
-- Ihre Chatnachrichten.
-- Ihr Anliegen oder Problem.
-- Einsatzort/PLZ, sofern Sie diese Angaben machen.
-- Dringlichkeit, sofern relevant.
+Wenn Sie den Chat nutzen, koennen je nach Eingabe folgende Daten verarbeitet werden:
+
+- Chatnachrichten.
+- Anliegen, Problem oder Anfragegrund.
+- Ort, Einsatzort oder PLZ, sofern fuer die Anfrage relevant.
+- Dringlichkeit oder Terminwunsch, sofern relevant.
 - Name, Telefonnummer oder E-Mail-Adresse, wenn Sie eine Rueckmeldung wuenschen.
-- technische Angaben wie Zeitpunkt, Website und Session.
+- technische Angaben wie Zeitpunkt, Website, Session und Status der Anfrage.
 
-Wir nutzen diese Daten, um Ihre Anfrage zu beantworten, einen Rueckruf vorzubereiten oder Ihre Anfrage an die zustaendige Stelle weiterzuleiten. Bitte geben Sie im Chat keine Passwoerter, MFA-Codes, Zahlungsdaten, Ausweisdaten oder besonders sensiblen Informationen ein.
+Die Daten werden genutzt, um Ihre Anfrage zu beantworten, einen Rueckruf vorzubereiten, eine Kontaktanfrage zu bearbeiten oder Ihre Anfrage an die zustaendige Stelle bei `[Unternehmen]` weiterzuleiten.
 
-Weitere Informationen zur Verarbeitung, Speicherdauer, Ihren Rechten und Kontaktmoeglichkeiten finden Sie in unserer Datenschutzerklaerung:
+Bitte geben Sie im Chat keine Passwoerter, MFA-Codes, Zahlungsdaten, Ausweisdaten, Gesundheitsdaten oder andere besonders sensible Informationen ein, sofern dies fuer Ihre Anfrage nicht erforderlich ist.
 
-`{privacyUrl}`
+Weitere Informationen zur Verarbeitung, Speicherdauer, Ihren Rechten, Empfaengern und Kontaktmoeglichkeiten finden Sie in der Datenschutzerklaerung:
 
-## Platzhalter fuer Kunden
+`[Datenschutzerklaerung URL]`
 
-- `{companyName}`: Name des Website-Betreibers.
-- `{privacyUrl}`: URL der Datenschutzerklaerung.
-- `{contactEmail}`: Datenschutz- oder Kontaktadresse.
-- `{retentionDays}`: vereinbarte Speicherdauer, falls sie konkret genannt werden soll.
+Kontakt: `[Kontakt E-Mail]`
+
+Speicherdauer/Kriterien: `[Speicherdauer]`
+
+Unterauftragsverarbeiter/Empfaenger: `[Unterauftragsverarbeiter]`
 
 ## Mindestpruefung vor Einbindung
 
-- Datenschutzerklaerung ist erreichbar und enthaelt einen Hinweis zum Chat-Widget.
-- Verantwortlicher/Kontakt ist korrekt benannt.
+- Datenschutzerklaerung ist erreichbar.
+- Chat-/Widget-Verarbeitung ist in der Datenschutzerklaerung beschrieben.
+- Verantwortlicher und Kontaktadresse sind korrekt benannt.
 - Zweck der Verarbeitung ist beschrieben.
 - Datenarten sind beschrieben.
-- Empfaenger/Unterauftragsverarbeiter sind beschrieben, soweit erforderlich.
+- Empfaenger und Unterauftragsverarbeiter sind beschrieben, soweit erforderlich.
 - Speicherdauer oder Kriterien fuer die Loeschung sind beschrieben.
 - Betroffenenrechte sind beschrieben.
-- Keine versteckten Tracking-Zwecke ohne passenden Hinweis/Consent.
+- privacyUrl im Widget zeigt auf die passende Datenschutzerklaerung.
+- consentRequired ist entsprechend der juristischen Bewertung gesetzt.
+- Keine versteckten Tracking- oder Marketingzwecke ohne passende Information und Rechtsgrundlage.

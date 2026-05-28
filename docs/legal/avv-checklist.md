@@ -1,107 +1,159 @@
 # AVV-Checkliste fuer KI-Chat und Lead-Erfassung
 
-Stand: technischer Entwurf, keine Rechtsberatung. Vor Kundeneinsatz juristisch pruefen lassen.
+Stand: 2026-05-28
+
+Diese Checkliste ist ein technischer und organisatorischer Entwurf. Sie ist keine Rechtsberatung und muss vor Kundeneinsatz juristisch geprueft und an den konkreten Vertrag angepasst werden.
+
+## Ziel
+
+Diese Checkliste sammelt die Informationen, die fuer einen Auftragsverarbeitungsvertrag (AVV), eine TOM-Anlage und die Datenschutzhinweise des Kunden benoetigt werden.
 
 ## Rollenmodell
 
-- Kunde/Website-Betreiber: in der Regel Verantwortlicher, weil Zweck und Einsatz des Widgets auf der Kundenwebsite festgelegt werden.
-- Plattformbetreiber: in der Regel Auftragsverarbeiter, soweit Daten nur nach Weisung des Kunden verarbeitet werden.
-- Abweichungen, gemeinsame Verantwortlichkeit oder eigene Zwecke muessen im Einzelfall geprueft werden.
+- Kunde/Website-Betreiber: in der Regel Verantwortlicher, weil Zweck, Einbindung und Nutzung des Chat-Widgets auf der Kundenseite bestimmt werden.
+- Plattformbetreiber: in der Regel Auftragsverarbeiter, soweit personenbezogene Daten nur nach Weisung des Kunden verarbeitet werden.
+- Abweichungen, eigene Zwecke oder gemeinsame Verantwortlichkeit muessen im Einzelfall juristisch geprueft werden.
+
+## Zwecke der Verarbeitung
+
+- Website-Chat zur Beantwortung von Besucherfragen.
+- Aufnahme und Vorqualifizierung von Anfragen.
+- Rueckruf-, Kontakt- und Lead-Verarbeitung.
+- Kundenservice, Support oder Erstberatung je nach Kundenbranche.
+- Wissensbasisgestuetzte Beantwortung von Fragen.
+- Anzeige von Leads und Gespraechen im Admin-Dashboard.
+- optionale Weiterleitung an E-Mail, Webhook oder Integrationen.
+- technischer Betrieb, Sicherheit, Fehleranalyse und Missbrauchsschutz.
 
 ## Verarbeitete Datenarten
 
-- Chatnachrichten und technische Conversation-Daten.
-- Kontaktdaten aus Lead-/Rueckrufanfragen: Name, E-Mail, Telefonnummer.
-- Anliegen, Einsatzort/PLZ, Dringlichkeit und freiwillige Nutzerangaben.
-- Technische Metadaten wie Site, Session, Zeitstempel, Widget-Origin und Statuswerte.
-- Audit-/Betriebslogs mit reduzierten oder maskierten personenbezogenen Daten.
+- Name, sofern angegeben.
+- Telefonnummer, sofern angegeben.
+- E-Mail-Adresse, sofern genutzt.
+- Chatnachrichten und Anliegen/Problem.
+- Einsatzort, Ort oder PLZ, sofern fuer die Anfrage relevant.
+- Dringlichkeit, Termin- oder Rueckrufwunsch.
+- Zeitstempel, Statuswerte und technische Sessiondaten.
+- Site-/Tenant-Zuordnung.
+- Widget-Origin, erlaubte Domain und technische Request-Metadaten.
+- Knowledge-/Quellenbezug fuer Antworten, soweit technisch gespeichert.
+- Betriebslogs mit moeglichst reduzierten oder maskierten personenbezogenen Daten.
 
-## Zwecke
+## Betroffenengruppen
 
-- Beantwortung von Kundenfragen auf der Website.
-- Vorqualifizierung von Service-/Kontaktanfragen.
-- Speicherung und Anzeige von Leads im Dashboard.
-- optionale Weiterleitung an E-Mail/Webhook/Integrationen.
-- Fehleranalyse, Sicherheit, Missbrauchsschutz und Nachvollziehbarkeit.
+- Websitebesucher.
+- Interessenten.
+- Kunden des Auftraggebers.
+- Ansprechpartner bei Unternehmen.
+- Nutzer, die ueber das Widget Kontakt- oder Rueckrufanfragen stellen.
+
+## Verarbeitungsorte und Infrastruktur
+
+Vor Kundengang konkret pruefen und dokumentieren:
+
+- Hosting-Standort des Servers.
+- Standort der Datenbank-/Redis-Instanz.
+- Speicherort der lokalen und externen Backups.
+- Standort und Vertragsrahmen des KI-/API-Anbieters.
+- Standort und Vertragsrahmen des E-Mail-/SMTP-Anbieters.
+- Standort und Vertragsrahmen von Monitoring-/Alerting-Diensten.
+- DNS-, Proxy- oder CDN-Dienstleister, falls eingesetzt.
 
 ## Unterauftragsverarbeiter
 
-Vor Kundengang konkret eintragen und vertraglich pruefen:
+Die konkrete Liste ist im Subprocessor-Register zu pflegen. Mindestens zu pruefen:
 
-- Hosting/Serverbetrieb.
-- Datenbank-/Redis-Betrieb, falls extern.
-- E-Mail-/SMTP-Anbieter fuer Benachrichtigungen.
+- Hosting-/Server-Anbieter.
+- Hetzner Storage Box als externes Backup-Ziel.
+- E-Mail-/SMTP-Dienst fuer Lead- oder Betriebsbenachrichtigungen.
 - KI-/API-Anbieter fuer Antwortgenerierung und optional Embeddings.
-- Monitoring/Backup-Anbieter, falls eingesetzt.
+- Monitoring-/Alerting-Dienst.
+- DNS-, Proxy- oder CDN-Anbieter, falls beteiligt.
 
-Zu dokumentieren:
+Je Anbieter dokumentieren:
 
 - Name des Anbieters.
 - Leistungszweck.
 - Verarbeitete Datenkategorien.
-- Standort/Drittlandbezug.
-- TOMs und Nachweise.
-- Kuendigungs-/Loeschprozess.
+- Sitz/Land und Drittlandbezug.
+- Vertrag/DPA-Status.
+- Transfermechanismus, soweit erforderlich.
+- Kuendigungs-, Rueckgabe- und Loeschprozess.
+
+## Weisungen des Kunden
+
+- Der Kunde legt fest, auf welcher Website das Widget genutzt wird.
+- Der Kunde stellt Inhalte der Wissensbasis bereit oder gibt diese frei.
+- Der Kunde legt erlaubte Domains, Kontaktziele, Datenschutzlink und Speicherdauer fest.
+- Aenderungen an Verarbeitung, Loeschung, Export oder Integrationen sollten dokumentiert werden.
+- Supportzugriffe auf Kundendaten erfolgen nur anlassbezogen und im notwendigen Umfang.
 
 ## Technische und organisatorische Massnahmen
 
-- Tenant- und Site-Trennung fuer Datenbankabfragen.
+Details sind in `docs/legal/tom-overview.md` dokumentiert. Kernthemen:
+
+- Tenant- und Site-Trennung fuer Leads, Conversations, Knowledge Sources, Usage und Integrationen.
 - Rollenbasierte Dashboard-Zugriffe.
-- Widget-Origin-/Domain-Pruefung.
-- Rate Limits fuer Widget, Login, Ingest und Integrations-Tests.
-- TLS/HTTPS im Betrieb.
-- Secrets nicht in API Responses, Logs, Exporten oder Audit-Metadaten ausgeben.
-- PII-Maskierung fuer technische Logs und Audits.
-- Backups zugriffsbeschraenken und verschluesselt speichern.
-- Admin-Zugriff nur fuer berechtigte Personen, nachweisbar und entziehbar.
+- Widget-Origin- und Allowed-Domain-Pruefung.
+- TLS/HTTPS fuer Widget, API und Dashboard.
+- Keine Ausgabe von Secrets in API Responses, Logs, Exporten oder Dokumentation.
+- PII-arme technische Logs und Alerts.
+- Zentrale Lead-Speicherung vor Zustellversuchen.
+- Usage-/Plan-Limits mit zentraler Pruefung.
+- Sensitive-Data-Regeln: keine aktive Abfrage von Passwoertern, MFA-Codes, Zahlungsdaten oder Ausweisdaten.
+- Lokale Backups, Offsite-Backups mit restic, Restore-Test aus Offsite-Kopie und Healthchecks.
+- Production-Health-, Job-, Backup- und Offsite-Healthchecks mit SMTP-Alerting.
 
 ## Loesch- und Exportprozess
 
 - Site-spezifischer Export: `GET /admin/sites/:siteId/privacy/export`.
 - Site-spezifische Loeschung/Anonymisierung: `POST /admin/sites/:siteId/privacy/delete-data`.
-- Einzelne Leads koennen ueber die Admin-/Dashboard-Lead-Funktion geloescht werden.
+- Einzelne Leads koennen ueber die Admin-/Dashboard-Lead-Funktion geloescht werden, soweit im konkreten Admin-Flow freigegeben.
 - Conversation Export/Delete ist admin- und site-scoped.
-- Loeschaktionen muessen auditierbar bleiben, ohne exportierte Rohdaten im Audit zu speichern.
-- Backups koennen personenbezogene Daten enthalten und brauchen eine separate Retention-/Restore-Regel.
+- Loeschaktionen sollten auditierbar bleiben, ohne exportierte Rohdaten im Audit zu speichern.
+- Backups koennen personenbezogene Daten enthalten und brauchen eine separate Retention- und Restore-Regel.
+- Rueckgabe oder Loeschung bei Vertragsende muss vertraglich und technisch festgelegt werden.
 
-## Retention
+## Speicherfristen
 
-Technische Defaults im System:
+Vorschlag und offene Abstimmung sind in `docs/legal/data-retention-policy.md` dokumentiert.
 
-- Conversations: 90 Tage, falls keine Site-Konfiguration abweicht.
-- Leads: 365 Tage, falls keine Site-Konfiguration abweicht.
-- Reports: 365 Tage, falls keine Site-Konfiguration abweicht.
-- Audit Logs: 180 Tage als Zielwert dokumentiert; operative Bereinigung separat pruefen.
+Aktueller technischer Stand:
 
-Vor Kundengang klaeren:
-
-- Gewuenschte Aufbewahrungsfristen pro Kunde.
-- Ob automatische Bereinigung aktiv bleiben soll.
-- Wie Backup-Retention dazu passt.
+- Lokale DB-Backups: 14 Tage Retention.
+- Offsite-Backup: aktiv ueber Hetzner Storage Box/restic; Retention/Prune separat freizugeben.
+- Automatische Datenloeschung fuer fachliche Daten nicht neu aktivieren, bevor Fristen final abgestimmt, getestet und freigegeben sind.
 
 ## Support- und Zugriffsregelung
 
-- Supportzugriffe nur nach Anlass und mit minimal notwendigem Umfang.
-- Keine Passwoerter, MFA-Codes, Zahlungsdaten oder Ausweisdaten im Chat erfragen.
-- Bei versehentlich eingegebenen sensiblen Daten: nicht weiterverarbeiten, Nutzer warnen und ggf. Loeschprozess anbieten.
-- Zugriffe auf Kundendaten intern dokumentieren.
+- Supportzugriffe nur nach Anlass, mit minimal notwendigem Umfang und dokumentierbarer Zweckbindung.
+- Interne Zugriffe auf Kundendaten auf berechtigte Personen begrenzen.
+- Keine Passwoerter, MFA-Codes, Zahlungsdaten oder Ausweisdaten aktiv im Chat erfragen.
+- Bei versehentlich eingegebenen sensiblen Daten: Nutzer hinweisen, diese Daten nicht zu senden, und bei Bedarf Loeschprozess anbieten.
+- Keine Lead-, Chat- oder Payload-Inhalte in externe Alerts oder Tickets kopieren, sofern nicht erforderlich und freigegeben.
 
-## Datenschutzvorfall
+## Incident- und Datenschutzvorfall-Prozess
 
-Vor Kundengang Prozess festlegen:
+Der technische Ablauf ist in `docs/ops/incident-response-runbook.md` vorbereitet.
 
-- Meldestelle intern.
+Vor Kundengang klaeren:
+
+- interne Meldestelle und Verantwortliche.
 - Bewertung von Art, Umfang und betroffenen Daten.
-- Benachrichtigung des Kunden.
-- Fristen und Verantwortlichkeiten.
+- Kundeninformation und Eskalationsweg.
+- rechtliche Meldefristen und Aufsichtsbehoerdenbezug juristisch pruefen.
 - Sicherung relevanter Logs ohne unnoetige Datenkopien.
 - technische Sofortmassnahmen und Nachbereitung.
 
-## Juristisch offen
+## Offene juristische Pruefpunkte
 
-- AVV-Text und TOM-Anlage.
-- Liste der Unterauftragsverarbeiter.
-- Drittlandtransfer und Rechtsgrundlage je Anbieter.
-- Rechtsgrundlage fuer Chat-/Lead-Verarbeitung auf der Kundenwebsite.
-- Datenschutzerklaerung des Kunden inkl. Widget-Hinweis.
-- Cookie-/Consent-Bewertung fuer konkrete Einbindung.
+- finaler AVV-Text und TOM-Anlage.
+- finale Rollenverteilung je Kundenszenario.
+- Liste und Vertragsstand der Unterauftragsverarbeiter.
+- Drittlandtransfer und Transfermechanismen je Anbieter.
+- Rechtsgrundlage fuer Chat-/Lead-Verarbeitung auf der Kundenseite.
+- konkrete Datenschutzerklaerung des Kunden inklusive Widget-Hinweis.
+- Cookie-/Consent-Bewertung fuer die konkrete Einbindung.
+- Speicherfristen je Datenart.
+- Rueckgabe- und Loeschpflichten bei Vertragsende.
+- Umgang mit versehentlich eingegebenen besonders sensiblen Daten.

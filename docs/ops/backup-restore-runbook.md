@@ -1,6 +1,6 @@
 # Backup and Restore Runbook
 
-Stand: 2026-05-27
+Stand: 2026-05-28
 
 Dieses Runbook beschreibt den technischen Mindestprozess fuer PostgreSQL-Backups und Restore-Tests. Es enthaelt keine Secrets und ersetzt kein externes Disaster-Recovery-Konzept.
 
@@ -100,8 +100,8 @@ systemctl start ai-chatbot-backup.service
 Fehlerbehandlung:
 
 - systemd markiert den Service bei Fehlern als `failed`
-- `ai-chatbot-backup-failed.service` schreibt einen Fehler ins Journal
-- externe E-Mail-/Webhook-Benachrichtigung ist noch nicht aktiv, solange kein sicheres Benachrichtigungsziel konfiguriert ist
+- `ai-chatbot-backup-failed.service` nutzt den bestehenden SMTP-Alertpfad
+- Alerts enthalten technische Statusdaten, keine Backups, keine Secret-Werte und keine personenbezogenen Daten
 
 ## Backup-Healthcheck
 
@@ -159,11 +159,12 @@ Kein produktiver Restore ohne aktuelles Zusatzbackup und klare Rueckfallentschei
 
 ## Retention
 
-Empfehlung fuer den ersten Kundengang:
+Aktueller Stand fuer den ersten Kundengang:
 
 - taegliches DB-Backup
 - mindestens 14 Tage lokale Retention
-- zusaetzlich regelmaessige externe/offsite Sicherung
+- zusaetzlich regelmaessige externe/offsite Sicherung ueber Hetzner Storage Box/restic
+- Restore-Test aus Offsite-Kopie erfolgreich durchgefuehrt
 - Backup-Dateien nicht oeffentlich ausliefern
 - Backup-Zugriff nur fuer Server-/Admin-Zugriff
 
@@ -268,11 +269,11 @@ Fehlerbehandlung:
 
 Retention ist vorbereitet, aber in Schritt 9.2 bewusst noch nicht mit `prune` aktiviert.
 
-Empfehlung fuer den naechsten Schritt:
+Empfehlung fuer den naechsten optionalen Schritt:
 
 - 14 taegliche Snapshots behalten
 - 4 woechentliche Snapshots behalten
-- erst nach erfolgreichem Offsite-Restore-Test aktivieren
+- erst nach separater Freigabe aktivieren; Offsite-Restore-Test wurde bereits erfolgreich durchgefuehrt
 - Retention nur mit Safety-Check und ohne globale Snapshot-Loeschung ausfuehren
 
 ## Restore-Test aus Offsite-Kopie
@@ -359,7 +360,7 @@ Diese Werte sind Startwerte fuer den ersten Kundengang und muessen bei zahlenden
 
 ## Pruefrhythmus
 
-- Backup taeglich automatisieren.
+- Backup taeglich automatisiert ausfuehren und pruefen.
 - Restore-Test monatlich oder vor groesseren Releases ausfuehren.
 - Nach jedem Restore-Test Counts und Demo-Site-Existenz pruefen.
 - Fehlerlogging fuer Backup-Laeufe aufbewahren.

@@ -1,6 +1,6 @@
 # Monitoring Runbook
 
-Stand: 2026-05-27
+Stand: 2026-05-28
 
 Dieses Runbook beschreibt den minimalen Betriebscheck fuer den aktuellen Livebetrieb. Es ersetzt keine externe Monitoring-Plattform.
 
@@ -201,7 +201,7 @@ Der Production-Healthcheck gibt den lokalen Server-Repo-Commit aus. Ein API-seit
 
 ## Offene Punkte vor zahlenden Kunden
 
-- Restore-Test aus Offsite-Kopie durchfuehren
 - externe HTTP-Uptime-Checks fuer API, Dashboard und Widget konfigurieren
-- restic Retention nach erfolgreichem Offsite-Restore-Test aktivieren
+- restic Retention/Prune nach separater Freigabe aktivieren
 - optional Speicher-/Docker-Volume-Monitoring automatisieren
+- API-seitigen Commit-Hash in `/healthz` optional ergaenzen
