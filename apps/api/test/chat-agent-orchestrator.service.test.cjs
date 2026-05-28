@@ -429,6 +429,102 @@ test('ChatAgentOrchestratorService handles local service free-text intake step b
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
 });
 
+test('ChatAgentOrchestratorService restarts local intake after a completed lead when a new problem is sent', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('Mein Abfluss läuft nicht ab');
+  await decide('Frankfurt');
+  await decide('heute');
+  await decide('015511410215');
+  const completed = await decide('Max Mustermann');
+  const restarted = await decide('Meine Toilette ist verstopft');
+
+  assert.match(completed.answer, /Ihre Anfrage aufgenommen/i);
+  assert.equal(leads.length, 1);
+  assert.equal(restarted.action, 'ask_for_contact');
+  assert.match(restarted.answer, /Ort|PLZ|Einsatzort/i);
+  assert.doesNotMatch(restarted.answer, /Ihre Anfrage aufgenommen/i);
+  assert.equal(leads.length, 1);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(
+    conversations.get('conversation-1').metadata.pendingLead.concern,
+    'Meine Toilette ist verstopft',
+  );
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
+});
+
+test('ChatAgentOrchestratorService restarts local intake after a completed lead when notdienst is sent', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('Mein Abfluss läuft nicht ab');
+  await decide('Frankfurt');
+  await decide('heute');
+  await decide('015511410215');
+  await decide('Max Mustermann');
+  const restarted = await decide('Notdienst');
+
+  assert.equal(leads.length, 1);
+  assert.equal(restarted.action, 'ask_for_contact');
+  assert.match(restarted.answer, /Toilette|Abfluss|Keller|Kanal|betroffen/i);
+  assert.doesNotMatch(restarted.answer, /Ihre Anfrage aufgenommen/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
+});
+
+test('ChatAgentOrchestratorService does not treat a name as phone in local service intake', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('mein klo ist verstopft');
+  await decide('65549');
+  await decide('heute');
+  const nameBeforePhone = await decide('Müller');
+
+  assert.equal(nameBeforePhone.action, 'ask_for_contact');
+  assert.match(nameBeforePhone.answer, /Telefonnummer|zurückrufen/i);
+  assert.doesNotMatch(nameBeforePhone.answer, /Ihre Anfrage aufgenommen/i);
+  assert.equal(leads.length, 0);
+  const final = await decide('017600000000');
+
+  assert.equal(final.action, 'capture_lead');
+  assert.match(final.answer, /Ihre Anfrage aufgenommen/i);
+  assert.equal(leads.length, 1);
+  assert.equal(leads[0].name, 'Müller');
+  assert.equal(leads[0].phone, '017600000000');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'completed');
+});
+
+test('ChatAgentOrchestratorService respects local service stop intent without lead capture', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('Meine Toilette ist verstopft');
+  const stop = await decide('nerv nicht');
+  const neither = await decide('weder noch', [
+    { role: 'assistant', content: '[DATEN BEREINIGT]' },
+  ]);
+
+  assert.equal(stop.action, 'normal_answer');
+  assert.match(stop.answer, /frage nicht weiter/i);
+  assert.doesNotMatch(stop.answer, /Telefonnummer|E-Mail|Name/i);
+  assert.doesNotMatch(stop.answer, /\b(du|dir|dich|deine|deinen|deiner|deinem|sag mir|wenn du magst)\b/i);
+  assert.equal(neither.action, 'normal_answer');
+  assert.match(neither.answer, /Verstanden/i);
+  assert.doesNotMatch(neither.answer, /\[DATEN BEREINIGT\]/i);
+  assert.doesNotMatch(neither.answer, /\b(du|dir|dich|deine|deinen|deiner|deinem|sag mir|wenn du magst)\b/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'paused');
+});
+
 test('ChatAgentOrchestratorService uses formal fallback wording for local services', async () => {
   const { decide, leads } = createHarness({
     intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
@@ -439,7 +535,7 @@ test('ChatAgentOrchestratorService uses formal fallback wording for local servic
   const recovery = await decide('was soll das');
 
   assert.match(greeting.answer, /Ihnen helfen/i);
-  assert.match(recovery.answer, /Ich kann Ihnen/i);
+  assert.match(recovery.answer, /kann ich Ihnen|Ich kann Ihnen/i);
   assert.doesNotMatch(`${greeting.answer} ${recovery.answer}`, /\b(du|dir|dich|deine|deinen|deiner|deinem)\b/i);
   assert.equal(leads.length, 0);
 });

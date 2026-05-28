@@ -159,6 +159,38 @@ export class ChatAgentOrchestratorService {
       };
     }
 
+    if (localServiceFlow && hasNoFurtherHelpIntent(text)) {
+      if (pendingActive || askedForContact) {
+        await this.saveConversationMetadata(params.conversationId, {
+          pendingLead: buildPausedLeadState({
+            previous: pendingLead,
+            contact: mergeContactDetails(pendingLead, contactFromMessage),
+            reason: 'stop',
+          }),
+          conversationState: buildConversationState({
+            previous: conversationState,
+            message: params.message,
+            contact: mergeContactDetails(pendingLead, contactFromMessage),
+            leadIntent: false,
+            scheduleIntent: false,
+            stage: 'discovery',
+            intakeFlow,
+          }),
+        });
+      } else {
+        await this.saveConversationMetadata(params.conversationId, {
+          conversationState,
+        });
+      }
+
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildLocalServiceStopAnswer(),
+        decision: structuredDecision,
+      };
+    }
+
     const leadFeatureEnabled =
       moduleContext.leadSalesEnabled ||
       siteConfig.setupGoal === 'lead_capture' ||
@@ -248,6 +280,75 @@ export class ChatAgentOrchestratorService {
         }),
       });
       return { action: 'normal_answer', handled: false, decision: structuredDecision };
+    }
+
+    if (
+      shouldRestartCompletedLocalServiceIntake({
+        pendingLead,
+        localServiceFlow,
+        leadIntent,
+        scheduleIntent,
+        contact: contactFromMessage,
+        text,
+        intakeFlow,
+      })
+    ) {
+      const restartedConversationState = buildConversationState({
+        previous: null,
+        message: params.message,
+        contact: contactFromMessage,
+        leadIntent,
+        scheduleIntent,
+        stage: 'qualification',
+        intakeFlow,
+      });
+      const restartedContact = mergeContactDetailsFromState(contactFromMessage, restartedConversationState);
+      const restartedMissing = getMissingContactFields(restartedContact, true, intakeFlow);
+      const restartedLeadState = buildPendingLeadState({
+        previous: null,
+        contact: restartedContact,
+        scheduleIntent,
+        startedByIntent: scheduleIntent ? 'schedule' : 'lead',
+      });
+
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: restartedLeadState,
+        conversationState: restartedConversationState,
+      });
+      await this.recordLeadAudit({
+        tenantId: params.tenantId,
+        siteId: params.siteId,
+        action: 'lead_pending_started',
+        metadata: {
+          missingFields: restartedMissing,
+          restartedAfterCompletedLead: true,
+          hasName: Boolean(restartedLeadState.name),
+          hasEmail: Boolean(restartedLeadState.email),
+          hasPhone: Boolean(restartedLeadState.phone),
+          hasMessage: Boolean(restartedLeadState.concern),
+        },
+      });
+
+      return {
+        action: 'ask_for_contact',
+        handled: true,
+        answer: buildMissingFieldsQuestion(
+          restartedMissing,
+          scheduleIntent,
+          Boolean(restartedContact.concern),
+          restartedContact.preferredContact,
+          true,
+          intakeFlow,
+          Boolean(restartedContact.urgency),
+        ),
+        decision: structuredDecision,
+        cta: buildLeadCta(
+          moduleContext.ctaLabel,
+          moduleContext.ctaDescription,
+          siteConfig.ctaText,
+          true,
+        ),
+      };
     }
 
     if (
@@ -1194,6 +1295,15 @@ function hasRefusalIntent(text: string) {
   );
 }
 
+function hasNoFurtherHelpIntent(text: string) {
+  const normalized = text
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return /^(nix|nichts|weder noch|egal|passt|okay danke|ok danke)$/i.test(normalized);
+}
+
 function hasSensitiveDataInput(text: string) {
   return /\b((passwort|kennwort)\s*(ist|lautet|:)|(?:mfa|2fa|tan|pin)(?:\s*code)?\s*(ist|lautet|:)|kreditkarte|kartennummer|cvv|cvc|iban|ausweisnummer|personalausweis|reisepass|zahlungsdaten)\b/i.test(text);
 }
@@ -1253,6 +1363,33 @@ function isLocalServiceFlow(params: {
 
 function shouldStartLocalServiceIntakeFromContext(localServiceFlow: boolean, contact: ContactDetails) {
   return Boolean(localServiceFlow && (contact.location || contact.urgency));
+}
+
+function shouldRestartCompletedLocalServiceIntake(params: {
+  pendingLead: PendingLeadState | null;
+  localServiceFlow: boolean;
+  leadIntent: boolean;
+  scheduleIntent: boolean;
+  contact: ContactDetails;
+  text: string;
+  intakeFlow?: LocalServiceIntakeFlowConfig;
+}) {
+  if (params.pendingLead?.status !== 'completed' || !params.localServiceFlow) {
+    return false;
+  }
+
+  if (isServicePricingOrBillingQuestion(params.text, params.intakeFlow)) {
+    return false;
+  }
+
+  return Boolean(
+    params.leadIntent ||
+      params.scheduleIntent ||
+      params.contact.concern ||
+      params.contact.location ||
+      params.contact.urgency ||
+      hasLocalServiceSignal(params.text, params.intakeFlow),
+  );
 }
 
 function isLocalServiceIndustry(value: string) {
@@ -2096,10 +2233,14 @@ function buildSensitiveDataAnswer() {
 
 function buildRecoveryAnswer(localServiceFlow = false) {
   if (localServiceFlow) {
-    return 'Entschuldigung, ich habe zu früh nach Kontaktdaten gefragt. Ich kann Ihnen auch erst einmal normal weiterhelfen. Geht es um einen akuten Notfall, eine Kostenfrage oder eine allgemeine Anfrage?';
+    return 'Entschuldigung, ich habe zu früh nach Kontaktdaten gefragt. Ich frage nicht weiter danach. Wenn Sie möchten, kann ich Ihnen weiterhin Fragen zu Kosten, Einsatz, Rückruf oder Notdienst beantworten.';
   }
 
   return 'Du hast recht, ich frage gerade zu früh nach Kontaktdaten. Ich kann dir auch erst einmal normal weiterhelfen. Geht es bei dir eher um Website, KI-Automatisierung, Support oder Beratung?';
+}
+
+function buildLocalServiceStopAnswer() {
+  return 'Verstanden. Ich frage nicht weiter nach Kontaktdaten. Wenn Sie später Hilfe benötigen, können Sie Ihr Anliegen jederzeit kurz beschreiben.';
 }
 
 function buildConsultingResetAnswer(localServiceFlow = false) {
