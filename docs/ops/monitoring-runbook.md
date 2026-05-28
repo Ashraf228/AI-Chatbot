@@ -10,8 +10,9 @@ Dieses Runbook beschreibt den minimalen Betriebscheck fuer den aktuellen Livebet
 - API `/healthz` prueft Datenbank und Redis.
 - Lokale taegliche PostgreSQL-Backups laufen ueber `ai-chatbot-backup.timer`.
 - Lokaler Backup-Healthcheck ist vorhanden.
+- Offsite-Backups laufen ueber `ai-chatbot-backup-offsite.timer`, wenn die Hetzner Storage Box/restic-Konfiguration auf dem Server gesetzt ist.
+- Offsite-Backup-Healthcheck ist vorhanden.
 - Externes Health-Alerting ist per SMTP angebunden, sofern die SMTP-Werte in `/root/AI-Chatbot/.env` gesetzt sind.
-- Offsite-Backup ist noch nicht aktiv.
 
 ## Healthcheck-Skripte
 
@@ -30,6 +31,7 @@ Prueft:
 - Privacy URL
 - Docker-Container-Health fuer `api`, `dashboard`, `widget`, `proxy`, `db`, `redis`
 - lokaler Backup-Healthcheck
+- Offsite-Backup-Healthcheck
 - Job-Healthcheck
 - Speicherplatz
 - aktuelle Logs auf kritische Muster, ohne Logzeilen auszugeben
@@ -104,11 +106,14 @@ Backup:
 
 ```bash
 /root/AI-Chatbot/scripts/ops/check-last-backup.sh
+/root/AI-Chatbot/scripts/ops/check-offsite-backup.sh
 systemctl status ai-chatbot-backup.timer --no-pager
+systemctl status ai-chatbot-backup-offsite.timer --no-pager
 journalctl -u ai-chatbot-backup.service -n 50 --no-pager
+journalctl -u ai-chatbot-backup-offsite.service -n 50 --no-pager
 ```
 
-Backup-Fehler loesen ueber `ai-chatbot-backup-failed.service` denselben externen Alert-Kanal aus.
+Lokale Backup-Fehler loesen ueber `ai-chatbot-backup-failed.service` denselben externen Alert-Kanal aus. Offsite-Backup-Fehler loesen ueber `ai-chatbot-backup-offsite-failed.service` denselben externen Alert-Kanal aus.
 
 Speicherplatz:
 
@@ -161,7 +166,8 @@ Backup-Fehler:
 1. `systemctl status ai-chatbot-backup.service --no-pager`
 2. `journalctl -u ai-chatbot-backup.service -n 100 --no-pager`
 3. Speicherplatz und DB-Container pruefen.
-4. Nach Fix manuellen Backup-Lauf ausloesen.
+4. Bei Offsite-Fehlern zusaetzlich `systemctl status ai-chatbot-backup-offsite.service --no-pager` und `journalctl -u ai-chatbot-backup-offsite.service -n 100 --no-pager` pruefen.
+5. Nach Fix manuellen Backup-Lauf oder Offsite-Sync ausloesen.
 
 Speicher voll:
 
@@ -195,7 +201,7 @@ Der Production-Healthcheck gibt den lokalen Server-Repo-Commit aus. Ein API-seit
 
 ## Offene Punkte vor zahlenden Kunden
 
-- Offsite-Backup aktivieren
 - Restore-Test aus Offsite-Kopie durchfuehren
 - externe HTTP-Uptime-Checks fuer API, Dashboard und Widget konfigurieren
+- restic Retention nach erfolgreichem Offsite-Restore-Test aktivieren
 - optional Speicher-/Docker-Volume-Monitoring automatisieren

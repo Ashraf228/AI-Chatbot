@@ -18,6 +18,7 @@ LOG_SCAN_SINCE="${LOG_SCAN_SINCE:-30m}"
 LOG_SCAN_PATTERN="${LOG_SCAN_PATTERN:-error|exception|failed|fatal}"
 RUN_LOG_SCAN="${RUN_LOG_SCAN:-true}"
 BACKUP_HEALTH_SCRIPT="${BACKUP_HEALTH_SCRIPT:-$SCRIPT_DIR/check-last-backup.sh}"
+OFFSITE_HEALTH_SCRIPT="${OFFSITE_HEALTH_SCRIPT:-$SCRIPT_DIR/check-offsite-backup.sh}"
 JOB_HEALTH_SCRIPT="${JOB_HEALTH_SCRIPT:-$SCRIPT_DIR/check-job-health.sh}"
 
 warns=0
@@ -135,6 +136,21 @@ if "$BACKUP_HEALTH_SCRIPT"; then
   ok "backup freshness"
 else
   fail "backup freshness"
+fi
+
+if [[ -x "$OFFSITE_HEALTH_SCRIPT" ]]; then
+  if "$OFFSITE_HEALTH_SCRIPT"; then
+    ok "offsite backup freshness"
+  else
+    offsite_exit=$?
+    if [[ "$offsite_exit" -eq 2 ]]; then
+      warn "offsite backup has warnings"
+    else
+      fail "offsite backup failed"
+    fi
+  fi
+else
+  fail "offsite backup health script missing"
 fi
 
 if "$JOB_HEALTH_SCRIPT"; then

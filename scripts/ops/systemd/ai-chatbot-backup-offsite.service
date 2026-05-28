@@ -1,0 +1,15 @@
+[Unit]
+Description=AI Chatbot offsite backup sync
+Wants=network-online.target
+After=network-online.target ai-chatbot-backup.service
+OnFailure=ai-chatbot-backup-offsite-failed.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/AI-Chatbot
+Environment=PROJECT_DIR=/root/AI-Chatbot
+Environment=OFFSITE_ENV_FILE=/root/AI-Chatbot/.offsite-backup.env
+Environment=BACKUP_DIR=/root/AI-Chatbot/backups
+ExecStart=/root/AI-Chatbot/scripts/ops/sync-backups-offsite.sh
+Nice=10
+IOSchedulingClass=best-effort

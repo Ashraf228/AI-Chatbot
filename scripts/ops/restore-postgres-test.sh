@@ -56,6 +56,7 @@ UNION ALL SELECT 'chunks', count(*) FROM chunks
 UNION ALL SELECT 'tenant_subscriptions', count(*) FROM tenant_subscriptions
 UNION ALL SELECT 'site_modules', count(*) FROM site_modules
 UNION ALL SELECT 'integration_connections', count(*) FROM integration_connections
+UNION ALL SELECT 'usage_daily', count(*) FROM usage_daily
 UNION ALL SELECT 'email_jobs', count(*) FROM email_jobs
 UNION ALL SELECT 'webhook_jobs', count(*) FROM webhook_jobs;
 SELECT 'rohrreinigung_site', count(*) FROM sites WHERE site_key = 'rohrreinigung-ffm24';

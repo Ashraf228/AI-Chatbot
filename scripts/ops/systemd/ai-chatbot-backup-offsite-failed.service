@@ -1,0 +1,8 @@
+[Unit]
+Description=AI Chatbot offsite backup failure notice
+
+[Service]
+Type=oneshot
+Environment=ALERT_ENV_FILE=/root/AI-Chatbot/.env
+ExecStart=/usr/bin/logger -p daemon.err -t ai-chatbot-backup "Offsite PostgreSQL backup sync failed. Check: journalctl -u ai-chatbot-backup-offsite.service"
+ExecStart=/usr/bin/env CHECK_NAME=offsite-backup CHECK_STATUS=FAIL "CHECK_HINT=Offsite PostgreSQL backup sync failed. Check journalctl -u ai-chatbot-backup-offsite.service" /root/AI-Chatbot/scripts/ops/notify-production-health-failure.sh

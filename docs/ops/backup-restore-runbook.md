@@ -175,73 +175,180 @@ Aktuelle Retention im Backup-Script:
 
 ## Offsite-Backup
 
-Status am 2026-05-27: Offsite-Backup ist noch nicht aktiv.
+Status ab Schritt 9.2: Offsite-Backup nutzt Hetzner Storage Box mit `restic`.
 
-Geprueft wurde:
+Eigenschaften:
 
-- kein `restic` installiert
-- kein `rclone` installiert
-- kein `aws`, `s3cmd` oder `b2` CLI installiert
-- keine rclone-, AWS-, B2-, restic- oder Offsite-Env-Datei gefunden
-- `rsync` und `scp` sind vorhanden, aber es ist kein sicheres Ziel konfiguriert
+- Offsite-Ziel: Hetzner Storage Box ueber SFTP/SSH
+- Tool: `restic`
+- lokale Quelle: `/root/AI-Chatbot/backups/backup_postgres_*.sql.gz`
+- optionale Quelle: `/root/AI-Chatbot/backups/backup_manual_*.sql.gz`
+- keine `.env`, keine Zertifikate, keine Logs und keine sonstigen Betriebsdaten
+- restic verschluesselt Snapshots clientseitig vor dem Upload
+- Credentials liegen ausserhalb des Repositories
 
-Damit gibt es aktuell keine echte externe Backup-Kopie. Das ist vor zahlenden Kunden ein offener Betriebsblocker.
+Serverlokale Konfiguration:
 
-Vorbereitete Optionen:
+- `/root/AI-Chatbot/.offsite-backup.env`
+- `/root/AI-Chatbot/secrets/restic-password`
+- `/root/AI-Chatbot/secrets/storagebox_ed25519`
+- optionaler Fallback-Key: `/root/AI-Chatbot/secrets/storagebox_rsa`
 
-- Hetzner Storage Box per `rsync` oder `rclone`
-- S3-kompatibler Speicher per `rclone`
-- `restic` mit verschluesseltem Repository
+Alle Secret-Dateien muessen `600 root:root` haben. Das Verzeichnis `/root/AI-Chatbot/secrets` muss `700 root:root` haben. Secret-Werte werden nicht dokumentiert und nicht in Logs kopiert.
 
-Anforderungen fuer Aktivierung:
+Manuellen Offsite-Sync ausfuehren:
 
-- Credentials nur als Server-Secrets oder root-geschuetzte Env-Dateien
-- Testupload mit kleiner Testdatei
-- keine oeffentliche Auslieferung von Backup-Dateien
-- regelmaessiger Restore-Test aus Offsite-Kopie
+```bash
+scripts/ops/sync-backups-offsite.sh
+```
 
-Empfohlener Pfad fuer den ersten Kundengang:
+Dry-Run ohne Upload:
 
-1. Hetzner Storage Box oder S3-kompatibles Bucket anlegen.
-2. `restic` bevorzugen, damit Backups verschluesselt gespeichert werden.
-3. Credentials nur in einer root-geschuetzten Datei wie `/root/AI-Chatbot/.offsite.env` oder in systemd Credentials ablegen.
-4. Kleinen Testupload ausfuehren.
-5. Erst danach `sync-backups-offsite.sh` oder eine restic-Integration aktivieren.
-6. Restore-Test aus der Offsite-Kopie in isolierter Test-DB durchfuehren.
+```bash
+DRY_RUN=1 scripts/ops/sync-backups-offsite.sh
+```
 
-Keine Offsite-Skripte aktivieren, solange Ziel und Credentials fehlen.
+Offsite-Healthcheck:
+
+```bash
+scripts/ops/check-offsite-backup.sh
+```
+
+Der Healthcheck prueft:
+
+- mindestens ein restic Snapshot mit Tags `ai-chatbot`, `postgres`, `production`
+- juengster Snapshot standardmaessig nicht aelter als 48 Stunden
+- Snapshot enthaelt `*.sql.gz` Backup-Dateien mit plausibler Mindestgroesse
+
+Optionale Variablen:
+
+```bash
+OFFSITE_BACKUP_MAX_AGE_HOURS=48
+OFFSITE_BACKUP_MIN_FILE_BYTES=1000
+```
+
+## Offsite-Automatisierung mit systemd
+
+Versionierte Unit-Dateien:
+
+- `scripts/ops/systemd/ai-chatbot-backup-offsite.service`
+- `scripts/ops/systemd/ai-chatbot-backup-offsite.timer`
+- `scripts/ops/systemd/ai-chatbot-backup-offsite-failed.service`
+
+Installation auf dem Server:
+
+```bash
+cp scripts/ops/systemd/ai-chatbot-backup-offsite*.service /etc/systemd/system/
+cp scripts/ops/systemd/ai-chatbot-backup-offsite.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now ai-chatbot-backup-offsite.timer
+```
+
+Zeitplan:
+
+- taeglich um `02:45 UTC`
+- `RandomizedDelaySec=10m`
+- `Persistent=true`, damit ein verpasster Lauf nachgeholt wird
+
+Status pruefen:
+
+```bash
+systemctl list-timers ai-chatbot-backup-offsite.timer --no-pager
+systemctl status ai-chatbot-backup-offsite.timer --no-pager
+journalctl -u ai-chatbot-backup-offsite.service -n 50 --no-pager
+```
+
+Fehlerbehandlung:
+
+- `ai-chatbot-backup-offsite.service` loest bei Fehlern `ai-chatbot-backup-offsite-failed.service` aus
+- der Failure-Service nutzt den bestehenden SMTP-/Webhook-Alertpfad
+- Alerts enthalten nur technische Statusdaten, keine Backups, keine Secret-Werte und keine personenbezogenen Daten
+
+## Offsite-Retention
+
+Retention ist vorbereitet, aber in Schritt 9.2 bewusst noch nicht mit `prune` aktiviert.
+
+Empfehlung fuer den naechsten Schritt:
+
+- 14 taegliche Snapshots behalten
+- 4 woechentliche Snapshots behalten
+- erst nach erfolgreichem Offsite-Restore-Test aktivieren
+- Retention nur mit Safety-Check und ohne globale Snapshot-Loeschung ausfuehren
+
+## Restore-Test aus Offsite-Kopie
+
+Der Restore-Test aus einer Offsite-Kopie wurde in Schritt 9.3 erfolgreich durchgefuehrt.
+
+Regeln:
+
+- kein Restore in Produktion
+- Offsite-Snapshot oder einzelne Backup-Datei nur in isolierte Test-DB einspielen
+- danach zentrale Tabellen und Counts pruefen
+- Test-DB danach entfernen
+- produktive DB bleibt unveraendert
+
+### Letzter Offsite-Restore-Test
+
+Datum: 2026-05-28
+
+Quelle:
+
+- Hetzner Storage Box
+- `restic` Snapshot mit Tags `ai-chatbot`, `postgres`, `production`
+- wiederhergestellte Datei: `backup_postgres_*.sql.gz`
+
+Ergebnis:
+
+- Offsite-Snapshot wurde in ein temporaeres Verzeichnis unter `/tmp` restored.
+- `gzip -t` fuer die ausgewaehlte Backup-Datei war erfolgreich.
+- Restore erfolgte in eine isolierte Testdatenbank mit Prefix `restore_check_`.
+- Produktive Datenbank wurde nicht veraendert.
+- Temporaere Testdatenbank wurde nach der Pruefung entfernt.
+- Temporaeres Restore-Verzeichnis wurde entfernt.
+
+Gepruefte Tabellen/Objekte:
+
+- `schema_migrations`: 21
+- `tenants`: 2
+- `sites`: 2
+- `widget_leads`: 4
+- `conversations`: 36
+- `messages`: 176
+- `knowledge_sources`: 3
+- `chunks`: 18
+- `tenant_subscriptions`: 3
+- `site_modules`: 10
+- `integration_connections`: 0
+- `usage_daily`: 7
+- `email_jobs`: 2
+- `webhook_jobs`: 0
+- Demo-Site `rohrreinigung-ffm24`: vorhanden
+
+Die Counts sind Plausibilitaetswerte aus dem Restore-Test und enthalten keine personenbezogenen Inhalte. Keine Lead-Inhalte, Telefonnummern, Namen oder Chatverlaeufe wurden dokumentiert.
+
+Naechster geplanter Restore-Test:
+
+- monatlich
+- zusaetzlich vor groesseren Releases oder vor kritischen Migrations-/Deployment-Schritten
 
 ## Externe Fehlerbenachrichtigung
 
-Status am 2026-05-27: Externe Fehlerbenachrichtigung ist noch nicht aktiv.
-
-Geprueft wurde:
-
-- kein lokales `mail`, `sendmail` oder `msmtp` installiert
-- kein Slack-, Discord-, Teams-, Uptime-Kuma- oder Webhook-Ziel konfiguriert
-- SMTP-Variablen sind fuer App-Funktionen vorhanden, aber kein dedizierter Ops-Alert-Kanal ist eingerichtet
+Status ab Schritt 7.3: Externe Fehlerbenachrichtigung ist per SMTP aktiv, sofern die SMTP-Werte in `/root/AI-Chatbot/.env` gesetzt sind.
 
 Aktueller Fehlerpfad:
 
 - `ai-chatbot-backup.service` wird bei Fehlern als failed markiert
-- `ai-chatbot-backup-failed.service` schreibt eine Meldung ins Systemjournal
+- `ai-chatbot-backup-failed.service` sendet einen Alert
+- `ai-chatbot-backup-offsite.service` wird bei Fehlern als failed markiert
+- `ai-chatbot-backup-offsite-failed.service` sendet einen Alert
 - manuelle Pruefung:
 
 ```bash
 systemctl status ai-chatbot-backup.service --no-pager
 journalctl -u ai-chatbot-backup.service -n 50 --no-pager
 journalctl -t ai-chatbot-backup -n 50 --no-pager
+journalctl -u ai-chatbot-backup-offsite.service -n 50 --no-pager
 ```
-
-Das reicht fuer Demo-Betrieb, aber nicht fuer zahlende Kunden ohne regelmaessige manuelle Kontrolle oder externes Monitoring.
-
-Empfohlene Aktivierung:
-
-1. dediziertes Alert-Ziel anlegen, z. B. Uptime Kuma Push, Slack/Discord/Teams Webhook oder SMTP-Mailbox
-2. Secret nur serverseitig speichern, nicht im Repo
-3. `notify-backup-failure.sh` erst danach ergaenzen
-4. systemd `OnFailure=` auf den echten Notify-Service zeigen lassen
-5. Test-Alert mit ungefaehrlicher Meldung senden
 
 ## RPO/RTO
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily AI Chatbot offsite backup sync
+
+[Timer]
+OnCalendar=*-*-* 02:45:00 UTC
+RandomizedDelaySec=10m
+Persistent=true
+Unit=ai-chatbot-backup-offsite.service
+
+[Install]
+WantedBy=timers.target
