@@ -499,6 +499,33 @@ test('ChatAgentOrchestratorService starts a fresh local intake for short problem
   }
 });
 
+test('ChatAgentOrchestratorService uses default local intake for completed lead state without stored flow config', async () => {
+  const { decide, conversations, leads } = createHarness({
+    siteName: 'Rohrreinigung-ffm24',
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingLead: {
+      status: 'completed',
+      concern: 'TEST Deployment - Abfluss verstopft',
+      location: 'Frankfurt',
+      urgency: 'heute',
+      phone: '0000000000',
+      name: 'TEST Deployment',
+    },
+  };
+
+  const restarted = await decide('Keller');
+
+  assert.equal(restarted.action, 'ask_for_contact');
+  assert.match(restarted.answer, /Ort|PLZ|Einsatzort/i);
+  assert.doesNotMatch(restarted.answer, /Ihre Anfrage aufgenommen/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'Keller');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
+});
+
 test('ChatAgentOrchestratorService restarts local intake after a completed lead when notdienst is sent', async () => {
   const { decide, conversations, leads } = createHarness({
     intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,

@@ -118,21 +118,21 @@ export class ChatAgentOrchestratorService {
     const structuredDecision = await this.createStructuredDecision(params);
     const moduleContext = await this.getModuleContext(params.siteId);
     const siteConfig = await this.getSiteConfig(params.siteId);
-    const intakeFlow = moduleContext.intakeFlow || siteConfig.intakeFlow;
+    let intakeFlow = moduleContext.intakeFlow || siteConfig.intakeFlow;
     const text = normalizeText(params.message);
-    const leadIntent = hasLeadIntent(text, intakeFlow);
-    const scheduleIntent = hasScheduleIntent(text, intakeFlow);
+    let leadIntent = hasLeadIntent(text, intakeFlow);
+    let scheduleIntent = hasScheduleIntent(text, intakeFlow);
     const askedForContact = wasContactRequested(params.history);
     const metadataState = await this.loadConversationMetadata(params.conversationId);
     const pendingLead = metadataState.pendingLead;
     const activePendingLead = pendingLead?.status === 'pending' ? pendingLead : null;
     const currentConversationState = pendingLead?.status === 'completed' ? null : metadataState.conversationState;
     const pendingActive = activePendingLead?.status === 'pending';
-    const contactFromMessage = extractContactDetails(params.message, activePendingLead, intakeFlow);
+    let contactFromMessage = extractContactDetails(params.message, activePendingLead, intakeFlow);
     const greetingIntent = hasGreetingIntent(text);
     const recoveryIntent = hasRecoveryIntent(text);
     const refusalIntent = hasRefusalIntent(text);
-    const localServiceFlow = isLocalServiceFlow({
+    let localServiceFlow = isLocalServiceFlow({
       text,
       siteName: siteConfig.siteName,
       pendingLead,
@@ -140,6 +140,20 @@ export class ChatAgentOrchestratorService {
       conversationState: currentConversationState,
       intakeFlow,
     });
+    if (!intakeFlow && localServiceFlow) {
+      intakeFlow = DEFAULT_LOCAL_SERVICE_INTAKE_FLOW;
+      leadIntent = hasLeadIntent(text, intakeFlow);
+      scheduleIntent = hasScheduleIntent(text, intakeFlow);
+      contactFromMessage = extractContactDetails(params.message, activePendingLead, intakeFlow);
+      localServiceFlow = isLocalServiceFlow({
+        text,
+        siteName: siteConfig.siteName,
+        pendingLead,
+        contact: contactFromMessage,
+        conversationState: currentConversationState,
+        intakeFlow,
+      });
+    }
     const conversationState = buildConversationState({
       previous: currentConversationState,
       message: params.message,
