@@ -10,6 +10,8 @@ type SiteFormValues = {
   name: string;
   domain: string;
   industry: string;
+  botType: string;
+  leadNotificationEmail: string;
 };
 
 type SiteFormProps = {
@@ -81,6 +83,40 @@ export function SiteForm({
             </option>
           ))}
         </Select>
+      </div>
+
+      <div className="dashboard-field">
+        <label className="dashboard-field-label" htmlFor="site-bot-type">
+          Bot-Typ
+        </label>
+        <Select
+          id="site-bot-type"
+          value={form.botType}
+          onChange={(event) => onChange({ ...form, botType: event.target.value })}
+          required
+        >
+          <option value="handwerker-first-contact">Handwerker-Erstkontakt</option>
+        </Select>
+        <p className="dashboard-field-hint">
+          Erfasst Problem, Ort, Dringlichkeit und Kontaktdaten und sendet die Anfrage per E-Mail.
+        </p>
+      </div>
+
+      <div className="dashboard-field">
+        <label className="dashboard-field-label" htmlFor="site-lead-email">
+          Lead-Empfänger-E-Mail
+        </label>
+        <Input
+          id="site-lead-email"
+          type="email"
+          placeholder="info@unternehmen.de"
+          value={form.leadNotificationEmail}
+          onChange={(event) => onChange({ ...form, leadNotificationEmail: event.target.value })}
+          required
+        />
+        <p className="dashboard-field-hint">
+          An diese Adresse werden neue Kundenanfragen aus dem Chat gesendet.
+        </p>
       </div>
 
       {selectedTemplate ? (

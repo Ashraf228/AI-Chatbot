@@ -66,12 +66,16 @@ type SiteDetails = {
   fontFamily: string;
   systemPrompt: string;
   industry: string;
+  botType: string;
   setupGoal: string;
   primaryGoal: PrimaryGoal | "";
   tone: Tone | "";
   knowledgeMode: KnowledgeMode;
   fallbackBehavior: FallbackBehavior;
   ctaText: string;
+  leadCaptureEnabled: boolean;
+  leadNotificationEmail: string;
+  consentRequired: boolean;
   templateId: string;
   templateVersion: number | null;
   templateAppliedAt: string;
@@ -107,7 +111,7 @@ type KnowledgeSource = {
   createdAt: string;
 };
 
-type WizardStepKey = "profile" | "knowledge" | "design" | "test" | "agents" | "launch";
+type WizardStepKey = "customer" | "bot" | "delivery" | "flow" | "knowledge" | "design" | "launch";
 type KnowledgeMethod = "manual" | "url" | "pdf";
 
 type TestChatMessage = {
@@ -117,12 +121,13 @@ type TestChatMessage = {
 };
 
 const WIZARD_STEPS: Array<{ key: WizardStepKey; label: string; description: string }> = [
-  { key: "profile", label: "Chatbot", description: "Name, Branche, Begrüßung und Ziel" },
+  { key: "customer", label: "Kundendaten", description: "Firma, Website, Domain und Sprache" },
+  { key: "bot", label: "Branche & Bot-Typ", description: "Handwerker-Erstkontakt auswählen" },
+  { key: "delivery", label: "Anfrage-Zustellung", description: "Lead-Erfassung und Empfänger-E-Mail" },
+  { key: "flow", label: "Gesprächsablauf", description: "Problem, Ort, Dringlichkeit und Kontakt" },
   { key: "knowledge", label: "Wissen", description: "PDF, Website, FAQ oder eigene Texte" },
-  { key: "design", label: "Design", description: "Farben, Button, Position und Logo" },
-  { key: "test", label: "Testen", description: "Beispielfragen und Testchat prüfen" },
-  { key: "agents", label: "Agenten", description: "Lead-Agent und automatische Aktionen" },
-  { key: "launch", label: "Einbindung", description: "Domain, Script-Code und Status" },
+  { key: "design", label: "Design & Datenschutz", description: "Button, Begrüßung, Farbe und Consent" },
+  { key: "launch", label: "Test & Go-Live", description: "Testfragen, Widget-Code und Freigabe" },
 ];
 
 const GOAL_OPTIONS: Array<{ value: PrimaryGoal | ""; label: string; help: string }> = [
@@ -134,6 +139,8 @@ const GOAL_OPTIONS: Array<{ value: PrimaryGoal | ""; label: string; help: string
   { value: "appointment_requests", label: "Termine vorbereiten", help: "Kontakt- oder Terminwünsche qualifizieren." },
   { value: "internal_knowledge", label: "Internes Wissen nutzbar machen", help: "Wissen strukturiert und kontrolliert abrufen." },
 ];
+
+const PRIMARY_GOAL_VALUES = new Set<string>(GOAL_OPTIONS.map((option) => option.value).filter(Boolean));
 
 const TONE_OPTIONS: Array<{ value: Tone | ""; label: string }> = [
   { value: "", label: "Bitte wählen" },
@@ -157,21 +164,23 @@ const FALLBACK_OPTIONS: Array<{ value: FallbackBehavior; label: string }> = [
 ];
 
 const STATUS_STEP_GROUPS: Record<WizardStepKey, string[]> = {
-  profile: ["basics", "template", "behavior"],
+  customer: ["basics"],
+  bot: ["template", "behavior"],
+  delivery: ["lead_delivery"],
+  flow: ["behavior"],
   knowledge: ["knowledge"],
   design: ["design"],
-  test: ["test"],
-  agents: ["behavior"],
-  launch: ["embed", "live"],
+  launch: ["test", "embed", "live"],
 };
 
 const STEP_EXPLANATIONS: Record<WizardStepKey, string> = {
-  profile: "So versteht der Chatbot, für wen er spricht und welches Ziel das Gespräch haben soll.",
+  customer: "Diese Angaben reichen, um den Kunden eindeutig anzulegen und die Website-Domain freizugeben.",
+  bot: "Für den ersten produktiven Use Case ist der Handwerker-Erstkontakt der Standard.",
+  delivery: "Leads werden zuerst gespeichert und danach per E-Mail an das Unternehmen zugestellt.",
+  flow: "Der Standardflow bleibt bewusst fachlich und blendet technische Trigger im normalen Setup aus.",
   knowledge: "Die Wissensbasis sorgt dafür, dass Antworten verlässlich und kundenspezifisch bleiben.",
-  design: "Ein passendes Design schafft Vertrauen und macht das Widget auf der Website wiedererkennbar.",
-  test: "Mit Testfragen prüfst du, ob der Chatbot verständlich und hilfreich antwortet.",
-  agents: "Agenten übernehmen automatische Aktionen wie Anfragen erkennen oder Kontaktwünsche vorbereiten.",
-  launch: "Zum Schluss wird geprüft, ob Domain, Einbindung und Live-Status vollständig sind.",
+  design: "Ein passendes Design, Datenschutzlink und Consent schaffen Vertrauen auf der Kundenwebsite.",
+  launch: "Zum Schluss werden Testfragen, Widget-Code, Domain und Live-Status geprüft.",
 };
 
 function formatDate(value: string | null | undefined) {
@@ -210,11 +219,32 @@ function firstString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
 }
 
+function normalizePrimaryGoal(primaryGoal: unknown, setupGoal: unknown): PrimaryGoal | "" {
+  const rawPrimaryGoal = firstString(primaryGoal);
+  if (PRIMARY_GOAL_VALUES.has(rawPrimaryGoal)) {
+    return rawPrimaryGoal as PrimaryGoal;
+  }
+
+  const rawSetupGoal = firstString(setupGoal);
+  const mappedSetupGoals: Record<string, PrimaryGoal> = {
+    lead_capture: "lead_generation",
+    support: "support_automation",
+    product_advice: "product_questions",
+    appointments: "appointment_requests",
+  };
+
+  return mappedSetupGoals[rawSetupGoal] || "";
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 function normalizeSite(data: Record<string, unknown>): SiteDetails {
   const allowedDomains = Array.isArray(data.allowedDomains)
     ? data.allowedDomains.filter((entry): entry is string => typeof entry === "string")
     : [];
-  const primaryGoal = firstString(data.primaryGoal, firstString(data.setupGoal)) as SiteDetails["primaryGoal"];
+  const primaryGoal = normalizePrimaryGoal(data.primaryGoal, data.setupGoal);
 
   return {
     id: firstString(data.id),
@@ -239,6 +269,7 @@ function normalizeSite(data: Record<string, unknown>): SiteDetails {
     fontFamily: firstString(data.fontFamily, "system"),
     systemPrompt: firstString(data.systemPrompt),
     industry: firstString(data.industry),
+    botType: firstString(data.botType, "handwerker-first-contact"),
     setupGoal: firstString(data.setupGoal),
     primaryGoal,
     tone: firstString(data.tone) as SiteDetails["tone"],
@@ -249,6 +280,9 @@ function normalizeSite(data: Record<string, unknown>): SiteDetails {
       ? (data.fallbackBehavior as FallbackBehavior)
       : "ask_followup",
     ctaText: firstString(data.ctaText),
+    leadCaptureEnabled: data.leadCaptureEnabled !== false,
+    leadNotificationEmail: firstString(data.leadNotificationEmail),
+    consentRequired: data.consentRequired !== false,
     templateId: firstString(data.templateId),
     templateVersion: typeof data.templateVersion === "number" ? data.templateVersion : null,
     templateAppliedAt: firstString(data.templateAppliedAt),
@@ -348,11 +382,16 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
   });
   const [goalForm, setGoalForm] = useState({
     primaryGoal: "" as SiteDetails["primaryGoal"],
+    botType: "handwerker-first-contact",
     tone: "" as SiteDetails["tone"],
     knowledgeMode: "flexible" as KnowledgeMode,
     fallbackBehavior: "ask_followup" as FallbackBehavior,
     ctaText: "",
     systemPrompt: "",
+  });
+  const [deliveryForm, setDeliveryForm] = useState({
+    leadCaptureEnabled: true,
+    leadNotificationEmail: "",
   });
   const [knowledgeForm, setKnowledgeForm] = useState({
     title: "FAQ",
@@ -373,28 +412,18 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     launcherLabel: "Chat",
     privacyUrl: "",
     privacyNoticeText: "",
+    consentRequired: true,
   });
   const [testQuestion, setTestQuestion] = useState("");
   const [testSessionId, setTestSessionId] = useState("");
   const [testMessages, setTestMessages] = useState<TestChatMessage[]>([]);
-  const testQuestionChips = useMemo(
-    () =>
-      [
-        site?.lastTestQuestion,
-        "Was bietet ihr an?",
-        "Wie kann ich Kontakt aufnehmen?",
-        "Was kostet das?",
-      ].filter((question): question is string => Boolean(question && question.trim())),
-    [site?.lastTestQuestion],
-  );
-
   useEffect(() => {
     setLoaderUrl(resolveWidgetLoaderUrl(process.env.NEXT_PUBLIC_WIDGET_LOADER_URL));
   }, []);
 
   const templateMap = useMemo(() => templatesByKey(templates), [templates]);
   const activeStep = WIZARD_STEPS[activeStepIndex];
-  const selectedTemplate = site?.industry ? templateMap[site.industry] : undefined;
+  const selectedTemplate = profileForm.industry ? templateMap[profileForm.industry] : undefined;
   const readyActiveSources = sources.filter((source) => source.isActive && source.status === "ready");
   const embedCode = site ? createEmbedCode(loaderUrl, site.siteKey) : "";
   const canGoLive = Boolean(serverStatus?.isLiveReady);
@@ -447,11 +476,16 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
       });
       setGoalForm({
         primaryGoal: nextSite.primaryGoal,
+        botType: nextSite.botType || "handwerker-first-contact",
         tone: nextSite.tone,
         knowledgeMode: nextSite.knowledgeMode,
         fallbackBehavior: nextSite.fallbackBehavior,
         ctaText: nextSite.ctaText,
         systemPrompt: nextSite.systemPrompt,
+      });
+      setDeliveryForm({
+        leadCaptureEnabled: nextSite.leadCaptureEnabled,
+        leadNotificationEmail: nextSite.leadNotificationEmail,
       });
       setDesignForm({
         brandColor: nextSite.brandColor,
@@ -463,6 +497,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         launcherLabel: nextSite.launcherLabel,
         privacyUrl: nextSite.privacyUrl,
         privacyNoticeText: nextSite.privacyNoticeText,
+        consentRequired: nextSite.consentRequired,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Setup konnte nicht geladen werden.");
@@ -514,7 +549,6 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             supportEmail: profileForm.supportEmail.trim(),
             phone: profileForm.phone.trim(),
             language: profileForm.language,
-            industry: profileForm.industry,
           }),
         ]);
         return { siteResult, brandingResult, configResult };
@@ -574,6 +608,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
           primaryGoal: goalForm.primaryGoal,
           setupGoal: goalForm.primaryGoal,
           industry: profileForm.industry,
+          botType: goalForm.botType,
           tone: goalForm.tone,
           knowledgeMode: goalForm.knowledgeMode,
           fallbackBehavior: goalForm.fallbackBehavior,
@@ -591,11 +626,43 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             ...current,
             primaryGoal: goalForm.primaryGoal,
             setupGoal: goalForm.primaryGoal,
+            botType: goalForm.botType,
             tone: goalForm.tone,
             knowledgeMode: goalForm.knowledgeMode,
             fallbackBehavior: goalForm.fallbackBehavior,
             ctaText: goalForm.ctaText,
             systemPrompt: goalForm.systemPrompt,
+          }
+        : current,
+    );
+    await refreshStatus();
+    return true;
+  }
+
+  async function saveDelivery() {
+    if (deliveryForm.leadCaptureEnabled && !isValidEmail(deliveryForm.leadNotificationEmail.trim())) {
+      setError("Bitte eine gültige Lead-Empfänger-E-Mail eintragen.");
+      return false;
+    }
+
+    const saved = await runAction(
+      "delivery",
+      () =>
+        updateSiteSettings(siteId, {
+          leadCaptureEnabled: deliveryForm.leadCaptureEnabled,
+          leadNotificationEmail: deliveryForm.leadNotificationEmail.trim(),
+        }),
+      "Anfrage-Zustellung gespeichert.",
+    );
+    if (!saved) {
+      return false;
+    }
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            leadCaptureEnabled: deliveryForm.leadCaptureEnabled,
+            leadNotificationEmail: deliveryForm.leadNotificationEmail.trim(),
           }
         : current,
     );
@@ -620,6 +687,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             widgetPosition: designForm.widgetPosition,
             launcherLabel: designForm.launcherLabel.trim(),
             privacyNoticeText: designForm.privacyNoticeText.trim(),
+            consentRequired: designForm.consentRequired,
           }),
         ]);
         return { branding, config };
@@ -634,6 +702,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
         ? {
             ...current,
             ...designForm,
+            consentRequired: designForm.consentRequired,
           }
         : current,
     );
@@ -802,8 +871,12 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
 
   async function saveCurrentStep() {
     switch (activeStep.key) {
-      case "profile":
-        return (await saveProfile()) && (await saveGoal());
+      case "customer":
+        return saveProfile();
+      case "bot":
+        return saveGoal();
+      case "delivery":
+        return saveDelivery();
       case "design":
         return saveDesign();
       default:
@@ -832,19 +905,19 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
     }
 
     switch (activeStep.key) {
-      case "profile":
+      case "customer":
         return (
           <section className="dashboard-card dashboard-stack" id="setup-step-basics">
             <StepIntro
-              title="Chatbot einrichten"
-              description="Lege fest, wie der Chatbot heißt, wie er startet und welches Ziel er verfolgt."
-              explanation={STEP_EXPLANATIONS.profile}
-              status={statusForWizardStep(serverStatus, "profile")}
-              statusLabel={wizardStepStatusLabel(serverStatus, "profile")}
+              title="Kundendaten"
+              description="Lege Firma, Website, erlaubte Domain und Basissprache fest."
+              explanation={STEP_EXPLANATIONS.customer}
+              status={statusForWizardStep(serverStatus, "customer")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "customer")}
             />
             <div className="dashboard-grid dashboard-grid--two">
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Kunde / Projekt (Pflicht)</span>
+                <span className="dashboard-field-label">Firmenname (Pflicht)</span>
                 <Input
                   value={profileForm.companyName}
                   onChange={(event) => setProfileForm((current) => ({ ...current, companyName: event.target.value }))}
@@ -862,16 +935,18 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                 <span className="dashboard-field-hint">Die Website wird für Domain-Freigabe und Einbindung genutzt.</span>
               </label>
             </div>
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">Erlaubte Domains (Pflicht)</span>
+              <textarea
+                className="dashboard-textarea"
+                rows={3}
+                value={profileForm.allowedDomains}
+                onChange={(event) => setProfileForm((current) => ({ ...current, allowedDomains: event.target.value }))}
+                placeholder="kunde.de&#10;www.kunde.de"
+              />
+              <span className="dashboard-field-hint">Nur diese Websites dürfen den Chatbot anzeigen.</span>
+            </label>
             <div className="dashboard-grid dashboard-grid--two">
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Chatbot-Name (Pflicht)</span>
-                <Input
-                  value={profileForm.botName}
-                  onChange={(event) => setProfileForm((current) => ({ ...current, botName: event.target.value }))}
-                  placeholder="Service-Assistent"
-                />
-                <span className="dashboard-field-hint">So wird der Assistent im Chat angezeigt.</span>
-              </label>
               <label className="dashboard-field">
                 <span className="dashboard-field-label">Sprache (Pflicht)</span>
                 <Select
@@ -887,41 +962,8 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                   <option value="en">Englisch</option>
                 </Select>
               </label>
-            </div>
-            <label className="dashboard-field">
-              <span className="dashboard-field-label">Begrüßung (Pflicht)</span>
-              <textarea
-                className="dashboard-textarea wizard-textarea-compact"
-                rows={3}
-                value={designForm.welcomeMessage}
-                onChange={(event) => setDesignForm((current) => ({ ...current, welcomeMessage: event.target.value }))}
-                placeholder="Hallo! Wie kann ich dir helfen?"
-              />
-              <span className="dashboard-field-hint">Diese Nachricht sieht der Besucher als Erstes.</span>
-            </label>
-            <label className="dashboard-field">
-              <span className="dashboard-field-label">Erlaubte Domains (Pflicht)</span>
-              <textarea
-                className="dashboard-textarea"
-                rows={3}
-                value={profileForm.allowedDomains}
-                onChange={(event) => setProfileForm((current) => ({ ...current, allowedDomains: event.target.value }))}
-                placeholder="kunde.de&#10;www.kunde.de"
-              />
-              <span className="dashboard-field-hint">Nur diese Websites dürfen den Chatbot anzeigen.</span>
-            </label>
-            <div className="dashboard-grid dashboard-grid--two">
               <label className="dashboard-field">
-                <span className="dashboard-field-label">Support-E-Mail (optional)</span>
-                <Input
-                  type="email"
-                  value={profileForm.supportEmail}
-                  onChange={(event) => setProfileForm((current) => ({ ...current, supportEmail: event.target.value }))}
-                  placeholder="support@kunde.de"
-                />
-              </label>
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Telefon (optional)</span>
+                <span className="dashboard-field-label">Telefonnummer des Unternehmens (optional)</span>
                 <Input
                   value={profileForm.phone}
                   onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
@@ -929,143 +971,243 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                 />
               </label>
             </div>
-            <div className="setup-module-card dashboard-stack dashboard-stack--sm">
-              <StepIntro
-                title="Ziel und Verhalten"
-                description="Wähle Branche, Ton und gewünschtes Ergebnis der Gespräche."
-                explanation="Diese Angaben steuern, ob der Chatbot eher berät, Support gibt oder Anfragen vorbereitet."
-                status={statusForWizardStep(serverStatus, "profile")}
-                statusLabel={wizardStepStatusLabel(serverStatus, "profile")}
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">Support-E-Mail (optional)</span>
+              <Input
+                type="email"
+                value={profileForm.supportEmail}
+                onChange={(event) => setProfileForm((current) => ({ ...current, supportEmail: event.target.value }))}
+                placeholder="support@kunde.de"
               />
-              <div className="dashboard-grid dashboard-grid--two">
-                <label className="dashboard-field">
-                  <span className="dashboard-field-label">Branche (Pflicht)</span>
-                  <Select
-                    value={profileForm.industry}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, industry: event.target.value }))}
-                  >
-                    <option value="">Bitte wählen</option>
-                    {templates.map((template) => (
-                      <option key={template.key} value={template.key}>
-                        {template.label}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-                <div className="setup-template-panel">
-                  <strong>{selectedTemplate?.label || "Noch keine Vorlage ausgewählt"}</strong>
-                  <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-                    {site.templateId
-                      ? `Vorlage angewendet am ${formatDate(site.templateAppliedAt)}`
-                      : "Eine Vorlage setzt passende Startwerte für Ziel, Ton und typische Fragen."}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={applyIndustryTemplate}
-                    disabled={savingKey === "template" || !profileForm.industry}
-                  >
-                    {savingKey === "template" ? "Wendet an..." : "Vorlage anwenden"}
-                  </Button>
-                </div>
-              </div>
-              <div className="dashboard-grid dashboard-grid--two">
-                <label className="dashboard-field">
-                <span className="dashboard-field-label">Ziel des Chatbots (Pflicht)</span>
-                  <Select
-                    value={goalForm.primaryGoal}
-                    onChange={(event) =>
-                      setGoalForm((current) => ({
-                        ...current,
-                        primaryGoal: event.target.value as SiteDetails["primaryGoal"],
-                      }))
-                    }
-                  >
-                    {GOAL_OPTIONS.map((option) => (
-                      <option key={option.value || "empty"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="dashboard-field">
-                <span className="dashboard-field-label">Tonalität (Pflicht)</span>
-                  <Select
-                    value={goalForm.tone}
-                    onChange={(event) =>
-                      setGoalForm((current) => ({ ...current, tone: event.target.value as SiteDetails["tone"] }))
-                    }
-                  >
-                    {TONE_OPTIONS.map((option) => (
-                      <option key={option.value || "empty"} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-              </div>
-              <div className="dashboard-grid dashboard-grid--two">
-                <label className="dashboard-field">
-                  <span className="dashboard-field-label">Antwortverhalten mit Wissen</span>
-                  <Select
-                    value={goalForm.knowledgeMode}
-                    onChange={(event) =>
-                      setGoalForm((current) => ({ ...current, knowledgeMode: event.target.value as KnowledgeMode }))
-                    }
-                  >
-                    {KNOWLEDGE_MODE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-                <label className="dashboard-field">
-                  <span className="dashboard-field-label">Wenn der Chatbot unsicher ist</span>
-                  <Select
-                    value={goalForm.fallbackBehavior}
-                    onChange={(event) =>
-                      setGoalForm((current) => ({
-                        ...current,
-                        fallbackBehavior: event.target.value as FallbackBehavior,
-                      }))
-                    }
-                  >
-                    {FALLBACK_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-              </div>
-              <label className="dashboard-field">
-                <span className="dashboard-field-label">Nächster Schritt für Besucher (optional)</span>
-                <Input
-                  value={goalForm.ctaText}
-                  onChange={(event) => setGoalForm((current) => ({ ...current, ctaText: event.target.value }))}
-                  placeholder="Kontakt aufnehmen, Termin vereinbaren, Anfrage aufnehmen"
-                />
-              </label>
-              <details className="dashboard-accordion">
-                <summary className="dashboard-accordion__summary">Erweiterte Gesprächsregel</summary>
-                <div className="dashboard-accordion__content">
-                  <label className="dashboard-field">
-                    <span className="dashboard-field-label">Interne Gesprächsregel (optional)</span>
-                    <textarea
-                      className="dashboard-textarea"
-                      rows={4}
-                      value={goalForm.systemPrompt}
-                      onChange={(event) => setGoalForm((current) => ({ ...current, systemPrompt: event.target.value }))}
-                      placeholder="Beispiel: Stelle maximal eine Rückfrage, bleibe professionell und leite bei konkretem Interesse zur Kontaktaufnahme."
-                    />
-                  </label>
-                </div>
-              </details>
-            </div>
+            </label>
           </section>
         );
 
+      case "bot":
+        return (
+          <section className="dashboard-card dashboard-stack" id="setup-step-industry">
+            <StepIntro
+              title="Branche & Bot-Typ"
+              description="Wähle das Branchenpaket und den Bot-Typ für den ersten Use Case."
+              explanation={STEP_EXPLANATIONS.bot}
+              status={statusForWizardStep(serverStatus, "bot")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "bot")}
+            />
+            <div className="dashboard-grid dashboard-grid--two">
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Branche (Pflicht)</span>
+                <Select
+                  value={profileForm.industry}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, industry: event.target.value }))}
+                >
+                  <option value="">Bitte wählen</option>
+                  {templates.map((template) => (
+                    <option key={template.key} value={template.key}>
+                      {template.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Bot-Typ</span>
+                <Select
+                  value={goalForm.botType}
+                  onChange={(event) => setGoalForm((current) => ({ ...current, botType: event.target.value }))}
+                >
+                  <option value="handwerker-first-contact">Handwerker-Erstkontakt</option>
+                </Select>
+                <span className="dashboard-field-hint">
+                  Erfasst Problem, Ort, Dringlichkeit und Kontaktdaten und sendet die Anfrage per E-Mail.
+                </span>
+              </label>
+            </div>
+            <div className="setup-template-panel">
+              <strong>{selectedTemplate?.label || "Noch keine Vorlage ausgewählt"}</strong>
+              <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                {selectedTemplate?.description ||
+                  (site.templateId
+                  ? `Vorlage angewendet am ${formatDate(site.templateAppliedAt)}`
+                    : "Die Vorlage setzt formelle Texte, Standardflow und passende Module.")}
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={applyIndustryTemplate}
+                disabled={savingKey === "template" || !profileForm.industry}
+              >
+                {savingKey === "template" ? "Wendet an..." : "Vorlage anwenden"}
+              </Button>
+            </div>
+            <details className="dashboard-accordion">
+              <summary className="dashboard-accordion__summary">Erweitert: Ziel und Ton</summary>
+              <div className="dashboard-accordion__content dashboard-stack dashboard-stack--sm">
+                <div className="dashboard-grid dashboard-grid--two">
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Ziel des Chatbots</span>
+                    <Select
+                      value={goalForm.primaryGoal}
+                      onChange={(event) =>
+                        setGoalForm((current) => ({
+                          ...current,
+                          primaryGoal: event.target.value as SiteDetails["primaryGoal"],
+                        }))
+                      }
+                    >
+                      {GOAL_OPTIONS.map((option) => (
+                        <option key={option.value || "empty"} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Tonalität</span>
+                    <Select
+                      value={goalForm.tone}
+                      onChange={(event) =>
+                        setGoalForm((current) => ({ ...current, tone: event.target.value as SiteDetails["tone"] }))
+                      }
+                    >
+                      {TONE_OPTIONS.map((option) => (
+                        <option key={option.value || "empty"} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                </div>
+                <div className="dashboard-grid dashboard-grid--two">
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Antwortverhalten mit Wissen</span>
+                    <Select
+                      value={goalForm.knowledgeMode}
+                      onChange={(event) =>
+                        setGoalForm((current) => ({ ...current, knowledgeMode: event.target.value as KnowledgeMode }))
+                      }
+                    >
+                      {KNOWLEDGE_MODE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="dashboard-field">
+                    <span className="dashboard-field-label">Wenn der Chatbot unsicher ist</span>
+                    <Select
+                      value={goalForm.fallbackBehavior}
+                      onChange={(event) =>
+                        setGoalForm((current) => ({
+                          ...current,
+                          fallbackBehavior: event.target.value as FallbackBehavior,
+                        }))
+                      }
+                    >
+                      {FALLBACK_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                </div>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Nächster Schritt für Besucher</span>
+                  <Input
+                    value={goalForm.ctaText}
+                    onChange={(event) => setGoalForm((current) => ({ ...current, ctaText: event.target.value }))}
+                    placeholder="Anfrage aufnehmen"
+                  />
+                </label>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Interne Gesprächsregel</span>
+                  <textarea
+                    className="dashboard-textarea"
+                    rows={4}
+                    value={goalForm.systemPrompt}
+                    onChange={(event) => setGoalForm((current) => ({ ...current, systemPrompt: event.target.value }))}
+                    placeholder="Optionaler System Prompt für Sonderfälle."
+                  />
+                </label>
+              </div>
+            </details>
+          </section>
+        );
+
+      case "delivery":
+        return (
+          <section className="dashboard-card dashboard-stack" id="setup-step-delivery">
+            <StepIntro
+              title="Anfrage-Zustellung"
+              description="Leads werden zuerst gespeichert und danach per E-Mail zugestellt."
+              explanation={STEP_EXPLANATIONS.delivery}
+              status={statusForWizardStep(serverStatus, "delivery")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "delivery")}
+            />
+            <label className="dashboard-checkbox">
+              <input
+                type="checkbox"
+                checked={deliveryForm.leadCaptureEnabled}
+                onChange={(event) =>
+                  setDeliveryForm((current) => ({ ...current, leadCaptureEnabled: event.target.checked }))
+                }
+              />
+              <span>Lead-Erfassung aktiv</span>
+            </label>
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">Lead-Empfänger-E-Mail</span>
+              <Input
+                type="email"
+                value={deliveryForm.leadNotificationEmail}
+                onChange={(event) =>
+                  setDeliveryForm((current) => ({ ...current, leadNotificationEmail: event.target.value }))
+                }
+                placeholder="info@unternehmen.de"
+              />
+              <span className="dashboard-field-hint">
+                An diese Adresse werden neue Kundenanfragen aus dem Chat gesendet. Das ist nicht die E-Mail des Besuchers.
+              </span>
+            </label>
+            <p className={deliveryForm.leadNotificationEmail ? "dashboard-status dashboard-status--success" : "dashboard-status dashboard-status--warning"}>
+              {deliveryForm.leadNotificationEmail ? "E-Mail eingerichtet" : "E-Mail fehlt"}
+            </p>
+          </section>
+        );
+
+      case "flow":
+        return (
+          <section className="dashboard-card dashboard-stack" id="setup-step-flow">
+            <StepIntro
+              title="Gesprächsablauf"
+              description="Standardflow für Handwerker und lokale Dienstleister."
+              explanation={STEP_EXPLANATIONS.flow}
+              status={statusForWizardStep(serverStatus, "flow")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "flow")}
+            />
+            <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+              <strong>Handwerker-Erstkontakt</strong>
+              <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                Problem → Ort/PLZ/Adresse → Dringlichkeit → Telefonnummer → Name → Zusammenfassung
+              </p>
+            </div>
+            <div className="dashboard-grid dashboard-grid--metrics-3">
+              {["Problem erfassen", "Einsatzort klären", "Dringlichkeit erfassen", "Telefonnummer erfragen", "Name erfragen", "Anfrage speichern"].map((item) => (
+                <CompactMetricCard key={item} label="Schritt" value={item} />
+              ))}
+            </div>
+            <details className="dashboard-accordion">
+              <summary className="dashboard-accordion__summary">Erweitert: technische Gesprächsregeln öffnen</summary>
+              <div className="dashboard-accordion__content">
+                <p className="dashboard-copy dashboard-copy--muted">
+                  Triggerwörter, Branch-IDs und der Conversation-Flow-Editor bleiben verfügbar, sind aber nicht Teil des Standard-Onboardings.
+                </p>
+                <Link href={`/sites/${siteSlug}/widget`} className="dashboard-button dashboard-button--secondary">
+                  Erweiterte Widget-Einstellungen öffnen
+                </Link>
+              </div>
+            </details>
+          </section>
+        );
       case "knowledge":
         return (
           <section className="dashboard-card dashboard-stack" id="setup-step-knowledge">
@@ -1268,6 +1410,24 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                     </Select>
                   </label>
                 </div>
+                <label className="dashboard-field">
+                  <span className="dashboard-field-label">Datenschutzlink (Pflicht)</span>
+                  <Input
+                    value={designForm.privacyUrl}
+                    onChange={(event) => setDesignForm((current) => ({ ...current, privacyUrl: event.target.value }))}
+                    placeholder="https://www.kunde.de/datenschutz"
+                  />
+                </label>
+                <label className="dashboard-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={designForm.consentRequired}
+                    onChange={(event) =>
+                      setDesignForm((current) => ({ ...current, consentRequired: event.target.checked }))
+                    }
+                  />
+                  <span>Consent aktiv</span>
+                </label>
                 <details className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
                   <summary className="dashboard-accordion__summary">Optionale Designfelder</summary>
                   <label className="dashboard-field">
@@ -1276,14 +1436,6 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                       value={designForm.logoUrl}
                       onChange={(event) => setDesignForm((current) => ({ ...current, logoUrl: event.target.value }))}
                       placeholder="https://..."
-                    />
-                  </label>
-                  <label className="dashboard-field">
-                    <span className="dashboard-field-label">Datenschutz-URL (empfohlen)</span>
-                    <Input
-                      value={designForm.privacyUrl}
-                      onChange={(event) => setDesignForm((current) => ({ ...current, privacyUrl: event.target.value }))}
-                      placeholder="https://www.kunde.de/datenschutz"
                     />
                   </label>
                   <label className="dashboard-field">
@@ -1327,20 +1479,20 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
           </section>
         );
 
-      case "test":
+      case "launch":
         return (
-          <section className="dashboard-card dashboard-stack" id="setup-step-test">
+          <section className="dashboard-card dashboard-stack" id="setup-step-live">
             <StepIntro
-              title="Chat testen"
-              description="Teste echte Besucherfragen, bevor der Chatbot auf die Website kommt."
-              explanation={STEP_EXPLANATIONS.test}
-              status={statusForWizardStep(serverStatus, "test")}
-              statusLabel={wizardStepStatusLabel(serverStatus, "test")}
+              title="Website einbinden"
+              description="Kopiere den Script-Code, prüfe die Domain und schalte den Chatbot live."
+              explanation={STEP_EXPLANATIONS.launch}
+              status={statusForWizardStep(serverStatus, "launch")}
+              statusLabel={wizardStepStatusLabel(serverStatus, "launch")}
             />
-            <div className="setup-module-card dashboard-stack dashboard-stack--sm">
-              <h3 className="dashboard-card-title dashboard-card-title--sm">Test-Chat</h3>
+            <div className="setup-module-card dashboard-stack dashboard-stack--sm" id="customer-test-chat">
+              <h3 className="dashboard-card-title dashboard-card-title--sm">Test & Testlead</h3>
               <div className="dashboard-inline dashboard-wrap">
-                {testQuestionChips.slice(0, 3).map((question) => (
+                {["Was kostet eine Rohrreinigung?", "Meine Toilette ist verstopft", "Ich möchte zurückgerufen werden"].map((question) => (
                   <Button key={question} type="button" variant="secondary" onClick={() => setTestQuestion(question)}>
                     {question}
                   </Button>
@@ -1348,7 +1500,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
               </div>
               <div className="dashboard-stack dashboard-stack--sm">
                 {testMessages.length === 0 ? (
-                  <EmptyStateCard title="Noch kein Test gestartet" description="Wähle eine Beispielfrage oder schreibe eine eigene Frage." />
+                  <EmptyStateCard title="Noch kein Test gestartet" description="Teste Preisfrage, Problemflow, Rückrufwunsch und sensible Daten." />
                 ) : (
                   testMessages.map((entry, index) => (
                     <div key={`${entry.role}-${index}`} className="dashboard-card dashboard-card--compact">
@@ -1377,83 +1529,6 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
                 Letzter Test: {formatDate(site.lastTestedAt)}
               </p>
             </div>
-          </section>
-        );
-
-      case "agents":
-        return (
-          <section className="dashboard-card dashboard-stack" id="setup-step-agents">
-            <StepIntro
-              title="Automatische Aktionen aktivieren"
-              description="Starte mit dem Lead-Agent. Weitere Agenten kannst du später ergänzen."
-              explanation={STEP_EXPLANATIONS.agents}
-              status={statusForWizardStep(serverStatus, "agents")}
-              statusLabel={wizardStepStatusLabel(serverStatus, "agents")}
-            />
-            <div className="setup-agent-grid">
-              {[
-                {
-                  title: "Lead-Agent",
-                  text: "Erkennt konkrete Anfragen und bereitet neue Kontakte vor.",
-                  href: `/sites/${siteSlug}/modules`,
-                  status: "Über Funktionen aktivieren",
-                },
-                {
-                  title: "Termin-/Kontakt-Agent",
-                  text: "Bereitet Rückruf, Terminwunsch oder Kontaktaufnahme vor.",
-                  href: `/sites/${siteSlug}/widget`,
-                  status: "Kontaktziel prüfen",
-                },
-                {
-                  title: "E-Commerce-Agent",
-                  text: "Berät später zu Produkten und Shop-Fragen.",
-                  href: `/sites/${siteSlug}/agents`,
-                  status: "Optional",
-                },
-                {
-                  title: "IT-Support-/Ticket-Agent",
-                  text: "Erkennt Supportfälle und bereitet Tickets vor.",
-                  href: `/sites/${siteSlug}/agents`,
-                  status: "Optional",
-                },
-                {
-                  title: "Webhook-/Übergabe-Agent",
-                  text: "Übergibt wichtige Ereignisse an Verbindungen oder Menschen.",
-                  href: `/sites/${siteSlug}/integrations`,
-                  status: "Verbindungen prüfen",
-                },
-              ].map((agent) => (
-                <Link key={agent.title} href={agent.href} className="setup-agent-card">
-                  <span className="dashboard-badge">{agent.status}</span>
-                  <strong>{agent.title}</strong>
-                  <span>{agent.text}</span>
-                </Link>
-              ))}
-            </div>
-            <div className="dashboard-inline dashboard-wrap">
-              <Link href={`/sites/${siteSlug}/modules`} className="dashboard-button dashboard-button--secondary">
-                Funktionen aktivieren
-              </Link>
-              <Link href={`/sites/${siteSlug}/agents`} className="dashboard-button dashboard-button--secondary">
-                Agenten ansehen
-              </Link>
-              <Link href={`/sites/${siteSlug}/integrations`} className="dashboard-button dashboard-button--secondary">
-                Verbindungen öffnen
-              </Link>
-            </div>
-          </section>
-        );
-
-      case "launch":
-        return (
-          <section className="dashboard-card dashboard-stack" id="setup-step-live">
-            <StepIntro
-              title="Website einbinden"
-              description="Kopiere den Script-Code, prüfe die Domain und schalte den Chatbot live."
-              explanation={STEP_EXPLANATIONS.launch}
-              status={statusForWizardStep(serverStatus, "launch")}
-              statusLabel={wizardStepStatusLabel(serverStatus, "launch")}
-            />
             <div className="setup-module-card dashboard-stack dashboard-stack--sm">
               <h3 className="dashboard-card-title dashboard-card-title--sm">Einbindung</h3>
               <div className="dashboard-info-row">
@@ -1532,7 +1607,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
           <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
             <div>
               <h2 className="dashboard-card-title">Setup-Assistent</h2>
-              <p className="dashboard-copy dashboard-copy--muted">Führe den Kunden in sechs klaren Modulen bis zur Website-Einbindung.</p>
+              <p className="dashboard-copy dashboard-copy--muted">Führe den Kunden in sieben klaren Schritten bis zu Test und Go-Live.</p>
             </div>
             <CustomerStatusBadge
               status={serverStatus ? mapStatusSeverityToTone(serverStatus.severity) : mapOverallStatusToTone(overallStatus)}

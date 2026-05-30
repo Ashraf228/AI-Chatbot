@@ -227,6 +227,11 @@ export class UpdateWidgetConfigDto {
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))
+  @IsIn(['handwerker-first-contact'])
+  botType?: 'handwerker-first-contact';
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeOptionalString(value))
   @IsIn(['professional', 'friendly', 'consultative', 'premium', 'direct'])
   tone?: 'professional' | 'friendly' | 'consultative' | 'premium' | 'direct';
 

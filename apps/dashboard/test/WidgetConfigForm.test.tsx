@@ -54,7 +54,10 @@ describe("WidgetConfigForm", () => {
     expect(screen.getByText("Live-Vorschau")).toBeInTheDocument();
     expect(screen.getByText("Einstieg / Klärung")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Verhalten speichern" }));
+    const leadEmailField = screen.getByPlaceholderText("info@unternehmen.de");
+    await user.clear(leadEmailField);
+    await user.type(leadEmailField, "info@unternehmen.de");
+    await user.click(screen.getByRole("button", { name: "Widget-Konfiguration speichern" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenNthCalledWith(
@@ -73,6 +76,7 @@ describe("WidgetConfigForm", () => {
     expect(payload.conversationFlow.questions.opening).toBe(
       "Geht es bei dir eher um ein akutes Problem, eine Rückfrage zu einem Vorgang oder allgemeine Hilfe?",
     );
+    expect(payload.leadNotificationEmail).toBe("info@unternehmen.de");
     expect(payload.conversationFlow.triggers.qualifiedNeed).toContain("problem");
     expect(payload.conversationFlow.states).toEqual(
       expect.arrayContaining([

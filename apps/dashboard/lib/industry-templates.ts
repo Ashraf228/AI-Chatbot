@@ -15,11 +15,14 @@ export type IndustryTemplate = {
   key: string;
   version: number;
   label: string;
+  description?: string;
   setupGoal: "lead_capture" | "support" | "product_advice" | "appointments";
+  botType?: string;
   welcomeMessage: string;
   systemPrompt: string;
   tone?: "professional" | "friendly" | "consultative";
   ctaText?: string;
+  launcherLabel?: string;
   recommendedQuestions: Record<string, string[]>;
   topTestQuestions?: string[];
   reportKpis?: string[];

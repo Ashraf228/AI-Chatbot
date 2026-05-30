@@ -20,11 +20,14 @@ export type IndustryTemplate = {
   key: string;
   version: number;
   label: string;
+  description?: string;
   setupGoal: 'lead_capture' | 'support' | 'product_advice' | 'appointments';
+  botType?: string;
   welcomeMessage: string;
   systemPrompt: string;
   tone: 'professional' | 'friendly' | 'consultative';
   ctaText: string;
+  launcherLabel?: string;
   recommendedQuestions: Record<string, string[]>;
   topTestQuestions: string[];
   reportKpis: string[];
@@ -45,7 +48,81 @@ function baseModules(overrides: Partial<Record<string, SiteModulePatch>>) {
   return Object.entries(defaults).map(([key, value]) => overrides[key] ?? value);
 }
 
+const LOCAL_SERVICE_FIRST_CONTACT_FLOW: LocalServiceIntakeFlowConfig = {
+  ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  templateKey: 'local-service-first-contact',
+  subIndustry: 'local_service',
+  requiredFields: ['problem', 'location', 'urgency', 'phone', 'name'],
+  questionOrder: ['problem', 'location', 'urgency', 'phone', 'name'],
+  questionTexts: {
+    ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.questionTexts,
+    problem: 'Was genau ist passiert?',
+    location: 'In welchem Ort, welcher PLZ oder welcher Adresse wird Hilfe benötigt?',
+    urgency: 'Wie dringend ist es aktuell - Notfall, heute noch oder Terminwunsch?',
+    phone: 'Unter welcher Telefonnummer kann das Unternehmen Sie zurückrufen?',
+    name: 'Auf welchen Namen dürfen wir die Anfrage aufnehmen?',
+    callback: 'Gerne. Geht es um einen akuten Notfall oder um eine allgemeine Anfrage?',
+  },
+  pricingAnswerTemplate:
+    'Die Kosten hängen vom Aufwand, dem betroffenen Problem und der Dringlichkeit ab. Eine genaue Einschätzung ist nach kurzer Problembeschreibung möglich.',
+};
+
 export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
+  'local-service-first-contact': {
+    key: 'local-service-first-contact',
+    version: 1,
+    label: 'Handwerker / Erstkontakt',
+    description:
+      'Erfasst Anliegen, Einsatzort, Dringlichkeit und Kontaktdaten und sendet die Anfrage an das Unternehmen.',
+    setupGoal: 'lead_capture',
+    botType: 'handwerker-first-contact',
+    welcomeMessage: 'Guten Tag. Beschreiben Sie kurz, was passiert ist.',
+    systemPrompt:
+      'Führen Sie einen formellen Erstkontakt für Handwerker und lokale Dienstleister. Erfassen Sie nacheinander Problem, Einsatzort, Dringlichkeit, Telefonnummer und Name. Verwenden Sie konsequent Sie-Ansprache. Vermeiden Sie Begriffe wie Projekt, Automatisierung oder Business-Prozess.',
+    tone: 'professional',
+    ctaText: 'Soforthilfe',
+    launcherLabel: 'Soforthilfe',
+    recommendedQuestions: {
+      '/': [
+        'Was kostet ein Einsatz?',
+        'Ich brauche dringend Hilfe.',
+        'Ich möchte zurückgerufen werden.',
+      ],
+    },
+    topTestQuestions: [
+      'Was kostet eine Rohrreinigung?',
+      'Meine Toilette ist verstopft',
+      'Ich möchte zurückgerufen werden',
+    ],
+    reportKpis: ['startedChats', 'leads', 'leadRate', 'topQuestions'],
+    brandingDefaults: {
+      brandColor: '#b55400',
+      accentColor: '#fff0d9',
+      fontFamily: 'system',
+      botName: 'Service-Assistent',
+    },
+    conversationFlow: LOCAL_SERVICE_FIRST_CONTACT_FLOW,
+    modules: baseModules({
+      'lead-sales': {
+        key: 'lead-sales',
+        isEnabled: true,
+        config: {
+          primaryGoal: 'lead_capture',
+          ctaLabel: 'Soforthilfe',
+          ctaDescription: 'Wir nehmen Problem, Einsatzort, Dringlichkeit und Kontaktdaten auf.',
+          qualificationFocus:
+            'Kläre Problem, Einsatzort, Dringlichkeit, Telefonnummer und Name in einer Frage nach der anderen.',
+          handoffInstruction:
+            'Frage erst nach Problem, Einsatzort und Dringlichkeit, danach nach Telefonnummer und Name. Schließe erst ab, wenn alle Pflichtfelder vorhanden sind.',
+          intakeFlow: LOCAL_SERVICE_FIRST_CONTACT_FLOW,
+        },
+      },
+      'knowledge-faq': { key: 'knowledge-faq', isEnabled: true },
+      'reporting-insights': { key: 'reporting-insights', isEnabled: true },
+      'ecommerce-product-advisor': { key: 'ecommerce-product-advisor', isEnabled: false },
+      'property-ticketing': { key: 'property-ticketing', isEnabled: false },
+    }),
+  },
   'local-services': {
     key: 'local-services',
     version: 1,

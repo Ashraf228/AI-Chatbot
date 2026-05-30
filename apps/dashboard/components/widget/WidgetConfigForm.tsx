@@ -707,6 +707,30 @@ function updateFlowStates(flow: ConversationFlowForm, states: ConversationFlowSt
   };
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function formatSimpleSuggestedQuestions(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+
+  const rootQuestions = (value as Record<string, unknown>)["/"];
+  if (!Array.isArray(rootQuestions)) {
+    return "";
+  }
+
+  return rootQuestions.filter((entry): entry is string => typeof entry === "string").join("\n");
+}
+
+function parseSimpleSuggestedQuestions(value: string) {
+  return value
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
   const [form, setForm] = useState({
     siteKey: "",
@@ -718,6 +742,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     leadCaptureEnabled: true,
     leadNotificationEmail: "",
     allowedDomains: "",
+    simpleSuggestedQuestions: "Was kostet der Service?",
     suggestedQuestionsByPath: "{\n  \"/\": [\"Was kostet der Service?\"]\n}",
     conversationFlow: mergeConversationFlow(DEFAULT_CONVERSATION_FLOW),
   });
@@ -738,6 +763,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         return;
       }
 
+      const suggestedQuestionsByPath = data.suggestedQuestionsByPath || {};
       setForm({
         siteKey: data.siteKey || siteId,
         domain: data.domain || "",
@@ -748,7 +774,8 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
         leadCaptureEnabled: data.leadCaptureEnabled ?? true,
         leadNotificationEmail: data.leadNotificationEmail || "",
         allowedDomains: (data.allowedDomains || []).join(", "),
-        suggestedQuestionsByPath: JSON.stringify(data.suggestedQuestionsByPath || {}, null, 2),
+        simpleSuggestedQuestions: formatSimpleSuggestedQuestions(suggestedQuestionsByPath),
+        suggestedQuestionsByPath: JSON.stringify(suggestedQuestionsByPath, null, 2),
         conversationFlow: mergeConversationFlow(data.conversationFlow),
       });
       setLoading(false);
@@ -762,13 +789,28 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
     setMessage(null);
     setError(null);
 
+    const leadNotificationEmail = form.leadNotificationEmail.trim();
+    if (leadNotificationEmail && !isValidEmail(leadNotificationEmail)) {
+      setError("Bitte eine gültige Lead-Empfänger-E-Mail eintragen.");
+      setSaving(false);
+      return;
+    }
+
     let suggestedQuestionsByPath: Record<string, string[]>;
     try {
       suggestedQuestionsByPath = JSON.parse(form.suggestedQuestionsByPath || "{}");
     } catch {
-      setError("Suggested Questions muessen gueltiges JSON sein.");
+      setError("Raw Suggested Questions JSON muss gültiges JSON sein.");
       setSaving(false);
       return;
+    }
+
+    const simpleSuggestedQuestions = parseSimpleSuggestedQuestions(form.simpleSuggestedQuestions);
+    if (simpleSuggestedQuestions.length > 0) {
+      suggestedQuestionsByPath = {
+        ...suggestedQuestionsByPath,
+        "/": simpleSuggestedQuestions,
+      };
     }
 
     const payload = {
@@ -779,7 +821,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
       isActive: form.isActive,
       consentRequired: form.consentRequired,
       leadCaptureEnabled: form.leadCaptureEnabled,
-      leadNotificationEmail: form.leadNotificationEmail.trim() || undefined,
+      leadNotificationEmail: leadNotificationEmail || undefined,
       allowedDomains: form.allowedDomains
         .split(",")
         .map((item) => item.trim())
@@ -811,35 +853,12 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
 
   return (
     <div className="dashboard-card">
-      <h2 className="dashboard-card-title">Verhalten & Einbindung</h2>
+      <h2 className="dashboard-card-title">Widget-Konfiguration</h2>
       <div className="dashboard-stack">
-        <Field
-          label="Kundenschlüssel"
-          value={form.siteKey}
-          onChange={(value) => setForm({ ...form, siteKey: value })}
+        <SectionTitle
+          title="Standard-Einstellungen"
+          text="Diese Felder reichen für den normalen Handwerker-Erstkontakt."
         />
-        <Field label="Primäre Domain" value={form.domain} onChange={(value) => setForm({ ...form, domain: value })} />
-        <Field
-          label="Erlaubte Domains (kommagetrennt)"
-          value={form.allowedDomains}
-          onChange={(value) => setForm({ ...form, allowedDomains: value })}
-        />
-        <Field
-          label="Widget Bundle URL"
-          value={form.widgetBundleUrl}
-          onChange={(value) => setForm({ ...form, widgetBundleUrl: value })}
-        />
-        <label className="dashboard-field">
-          <span className="dashboard-field-label">System Prompt</span>
-          <textarea
-            className="dashboard-textarea"
-            value={form.systemPrompt}
-            onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
-            placeholder="Optionaler kundenspezifischer Systemprompt. Leer lassen = globaler Standard."
-            style={{ minHeight: 200 }}
-          />
-        </label>
-
         <label className="dashboard-checkbox">
           <input
             type="checkbox"
@@ -849,31 +868,81 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
           <span>Widget aktiv</span>
         </label>
 
-        <ConsentSettings
-          checked={form.consentRequired}
-          onChange={(value) => setForm({ ...form, consentRequired: value })}
-        />
         <LeadFlowSettings
           checked={form.leadCaptureEnabled}
           onChange={(value) => setForm({ ...form, leadCaptureEnabled: value })}
         />
-        <Field
-          label="Lead-Benachrichtigung E-Mail"
-          value={form.leadNotificationEmail}
-          onChange={(value) => setForm({ ...form, leadNotificationEmail: value })}
+        <label className="dashboard-field">
+          <span className="dashboard-field-label">Lead-Empfänger-E-Mail</span>
+          <Input
+            type="email"
+            value={form.leadNotificationEmail}
+            onChange={(e) => setForm({ ...form, leadNotificationEmail: e.target.value })}
+            placeholder="info@unternehmen.de"
+          />
+          <span className="dashboard-field-hint">
+            An diese Adresse werden neue Kundenanfragen aus dem Chat gesendet.
+          </span>
+        </label>
+        <ConsentSettings
+          checked={form.consentRequired}
+          onChange={(value) => setForm({ ...form, consentRequired: value })}
         />
-        <SuggestedQuestionsEditor
-          value={form.suggestedQuestionsByPath}
-          onChange={(value) => setForm({ ...form, suggestedQuestionsByPath: value })}
-        />
+        <label className="dashboard-field">
+          <span className="dashboard-field-label">Suggested Questions</span>
+          <textarea
+            className="dashboard-textarea"
+            rows={4}
+            value={form.simpleSuggestedQuestions}
+            onChange={(e) => setForm({ ...form, simpleSuggestedQuestions: e.target.value })}
+            placeholder={"Was kostet eine Rohrreinigung?\nIch brauche Notdienst\nIch möchte zurückgerufen werden"}
+          />
+          <span className="dashboard-field-hint">Eine Frage pro Zeile. Wird für den Standardpfad des Widgets gespeichert.</span>
+        </label>
 
-        <ConversationFlowEditor
-          value={form.conversationFlow}
-          onChange={(conversationFlow) => setForm({ ...form, conversationFlow })}
-        />
+        <details className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+          <summary className="dashboard-accordion__summary">Erweitert: technische Einstellungen</summary>
+          <div className="dashboard-stack dashboard-stack--sm dashboard-mt-14">
+            <Field
+              label="Kundenschlüssel"
+              value={form.siteKey}
+              onChange={(value) => setForm({ ...form, siteKey: value })}
+            />
+            <Field label="Primäre Domain" value={form.domain} onChange={(value) => setForm({ ...form, domain: value })} />
+            <Field
+              label="Erlaubte Domains (kommagetrennt)"
+              value={form.allowedDomains}
+              onChange={(value) => setForm({ ...form, allowedDomains: value })}
+            />
+            <Field
+              label="Widget Bundle URL"
+              value={form.widgetBundleUrl}
+              onChange={(value) => setForm({ ...form, widgetBundleUrl: value })}
+            />
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">System Prompt</span>
+              <textarea
+                className="dashboard-textarea"
+                value={form.systemPrompt}
+                onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
+                placeholder="Optionaler kundenspezifischer Systemprompt. Leer lassen = globaler Standard."
+                style={{ minHeight: 200 }}
+              />
+            </label>
+            <SuggestedQuestionsEditor
+              value={form.suggestedQuestionsByPath}
+              onChange={(value) => setForm({ ...form, suggestedQuestionsByPath: value })}
+            />
+
+            <ConversationFlowEditor
+              value={form.conversationFlow}
+              onChange={(conversationFlow) => setForm({ ...form, conversationFlow })}
+            />
+          </div>
+        </details>
 
         <Button onClick={save} disabled={saving}>
-          {saving ? "Speichert..." : "Verhalten speichern"}
+          {saving ? "Speichert..." : "Widget-Konfiguration speichern"}
         </Button>
         {message && <p className="dashboard-status dashboard-status--success">{message}</p>}
         {error && <ErrorState message={error} />}

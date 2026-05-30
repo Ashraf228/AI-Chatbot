@@ -45,6 +45,8 @@ type SiteConfig = {
   knowledgeMode?: 'flexible' | 'grounded' | 'strict';
   systemPrompt?: string;
   ctaText?: string;
+  leadCaptureEnabled?: boolean;
+  leadNotificationEmail?: string;
   templateId?: string;
   templateAppliedAt?: string;
   isActive?: boolean;
@@ -58,6 +60,7 @@ export type CustomerStatusStepKey =
   | 'template'
   | 'knowledge'
   | 'behavior'
+  | 'lead_delivery'
   | 'design'
   | 'embed'
   | 'test'
@@ -163,6 +166,8 @@ export class SiteStatusService {
       (input.config.primaryGoal || input.config.setupGoal) &&
         (input.config.systemPrompt || input.config.ctaText || input.config.welcomeMessage),
     );
+    const leadDeliveryDone =
+      input.config.leadCaptureEnabled === false || Boolean(input.config.leadNotificationEmail);
     const designVisualDone = isDesignConfigured(input.config);
     const privacyDone = Boolean(input.config.privacyUrl);
     const designDone = Boolean(designVisualDone && privacyDone);
@@ -174,6 +179,7 @@ export class SiteStatusService {
       templateDone,
       knowledgeDone,
       behaviorDone,
+      leadDeliveryDone,
       designDone,
       embedDone,
       testDone,
@@ -183,6 +189,7 @@ export class SiteStatusService {
       templateDone,
       knowledgeDone,
       behaviorDone,
+      leadDeliveryDone,
       designVisualDone,
       privacyDone,
       designDone,
@@ -195,7 +202,7 @@ export class SiteStatusService {
     const missingSteps = steps
       .filter((step) => step.key !== 'live' && step.status !== 'complete')
       .map((step) => step.key);
-    const totalChecks = 7;
+    const totalChecks = 8;
     const completedChecks = totalChecks - missingSteps.length;
     const progress = Math.round((completedChecks / totalChecks) * 100);
     const isLiveReady = preLiveReady;
@@ -228,7 +235,7 @@ export class SiteStatusService {
       });
     }
 
-    if (!basicsDone || !templateDone || !behaviorDone) {
+    if (!basicsDone || !templateDone || !behaviorDone || !leadDeliveryDone) {
       return this.toStatus({
         siteId: input.siteId,
         code: 'setup_incomplete',
@@ -356,6 +363,7 @@ export class SiteStatusService {
       templateDone: boolean;
       knowledgeDone: boolean;
       behaviorDone: boolean;
+      leadDeliveryDone: boolean;
       designVisualDone: boolean;
       privacyDone: boolean;
       designDone: boolean;
@@ -394,17 +402,27 @@ export class SiteStatusService {
         missingReason: checks.knowledgeDone ? undefined : 'Mindestens eine Wissensquelle fehlt.',
         nextAction: {
           label: 'Wissen hinzufügen',
-          href: `/sites/${siteId}/knowledge`,
+          href: `/sites/${siteId}/setup#setup-step-knowledge`,
         },
       }),
       this.buildStep({
         key: 'behavior',
-        label: 'Verhalten',
+        label: 'Gesprächsablauf',
         status: checks.behaviorDone ? 'complete' : 'incomplete',
-        missingReason: checks.behaviorDone ? undefined : 'Bot-Ziel und Gesprächsverhalten fehlen.',
+        missingReason: checks.behaviorDone ? undefined : 'Bot-Ziel oder Gesprächsablauf fehlt.',
         nextAction: {
-          label: 'Verhalten festlegen',
-          href: `/sites/${siteId}/setup#setup-step-goal`,
+          label: 'Gesprächsablauf prüfen',
+          href: `/sites/${siteId}/setup#setup-step-flow`,
+        },
+      }),
+      this.buildStep({
+        key: 'lead_delivery',
+        label: 'Lead-Zustellung',
+        status: checks.leadDeliveryDone ? 'complete' : 'warning',
+        missingReason: checks.leadDeliveryDone ? undefined : 'Lead-Empfänger-E-Mail fehlt.',
+        nextAction: {
+          label: 'Lead-Empfänger-E-Mail setzen',
+          href: `/sites/${siteId}/setup#setup-step-delivery`,
         },
       }),
       this.buildStep({
@@ -418,7 +436,7 @@ export class SiteStatusService {
             : 'Branding, Farbe oder Begrüßung fehlt.',
         nextAction: {
           label: checks.designVisualDone ? 'Datenschutz-URL setzen' : 'Design prüfen',
-          href: `/sites/${siteId}/branding`,
+          href: `/sites/${siteId}/setup#setup-step-design`,
         },
       }),
       this.buildStep({
@@ -438,7 +456,7 @@ export class SiteStatusService {
         missingReason: checks.testDone ? undefined : 'Test-Chat wurde noch nicht durchgeführt.',
         nextAction: {
           label: 'Test-Chat durchführen',
-          href: `/sites/${siteId}#customer-test-chat`,
+          href: `/sites/${siteId}/setup#customer-test-chat`,
         },
       }),
       this.buildStep({
@@ -481,11 +499,12 @@ export class SiteStatusService {
     const actions: Record<string, CustomerStatusAction> = {
       basics: { key: 'basics', label: 'Firma & Domain ergänzen', href: `/sites/${siteId}/setup#setup-step-basics` },
       template: { key: 'template', label: 'Branche auswählen', href: `/sites/${siteId}/setup#setup-step-industry` },
-      knowledge: { key: 'knowledge', label: 'Wissen hinzufügen', href: `/sites/${siteId}/knowledge` },
-      behavior: { key: 'behavior', label: 'Verhalten festlegen', href: `/sites/${siteId}/setup#setup-step-goal` },
-      design: { key: 'design', label: 'Design und Datenschutz prüfen', href: `/sites/${siteId}/branding` },
+      knowledge: { key: 'knowledge', label: 'Wissen hinzufügen', href: `/sites/${siteId}/setup#setup-step-knowledge` },
+      behavior: { key: 'behavior', label: 'Gesprächsablauf prüfen', href: `/sites/${siteId}/setup#setup-step-flow` },
+      lead_delivery: { key: 'lead_delivery', label: 'Lead-Empfänger-E-Mail setzen', href: `/sites/${siteId}/setup#setup-step-delivery` },
+      design: { key: 'design', label: 'Design und Datenschutz prüfen', href: `/sites/${siteId}/setup#setup-step-design` },
       embed: { key: 'embed', label: 'Einbindung vorbereiten', href: `/sites/${siteId}/embedding` },
-      test: { key: 'test', label: 'Test-Chat durchführen', href: `/sites/${siteId}#customer-test-chat` },
+      test: { key: 'test', label: 'Test-Chat durchführen', href: `/sites/${siteId}/setup#customer-test-chat` },
     };
 
     if (actions[firstMissing]) {

@@ -24,6 +24,7 @@ type SiteConfig = {
   industry?: string;
   setupGoal?: string;
   primaryGoal?: string;
+  botType?: string;
   tone?: string;
   knowledgeMode?: 'flexible' | 'grounded' | 'strict';
   fallbackBehavior?: string;
@@ -147,6 +148,7 @@ export class WidgetAdminSiteService {
       industry: config.industry || '',
       setupGoal: config.setupGoal || '',
       primaryGoal: config.primaryGoal || config.setupGoal || '',
+      botType: config.botType || '',
       tone: config.tone || '',
       knowledgeMode: config.knowledgeMode || 'flexible',
       fallbackBehavior: config.fallbackBehavior || 'ask_followup',
@@ -229,6 +231,7 @@ export class WidgetAdminSiteService {
       industry?: string;
       setupGoal?: string;
       primaryGoal?: string;
+      botType?: string;
       tone?: string;
       knowledgeMode?: 'flexible' | 'grounded' | 'strict';
       fallbackBehavior?: string;
@@ -283,6 +286,7 @@ export class WidgetAdminSiteService {
       industry: payload.industry ?? site.industry,
       setupGoal: payload.setupGoal ?? site.setupGoal,
       primaryGoal: payload.primaryGoal ?? site.primaryGoal,
+      botType: payload.botType ?? site.botType,
       tone: payload.tone ?? site.tone,
       knowledgeMode: payload.knowledgeMode ?? site.knowledgeMode,
       fallbackBehavior: payload.fallbackBehavior ?? site.fallbackBehavior,

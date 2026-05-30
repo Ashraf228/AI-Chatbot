@@ -108,6 +108,7 @@ export class IndustryTemplatesService {
         fillMissingOnly && isSetupGoal(site.setupGoal)
           ? site.setupGoal
           : template.setupGoal,
+      botType: fillMissingOnly && site.botType ? site.botType : template.botType,
       systemPrompt: fillMissingOnly && site.systemPrompt ? site.systemPrompt : template.systemPrompt,
       suggestedQuestionsByPath:
         fillMissingOnly && Object.keys(site.suggestedQuestionsByPath || {}).length > 0
@@ -119,6 +120,7 @@ export class IndustryTemplatesService {
           : template.conversationFlow,
       tone: fillMissingOnly && site.tone ? site.tone : template.tone,
       ctaText: fillMissingOnly && site.ctaText ? site.ctaText : template.ctaText,
+      launcherLabel: fillMissingOnly && site.launcherLabel ? site.launcherLabel : template.launcherLabel,
       reportKpis: fillMissingOnly && site.reportKpis.length > 0 ? site.reportKpis : template.reportKpis,
       topTestQuestions:
         fillMissingOnly && site.topTestQuestions.length > 0

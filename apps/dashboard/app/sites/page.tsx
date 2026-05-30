@@ -71,7 +71,9 @@ export default function SitesPage() {
     tenantId: "",
     name: "",
     domain: "localhost",
-    industry: "",
+    industry: "local-service-first-contact",
+    botType: "handwerker-first-contact",
+    leadNotificationEmail: "",
   });
   const [tenantForm, setTenantForm] = useState({
     id: "",
@@ -215,12 +217,22 @@ export default function SitesPage() {
       return;
     }
 
+    const leadNotificationEmail = form.leadNotificationEmail.trim();
+    if (!isValidEmail(leadNotificationEmail)) {
+      setErr("Bitte eine gültige Lead-Empfänger-E-Mail eintragen.");
+      return;
+    }
+
     const body = {
       siteKey: form.siteKey.trim(),
       tenantId,
       name: form.name.trim(),
       allowedDomains: [form.domain.trim()].filter(Boolean),
-      config: {},
+      config: {
+        botType: form.botType,
+        leadCaptureEnabled: true,
+        leadNotificationEmail,
+      },
     };
 
     const r = await fetch("/api/sites", {
@@ -262,7 +274,9 @@ export default function SitesPage() {
       tenantId,
       name: "",
       domain: "localhost",
-      industry: "",
+      industry: "local-service-first-contact",
+      botType: "handwerker-first-contact",
+      leadNotificationEmail: "",
     });
 
     await loadSites();
@@ -569,4 +583,8 @@ function formatApiError(data: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
