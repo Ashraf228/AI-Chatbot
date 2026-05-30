@@ -555,6 +555,36 @@ test('ChatAgentOrchestratorService treats drain-cleaning site names as local ser
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
 });
 
+test('ChatAgentOrchestratorService keeps default local keywords when stored flow arrays are empty', async () => {
+  const { decide, conversations, leads } = createHarness({
+    siteName: 'Rohrreinigung-ffm24',
+    intakeFlow: {
+      genericLocalServiceKeywords: [],
+      problemKeywords: [],
+      pricingKeywords: [],
+      callbackKeywords: [],
+      questionOrder: [],
+      requiredFields: [],
+      questionTexts: {},
+    },
+  });
+
+  const first = await decide('mein Klo ist verstopft');
+  const location = await decide('65549');
+  const urgency = await decide('heute');
+  const nameBeforePhone = await decide('TEST Deployment');
+
+  assert.equal(first.action, 'ask_for_contact');
+  assert.match(first.answer, /Ort|PLZ|Einsatzort/i);
+  assert.match(location.answer, /dringend|Notfall|heute|Termin/i);
+  assert.match(urgency.answer, /Telefonnummer|zurückrufen|zurueckrufen/i);
+  assert.match(nameBeforePhone.answer, /Telefonnummer|zurückrufen|zurueckrufen/i);
+  assert.doesNotMatch(nameBeforePhone.answer, /Ihre Anfrage aufgenommen/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+});
+
 test('ChatAgentOrchestratorService restarts local intake after a completed lead when notdienst is sent', async () => {
   const { decide, conversations, leads } = createHarness({
     intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,

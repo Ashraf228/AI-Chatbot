@@ -143,11 +143,15 @@ function asNonEmptyString(value: unknown, fallback: string) {
 }
 
 function asStringArray(value: unknown, fallback: string[]) {
-  return Array.isArray(value)
-    ? value
-        .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
-        .map((entry) => entry.trim())
-    : fallback;
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const entries = value
+    .filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+    .map((entry) => entry.trim());
+
+  return entries.length > 0 ? entries : fallback;
 }
 
 function normalizeQuestionTexts(value: unknown, fallback: Record<string, string>) {
