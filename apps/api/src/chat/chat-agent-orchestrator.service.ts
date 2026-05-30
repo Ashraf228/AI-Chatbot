@@ -1446,7 +1446,7 @@ function isLocalServiceIndustry(value: string) {
 
 function hasLocalServiceSiteSignal(value: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
   return Boolean(
-    /\b(dienstleister|service|notdienst)\b/i.test(value) ||
+    /\b(dienstleister|service|notdienst|handwerker|rohrreinigung|rohr|abfluss|kanal|sanitär|sanitaer|elektriker)\b/i.test(value) ||
       matchesKeyword(value, getLocalServiceKeywords(intakeFlow)),
   );
 }
