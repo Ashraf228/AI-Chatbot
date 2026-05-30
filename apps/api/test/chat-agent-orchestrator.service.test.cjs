@@ -426,11 +426,91 @@ test('ChatAgentOrchestratorService handles local service free-text intake step b
   assert.match(urgency.answer, /Telefonnummer|Rückruf/i);
   assert.match(phone.answer, /Name/i);
   assert.match(final.answer, /Ihre Anfrage aufgenommen/i);
+  assert.match(final.answer, /Mitarbeiter.*zurückrufen/i);
+  assert.doesNotMatch(final.answer, /Nächster Schritt|Terminabstimmung/i);
   assert.doesNotMatch(final.answer, /\b(du|dir|dich|deine|deinen|deiner|deinem)\b/i);
   assert.equal(leads.length, 1);
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'Mein Abfluss läuft nicht ab');
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.location, 'Frankfurt');
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
+});
+
+test('ChatAgentOrchestratorService keeps pricing informational and starts intake on the next problem', async () => {
+  const { decide, conversations, leads } = createHarness({
+    siteName: 'Rohrreinigung-ffm24',
+    siteKey: 'rohrreinigung-ffm24',
+    domain: 'rohrreinigung-ffm24.de',
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  const price = await decide('Was kostet eine Rohrreinigung?');
+  const problem = await decide('Mein Klo ist verstopft');
+
+  assert.equal(price.action, 'normal_answer');
+  assert.match(price.answer, /Kosten hängen vom Aufwand/i);
+  assert.doesNotMatch(price.answer, /Telefonnummer|E-Mail|Name|Anfrage aufgenommen/i);
+  assert.equal(problem.action, 'ask_for_contact');
+  assert.match(problem.answer, /Ort|PLZ|Einsatzort/i);
+  assert.doesNotMatch(problem.answer, /Ihre Anfrage aufgenommen|Nächster Schritt|Terminabstimmung/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'Mein Klo ist verstopft');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
+});
+
+test('ChatAgentOrchestratorService ignores stale completed conversation fields for a new local problem', async () => {
+  const { decide, conversations, leads } = createHarness({
+    siteName: 'Rohrreinigung-ffm24',
+    siteKey: 'rohrreinigung-ffm24',
+    domain: 'rohrreinigung-ffm24.de',
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+  conversations.get('conversation-1').metadata = {
+    conversationState: {
+      stage: 'completed',
+      collectedFields: {
+        concern: 'Alte abgeschlossene Anfrage',
+        location: 'Frankfurt',
+        urgency: 'akut',
+        phone: '017600000000',
+        name: 'Test Alt',
+      },
+    },
+  };
+
+  const result = await decide('Mein Klo ist verstopft');
+
+  assert.equal(result.action, 'ask_for_contact');
+  assert.match(result.answer, /Ort|PLZ|Einsatzort/i);
+  assert.doesNotMatch(result.answer, /Ihre Anfrage aufgenommen|Nächster Schritt|Terminabstimmung/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'Mein Klo ist verstopft');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.location, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
+});
+
+test('ChatAgentOrchestratorService completes local intake only after phone and name are present', async () => {
+  const { decide, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  const problem = await decide('Mein Klo ist verstopft');
+  const location = await decide('65549');
+  const urgency = await decide('heute');
+  const phone = await decide('017600000000');
+  const final = await decide('Müller');
+
+  assert.match(problem.answer, /Ort|PLZ|Einsatzort/i);
+  assert.match(location.answer, /dringend|Notfall|heute|Termin/i);
+  assert.match(urgency.answer, /Telefonnummer|zurückrufen/i);
+  assert.match(phone.answer, /Namen|Name/i);
+  assert.match(final.answer, /Ihre Anfrage aufgenommen/i);
+  assert.match(final.answer, /Mitarbeiter.*zurückrufen/i);
+  assert.doesNotMatch(`${problem.answer} ${location.answer} ${urgency.answer} ${phone.answer}`, /Ihre Anfrage aufgenommen/i);
+  assert.equal(leads.length, 1);
 });
 
 test('ChatAgentOrchestratorService restarts local intake after a completed lead when a new problem is sent', async () => {

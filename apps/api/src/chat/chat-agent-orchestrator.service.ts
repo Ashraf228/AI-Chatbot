@@ -415,12 +415,30 @@ export class ChatAgentOrchestratorService {
           conversationState.intent === 'appointment' ||
           conversationState.goal === 'schedule_call',
       );
+    const freshLocalServiceIntake = shouldStartFreshLocalServiceIntake({
+      pendingActive,
+      localServiceFlow,
+      text,
+      contact: contactFromMessage,
+      scheduleIntent: effectiveScheduleIntent,
+      intakeFlow,
+    });
+    const intakeConversationState = freshLocalServiceIntake
+      ? buildConversationState({
+          previous: null,
+          message: params.message,
+          contact: contactFromMessage,
+          leadIntent,
+          scheduleIntent: effectiveScheduleIntent,
+          intakeFlow,
+        })
+      : conversationState;
     const contact = ensureScheduleContactContext(
       mergeContactDetailsFromState(
         mergeContactDetails(activePendingLead, contactFromMessage),
-        conversationState,
+        intakeConversationState,
       ),
-      conversationState,
+      intakeConversationState,
       effectiveScheduleIntent,
     );
     const missing = getMissingContactFields(contact, localServiceFlow, intakeFlow);
@@ -444,7 +462,7 @@ export class ChatAgentOrchestratorService {
       intakeFlow,
     });
     const activeConversationState = buildConversationState({
-      previous: conversationState,
+      previous: intakeConversationState,
       message: params.message,
       contact,
       leadIntent,
@@ -560,6 +578,58 @@ export class ChatAgentOrchestratorService {
         decision: structuredDecision,
         cta,
       };
+    }
+
+    if (localServiceFlow) {
+      const hardMissing = getMissingContactFields(contact, true, intakeFlow);
+      if (hardMissing.length > 0) {
+        const guardedState = buildPendingLeadState({
+          previous: activePendingLead,
+          contact,
+          scheduleIntent: effectiveScheduleIntent,
+          startedByIntent: scheduleIntent ? 'schedule' : 'lead',
+        });
+        await this.saveConversationMetadata(params.conversationId, {
+          pendingLead: guardedState,
+          conversationState: buildConversationState({
+            previous: intakeConversationState,
+            message: params.message,
+            contact,
+            leadIntent,
+            scheduleIntent: effectiveScheduleIntent,
+            stage: 'qualification',
+            intakeFlow,
+          }),
+        });
+        await this.recordLeadAudit({
+          tenantId: params.tenantId,
+          siteId: params.siteId,
+          action: pendingActive ? 'lead_pending_updated' : 'lead_pending_started',
+          metadata: {
+            missingFields: hardMissing,
+            guardedBeforeCapture: true,
+            hasName: Boolean(guardedState.name),
+            hasPhone: Boolean(guardedState.phone),
+            hasMessage: Boolean(guardedState.concern),
+          },
+        });
+
+        return {
+          action: 'ask_for_contact',
+          handled: true,
+          answer: buildMissingFieldsQuestion(
+            hardMissing,
+            effectiveScheduleIntent,
+            Boolean(contact.concern),
+            contact.preferredContact,
+            true,
+            intakeFlow,
+            Boolean(contact.urgency),
+          ),
+          decision: structuredDecision,
+          cta,
+        };
+      }
     }
 
     if (!hasLeadCaptureQuality(contact)) {
@@ -1428,6 +1498,33 @@ function shouldStartLocalServiceIntakeFromContext(localServiceFlow: boolean, con
   return Boolean(localServiceFlow && (contact.location || contact.urgency));
 }
 
+function shouldStartFreshLocalServiceIntake(params: {
+  pendingActive: boolean;
+  localServiceFlow: boolean;
+  text: string;
+  contact: ContactDetails;
+  scheduleIntent: boolean;
+  intakeFlow?: LocalServiceIntakeFlowConfig;
+}) {
+  if (!params.localServiceFlow || params.pendingActive) {
+    return false;
+  }
+
+  if (isServicePricingOrBillingQuestion(params.text, params.intakeFlow)) {
+    return false;
+  }
+
+  return Boolean(
+    params.contact.concern ||
+      params.contact.location ||
+      params.contact.urgency ||
+      params.contact.preferredContact ||
+      params.scheduleIntent ||
+      hasLocalServiceSignal(params.text, params.intakeFlow) ||
+      hasCallbackOnlyIntent(params.text, params.intakeFlow),
+  );
+}
+
 function shouldRestartCompletedLocalServiceIntake(params: {
   pendingLead: PendingLeadState | null;
   localServiceFlow: boolean;
@@ -2276,25 +2373,24 @@ function buildCapturedLeadAnswer(params: {
   const base = params.localServiceFlow
     ? 'Danke, ich habe Ihre Anfrage aufgenommen.'
     : 'Danke, ich habe deine Anfrage aufgenommen.';
+
+  if (params.localServiceFlow) {
+    return `${base} Ein Mitarbeiter kann Sie nun anhand der Angaben zurückrufen.`;
+  }
+
   if (params.scheduleUrl) {
-    return params.localServiceFlow
-      ? `${base} Hier können Sie direkt einen passenden Termin buchen: ${params.scheduleUrl}`
-      : `${base} Hier kannst du direkt einen passenden Termin buchen: ${params.scheduleUrl}`;
+    return `${base} Hier kannst du direkt einen passenden Termin buchen: ${params.scheduleUrl}`;
   }
 
   if (params.scheduleIntent) {
-    return params.localServiceFlow
-      ? `${base} Wir melden uns zur Terminabstimmung bei Ihnen.`
-      : `${base} Wir melden uns zur Terminabstimmung bei dir.`;
+    return `${base} Wir melden uns zur Terminabstimmung bei dir.`;
   }
 
   if (params.ctaText) {
     return `${base} Nächster Schritt: ${params.ctaText}`;
   }
 
-  return params.localServiceFlow
-    ? `${base} Wir melden uns schnellstmöglich bei Ihnen.`
-    : `${base} Wir melden uns schnellstmöglich bei dir.`;
+  return `${base} Wir melden uns schnellstmöglich bei dir.`;
 }
 
 function buildLocalServicePricingAnswer(intakeFlow?: LocalServiceIntakeFlowConfig) {
