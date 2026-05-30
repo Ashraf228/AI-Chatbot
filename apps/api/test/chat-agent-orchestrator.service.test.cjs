@@ -503,6 +503,36 @@ test('ChatAgentOrchestratorService starts a fresh local intake for short problem
   }
 });
 
+test('ChatAgentOrchestratorService treats post-completion drain keywords as new intake before generic completed fallback', async () => {
+  const { decide, conversations, leads } = createHarness({
+    siteName: 'Demo Kunde',
+    siteKey: 'rohrreinigung-ffm24',
+    domain: 'rohrreinigung-ffm24.de',
+  });
+
+  await decide('Mein Abfluss läuft nicht ab');
+  await decide('65549');
+  await decide('heute');
+  await decide('Mein Name ist Test Deployment');
+  await decide('017600000000');
+
+  const restarted = await decide('Keller', [
+    {
+      role: 'assistant',
+      content: 'Danke, ich habe Ihre Anfrage aufgenommen. Nächster Schritt: Kontakt aufnehmen',
+    },
+  ]);
+
+  assert.equal(leads.length, 1);
+  assert.equal(restarted.action, 'ask_for_contact');
+  assert.match(restarted.answer, /Ort|PLZ|Einsatzort/i);
+  assert.doesNotMatch(restarted.answer, /Wobei kann ich Ihnen helfen|Ihre Anfrage aufgenommen/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.concern, 'Keller');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
+});
+
 test('ChatAgentOrchestratorService uses default local intake for completed lead state without stored flow config', async () => {
   const { decide, conversations, leads } = createHarness({
     siteName: 'Rohrreinigung-ffm24',

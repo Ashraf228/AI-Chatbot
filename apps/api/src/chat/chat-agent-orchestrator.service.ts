@@ -301,26 +301,6 @@ export class ChatAgentOrchestratorService {
     }
 
     if (
-      !pendingActive &&
-      pendingLead?.status === 'completed' &&
-      !leadIntent &&
-      !scheduleIntent
-    ) {
-      await this.saveConversationMetadata(params.conversationId, {
-        conversationState: buildConversationState({
-          previous: conversationState,
-          message: params.message,
-          contact: pendingLead,
-          leadIntent,
-          scheduleIntent,
-          stage: 'completed',
-          intakeFlow,
-        }),
-      });
-      return { action: 'normal_answer', handled: false, decision: structuredDecision };
-    }
-
-    if (
       shouldRestartCompletedLocalServiceIntake({
         pendingLead,
         localServiceFlow,
@@ -387,6 +367,26 @@ export class ChatAgentOrchestratorService {
           true,
         ),
       };
+    }
+
+    if (
+      !pendingActive &&
+      pendingLead?.status === 'completed' &&
+      !leadIntent &&
+      !scheduleIntent
+    ) {
+      await this.saveConversationMetadata(params.conversationId, {
+        conversationState: buildConversationState({
+          previous: conversationState,
+          message: params.message,
+          contact: pendingLead,
+          leadIntent,
+          scheduleIntent,
+          stage: 'completed',
+          intakeFlow,
+        }),
+      });
+      return { action: 'normal_answer', handled: false, decision: structuredDecision };
     }
 
     if (
@@ -1467,7 +1467,10 @@ function hasLocalServiceSiteSignal(value: string, intakeFlow?: LocalServiceIntak
 }
 
 function hasLocalServiceSignal(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
-  return /\b(notfall|notdienst|akut|dringend|soforthilfe)\b/i.test(text) || matchesKeyword(text, getLocalServiceKeywords(intakeFlow));
+  return (
+    /\b(notfall|notdienst|akut|dringend|soforthilfe|toilette|wc|klo|abfluss|rohr|rohrreinigung|kanal|keller|rückstau|rueckstau|verstopft)\b/i.test(text) ||
+    matchesKeyword(text, getLocalServiceKeywords(intakeFlow))
+  );
 }
 
 function isUnclearInput(text: string) {
@@ -1482,11 +1485,15 @@ function isUnclearInput(text: string) {
 }
 
 function shouldPauseLeadCapture(text: string, contact: ContactDetails) {
-  if (hasContactSignal(contact) || contact.location || contact.urgency || contact.preferredContact) {
+  if (hasRecoveryIntent(text) || hasRefusalIntent(text) || hasGreetingIntent(text)) {
+    return true;
+  }
+
+  if (hasContactSignal(contact) || contact.concern || contact.location || contact.urgency || contact.preferredContact) {
     return false;
   }
 
-  return hasRecoveryIntent(text) || hasRefusalIntent(text) || hasGreetingIntent(text) || isUnclearInput(text);
+  return isUnclearInput(text);
 }
 
 function extractContactDetails(
