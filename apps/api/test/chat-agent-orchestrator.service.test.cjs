@@ -456,6 +456,49 @@ test('ChatAgentOrchestratorService restarts local intake after a completed lead 
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
 });
 
+test('ChatAgentOrchestratorService acknowledges harmless messages after a completed local lead without restarting intake', async () => {
+  for (const message of ['okay', 'hast mir schon geholfen']) {
+    const { decide, conversations, leads } = createHarness({
+      intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+    });
+
+    await decide('Mein Abfluss läuft nicht ab');
+    await decide('Frankfurt');
+    await decide('heute');
+    await decide('015511410215');
+    await decide('Max Mustermann');
+    const result = await decide(message);
+
+    assert.equal(result.action, 'normal_answer', message);
+    assert.match(result.answer, /Ihre Anfrage wurde aufgenommen/i, message);
+    assert.doesNotMatch(result.answer, /Ort|PLZ|Telefonnummer|Was genau ist betroffen/i, message);
+    assert.equal(leads.length, 1, message);
+    assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'completed', message);
+  }
+});
+
+test('ChatAgentOrchestratorService starts a fresh local intake for short problem keywords after completed lead', async () => {
+  for (const message of ['Keller', 'klo verstopft']) {
+    const { decide, conversations, leads } = createHarness({
+      intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+    });
+
+    await decide('Mein Abfluss läuft nicht ab');
+    await decide('Frankfurt');
+    await decide('heute');
+    await decide('015511410215');
+    await decide('Max Mustermann');
+    const restarted = await decide(message);
+
+    assert.equal(restarted.action, 'ask_for_contact', message);
+    assert.doesNotMatch(restarted.answer, /Ihre Anfrage aufgenommen/i, message);
+    assert.equal(leads.length, 1, message);
+    assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending', message);
+    assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined, message);
+    assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined, message);
+  }
+});
+
 test('ChatAgentOrchestratorService restarts local intake after a completed lead when notdienst is sent', async () => {
   const { decide, conversations, leads } = createHarness({
     intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
@@ -467,6 +510,28 @@ test('ChatAgentOrchestratorService restarts local intake after a completed lead 
   await decide('015511410215');
   await decide('Max Mustermann');
   const restarted = await decide('Notdienst');
+
+  assert.equal(leads.length, 1);
+  assert.equal(restarted.action, 'ask_for_contact');
+  assert.match(restarted.answer, /Toilette|Abfluss|Keller|Kanal|betroffen/i);
+  assert.doesNotMatch(restarted.answer, /Ihre Anfrage aufgenommen/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
+});
+
+test('ChatAgentOrchestratorService restarts local intake after a completed lead when notfall is sent', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('Mein Abfluss läuft nicht ab');
+  await decide('Frankfurt');
+  await decide('heute');
+  await decide('015511410215');
+  await decide('Max Mustermann');
+  const restarted = await decide('notfall');
 
   assert.equal(leads.length, 1);
   assert.equal(restarted.action, 'ask_for_contact');
@@ -530,7 +595,7 @@ test('ChatAgentOrchestratorService respects local service stop intent without le
   ]);
 
   assert.equal(stop.action, 'normal_answer');
-  assert.match(stop.answer, /frage nicht weiter/i);
+  assert.match(stop.answer, /breche die Aufnahme der Anfrage hier ab/i);
   assert.doesNotMatch(stop.answer, /Telefonnummer|E-Mail|Name/i);
   assert.doesNotMatch(stop.answer, /\b(du|dir|dich|deine|deinen|deiner|deinem|sag mir|wenn du magst)\b/i);
   assert.equal(neither.action, 'normal_answer');
@@ -539,6 +604,22 @@ test('ChatAgentOrchestratorService respects local service stop intent without le
   assert.doesNotMatch(neither.answer, /\b(du|dir|dich|deine|deinen|deiner|deinem|sag mir|wenn du magst)\b/i);
   assert.equal(leads.length, 0);
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'paused');
+});
+
+test('ChatAgentOrchestratorService keeps local service stop intents from asking contact details', async () => {
+  for (const message of ['nein', 'stop', 'egal', 'lass gut']) {
+    const { decide, leads } = createHarness({
+      intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+    });
+
+    await decide('Meine Toilette ist verstopft');
+    const result = await decide(message);
+
+    assert.equal(result.action, 'normal_answer', message);
+    assert.match(result.answer, /breche die Aufnahme der Anfrage hier ab/i, message);
+    assert.doesNotMatch(result.answer, /Telefonnummer|E-Mail|Name/i, message);
+    assert.equal(leads.length, 0, message);
+  }
 });
 
 test('ChatAgentOrchestratorService uses formal fallback wording for local services', async () => {
@@ -583,6 +664,21 @@ test('ChatAgentOrchestratorService answers local service pricing without lead pr
   assert.equal(result.action, 'normal_answer');
   assert.match(result.answer, /Kosten hängen vom Aufwand/i);
   assert.match(result.answer, /kurz schildern/i);
+  assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i);
+  assert.equal(leads.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+});
+
+test('ChatAgentOrchestratorService answers broad local service cost questions without lead capture', async () => {
+  const { decide, leads, conversations } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  const result = await decide('Mit wie viel muss ich rechnen?');
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, 'normal_answer');
+  assert.match(result.answer, /Kosten hängen vom Aufwand/i);
   assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i);
   assert.equal(leads.length, 0);
   assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
@@ -633,18 +729,20 @@ test('ChatAgentOrchestratorService routes standalone service area statements int
 });
 
 test('ChatAgentOrchestratorService falls back to local service intake from site industry', async () => {
-  const { decide, leads } = createHarness({
-    siteName: 'Rohrreinigung-ffm24',
-    industry: 'local-services',
-  });
+  for (const industry of ['local-services', 'local-service-first-contact']) {
+    const { decide, leads } = createHarness({
+      siteName: 'Rohrreinigung-ffm24',
+      industry,
+    });
 
-  const result = await decide('Was kostet eine Rohrreinigung?');
+    const result = await decide('Was kostet eine Rohrreinigung?');
 
-  assert.equal(result.handled, true);
-  assert.equal(result.action, 'normal_answer');
-  assert.match(result.answer, /Kosten hängen vom Aufwand/i);
-  assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i);
-  assert.equal(leads.length, 0);
+    assert.equal(result.handled, true, industry);
+    assert.equal(result.action, 'normal_answer', industry);
+    assert.match(result.answer, /Kosten hängen vom Aufwand/i, industry);
+    assert.doesNotMatch(result.answer, /Telefon|E-Mail|Name/i, industry);
+    assert.equal(leads.length, 0, industry);
+  }
 });
 
 test('ChatAgentOrchestratorService clarifies callback urgency before asking for phone on local sites', async () => {

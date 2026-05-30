@@ -125,8 +125,10 @@ export class ChatAgentOrchestratorService {
     const askedForContact = wasContactRequested(params.history);
     const metadataState = await this.loadConversationMetadata(params.conversationId);
     const pendingLead = metadataState.pendingLead;
-    const pendingActive = pendingLead?.status === 'pending';
-    const contactFromMessage = extractContactDetails(params.message, pendingLead, intakeFlow);
+    const activePendingLead = pendingLead?.status === 'pending' ? pendingLead : null;
+    const currentConversationState = pendingLead?.status === 'completed' ? null : metadataState.conversationState;
+    const pendingActive = activePendingLead?.status === 'pending';
+    const contactFromMessage = extractContactDetails(params.message, activePendingLead, intakeFlow);
     const greetingIntent = hasGreetingIntent(text);
     const recoveryIntent = hasRecoveryIntent(text);
     const refusalIntent = hasRefusalIntent(text);
@@ -135,13 +137,13 @@ export class ChatAgentOrchestratorService {
       siteName: siteConfig.siteName,
       pendingLead,
       contact: contactFromMessage,
-      conversationState: metadataState.conversationState,
+      conversationState: currentConversationState,
       intakeFlow,
     });
     const conversationState = buildConversationState({
-      previous: metadataState.conversationState,
+      previous: currentConversationState,
       message: params.message,
-      contact: mergeContactDetails(pendingLead, contactFromMessage),
+      contact: mergeContactDetails(activePendingLead, contactFromMessage),
       leadIntent,
       scheduleIntent,
       intakeFlow,
@@ -159,18 +161,38 @@ export class ChatAgentOrchestratorService {
       };
     }
 
-    if (localServiceFlow && hasNoFurtherHelpIntent(text)) {
+    if (localServiceFlow && hasCompletedLeadAcknowledgementIntent(text) && pendingLead?.status === 'completed') {
+      await this.saveConversationMetadata(params.conversationId, {
+        conversationState: buildConversationState({
+          previous: null,
+          message: params.message,
+          contact: {},
+          leadIntent: false,
+          scheduleIntent: false,
+          stage: 'completed',
+          intakeFlow,
+        }),
+      });
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildCompletedLeadAcknowledgementAnswer(),
+        decision: structuredDecision,
+      };
+    }
+
+    if (localServiceFlow && hasLocalServiceStopIntent(text)) {
       if (pendingActive || askedForContact) {
         await this.saveConversationMetadata(params.conversationId, {
           pendingLead: buildPausedLeadState({
-            previous: pendingLead,
-            contact: mergeContactDetails(pendingLead, contactFromMessage),
+            previous: activePendingLead,
+            contact: mergeContactDetails(activePendingLead, contactFromMessage),
             reason: 'stop',
           }),
           conversationState: buildConversationState({
             previous: conversationState,
             message: params.message,
-            contact: mergeContactDetails(pendingLead, contactFromMessage),
+            contact: mergeContactDetails(activePendingLead, contactFromMessage),
             leadIntent: false,
             scheduleIntent: false,
             stage: 'discovery',
@@ -216,8 +238,8 @@ export class ChatAgentOrchestratorService {
 
     if ((pendingActive || askedForContact) && shouldPauseLeadCapture(text, contactFromMessage)) {
       const pausedState = buildPausedLeadState({
-        previous: pendingLead,
-        contact: mergeContactDetails(pendingLead, contactFromMessage),
+        previous: activePendingLead,
+        contact: mergeContactDetails(activePendingLead, contactFromMessage),
         reason: recoveryIntent ? 'recovery' : refusalIntent ? 'refusal' : greetingIntent ? 'greeting' : 'unclear',
       });
       await this.saveConversationMetadata(params.conversationId, {
@@ -379,7 +401,7 @@ export class ChatAgentOrchestratorService {
       );
     const contact = ensureScheduleContactContext(
       mergeContactDetailsFromState(
-        mergeContactDetails(pendingLead, contactFromMessage),
+        mergeContactDetails(activePendingLead, contactFromMessage),
         conversationState,
       ),
       conversationState,
@@ -392,7 +414,7 @@ export class ChatAgentOrchestratorService {
       siteConfig.ctaText,
       localServiceFlow,
     );
-    const leadPromptCount = pendingLead?.leadPromptCount || 0;
+    const leadPromptCount = activePendingLead?.leadPromptCount || 0;
     const shouldAskForContactDetails = canAskForLeadDetails({
       missing,
       contact,
@@ -447,7 +469,7 @@ export class ChatAgentOrchestratorService {
 
       if (!shouldAskForContactDetails) {
         const pausedState = buildPausedLeadState({
-          previous: pendingLead,
+          previous: activePendingLead,
           contact,
           reason: leadPromptCount >= 1 ? 'prompt_limit' : 'weak_intent',
         });
@@ -473,7 +495,7 @@ export class ChatAgentOrchestratorService {
       }
 
       const nextState = buildPendingLeadState({
-        previous: pendingLead,
+        previous: activePendingLead,
         contact,
         scheduleIntent: effectiveScheduleIntent,
         startedByIntent: scheduleIntent ? 'schedule' : 'lead',
@@ -527,7 +549,7 @@ export class ChatAgentOrchestratorService {
     if (!hasLeadCaptureQuality(contact)) {
       await this.saveConversationMetadata(params.conversationId, {
         pendingLead: buildPausedLeadState({
-          previous: pendingLead,
+          previous: activePendingLead,
           contact,
           reason: 'weak_lead_quality',
         }),
@@ -576,7 +598,7 @@ export class ChatAgentOrchestratorService {
           status: 'completed',
           intent: effectiveScheduleIntent ? 'schedule' : 'lead',
           scheduleIntent: effectiveScheduleIntent,
-          startedAt: pendingLead?.startedAt || new Date().toISOString(),
+          startedAt: activePendingLead?.startedAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
           completedLeadId: leadCapture.leadId,
@@ -613,14 +635,14 @@ export class ChatAgentOrchestratorService {
         scheduleIntent: effectiveScheduleIntent,
         recipientEmail: siteConfig.leadNotificationEmail || resolveFallbackRecipient(),
       });
-    } else if (pendingLead?.status === 'pending') {
+    } else if (activePendingLead?.status === 'pending') {
       await this.saveConversationMetadata(params.conversationId, {
         pendingLead: {
           ...contact,
           status: 'completed',
           intent: effectiveScheduleIntent ? 'schedule' : 'lead',
           scheduleIntent: effectiveScheduleIntent,
-          startedAt: pendingLead.startedAt || new Date().toISOString(),
+          startedAt: activePendingLead.startedAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           completedAt: new Date().toISOString(),
           completedLeadId: leadCapture.leadId,
@@ -708,7 +730,7 @@ export class ChatAgentOrchestratorService {
       return {
         action: decision.type === 'handoff' ? 'handoff_to_contact' : 'normal_answer',
         handled: true,
-        answer: decision.message,
+        answer: sanitizeAssistantAnswer(decision.message),
         decision,
         cta: decision.requiredFields.includes('email') || decision.requiredFields.includes('phone')
           ? {
@@ -1213,6 +1235,9 @@ function getLocalServiceKeywords(intakeFlow?: LocalServiceIntakeFlowConfig) {
   }
 
   return [
+    'notfall',
+    'akut',
+    'soforthilfe',
     ...intakeFlow.genericLocalServiceKeywords,
     ...intakeFlow.problemKeywords,
     ...intakeFlow.callbackKeywords,
@@ -1295,13 +1320,22 @@ function hasRefusalIntent(text: string) {
   );
 }
 
-function hasNoFurtherHelpIntent(text: string) {
+function hasCompletedLeadAcknowledgementIntent(text: string) {
   const normalized = text
     .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  return /^(nix|nichts|weder noch|egal|passt|okay danke|ok danke)$/i.test(normalized);
+  return /^(ok|okay|danke|danke ihnen|vielen dank|passt|alles gut|hast mir schon geholfen|sie haben mir schon geholfen)$/i.test(normalized);
+}
+
+function hasLocalServiceStopIntent(text: string) {
+  const normalized = text
+    .replace(/[^\p{L}\p{N}\s]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return /^(nerv nicht|nerven sie nicht|egal|lass gut|lassen sie gut sein|nein|stop|stopp|weder noch|nix|nichts)$/i.test(normalized);
 }
 
 function hasSensitiveDataInput(text: string) {
@@ -1333,7 +1367,7 @@ function isLocalServicePricingQuestion(text: string, intakeFlow?: LocalServiceIn
 
 function isServicePricingOrBillingQuestion(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
   return (
-    /\b(kostet|kosten|preis|preise|abrechnung|abrechnen)\b/i.test(
+    /\b(kostet|kosten|preis|preise|abrechnung|abrechnen|rechnen|wieviel)\b|wie viel/i.test(
       text,
     ) ||
     matchesKeyword(text, intakeFlow?.pricingKeywords || [])
@@ -1393,7 +1427,7 @@ function shouldRestartCompletedLocalServiceIntake(params: {
 }
 
 function isLocalServiceIndustry(value: string) {
-  return ['local-services', 'local_service', 'local-service', 'local_services'].includes(value);
+  return ['local-service-first-contact', 'local-services', 'local_service', 'local-service', 'local_services'].includes(value);
 }
 
 function hasLocalServiceSiteSignal(value: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
@@ -1404,7 +1438,7 @@ function hasLocalServiceSiteSignal(value: string, intakeFlow?: LocalServiceIntak
 }
 
 function hasLocalServiceSignal(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
-  return matchesKeyword(text, getLocalServiceKeywords(intakeFlow));
+  return /\b(notfall|notdienst|akut|dringend|soforthilfe)\b/i.test(text) || matchesKeyword(text, getLocalServiceKeywords(intakeFlow));
 }
 
 function isUnclearInput(text: string) {
@@ -1570,7 +1604,19 @@ function extractConcern(
   intakeFlow?: LocalServiceIntakeFlowConfig,
 ) {
   const value = message.trim();
-  if (!value || looksLikeContactOnly(value)) {
+  if (!value) {
+    return undefined;
+  }
+
+  if (
+    intakeFlow &&
+    matchesKeyword(value, intakeFlow.problemKeywords) &&
+    !isGenericUrgencyQuestion(value, intakeFlow)
+  ) {
+    return sanitizeConcern(value);
+  }
+
+  if (looksLikeContactOnly(value)) {
     return undefined;
   }
 
@@ -2003,8 +2049,8 @@ function getMissingContactFields(
       concern: !contact.concern,
       location: !contact.location,
       urgency: !contact.urgency,
-      phone: !contact.email && !contact.phone,
-      contact: !contact.email && !contact.phone,
+      phone: !contact.phone,
+      contact: !contact.phone,
       name: !contact.name,
     };
     const order = intakeFlow?.questionOrder?.length
@@ -2243,7 +2289,11 @@ function buildRecoveryAnswer(localServiceFlow = false) {
 }
 
 function buildLocalServiceStopAnswer() {
-  return 'Verstanden. Ich frage nicht weiter nach Kontaktdaten. Wenn Sie später Hilfe benötigen, können Sie Ihr Anliegen jederzeit kurz beschreiben.';
+  return 'Verstanden. Ich breche die Aufnahme der Anfrage hier ab. Falls Sie doch Hilfe benötigen, können Sie jederzeit kurz Ihr Problem schildern.';
+}
+
+function buildCompletedLeadAcknowledgementAnswer() {
+  return 'Gern. Ihre Anfrage wurde aufgenommen. Falls Sie noch etwas ergänzen möchten, schreiben Sie es einfach dazu.';
 }
 
 function buildConsultingResetAnswer(localServiceFlow = false) {
@@ -2271,6 +2321,18 @@ function buildLeadCta(
       ? 'Wir nehmen Ihre Anfrage direkt auf.'
       : 'Wir nehmen deine Anfrage direkt auf.'),
   };
+}
+
+function sanitizeAssistantAnswer(value: string | undefined) {
+  const answer = asString(value);
+  if (!answer || /^\s*(\[DATEN BEREINIGT\]|\[TESTDATEN BEREINIGT\]|\[REDACTED\]|null|undefined)\s*$/i.test(answer)) {
+    return 'Ich kann Ihnen dazu kurz weiterhelfen. Bitte schildern Sie Ihr Anliegen ohne sensible Daten.';
+  }
+  return answer
+    .replace(/\[DATEN BEREINIGT\]/gi, '')
+    .replace(/\[TESTDATEN BEREINIGT\]/gi, '')
+    .replace(/\[REDACTED\]/gi, '')
+    .trim() || 'Ich kann Ihnen dazu kurz weiterhelfen. Bitte schildern Sie Ihr Anliegen ohne sensible Daten.';
 }
 
 function resolveFallbackRecipient() {
