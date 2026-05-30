@@ -22,6 +22,8 @@ type ChatHistoryEntry = {
 
 type SiteConfigRow = {
   name: string;
+  site_key?: string | null;
+  domain?: string | null;
   config: Record<string, unknown> | null;
 };
 
@@ -134,7 +136,7 @@ export class ChatAgentOrchestratorService {
     const refusalIntent = hasRefusalIntent(text);
     let localServiceFlow = isLocalServiceFlow({
       text,
-      siteName: siteConfig.siteName,
+      siteName: siteConfig.siteSignalText || siteConfig.siteName,
       pendingLead,
       contact: contactFromMessage,
       conversationState: currentConversationState,
@@ -147,7 +149,7 @@ export class ChatAgentOrchestratorService {
       contactFromMessage = extractContactDetails(params.message, activePendingLead, intakeFlow);
       localServiceFlow = isLocalServiceFlow({
         text,
-        siteName: siteConfig.siteName,
+        siteName: siteConfig.siteSignalText || siteConfig.siteName,
         pendingLead,
         contact: contactFromMessage,
         conversationState: currentConversationState,
@@ -779,13 +781,25 @@ export class ChatAgentOrchestratorService {
 
   private async getSiteConfig(siteId: string) {
     const res = await this.db.query<SiteConfigRow>(
-      `SELECT name, config
+      `SELECT
+         name,
+         site_key,
+         COALESCE(config->>'domain', allowed_domains[1], '') AS domain,
+         config
        FROM sites
        WHERE id = $1
        LIMIT 1`,
       [siteId],
     );
     const config = asObject(res.rows[0]?.config);
+    const siteName = res.rows[0]?.name || '';
+    const siteSignalText = [
+      siteName,
+      asString(res.rows[0]?.site_key || ''),
+      asString(res.rows[0]?.domain || ''),
+      asString(config.companyName),
+      asString(config.domain),
+    ].filter(Boolean).join(' ');
     const conversationFlow = asObject(config.conversationFlow);
     const scheduleUrl = findFirstUrl(config, [
       'scheduleUrl',
@@ -799,10 +813,11 @@ export class ChatAgentOrchestratorService {
 
     const industry = asString(config.industry) || asString(config.industryTemplate);
     const hasConversationFlow = Object.keys(conversationFlow).length > 0;
-    const isLocalService = isLocalServiceIndustry(industry);
+    const isLocalService = isLocalServiceIndustry(industry) || hasLocalServiceSiteSignal(siteSignalText);
 
     return {
-      siteName: res.rows[0]?.name || '',
+      siteName,
+      siteSignalText,
       setupGoal: asString(config.setupGoal),
       leadCaptureEnabled: typeof config.leadCaptureEnabled === 'boolean' ? config.leadCaptureEnabled : undefined,
       leadNotificationEmail:

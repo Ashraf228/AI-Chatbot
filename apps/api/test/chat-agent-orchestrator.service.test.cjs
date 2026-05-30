@@ -130,6 +130,8 @@ function createHarness({
   scheduleUrl = '',
   usageLimits,
   siteName = 'Demo Kunde',
+  siteKey = 'demo-kunde',
+  domain = 'demo.example',
   intakeFlow,
   industry,
 } = {}) {
@@ -143,11 +145,13 @@ function createHarness({
 
   const db = {
     async query(sql, params = []) {
-      if (/SELECT name, config\s+FROM sites/i.test(sql)) {
+      if (/SELECT\s+name,\s+site_key,/i.test(sql) || /SELECT name, config\s+FROM sites/i.test(sql)) {
         return {
           rows: [
             {
               name: siteName,
+              site_key: siteKey,
+              domain,
               config: {
                 setupGoal: 'lead_capture',
                 leadNotificationEmail,
@@ -528,7 +532,9 @@ test('ChatAgentOrchestratorService uses default local intake for completed lead 
 
 test('ChatAgentOrchestratorService treats drain-cleaning site names as local service without stored flow config', async () => {
   const { decide, conversations, leads } = createHarness({
-    siteName: 'Rohrreinigung-ffm24',
+    siteName: 'Demo Kunde',
+    siteKey: 'rohrreinigung-ffm24',
+    domain: 'rohrreinigung-ffm24.de',
   });
 
   const first = await decide('mein Klo ist verstopft');
