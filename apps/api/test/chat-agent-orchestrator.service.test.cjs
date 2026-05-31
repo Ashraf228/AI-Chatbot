@@ -464,6 +464,40 @@ test('ChatAgentOrchestratorService stores local lead without email job when no l
   assert.equal(emailJobs.length, 0);
 });
 
+test('ChatAgentOrchestratorService accepts lowercase and umlaut full names when name is pending', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('Mein Klo ist verstopft');
+  await decide('heute noch');
+  await decide(FULL_TEST_ADDRESS);
+  const nameReply = await decide('Müller thomas');
+
+  assert.equal(nameReply.action, 'ask_for_contact');
+  assert.match(nameReply.answer, /Telefonnummer|zurückrufen|Rückruf/i);
+  assert.doesNotMatch(nameReply.answer, /Guten Tag|Vor- und Nachnamen|Vor- und Nachname|Daten wurden aufgenommen/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, 'Müller thomas');
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService accepts TEST demo full names when name is pending', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('Mein Klo ist verstopft');
+  await decide('heute noch');
+  await decide(FULL_TEST_ADDRESS);
+  const nameReply = await decide('test loom');
+
+  assert.equal(nameReply.action, 'ask_for_contact');
+  assert.match(nameReply.answer, /Telefonnummer|zurückrufen|Rückruf/i);
+  assert.doesNotMatch(nameReply.answer, /Guten Tag|Vor- und Nachnamen|Vor- und Nachname|Daten wurden aufgenommen/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, 'test loom');
+  assert.equal(leads.length, 0);
+});
+
 test('ChatAgentOrchestratorService keeps pricing informational and starts intake on the next problem', async () => {
   const { decide, conversations, leads } = createHarness({
     siteName: 'Rohrreinigung-ffm24',
@@ -531,7 +565,7 @@ test('ChatAgentOrchestratorService completes local intake only after phone and n
   const partialAddress = await decide('65549');
   const fullAddress = await decide(FULL_TEST_ADDRESS);
   const partialName = await decide('Müller');
-  const fullName = await decide('Max Müller');
+  const fullName = await decide('Thomas Müller');
   const final = await decide('017600000000');
 
   assert.match(problem.answer, /dringend|Notfall|heute|Termin/i);
@@ -544,6 +578,7 @@ test('ChatAgentOrchestratorService completes local intake only after phone and n
   assert.match(final.answer, /schnellstmöglich kontaktiert/i);
   assert.doesNotMatch(`${problem.answer} ${urgency.answer} ${partialAddress.answer} ${fullAddress.answer} ${partialName.answer} ${fullName.answer}`, /Ihre Anfrage aufgenommen/i);
   assert.equal(leads.length, 1);
+  assert.equal(leads[0].name, 'Thomas Müller');
 });
 
 test('ChatAgentOrchestratorService restarts local intake after a completed lead when a new problem is sent', async () => {

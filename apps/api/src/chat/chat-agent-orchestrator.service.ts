@@ -1812,7 +1812,8 @@ function inferNameFromPendingAnswer(
     return undefined;
   }
 
-  if (words.every((word) => /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'-]+$/.test(word))) {
+  const acceptsNameToken = Boolean(intakeFlow) ? isNameToken : isStrictNameToken;
+  if (words.every(acceptsNameToken)) {
     return clean;
   }
 
@@ -2271,8 +2272,16 @@ function hasFullName(value: string | undefined) {
   }
   const words = cleanExtractedText(value)
     .split(/\s+/)
-    .filter((word) => /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'-]{1,}$/.test(word));
+    .filter(isNameToken);
   return words.length >= 2;
+}
+
+function isNameToken(value: string) {
+  return /^[\p{L}][\p{L}'-]{1,}$/u.test(value);
+}
+
+function isStrictNameToken(value: string) {
+  return /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'-]+$/.test(value);
 }
 
 function getMissingContactFields(
