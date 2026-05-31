@@ -53,8 +53,8 @@ export const DEFAULT_LEAD_SALES_MODULE_CONFIG: LeadSalesModuleConfig = {
 export const DEFAULT_LOCAL_SERVICE_INTAKE_FLOW: LocalServiceIntakeFlowConfig = {
   templateKey: 'local-services',
   subIndustry: 'drain_cleaning',
-  requiredFields: ['problem', 'location', 'urgency', 'phone', 'name'],
-  questionOrder: ['problem', 'location', 'urgency', 'phone', 'name'],
+  requiredFields: ['problem', 'urgency', 'fullAddress', 'fullName', 'phone'],
+  questionOrder: ['problem', 'urgency', 'fullAddress', 'fullName', 'phone'],
   genericLocalServiceKeywords: [
     'notdienst',
     'einsatz',
@@ -101,10 +101,12 @@ export const DEFAULT_LOCAL_SERVICE_INTAKE_FLOW: LocalServiceIntakeFlowConfig = {
   callbackKeywords: ['rückruf', 'rueckruf', 'zurückrufen', 'zurueckrufen', 'anrufen', 'kontaktiert werden'],
   questionTexts: {
     problem: 'Was genau ist betroffen - Toilette, Abfluss, Keller oder Kanal?',
-    location: 'In welchem Ort oder welcher PLZ befindet sich der Einsatzort?',
+    location: 'Okay, wir kümmern uns darum. Bitte nennen Sie uns die vollständige Einsatzadresse mit Straße, Hausnummer, PLZ und Ort.',
+    fullAddress: 'Okay, wir kümmern uns darum. Bitte nennen Sie uns die vollständige Einsatzadresse mit Straße, Hausnummer, PLZ und Ort.',
     urgency: 'Wie dringend ist es aktuell - Notfall, heute noch oder Terminwunsch?',
     phone: 'Unter welcher Telefonnummer kann der Notdienst Sie zurückrufen?',
-    name: 'Auf welchen Namen dürfen wir die Anfrage aufnehmen?',
+    name: 'Danke. Auf welchen Vor- und Nachnamen dürfen wir die Anfrage aufnehmen?',
+    fullName: 'Danke. Auf welchen Vor- und Nachnamen dürfen wir die Anfrage aufnehmen?',
     callback: 'Gerne. Geht es um einen akuten Notfall oder um eine allgemeine Anfrage?',
   },
   pricingAnswerTemplate:

@@ -12,11 +12,13 @@ test('local-service-first-contact template configures the Handwerker first-conta
   assert.equal(template.launcherLabel, 'Soforthilfe');
   assert.deepEqual(template.conversationFlow.questionOrder, [
     'problem',
-    'location',
     'urgency',
+    'fullAddress',
+    'fullName',
     'phone',
-    'name',
   ]);
+  assert.match(template.conversationFlow.questionTexts.fullAddress, /vollständige Einsatzadresse/i);
+  assert.match(template.conversationFlow.questionTexts.fullName, /Vor- und Nachnamen/i);
 
   const modulesByKey = Object.fromEntries(template.modules.map((module) => [module.key, module]));
 

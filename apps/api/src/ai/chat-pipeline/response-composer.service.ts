@@ -158,7 +158,7 @@ Verbotene Begriffe: ${forbiddenTerms.join(', ') || 'Projekt, Support-Anfrage, Bu
 Rückfrage-Reihenfolge: ${asStringArray(flow.questionOrder).join(' -> ')}
 Standardfragen:
 - Problem: ${asString(questionTexts.problem) || 'Was genau ist betroffen?'}
-- Einsatzort: ${asString(questionTexts.location) || 'In welchem Ort oder welcher PLZ befindet sich der Einsatzort?'}
+- Einsatzadresse: ${asString(questionTexts.fullAddress) || asString(questionTexts.location) || 'Bitte nennen Sie die vollständige Einsatzadresse mit Straße, Hausnummer, PLZ und Ort.'}
 - Dringlichkeit: ${asString(questionTexts.urgency) || 'Wie dringend ist es aktuell?'}
 
 Wenn Sie eine Wissensfrage beantworten, hängen Sie keine allgemeine Auswahl wie "Support, Prozesse oder Marketing" an. Stellen Sie nur eine passende lokale Rückfrage, falls sie wirklich nötig ist.

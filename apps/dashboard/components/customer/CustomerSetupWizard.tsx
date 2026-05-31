@@ -1187,11 +1187,18 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
               <strong>Handwerker-Erstkontakt</strong>
               <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-                Problem → Ort/PLZ/Adresse → Dringlichkeit → Telefonnummer → Name → Zusammenfassung
+                Problem → Dringlichkeit → vollständige Einsatzadresse → Vor- und Nachname → Telefonnummer → E-Mail an Unternehmen
               </p>
             </div>
             <div className="dashboard-grid dashboard-grid--metrics-3">
-              {["Problem erfassen", "Einsatzort klären", "Dringlichkeit erfassen", "Telefonnummer erfragen", "Name erfragen", "Anfrage speichern"].map((item) => (
+              {[
+                "Problem erfassen",
+                "Dringlichkeit erfassen",
+                "vollständige Einsatzadresse erfassen",
+                "Vor- und Nachname erfragen",
+                "Telefonnummer erfragen",
+                "Anfrage speichern und zustellen",
+              ].map((item) => (
                 <CompactMetricCard key={item} label="Schritt" value={item} />
               ))}
             </div>

@@ -22,7 +22,7 @@ export class LeadMailerService {
   constructor(private readonly mailer: ReportMailerService) {}
 
   buildLeadNotification(payload: LeadNotificationPayload): MailMessage {
-    const subject = `Neue Anfrage über den Chatbot – ${payload.siteName || payload.siteId}`;
+    const subject = `Neue Anfrage über den Website-Chat – ${payload.siteName || payload.siteId}`;
 
     return {
       to: payload.recipientEmail,
@@ -44,7 +44,7 @@ export class LeadMailerService {
     <title>Neuer Lead</title>
   </head>
   <body style="font-family: Arial, sans-serif; color: #1b1f23; line-height: 1.5;">
-    <h1>Neuer Lead eingegangen</h1>
+    <h1>Neue Kundenanfrage über den Website-Chat</h1>
     <p><strong>Site:</strong> ${escapeHtml(payload.siteName || payload.siteId)}</p>
     <p><strong>Zeitpunkt:</strong> ${escapeHtml(payload.submittedAt)}</p>
     <p><strong>Quelle:</strong> ${escapeHtml(payload.source || 'Widget Chat')}</p>
@@ -55,7 +55,7 @@ export class LeadMailerService {
       <li><strong>E-Mail:</strong> ${escapeHtml(payload.lead.email || '-')}</li>
       <li><strong>Telefon:</strong> ${escapeHtml(payload.lead.phone || '-')}</li>
     </ul>
-    <h2>Anliegen</h2>
+    <h2>Anfrage</h2>
     <p>${escapeHtml(payload.lead.message || '-')}</p>
     ${
       payload.dashboardUrl
@@ -68,7 +68,7 @@ export class LeadMailerService {
 
   private renderText(payload: LeadNotificationPayload) {
     return [
-      `Neue Anfrage über den Chatbot – ${payload.siteName || payload.siteId}`,
+      `Neue Anfrage über den Website-Chat – ${payload.siteName || payload.siteId}`,
       `Zeitpunkt: ${payload.submittedAt}`,
       `Quelle: ${payload.source || 'Widget Chat'}`,
       `Terminabsicht: ${payload.scheduleIntent ? 'Ja' : 'Nein'}`,
@@ -78,7 +78,7 @@ export class LeadMailerService {
       `- E-Mail: ${payload.lead.email || '-'}`,
       `- Telefon: ${payload.lead.phone || '-'}`,
       '',
-      'Anliegen:',
+      'Anfrage:',
       payload.lead.message || '-',
       payload.dashboardUrl ? `Dashboard: ${payload.dashboardUrl}` : '',
     ].join('\n');

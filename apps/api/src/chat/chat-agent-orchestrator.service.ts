@@ -477,6 +477,39 @@ export class ChatAgentOrchestratorService {
       intakeFlow,
     });
 
+    if (localServiceFlow && pendingActive && isServicePricingOrBillingQuestion(text, intakeFlow)) {
+      const nextState = buildPendingLeadState({
+        previous: activePendingLead,
+        contact,
+        scheduleIntent: effectiveScheduleIntent,
+        startedByIntent: scheduleIntent ? 'schedule' : 'lead',
+      });
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: nextState,
+        conversationState: activeConversationState,
+      });
+
+      const nextQuestion = missing.length > 0
+        ? buildMissingFieldsQuestion(
+            missing,
+            effectiveScheduleIntent,
+            Boolean(contact.concern),
+            contact.preferredContact,
+            true,
+            intakeFlow,
+            Boolean(contact.urgency),
+          )
+        : '';
+
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: [buildLocalServicePricingAnswer(intakeFlow), nextQuestion].filter(Boolean).join('\n\n'),
+        decision: structuredDecision,
+        cta,
+      };
+    }
+
     if (missing.length > 0) {
       if (
         !pendingActive &&
@@ -656,6 +689,7 @@ export class ChatAgentOrchestratorService {
         siteId: params.siteId,
         sessionId: params.sessionId,
         contact,
+        localServiceFlow,
       });
     } catch (error) {
       const limitError = extractLimitExceeded(error);
@@ -719,7 +753,8 @@ export class ChatAgentOrchestratorService {
         leadId: leadCapture.leadId,
         contact,
         scheduleIntent: effectiveScheduleIntent,
-        recipientEmail: siteConfig.leadNotificationEmail || resolveFallbackRecipient(),
+        recipientEmail: siteConfig.leadNotificationEmail,
+        localServiceFlow,
       });
     } else if (activePendingLead?.status === 'pending') {
       await this.saveConversationMetadata(params.conversationId, {
@@ -917,6 +952,7 @@ export class ChatAgentOrchestratorService {
     siteId: string;
     sessionId: string;
     contact: ContactDetails;
+    localServiceFlow: boolean;
   }): Promise<LeadCaptureResult> {
     const existing = await this.db.query<{ id: string }>(
       `SELECT id
@@ -969,7 +1005,7 @@ export class ChatAgentOrchestratorService {
           params.contact.name || 'Unbekannt',
           params.contact.email || '',
           params.contact.phone || null,
-          summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat'),
+          summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat', params.localServiceFlow),
         ],
       );
 
@@ -1126,6 +1162,7 @@ export class ChatAgentOrchestratorService {
     contact: ContactDetails;
     scheduleIntent: boolean;
     recipientEmail?: string;
+    localServiceFlow: boolean;
   }) {
     if (!params.recipientEmail) {
       logEvent('lead_notification_skipped', {
@@ -1159,7 +1196,7 @@ export class ChatAgentOrchestratorService {
           name: params.contact.name || 'Unbekannt',
           email: params.contact.email || '',
           phone: params.contact.phone || null,
-          message: summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat'),
+          message: summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat', params.localServiceFlow),
         },
       });
 
@@ -1481,14 +1518,19 @@ function isLocalServiceFlow(params: {
   conversationState: ConversationState | null;
   intakeFlow?: LocalServiceIntakeFlowConfig;
 }) {
-  return Boolean(
+  const configuredLocalContext = Boolean(
     params.intakeFlow ||
-      params.pendingLead?.location ||
-      params.pendingLead?.urgency ||
-      params.contact.location ||
-      params.contact.urgency ||
-      params.conversationState?.collectedFields?.location ||
-      params.conversationState?.collectedFields?.urgency ||
+      hasLocalServiceSiteSignal(params.siteName || '', params.intakeFlow),
+  );
+  return Boolean(
+    configuredLocalContext ||
+      (configuredLocalContext &&
+        (params.pendingLead?.location ||
+          params.pendingLead?.urgency ||
+          params.contact.location ||
+          params.contact.urgency ||
+          params.conversationState?.collectedFields?.location ||
+          params.conversationState?.collectedFields?.urgency)) ||
       hasLocalServiceSignal(params.text, params.intakeFlow) ||
       hasLocalServiceSiteSignal(params.siteName || '', params.intakeFlow),
   );
@@ -1593,13 +1635,21 @@ function shouldPauseLeadCapture(text: string, contact: ContactDetails) {
   return isUnclearInput(text);
 }
 
+function extractPhoneNumber(message: string) {
+  const candidate = message.match(/(?:\+?\d[\d\s()./-]{4,}\d)/)?.[0]?.replace(/\s+/g, ' ').trim();
+  if (!candidate) {
+    return undefined;
+  }
+  return isValidPhoneNumber(candidate) ? candidate : undefined;
+}
+
 function extractContactDetails(
   message: string,
   pendingLead: PendingLeadState | null,
   intakeFlow?: LocalServiceIntakeFlowConfig,
 ): ContactDetails {
   const email = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
-  const phone = message.match(/(?:\+?\d[\d\s()./-]{6,}\d)/)?.[0]?.replace(/\s+/g, ' ').trim();
+  const phone = extractPhoneNumber(message);
   const name = extractName(message) || inferNameFromPendingAnswer(message, pendingLead, intakeFlow);
   const location = extractServiceLocation(message, pendingLead, intakeFlow);
   const urgency = extractServiceUrgency(message, intakeFlow);
@@ -1623,14 +1673,9 @@ function extractServiceLocation(
   intakeFlow?: LocalServiceIntakeFlowConfig,
 ) {
   const value = message.trim();
-  const zip = value.match(/\b\d{5}\b/)?.[0];
-  if (zip) {
-    return zip;
-  }
-
-  const location = value.match(/\b(?:in|aus|bei|wohne in|bin in)\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,2})\b/)?.[1];
-  if (location) {
-    return cleanExtractedText(location);
+  const fullAddress = extractFullServiceAddress(value);
+  if (fullAddress) {
+    return fullAddress;
   }
 
   if (
@@ -1642,18 +1687,57 @@ function extractServiceLocation(
     !hasLocalServiceSignal(value, intakeFlow) &&
     !hasCallbackOnlyIntent(value, intakeFlow) &&
     !value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i) &&
-    !value.match(/(?:\+?\d[\d\s()./-]{6,}\d)/)
+    !extractPhoneNumber(value)
   ) {
-    const directLocation = value.match(/^([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,2})$/)?.[1];
-    return directLocation ? cleanExtractedText(directLocation) : undefined;
+    return undefined;
   }
 
   return undefined;
 }
 
+function extractFullServiceAddress(value: string) {
+  const clean = value
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.])/g, '$1')
+    .replace(/[;:!?]+$/g, '')
+    .trim();
+  if (!clean || !hasCompleteServiceAddress(clean)) {
+    return undefined;
+  }
+  return clean;
+}
+
+function hasCompleteServiceAddress(value: string | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  const hasZip = /\b\d{5}\b/.test(normalized);
+  const hasHouseNumber = /\b\d{1,5}\s?[a-zA-Z]?\b/.test(normalized);
+  const hasStreetWord =
+    /\b([A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]*(?:straße|strasse|str\.|weg|gasse|allee|ring|platz|damm|ufer|chaussee|pfad|steig|berg|tal|markt)\b|[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]+\s+(?:Straße|Strasse|Weg|Gasse|Allee|Ring|Platz|Damm|Ufer|Chaussee|Pfad|Steig|Berg|Tal|Markt)\b)/i.test(
+      normalized,
+    );
+  const afterZip = normalized.match(/\b\d{5}\b\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,2})/)?.[1];
+  const beforeZip = normalized.match(/([A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,2})\s+\b\d{5}\b/)?.[1];
+  const city = afterZip || beforeZip;
+
+  return Boolean(hasZip && hasHouseNumber && hasStreetWord && city);
+}
+
+function hasPartialServiceAddress(value: string) {
+  return Boolean(
+    /\b\d{5}\b/.test(value) ||
+      /\b[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.-]*(?:straße|strasse|str\.|weg|gasse|allee|ring|platz|damm|ufer|chaussee|pfad|steig|berg|tal|markt)\b\s+\d{1,5}\s?[a-zA-Z]?\b/i.test(value) ||
+      /\b(?:in|aus|bei|wohne in|bin in)\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+/i.test(value) ||
+      /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+(?:\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß-]+){0,2}$/.test(value.trim()),
+  );
+}
+
 function extractServiceUrgency(message: string, intakeFlow?: LocalServiceIntakeFlowConfig) {
   if (
-    /\b(notdienst|notfall|sofort|akut|dringend|eilig|wasser steht|läuft über|laeuft ueber)\b/i.test(message) ||
+    /\b(notdienst|notfall|sofort|akut|dringend|eilig|heute|heute noch|wasser steht|läuft über|laeuft ueber)\b/i.test(message) ||
     matchesKeyword(message, (intakeFlow?.genericLocalServiceKeywords || []).filter((keyword) =>
       /notdienst|dringend|heute/i.test(keyword),
     ))
@@ -1661,7 +1745,7 @@ function extractServiceUrgency(message: string, intakeFlow?: LocalServiceIntakeF
     return 'akut';
   }
 
-  if (/\b(planbar|nicht dringend|morgen|später|spaeter|allgemeine anfrage|nur eine frage)\b/i.test(message)) {
+  if (/\b(planbar|nicht dringend|morgen|termin|terminwunsch|später|spaeter|allgemeine anfrage|nur eine frage)\b/i.test(message)) {
     return 'planbar';
   }
 
@@ -1706,16 +1790,20 @@ function inferNameFromPendingAnswer(
   pendingLead: PendingLeadState | null,
   intakeFlow?: LocalServiceIntakeFlowConfig,
 ) {
-  if (pendingLead?.status !== 'pending' || pendingLead.name) {
+  if (pendingLead?.status !== 'pending' || hasFullName(pendingLead.name)) {
     return undefined;
   }
 
-  if ((!pendingLead.location && extractServiceLocation(message, pendingLead, intakeFlow)) || (!pendingLead.urgency && extractServiceUrgency(message, intakeFlow))) {
+  if (
+    (!pendingLead.location &&
+      (extractServiceLocation(message, pendingLead, intakeFlow) || (Boolean(intakeFlow) && hasPartialServiceAddress(message)))) ||
+    (!pendingLead.urgency && extractServiceUrgency(message, intakeFlow))
+  ) {
     return undefined;
   }
 
   const clean = cleanExtractedText(message.trim());
-  if (!clean || clean.length > 60 || clean.includes('@') || /\d/.test(clean)) {
+  if (!clean || clean.length > 60 || clean.includes('@') || /\d/.test(clean) || hasLocalServiceSignal(clean, intakeFlow)) {
     return undefined;
   }
 
@@ -1776,7 +1864,10 @@ function extractConcern(
   }
 
   if (pendingLead?.status === 'pending' && pendingLead.concern) {
-    if (!pendingLead.location && extractServiceLocation(value, pendingLead, intakeFlow)) {
+    if (
+      !pendingLead.location &&
+      (extractServiceLocation(value, pendingLead, intakeFlow) || (Boolean(intakeFlow) && hasPartialServiceAddress(value)))
+    ) {
       return undefined;
     }
     if (!pendingLead.urgency && extractServiceUrgency(value, intakeFlow)) {
@@ -2166,6 +2257,24 @@ function compactConversationState(state: ConversationState) {
   );
 }
 
+function isValidPhoneNumber(value: string | undefined) {
+  if (!value) {
+    return false;
+  }
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 18;
+}
+
+function hasFullName(value: string | undefined) {
+  if (!value) {
+    return false;
+  }
+  const words = cleanExtractedText(value)
+    .split(/\s+/)
+    .filter((word) => /^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'-]{1,}$/.test(word));
+  return words.length >= 2;
+}
+
 function getMissingContactFields(
   contact: ContactDetails,
   localServiceFlow = false,
@@ -2180,18 +2289,29 @@ function getMissingContactFields(
     const missingByField: Record<string, boolean> = {
       problem: !contact.concern,
       concern: !contact.concern,
-      location: !contact.location,
+      location: !hasCompleteServiceAddress(contact.location),
+      fullAddress: !hasCompleteServiceAddress(contact.location),
+      address: !hasCompleteServiceAddress(contact.location),
       urgency: !contact.urgency,
-      phone: !contact.phone,
-      contact: !contact.phone,
-      name: !contact.name,
+      phone: !isValidPhoneNumber(contact.phone),
+      contact: !isValidPhoneNumber(contact.phone),
+      name: !hasFullName(contact.name),
+      fullName: !hasFullName(contact.name),
     };
-    const order = intakeFlow?.questionOrder?.length
-      ? intakeFlow.questionOrder
-      : ['problem', 'location', 'urgency', 'phone', 'name'];
+    const order = ['problem', 'urgency', 'fullAddress', 'fullName', 'phone'];
     return order
       .filter((field) => missingByField[field])
-      .map((field) => field === 'problem' || field === 'concern' ? 'concern' : field === 'phone' ? 'contact' : field)
+      .map((field) =>
+        field === 'problem' || field === 'concern'
+          ? 'concern'
+          : field === 'phone'
+            ? 'contact'
+            : field === 'fullAddress' || field === 'address'
+              ? 'location'
+              : field === 'fullName'
+                ? 'name'
+                : field,
+      )
       .filter((field, index, fields) => fields.indexOf(field) === index);
   }
 
@@ -2224,6 +2344,10 @@ function canAskForLeadDetails(params: {
     return false;
   }
 
+  if (params.localServiceFlow && params.pendingActive) {
+    return true;
+  }
+
   if (
     params.leadPromptCount >= 1 &&
     !hasLeadProgressSignal(params.contactFromMessage, params.text, params.intakeFlow) &&
@@ -2246,7 +2370,7 @@ function canAskForLeadDetails(params: {
     );
   }
 
-  if (params.localServiceFlow && (params.contact.location || params.contact.urgency)) {
+  if (params.localServiceFlow && (params.contact.location || params.contact.urgency || params.contact.name || params.contact.phone)) {
     return true;
   }
 
@@ -2263,6 +2387,7 @@ function hasLeadProgressSignal(contact: ContactDetails, text: string, intakeFlow
       contact.concern ||
       contact.location ||
       contact.urgency ||
+      contact.name ||
       contact.preferredContact ||
       hasBusinessNeedSignal(text, intakeFlow),
   );
@@ -2276,11 +2401,20 @@ function hasLeadCaptureQuality(contact: ContactDetails) {
   );
 }
 
-function summarizeLeadConcern(contact: ContactDetails, fallback: string) {
+function summarizeLeadConcern(contact: ContactDetails, fallback: string, structured = false) {
+  if (!structured) {
+    return contact.concern || fallback;
+  }
+
   const parts = [
-    contact.concern,
-    contact.location ? `Einsatzort: ${contact.location}` : '',
+    contact.concern ? `Problem / Anliegen: ${contact.concern}` : '',
     contact.urgency ? `Dringlichkeit: ${contact.urgency}` : '',
+    contact.location ? `Einsatzadresse: ${contact.location}` : '',
+    contact.name ? `Name: ${contact.name}` : '',
+    contact.phone ? `Telefon: ${contact.phone}` : '',
+    contact.concern
+      ? `Zusammenfassung: Der Besucher meldet: ${contact.concern}. Ein Rückruf ist erforderlich.`
+      : '',
   ].filter(Boolean);
 
   return parts.length > 0 ? parts.join('\n') : fallback;
@@ -2315,19 +2449,19 @@ function buildMissingFieldsQuestion(
         : questionTexts.problem || 'Was genau ist betroffen?';
     }
     if (missing[0] === 'location') {
-      return questionTexts.location || 'In welchem Ort oder welcher PLZ befindet sich der Einsatzort?';
+      return questionTexts.fullAddress || questionTexts.location || 'Okay, wir kümmern uns darum. Bitte nennen Sie uns die vollständige Einsatzadresse mit Straße, Hausnummer, PLZ und Ort.';
     }
     if (missing[0] === 'urgency') {
       return questionTexts.urgency || 'Wie dringend ist es aktuell - Notfall, heute noch oder Terminwunsch?';
+    }
+    if (missing[0] === 'name' || missing.includes('name')) {
+      return questionTexts.fullName || questionTexts.name || 'Bitte nennen Sie uns noch Ihren Vor- und Nachnamen.';
     }
     if (missing[0] === 'contact' || missing.includes('contact')) {
       if (preferredContact === 'email') {
         return 'Über welche E-Mail-Adresse können wir Sie erreichen?';
       }
       return questionTexts.phone || 'Unter welcher Telefonnummer können wir Sie für den Rückruf erreichen?';
-    }
-    if (missing[0] === 'name' || missing.includes('name')) {
-      return questionTexts.name || 'Wie ist Ihr Name?';
     }
   }
 
@@ -2371,11 +2505,11 @@ function buildCapturedLeadAnswer(params: {
   localServiceFlow?: boolean;
 }) {
   const base = params.localServiceFlow
-    ? 'Danke, ich habe Ihre Anfrage aufgenommen.'
+    ? 'Danke, Ihre Daten wurden aufgenommen.'
     : 'Danke, ich habe deine Anfrage aufgenommen.';
 
   if (params.localServiceFlow) {
-    return `${base} Ein Mitarbeiter kann Sie nun anhand der Angaben zurückrufen.`;
+    return `${base} Sie werden schnellstmöglich kontaktiert.`;
   }
 
   if (params.scheduleUrl) {
@@ -2397,12 +2531,12 @@ function buildLocalServicePricingAnswer(intakeFlow?: LocalServiceIntakeFlowConfi
   const template =
     intakeFlow?.pricingAnswerTemplate ||
     'Die Kosten hängen vom Aufwand und den konkreten Rahmenbedingungen ab. Eine genaue Einschätzung ist nach kurzer Problembeschreibung möglich.';
-  return `${template} Wenn Sie möchten, können Sie kurz schildern, was genau betroffen ist.`;
+  return template;
 }
 
 function buildGreetingAnswer(localServiceFlow = false) {
   if (localServiceFlow) {
-    return 'Guten Tag, ich unterstütze Sie bei Fragen zum Einsatz, zu Kosten, Rückruf oder Notdienst. Wobei kann ich Ihnen helfen?';
+    return 'Guten Tag, wie kann ich Ihnen behilflich sein?';
   }
 
   return 'Hi, ich helfe dir bei Fragen zu Websites, KI-Automatisierung, Support-Systemen oder individuellen Softwarelösungen. Wobei kann ich dich unterstützen?';
@@ -2465,14 +2599,6 @@ function sanitizeAssistantAnswer(value: string | undefined) {
     .replace(/\[TESTDATEN BEREINIGT\]/gi, '')
     .replace(/\[REDACTED\]/gi, '')
     .trim() || 'Ich kann Ihnen dazu kurz weiterhelfen. Bitte schildern Sie Ihr Anliegen ohne sensible Daten.';
-}
-
-function resolveFallbackRecipient() {
-  return (
-    asString(process.env.LEAD_NOTIFICATION_EMAIL) ||
-    asString(process.env.ADMIN_EMAIL) ||
-    asString(process.env.REPORTS_FROM_EMAIL)
-  );
 }
 
 function buildDashboardUrl(siteId: string) {

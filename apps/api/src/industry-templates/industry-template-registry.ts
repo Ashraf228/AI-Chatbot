@@ -52,15 +52,17 @@ const LOCAL_SERVICE_FIRST_CONTACT_FLOW: LocalServiceIntakeFlowConfig = {
   ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
   templateKey: 'local-service-first-contact',
   subIndustry: 'local_service',
-  requiredFields: ['problem', 'location', 'urgency', 'phone', 'name'],
-  questionOrder: ['problem', 'location', 'urgency', 'phone', 'name'],
+  requiredFields: ['problem', 'urgency', 'fullAddress', 'fullName', 'phone'],
+  questionOrder: ['problem', 'urgency', 'fullAddress', 'fullName', 'phone'],
   questionTexts: {
     ...DEFAULT_LOCAL_SERVICE_INTAKE_FLOW.questionTexts,
     problem: 'Was genau ist passiert?',
-    location: 'In welchem Ort, welcher PLZ oder welcher Adresse wird Hilfe benötigt?',
+    location: 'Okay, wir kümmern uns darum. Bitte nennen Sie uns die vollständige Einsatzadresse mit Straße, Hausnummer, PLZ und Ort.',
+    fullAddress: 'Okay, wir kümmern uns darum. Bitte nennen Sie uns die vollständige Einsatzadresse mit Straße, Hausnummer, PLZ und Ort.',
     urgency: 'Wie dringend ist es aktuell - Notfall, heute noch oder Terminwunsch?',
     phone: 'Unter welcher Telefonnummer kann das Unternehmen Sie zurückrufen?',
-    name: 'Auf welchen Namen dürfen wir die Anfrage aufnehmen?',
+    name: 'Danke. Auf welchen Vor- und Nachnamen dürfen wir die Anfrage aufnehmen?',
+    fullName: 'Danke. Auf welchen Vor- und Nachnamen dürfen wir die Anfrage aufnehmen?',
     callback: 'Gerne. Geht es um einen akuten Notfall oder um eine allgemeine Anfrage?',
   },
   pricingAnswerTemplate:
@@ -76,9 +78,9 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
       'Erfasst Anliegen, Einsatzort, Dringlichkeit und Kontaktdaten und sendet die Anfrage an das Unternehmen.',
     setupGoal: 'lead_capture',
     botType: 'handwerker-first-contact',
-    welcomeMessage: 'Guten Tag. Beschreiben Sie kurz, was passiert ist.',
+    welcomeMessage: 'Guten Tag, wie kann ich Ihnen behilflich sein?',
     systemPrompt:
-      'Führen Sie einen formellen Erstkontakt für Handwerker und lokale Dienstleister. Erfassen Sie nacheinander Problem, Einsatzort, Dringlichkeit, Telefonnummer und Name. Verwenden Sie konsequent Sie-Ansprache. Vermeiden Sie Begriffe wie Projekt, Automatisierung oder Business-Prozess.',
+      'Führen Sie einen formellen Erstkontakt für Handwerker und lokale Dienstleister. Erfassen Sie nacheinander Problem, Dringlichkeit, vollständige Einsatzadresse, Vor- und Nachname sowie Telefonnummer. Verwenden Sie konsequent Sie-Ansprache. Vermeiden Sie Begriffe wie Projekt, Automatisierung oder Business-Prozess.',
     tone: 'professional',
     ctaText: 'Soforthilfe',
     launcherLabel: 'Soforthilfe',
@@ -111,9 +113,9 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
           ctaLabel: 'Soforthilfe',
           ctaDescription: 'Wir nehmen Problem, Einsatzort, Dringlichkeit und Kontaktdaten auf.',
           qualificationFocus:
-            'Kläre Problem, Einsatzort, Dringlichkeit, Telefonnummer und Name in einer Frage nach der anderen.',
+            'Kläre Problem, Dringlichkeit, vollständige Einsatzadresse, Vor- und Nachname sowie Telefonnummer in einer Frage nach der anderen.',
           handoffInstruction:
-            'Frage erst nach Problem, Einsatzort und Dringlichkeit, danach nach Telefonnummer und Name. Schließe erst ab, wenn alle Pflichtfelder vorhanden sind.',
+            'Frage erst nach Problem und Dringlichkeit, danach nach vollständiger Einsatzadresse, Vor- und Nachname und Telefonnummer. Schließe erst ab, wenn alle Pflichtfelder vorhanden sind.',
           intakeFlow: LOCAL_SERVICE_FIRST_CONTACT_FLOW,
         },
       },
@@ -128,11 +130,12 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     version: 1,
     label: 'Lokaler Dienstleister',
     setupGoal: 'lead_capture',
-    welcomeMessage: 'Guten Tag! Wie kann ich Ihnen rund um unseren Service weiterhelfen?',
+    welcomeMessage: 'Guten Tag, wie kann ich Ihnen behilflich sein?',
     systemPrompt:
-      'Führe einen kurzen Erstkontakt für lokale Dienstleister. Kläre Bedarf, Einsatzort und Dringlichkeit und leite dann sichtbar Richtung Kontakt oder Termin.',
+      'Führen Sie einen formellen Erstkontakt für lokale Dienstleister. Erfassen Sie nacheinander Problem, Dringlichkeit, vollständige Einsatzadresse, Vor- und Nachname sowie Telefonnummer. Schließen Sie erst ab, wenn alle Pflichtfelder vorhanden sind.',
     tone: 'consultative',
-    ctaText: 'Kontakt aufnehmen',
+    ctaText: 'Soforthilfe',
+    launcherLabel: 'Soforthilfe',
     recommendedQuestions: {
       '/': [
         'Was ist gerade verstopft oder betroffen?',
@@ -158,9 +161,9 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
           ctaLabel: 'Rückruf anfragen',
           ctaDescription: 'Wir nehmen den Einsatz kurz auf.',
           qualificationFocus:
-            'Kläre Problem, Einsatzort und Dringlichkeit in einer Frage nach der anderen.',
+            'Kläre Problem, Dringlichkeit, vollständige Einsatzadresse, Vor- und Nachname sowie Telefonnummer in einer Frage nach der anderen.',
           handoffInstruction:
-            'Frage erst nach Problem, Einsatzort und Dringlichkeit, danach nach Telefonnummer und Name.',
+            'Frage erst nach Problem und Dringlichkeit, danach nach vollständiger Einsatzadresse, Vor- und Nachname und Telefonnummer. Schließe erst ab, wenn alle Pflichtfelder vorhanden sind.',
           intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
         },
       },
