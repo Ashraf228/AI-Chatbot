@@ -450,6 +450,79 @@ test('ChatAgentOrchestratorService handles local service free-text intake step b
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.urgency, 'akut');
 });
 
+test('ChatAgentOrchestratorService explains the current missing local service field', async () => {
+  const { decide, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  const problem = await decide('Mein Klo ist verstopft');
+  const urgency = await decide('heute');
+  const partialAddress = await decide('65549');
+  const fullAddress = await decide(FULL_TEST_ADDRESS);
+  const partialName = await decide('Müller');
+
+  assert.match(problem.answer, /fehlt noch: Dringlichkeit/i);
+  assert.match(urgency.answer, /fehlt noch: vollständige Einsatzadresse/i);
+  assert.match(partialAddress.answer, /PLZ allein reicht noch nicht|Straße, Hausnummer und Ort/i);
+  assert.match(fullAddress.answer, /fehlt noch: Vor- und Nachname/i);
+  assert.match(partialName.answer, /einzelner Name reicht noch nicht|Vor- und Nachnamen/i);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService does not derive phone or name from a full address without comma', async () => {
+  const { decide, conversations, leads, emailJobs } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+  const addressWithoutComma = 'Musterstrasse 36 76355 Musterstadt';
+
+  await decide('Mein Klo ist verstopft');
+  await decide('heute noch');
+  const addressReply = await decide(addressWithoutComma);
+
+  assert.equal(addressReply.action, 'ask_for_contact');
+  assert.match(addressReply.answer, /Vor- und Nachname/i);
+  assert.doesNotMatch(addressReply.answer, /Daten wurden aufgenommen|Telefonnummer/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.location, addressWithoutComma);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(leads.length, 0);
+
+  const nameReply = await decide('Max Müller');
+
+  assert.equal(nameReply.action, 'ask_for_contact');
+  assert.match(nameReply.answer, /Telefonnummer|zurückrufen/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, 'Max Müller');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(leads.length, 0);
+
+  const final = await decide('017600000000');
+
+  assert.equal(final.action, 'capture_lead');
+  assert.match(final.answer, /Daten wurden aufgenommen/i);
+  assert.equal(leads.length, 1);
+  assert.equal(emailJobs.length, 1);
+  assert.equal(emailJobs[0].metadata.leadId, leads[0].id);
+});
+
+test('ChatAgentOrchestratorService rejects address-like digits as phone when phone is pending', async () => {
+  const { decide, conversations, leads } = createHarness({
+    intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  });
+
+  await decide('Mein Klo ist verstopft');
+  await decide('heute');
+  await decide(FULL_TEST_ADDRESS);
+  await decide('Max Müller');
+  const invalidPhone = await decide('36 76355');
+
+  assert.equal(invalidPhone.action, 'ask_for_contact');
+  assert.match(invalidPhone.answer, /Telefonnummer wirkt unvollständig|gültige Rückrufnummer/i);
+  assert.doesNotMatch(invalidPhone.answer, /Daten wurden aufgenommen/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.status, 'pending');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead.phone, undefined);
+  assert.equal(leads.length, 0);
+});
+
 test('ChatAgentOrchestratorService stores local lead without email job when no lead recipient is configured', async () => {
   const { decide, leads, emailJobs } = createHarness({
     intakeFlow: DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
