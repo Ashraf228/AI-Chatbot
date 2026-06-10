@@ -31,6 +31,7 @@ import { AdminScopeModule } from './utils/admin-scope.module';
 import { SiteDataModule } from './site-data/site-data.module';
 import { BusinessAnalyticsModule } from './business-analytics/business-analytics.module';
 import { BillingModule } from './billing/billing.module';
+import { ItSupportModule } from './modules/it-support/it-support.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { BillingModule } from './billing/billing.module';
     SiteDataModule,
     BusinessAnalyticsModule,
     BillingModule,
+    ItSupportModule,
   ],
   controllers: [HealthController],
   providers: [

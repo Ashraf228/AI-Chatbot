@@ -117,6 +117,24 @@ test('IntegrationSecretsService encrypts new secrets as v2 and decrypts legacy v
   );
 });
 
+test('IntegrationsService.buildHeaders supports signingSecret without exposing it as payload data', async () => {
+  const service = new IntegrationsService(
+    { async query() { return { rows: [] }; } },
+    { async getSite(id) { return { id, tenant_id: 'tenant-1' }; } },
+    new IntegrationSecretsService(),
+  );
+
+  const headers = service.buildHeaders(
+    { headers: '{"x-source":"ticket-test"}' },
+    { signingSecret: 'signing-secret-value' },
+  );
+
+  assert.equal(headers['content-type'], 'application/json');
+  assert.equal(headers['x-source'], 'ticket-test');
+  assert.equal(headers['x-webhook-secret'], 'signing-secret-value');
+  assert.equal(headers['x-api-key'], undefined);
+});
+
 test('IntegrationSecretsService rejects weak or missing key material', async () => {
   delete process.env.INTEGRATION_SECRET_KEY;
   const crypto = new IntegrationSecretsService();

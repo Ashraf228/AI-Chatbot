@@ -19,6 +19,12 @@ Fuer einen produktionsnahen Betrieb sollten diese Bausteine aktiv und geprueft s
 - `requiredTicketFields` nur mit erlaubten Feldern konfigurieren.
 - Finale Ticket-Bestaetigung aktiviert lassen.
 
+Dashboard-Konfiguration der generischen Ticket-Weiterleitung: `docs/TICKET_WEBHOOK_CONFIGURATION.md`.
+
+Dashboard-Readiness-Anzeige fuer den IT-Support-Agenten: `docs/IT_SUPPORT_READINESS.md`.
+
+Read-only Ticketuebersicht im Dashboard: `docs/IT_SUPPORT_TICKETS_DASHBOARD.md`.
+
 ## Ablauf
 
 1. Knowledge-first Antwort aus verifizierter Wissensbasis oder sicheren allgemeinen First-Level-Schritten.
@@ -78,6 +84,8 @@ Das `create_ticket` Tool gibt neben der Ticket-ID einen `forwardingStatus` zurue
 
 Der Chat darf nur bei `queued` von eingereihter Weiterleitung sprechen. Ohne konfigurierte Weiterleitung wird transparent gesagt, dass nur das Ticket erstellt wurde.
 
+Neue Tickets speichern den Weiterleitungsstatus zusaetzlich in `agent_tickets.metadata.forwardingStatus`, damit Kunden/Admins den Zustand in der Dashboard-Ticketuebersicht sehen koennen. Alte Tickets ohne gespeicherten Wert werden dort als `unknown` angezeigt.
+
 ## Webhook Payload Beispiel
 
 ```json
@@ -126,6 +134,32 @@ Redigiert werden unter anderem:
 - `refresh_token`
 
 Die Redaction gilt auch fuer verschachtelte Felder wie `metadata`, `technicalContext`, `reporter` und Ticketbeschreibungen.
+
+## IT-Knowledge-Base-Templates
+
+Der Backend-Katalog `IT_KNOWLEDGE_BASE_TEMPLATES` stellt wiederverwendbare First-Level-Support-Artikel fuer typische IT-Faelle bereit. Die Templates sind als Basiswissen gedacht und muessen vor Kundeneinsatz fachlich und kundenspezifisch angepasst werden.
+
+Standard-Templates:
+
+- VPN verbindet nicht
+- Passwort zuruecksetzen
+- MFA / 2FA funktioniert nicht
+- Outlook sendet oder empfaengt keine E-Mails
+- WLAN oder Netzwerk funktioniert nicht
+- Drucker druckt nicht
+- Laptop oder PC ist langsam
+- Software funktioniert nicht
+- Zugriff oder Berechtigung beantragen
+- Phishing-Mail erhalten
+- Malware- oder Virenverdacht
+- Konto gesperrt oder Login blockiert
+- Geraet verloren oder gestohlen
+- Server-, Netzwerk- oder Unternehmensausfall
+- Allgemeines IT-Problem melden
+
+Die Templates fragen keine Passwoerter, MFA-Codes, API-Keys, Tokens oder Secrets ab. Security-Faelle sollen kurz sicher eingeordnet und schnell eskaliert werden.
+
+Details: `docs/IT_SUPPORT_KNOWLEDGE_TEMPLATES.md`
 
 ## Go-live Checklist
 

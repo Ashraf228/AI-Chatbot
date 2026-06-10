@@ -190,3 +190,37 @@ test('IngestService.resyncSource replaces old chunks via source documents', asyn
   assert.equal(result.sourceId, 'source-1');
   assert.deepEqual(deletes, ['source-1']);
 });
+
+test('IngestService.resyncSource supports IT support template sources', async () => {
+  const deps = createDeps();
+  let chunkInput = null;
+  deps.knowledgeSources.getById = async (sourceId) => ({
+    id: sourceId,
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    type: 'it_support_template',
+    title: 'VPN verbindet nicht',
+    metadata: {
+      content: '# VPN verbindet nicht\n\n## Sichere erste Schritte\n1. VPN-Client neu starten.',
+      templateKey: 'vpn-not-connecting',
+      templateVersion: '2026-06-10',
+      industry: 'it-support',
+      category: 'connectivity',
+      issueType: 'vpn',
+      tags: ['vpn'],
+    },
+    url: '',
+  });
+  deps.vector.upsertChunk = async (params) => {
+    chunkInput = params;
+    return { id: params.id, skipped: false };
+  };
+
+  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const result = await service.resyncSource('source-1');
+
+  assert.equal(result.sourceId, 'source-1');
+  assert.equal(chunkInput.metadata.kind, 'it_support_template');
+  assert.equal(chunkInput.metadata.templateKey, 'vpn-not-connecting');
+  assert.equal(chunkInput.metadata.industry, 'it-support');
+});

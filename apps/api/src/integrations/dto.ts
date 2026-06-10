@@ -88,3 +88,28 @@ export class PatchIntegrationDto {
   @IsObject()
   secrets?: Record<string, unknown>;
 }
+
+export class UpdateTicketWebhookDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  targetUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  signingSecret?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  rotateSecret?: boolean;
+}

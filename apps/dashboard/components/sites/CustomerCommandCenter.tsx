@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CustomerQuickActions } from "../customer/CustomerQuickActions";
 import { CustomerTestChatPanel } from "../customer/CustomerTestChatPanel";
+import { ItSupportReadinessCard } from "../it-support/ItSupportReadinessCard";
+import { ItSupportTicketsCard } from "../it-support/ItSupportTicketsCard";
 import type { CustomerApiStatus } from "../customer/customer-status";
 import { CompactMetricCard } from "../shared/CompactMetricCard";
 import { EmptyStateCard } from "../shared/EmptyStateCard";
@@ -201,6 +203,9 @@ export function CustomerCommandCenter({ siteId }: { siteId: string }) {
       <div className="customer-command-grid">
         <section className="dashboard-stack">
           <SetupReadinessChecklist siteId={siteId} status={status} />
+
+          <ItSupportReadinessCard siteId={siteId} />
+          <ItSupportTicketsCard siteId={siteId} />
 
           <section className="dashboard-card dashboard-card--compact dashboard-stack">
             <div className="dashboard-section-heading">

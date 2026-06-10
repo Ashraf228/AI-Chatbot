@@ -475,6 +475,19 @@ export class ToolExecutorService {
     });
     const dispatchResults = await this.dispatchIntegrationEvent('ticket.created', eventPayload, context, auditEntry);
     const forwarding = summarizeTicketForwarding(dispatchResults);
+    await this.db.query(
+      `UPDATE agent_tickets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+       WHERE id = $1 AND site_id = $3`,
+      [
+        ticketId,
+        JSON.stringify({
+          forwardingStatus: forwarding.forwardingStatus,
+          webhookJobId: forwarding.webhookJobId || null,
+        }),
+        context.siteId,
+      ],
+    );
     return {
       toolName: 'create_ticket',
       status: 'success',

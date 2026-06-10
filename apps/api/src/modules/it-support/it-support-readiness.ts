@@ -10,10 +10,14 @@ export type ItSupportReadinessInput = {
   escalationKeywords?: string[];
   hasTicketWebhook?: boolean;
   hasActiveKnowledgeSources?: boolean;
+  availableItKnowledgeTemplateKeys?: string[];
+  importedItKnowledgeTemplateKeys?: string[];
 };
 
 export type ItSupportReadinessResult = {
   status: ItSupportReadinessStatus;
+  label: string;
+  summary: string;
   missing: string[];
   warnings: string[];
   checks: Record<string, boolean>;
@@ -31,6 +35,14 @@ export function evaluateItSupportReadiness(input: ItSupportReadinessInput): ItSu
     requiredTicketFields.every((field) => allowedFields.has(field));
   const requiredTicketFieldsComplete = REQUIRED_BASE_FIELDS.every((field) => requiredFields.has(field));
   const ticketForwardingConfigured = input.hasTicketWebhook === true;
+  const availableTemplateKeys = Array.isArray(input.availableItKnowledgeTemplateKeys)
+    ? input.availableItKnowledgeTemplateKeys.filter((key) => typeof key === 'string' && Boolean(key.trim()))
+    : [];
+  const importedTemplateKeys = Array.isArray(input.importedItKnowledgeTemplateKeys)
+    ? input.importedItKnowledgeTemplateKeys.filter((key) => typeof key === 'string' && Boolean(key.trim()))
+    : [];
+  const itKnowledgeTemplatesImported = importedTemplateKeys.length > 0;
+  const knowledgeBasePrepared = input.hasActiveKnowledgeSources === true || itKnowledgeTemplatesImported;
   const checks = {
     itSupportEnabled: input.itSupportEnabled === true,
     knowledgeFaqEnabled: input.knowledgeFaqEnabled === true,
@@ -41,6 +53,9 @@ export function evaluateItSupportReadiness(input: ItSupportReadinessInput): ItSu
     ticketForwardingConfigured,
     ticketWebhookConfigured: ticketForwardingConfigured,
     activeKnowledgeSourcesAvailable: input.hasActiveKnowledgeSources === true,
+    itKnowledgeTemplatesAvailable: availableTemplateKeys.length > 0,
+    itKnowledgeTemplatesImported,
+    knowledgeBasePrepared,
   };
 
   const missing: string[] = [];
@@ -54,11 +69,13 @@ export function evaluateItSupportReadiness(input: ItSupportReadinessInput): ItSu
   if (!checks.requiredTicketFieldsComplete) {
     missing.push('requiredTicketFields enthält nicht alle Basisfelder: description, affectedSystem, impact, reporterEmail.');
   }
-  if (!checks.ticketConfirmationRequired) missing.push('Finale Ticket-Bestätigung ist nicht als erforderlich markiert.');
+  if (!checks.ticketConfirmationRequired) warnings.push('Finale Ticket-Bestätigung ist nicht als erforderlich markiert.');
 
   if (!checks.escalationKeywordsConfigured) warnings.push('Eskalations-Keywords sind leer oder nicht konfiguriert.');
-  if (!checks.ticketForwardingConfigured) warnings.push('Keine Ticket-Weiterleitung für ticket.created ist als vorhanden markiert.');
-  if (!checks.activeKnowledgeSourcesAvailable) warnings.push('Keine aktiven Wissensquellen sind als vorhanden markiert.');
+  if (!checks.ticketForwardingConfigured) warnings.push('Ticket-Weiterleitung ist noch nicht konfiguriert.');
+  if (!checks.knowledgeBasePrepared) {
+    warnings.push('Keine aktiven Wissensquellen oder importierten IT-Templates sind als vorhanden markiert.');
+  }
 
   const status: ItSupportReadinessStatus = missing.length > 0
     ? 'not_ready'
@@ -68,8 +85,34 @@ export function evaluateItSupportReadiness(input: ItSupportReadinessInput): ItSu
 
   return {
     status,
+    label: readinessLabel(status),
+    summary: readinessSummary(status),
     missing,
     warnings,
     checks,
   };
+}
+
+function readinessLabel(status: ItSupportReadinessStatus) {
+  switch (status) {
+    case 'ready':
+      return 'Produktionsbereit';
+    case 'warning':
+      return 'Fast bereit';
+    case 'not_ready':
+    default:
+      return 'Nicht bereit';
+  }
+}
+
+function readinessSummary(status: ItSupportReadinessStatus) {
+  switch (status) {
+    case 'ready':
+      return 'Der IT-Support-Agent ist einsatzbereit.';
+    case 'warning':
+      return 'Der IT-Support-Agent ist nutzbar, aber einige Punkte sollten vor dem Go-live geprüft werden.';
+    case 'not_ready':
+    default:
+      return 'Der IT-Support-Agent ist noch nicht vollständig eingerichtet.';
+  }
 }

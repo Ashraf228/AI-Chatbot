@@ -555,13 +555,16 @@ export class IntegrationsService {
     }
     const bearerToken = typeof secrets.bearerToken === 'string' ? secrets.bearerToken.trim() : '';
     const apiKey = typeof secrets.apiKey === 'string' ? secrets.apiKey.trim() : '';
+    const signingSecret = typeof secrets.signingSecret === 'string' ? secrets.signingSecret.trim() : '';
     const secret = typeof secrets.secret === 'string' ? secrets.secret.trim() : '';
     if (bearerToken) {
       headers.authorization = `Bearer ${bearerToken}`;
-    } else if (apiKey) {
+    }
+    if (apiKey) {
       headers['x-api-key'] = apiKey;
-    } else if (secret) {
-      headers['x-webhook-secret'] = secret;
+    }
+    if (signingSecret || secret) {
+      headers['x-webhook-secret'] = signingSecret || secret;
     }
     return headers;
   }

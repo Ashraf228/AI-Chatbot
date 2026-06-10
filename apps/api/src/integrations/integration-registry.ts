@@ -195,8 +195,13 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     ],
     secretFields: [
       {
+        key: 'signingSecret',
+        label: 'Signing Secret',
+        kind: 'password',
+      },
+      {
         key: 'apiKey',
-        label: 'API-Schluessel',
+        label: 'API-Schluessel (Legacy)',
         kind: 'password',
       },
     ],

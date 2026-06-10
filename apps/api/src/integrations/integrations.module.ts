@@ -10,6 +10,7 @@ import { IntegrationsService } from './integrations.service';
 import { SiteIntegrationsController } from './site-integrations.controller';
 import { ShopifyCatalogService } from './shopify/shopify-catalog.service';
 import { BillingModule } from '../billing/billing.module';
+import { TicketWebhookConfigService } from './ticket-webhook-config.service';
 
 @Module({
   imports: [SitesModule, AuditLogsModule, BillingModule],
@@ -18,6 +19,7 @@ import { BillingModule } from '../billing/billing.module';
     IntegrationsService,
     IntegrationSecretsService,
     IntegrationEventDispatcherService,
+    TicketWebhookConfigService,
     ShopifyCatalogService,
     RateLimitService,
     PrismaService,
@@ -26,6 +28,7 @@ import { BillingModule } from '../billing/billing.module';
     IntegrationsService,
     IntegrationSecretsService,
     IntegrationEventDispatcherService,
+    TicketWebhookConfigService,
     ShopifyCatalogService,
   ],
 })

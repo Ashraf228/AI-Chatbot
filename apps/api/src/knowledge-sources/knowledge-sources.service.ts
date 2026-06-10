@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../db/prisma.service';
 import { SitesService } from '../sites/sites.service';
 
-export type KnowledgeSourceType = 'faq' | 'pdf' | 'url' | 'manual' | 'product' | 'other';
+export type KnowledgeSourceType = 'faq' | 'pdf' | 'url' | 'manual' | 'product' | 'it_support_template' | 'other';
 export type KnowledgeSourceStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'disabled';
 
 type KnowledgeSourceRow = {
@@ -42,6 +42,8 @@ function normalizeSourceType(value: string): KnowledgeSourceType {
       return 'manual';
     case 'product':
       return 'product';
+    case 'it_support_template':
+      return 'it_support_template';
     default:
       return 'other';
   }

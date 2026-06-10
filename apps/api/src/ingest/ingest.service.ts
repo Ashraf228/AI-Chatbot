@@ -501,6 +501,19 @@ export class IngestService {
     return this.knowledgeSources.deleteSource(sourceId);
   }
 
+  async ingestTextIntoExistingSource(input: {
+    tenantId: string;
+    siteId: string;
+    sourceId: string;
+    type: string;
+    title: string;
+    text: string;
+    sourceUrl?: string;
+    metadata: Record<string, unknown>;
+  }) {
+    return this.ingestTextIntoSource(input);
+  }
+
   async getSource(sourceId: string) {
     if (!sourceId?.trim()) {
       throw new BadRequestException('sourceId missing');
@@ -581,6 +594,30 @@ export class IngestService {
           title: source.title,
           text: content,
           metadata: { kind: 'manual', tags: config.tags || [] },
+        });
+      }
+
+      if (source.type === 'it_support_template') {
+        const content = typeof config.content === 'string' ? config.content.trim() : '';
+        if (!content) {
+          throw new BadRequestException('IT support template source has no stored content for re-sync');
+        }
+        return this.ingestTextIntoSource({
+          tenantId: source.tenantId || '',
+          siteId: source.siteId,
+          sourceId,
+          type: 'manual',
+          title: source.title,
+          text: content,
+          metadata: {
+            kind: 'it_support_template',
+            templateKey: config.templateKey,
+            templateVersion: config.templateVersion,
+            industry: config.industry || 'it-support',
+            category: config.category,
+            issueType: config.issueType,
+            tags: config.tags || [],
+          },
         });
       }
 

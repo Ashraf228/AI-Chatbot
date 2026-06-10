@@ -93,7 +93,13 @@ function categoryLabel(category: string) {
   }
 }
 
-export function SiteIntegrationsForm({ siteId }: { siteId: string }) {
+export function SiteIntegrationsForm({
+  siteId,
+  hiddenProviderKeys = [],
+}: {
+  siteId: string;
+  hiddenProviderKeys?: string[];
+}) {
   const [integrations, setIntegrations] = useState<SiteIntegration[]>([]);
   const [forms, setForms] = useState<Record<string, FormState>>({});
   const [loading, setLoading] = useState(true);
@@ -114,7 +120,9 @@ export function SiteIntegrationsForm({ siteId }: { siteId: string }) {
       return;
     }
 
-    const items = Array.isArray(data) ? data : [];
+    const items = (Array.isArray(data) ? data : []).filter(
+      (integration: SiteIntegration) => !hiddenProviderKeys.includes(integration.providerKey),
+    );
     setIntegrations(items);
     setForms(
       Object.fromEntries(
@@ -130,7 +138,7 @@ export function SiteIntegrationsForm({ siteId }: { siteId: string }) {
   useEffect(() => {
     void loadIntegrations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteId]);
+  }, [siteId, hiddenProviderKeys.join("|")]);
 
   function updateForm(
     key: string,

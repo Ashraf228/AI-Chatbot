@@ -637,6 +637,21 @@ export class ToolDispatcherService {
       }
     }
 
+    const persistedForwardingStatus = forwardingStatus === 'disabled' ? 'not_configured' : forwardingStatus;
+    await this.db.query(
+      `UPDATE agent_tickets
+       SET metadata = COALESCE(metadata, '{}'::jsonb) || $2::jsonb
+       WHERE id = $1 AND site_id = $3`,
+      [
+        id,
+        JSON.stringify({
+          forwardingStatus: persistedForwardingStatus,
+          webhookJobId,
+        }),
+        run.site_id,
+      ],
+    );
+
     return {
       ticketId: id,
       title,
@@ -646,7 +661,7 @@ export class ToolDispatcherService {
       affectedSystem,
       status: 'new',
       forwardedToExternal,
-      forwardingStatus,
+      forwardingStatus: persistedForwardingStatus,
       webhookJobId,
     };
   }
