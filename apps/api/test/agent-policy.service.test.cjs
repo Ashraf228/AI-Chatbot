@@ -195,6 +195,98 @@ test('AgentPolicyService prepares create_ticket for support cases', () => {
   assert.ok(decision.suggestedTools.includes('create_ticket'));
 });
 
+test('AgentPolicyService keeps IT support password how-to in knowledge mode when IT support is active', () => {
+  const policy = new AgentPolicyService();
+
+  const decision = policy.decide(createPolicyContext('Wie setze ich mein Passwort zurück?', {
+    moduleContext: {
+      itSupportEnabled: true,
+    },
+  }));
+
+  assert.equal(decision.type, 'answer');
+  assert.ok(decision.suggestedTools.includes('query_knowledge'));
+  assert.ok(!decision.suggestedTools.includes('create_ticket'));
+});
+
+test('AgentPolicyService keeps IT support VPN issues in knowledge mode when IT support is active', () => {
+  const policy = new AgentPolicyService();
+
+  const decision = policy.decide(createPolicyContext('Mein VPN verbindet nicht', {
+    moduleContext: {
+      itSupportEnabled: true,
+    },
+  }));
+
+  assert.equal(decision.type, 'answer');
+  assert.ok(decision.suggestedTools.includes('query_knowledge'));
+  assert.ok(!decision.suggestedTools.includes('create_ticket'));
+});
+
+test('AgentPolicyService offers escalation without create_ticket for critical IT incidents', () => {
+  const policy = new AgentPolicyService();
+
+  const decision = policy.decide(createPolicyContext('Unser Netzwerk ist komplett down', {
+    moduleContext: {
+      itSupportEnabled: true,
+    },
+  }));
+
+  assert.ok(['ask_followup', 'handoff'].includes(decision.type));
+  assert.match(decision.message, /Ticket|Eskalation/i);
+  assert.ok(!decision.suggestedTools.includes('create_ticket'));
+});
+
+test('AgentPolicyService leaves explicit IT ticket request to pending-ticket flow', () => {
+  const policy = new AgentPolicyService();
+
+  const decision = policy.decide(createPolicyContext('Bitte Ticket erstellen, VPN geht nicht', {
+    moduleContext: {
+      itSupportEnabled: true,
+    },
+  }));
+
+  assert.ok(['ask_followup', 'handoff'].includes(decision.type));
+  assert.ok(!decision.suggestedTools.includes('create_ticket'));
+  assert.ok(!decision.suggestedTools.includes('capture_lead'));
+});
+
+test('AgentPolicyService leaves IT human support request to pending-ticket flow', () => {
+  const policy = new AgentPolicyService();
+
+  const decision = policy.decide(createPolicyContext('Ich möchte mit einem Mitarbeiter sprechen, Outlook geht nicht', {
+    moduleContext: {
+      itSupportEnabled: true,
+    },
+  }));
+
+  assert.ok(['ask_followup', 'handoff'].includes(decision.type));
+  assert.ok(!decision.suggestedTools.includes('create_ticket'));
+  assert.ok(!decision.suggestedTools.includes('capture_lead'));
+});
+
+test('AgentPolicyService does not route generic ticket or employee requests into IT support without IT signal', () => {
+  const policy = new AgentPolicyService();
+
+  const ticketDecision = policy.decide(createPolicyContext('Ich möchte ein Ticket öffnen', {
+    moduleContext: {
+      itSupportEnabled: true,
+      propertyTicketingEnabled: true,
+    },
+  }));
+  const employeeDecision = policy.decide(createPolicyContext('Ich möchte mit einem Mitarbeiter über meine Anfrage sprechen', {
+    moduleContext: {
+      itSupportEnabled: true,
+      propertyTicketingEnabled: true,
+    },
+  }));
+
+  assert.notEqual(ticketDecision.requiredFields[0], 'ticket_confirmation');
+  assert.notEqual(ticketDecision.reason, 'IT support module is active; critical or explicit ticket requests must be confirmed by the pending-ticket flow.');
+  assert.equal(employeeDecision.type, 'handoff');
+  assert.notEqual(employeeDecision.reason, 'IT support module is active; critical or explicit ticket requests must be confirmed by the pending-ticket flow.');
+});
+
 test('AgentPolicyService prepares tickets for common IT support cases', () => {
   const policy = new AgentPolicyService();
 

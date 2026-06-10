@@ -116,6 +116,74 @@ test('ChatPipeline strict knowledgeMode returns safe answer without LLM when ret
   assert.match(result.answer, /keine passende Information/i);
 });
 
+test('ChatPipeline adds IT support answer guidance to routed prompt', async () => {
+  const calls = { systemPrompt: '' };
+  const db = {
+    async query() {
+      return { rows: [] };
+    },
+  };
+  const conversationState = {
+    async ensureConversation() {
+      return { id: 'conversation-1', sessionId: 'session-1' };
+    },
+    async touchWidgetSession() {},
+    async appendMessage() {},
+    async loadHistory() {
+      return [];
+    },
+    async touchConversation() {},
+  };
+  const pipeline = new ChatPipelineService(
+    db,
+    { async embed() { return [0.1]; } },
+    { async search() { return []; } },
+    {
+      async answer(systemPrompt) {
+        calls.systemPrompt = systemPrompt;
+        return {
+          text: 'Allgemeine sichere Schritte. Hat das geholfen? Falls nicht, kann ich ein Support-Ticket öffnen.',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          model: 'm',
+          latencyMs: 1,
+        };
+      },
+    },
+    {
+      async resolveForSite() {
+        return {
+          route: 'agent',
+          reason: 'it_support_intent',
+          moduleKey: 'it-support',
+          agentKey: 'it-support-agent',
+          guide: 'Routing-Hinweis: IT-Support.',
+        };
+      },
+    },
+    { async buildRecommendationContextForSite() { return { products: [], collections: [], state: 'ready_to_recommend', stateGuide: '' }; } },
+    { async decide() { return { action: 'normal_answer', handled: false }; } },
+    conversationState,
+    new ResponseComposerService(),
+    { async executeTool() { return { toolName: 'noop', status: 'skipped', message: 'noop' }; } },
+    { async assertWithinLimit() {} },
+  );
+
+  await pipeline.process({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    sessionId: 'session-1',
+    source: 'widget',
+    message: 'Mein VPN geht nicht',
+    siteConfig: { knowledgeMode: 'flexible' },
+  });
+
+  assert.match(calls.systemPrompt, /IT-First-Level-Support/i);
+  assert.match(calls.systemPrompt, /keine passende Wissensbasis/i);
+  assert.match(calls.systemPrompt, /Hat das geholfen/i);
+  assert.match(calls.systemPrompt, /Passwörtern|Passwoertern/i);
+  assert.match(calls.systemPrompt, /MFA-Codes/i);
+});
+
 test('ChatPipeline advisor route returns safe product fallback without catalog or knowledge', async () => {
   const calls = { llm: 0 };
   const db = {

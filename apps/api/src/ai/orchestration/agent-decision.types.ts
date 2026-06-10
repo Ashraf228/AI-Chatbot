@@ -47,6 +47,19 @@ export type AgentDecision = {
 
 export type AgentMemory = {
   pendingLeadStatus?: 'pending' | 'completed';
+  pendingTicketStatus?:
+    | 'triage'
+    | 'solution_offered'
+    | 'ticket_offered'
+    | 'collecting'
+    | 'ready_to_create'
+    | 'created'
+    | 'cancelled'
+    | 'resolved';
+  pendingTicketIssueType?: string;
+  pendingTicketSummary?: string;
+  pendingTicketUrgency?: string;
+  pendingTicketImpact?: string;
   knownEmail?: string;
   knownPhone?: string;
   knownName?: string;
@@ -75,6 +88,7 @@ export type AgentPolicyContext = {
     leadSalesEnabled: boolean;
     ecommerceAdvisorEnabled: boolean;
     propertyTicketingEnabled: boolean;
+    itSupportEnabled?: boolean;
     supportEnabled: boolean;
     primaryGoal?: string;
     intakeFlow?: LocalServiceIntakeFlowConfig;

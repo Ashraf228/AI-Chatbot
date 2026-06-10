@@ -31,9 +31,20 @@ test('SiteModulesService.listForSite merges registry defaults with stored module
 
   const leadSales = modules.find((entry) => entry.key === 'lead-sales');
   const ecommerce = modules.find((entry) => entry.key === 'ecommerce-product-advisor');
+  const itSupport = modules.find((entry) => entry.key === 'it-support');
 
   assert.equal(leadSales.isEnabled, true);
   assert.equal(ecommerce.isEnabled, true);
   assert.equal(ecommerce.config.catalogMode, 'shopify_catalog');
   assert.equal(ecommerce.config.ctaLabel, 'Produktberatung anfragen');
+  assert.equal(itSupport.isEnabled, false);
+  assert.equal(itSupport.config.intakeMode, 'knowledge_first');
+  assert.equal(itSupport.config.ticketConfirmationRequired, true);
+  assert.equal(itSupport.config.maxTroubleshootingSteps, 2);
+  assert.deepEqual(itSupport.config.requiredTicketFields, [
+    'description',
+    'affectedSystem',
+    'impact',
+    'reporterEmail',
+  ]);
 });

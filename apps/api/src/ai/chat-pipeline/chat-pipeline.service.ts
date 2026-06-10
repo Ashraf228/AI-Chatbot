@@ -5,6 +5,7 @@ import { ChatAgentOrchestratorService } from '../../chat/chat-agent-orchestrator
 import { ChatRoutingService } from '../../chat-routing/chat-routing.service';
 import { PrismaService } from '../../db/prisma.service';
 import { EcommerceProductAdvisorService } from '../../modules/ecommerce-product-advisor/ecommerce-product-advisor.service';
+import { buildItSupportAnswerGuide } from '../../modules/it-support/it-support-flow';
 import { estimateOpenAICost } from '../../usage/costs';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { ToolExecutionResult } from '../../tools/tool-result.types';
@@ -580,6 +581,9 @@ export class ChatPipelineService {
 
     const context = this.responseComposer.buildContext(hits);
     const catalogContext = this.responseComposer.buildCatalogContext(advisorContext);
+    const itSupportKnowledgeGuide = routeDecision.moduleKey === 'it-support'
+      ? buildItSupportAnswerGuide({ knowledgeAvailable: hits.length > 0 })
+      : '';
     const userPrompt = this.responseComposer.buildUserPrompt({
       history,
       message: input.message,
@@ -590,7 +594,7 @@ export class ChatPipelineService {
     const systemPrompt = this.responseComposer.buildSystemPrompt({
       siteConfig: input.siteConfig,
       systemPrompt: input.systemPrompt,
-      guides: [routingGuide, conversationGuide],
+      guides: [routingGuide, itSupportKnowledgeGuide, conversationGuide],
     });
 
     return {

@@ -122,15 +122,17 @@ export class ToolAuditService {
     await this.db.query(
       `INSERT INTO agent_runs(
          id, tenant_id, site_id, agent_key, trigger_source, status, input_summary, metadata, started_at, created_at
-       ) VALUES ($1, $2, $3, 'tool-executor', $4, 'processing', $5, $6::jsonb, now(), now())`,
+       ) VALUES ($1, $2, $3, $4, $5, 'processing', $6, $7::jsonb, now(), now())`,
       [
         id,
         context.tenantId || null,
         context.siteId,
+        context.agentKey || 'tool-executor',
         context.source || 'system',
         `Tool execution: ${toolName}`,
         JSON.stringify({
           conversationId: context.conversationId,
+          moduleKey: context.moduleKey || null,
           messageId: context.messageId || null,
           userId: context.userId || null,
           visitorId: context.visitorId || null,

@@ -2,9 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { PrismaService } from '../db/prisma.service';
-import { IntegrationEventDispatcherService } from '../integrations/integration-event-dispatcher.service';
+import {
+  IntegrationEventDispatcherService,
+  type IntegrationDispatchResult,
+} from '../integrations/integration-event-dispatcher.service';
 import { IntegrationsService } from '../integrations/integrations.service';
 import { SitesService } from '../sites/sites.service';
+import { deepRedactSensitiveValues, redactSensitiveText } from '../modules/it-support/it-support-flow';
 import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { WebhookJobsService } from './webhook-jobs.service';
@@ -27,6 +31,8 @@ type ConversationRow = {
   session_id: string;
   metadata: Record<string, unknown> | null;
 };
+
+type TicketForwardingStatus = 'queued' | 'not_configured' | 'failed' | 'unknown';
 
 @Injectable()
 export class ToolExecutorService {
@@ -368,20 +374,68 @@ export class ToolExecutorService {
     }
 
     const ticketId = randomUUID();
+    const subject = sanitizeTicketText(text(input.subject));
+    const description = sanitizeTicketText(text(input.description));
+    const category = text(input.category) || 'support';
+    const priority = normalizePriority(text(input.priority));
+    const reporterName = text(input.reporterName || input.customerName) || null;
+    const reporterEmail = text(input.reporterEmail || input.customerEmail) || null;
+    const reporterPhone = text(input.reporterPhone) || null;
+    const company = text(input.company) || null;
+    const location = text(input.location) || null;
+    const issueType = text(input.issueType) || null;
+    const affectedSystem = text(input.affectedSystem) || null;
+    const impact = text(input.impact) || null;
+    const urgency = normalizePriority(text(input.urgency));
+    const affectedUsers = text(input.affectedUsers) || null;
+    const device = text(input.device) || null;
+    const operatingSystem = text(input.operatingSystem) || null;
+    const errorMessage = text(input.errorMessage) ? sanitizeTicketText(text(input.errorMessage)) : null;
+    const alreadyTried = text(input.alreadyTried) ? sanitizeTicketText(text(input.alreadyTried)) : null;
+    const department = text(input.department) || null;
+    const source = text(input.source) || 'chat';
+    const metadata = asObject(deepRedactSensitiveValues(input.metadata));
+    const conversationId = text(input.conversationId) || context.conversationId;
+
     await this.db.query(
       `INSERT INTO agent_tickets(
          id, tenant_id, site_id, agent_run_id, title, description, reporter_name,
-         reporter_email, location, priority, status, created_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, null, $7, null, $8, 'new', now())`,
+         reporter_email, location, priority, status, reporter_phone, category, issue_type,
+         affected_system, impact, urgency, affected_users, device, operating_system,
+         error_message, already_tried, department, source, metadata, created_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'new', $11, $12, $13,
+         $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb, now()
+       )`,
       [
         ticketId,
         context.tenantId || null,
         context.siteId,
         auditEntry.runId,
-        text(input.subject),
-        text(input.description),
-        text(input.customerEmail) || null,
-        normalizePriority(text(input.priority)),
+        subject,
+        description,
+        reporterName,
+        reporterEmail,
+        location,
+        priority,
+        reporterPhone,
+        category,
+        issueType,
+        affectedSystem,
+        impact,
+        urgency,
+        affectedUsers,
+        device,
+        operatingSystem,
+        errorMessage,
+        alreadyTried,
+        department,
+        source,
+        JSON.stringify({
+          ...metadata,
+          company,
+          conversationId,
+        }),
       ],
     );
     await this.updateConversationMetadata(context, {
@@ -391,19 +445,51 @@ export class ToolExecutorService {
         updatedAt: new Date().toISOString(),
       },
     });
-    await this.dispatchIntegrationEvent('ticket.created', {
+    const eventPayload = buildTicketCreatedPayload({
       ticketId,
-      subject: text(input.subject),
-      description: text(input.description),
-      priority: normalizePriority(text(input.priority)),
-      customerEmail: text(input.customerEmail) || null,
-      status: 'new',
-    }, context, auditEntry);
+      subject,
+      description,
+      category,
+      priority,
+      urgency,
+      impact,
+      issueType,
+      affectedSystem,
+      affectedUsers,
+      reporterName,
+      reporterEmail,
+      reporterPhone,
+      company,
+      department,
+      location,
+      device,
+      operatingSystem,
+      errorMessage,
+      alreadyTried,
+      source,
+      conversationId,
+      siteId: context.siteId,
+      tenantId: context.tenantId,
+      metadata,
+      createdAt: new Date().toISOString(),
+    });
+    const dispatchResults = await this.dispatchIntegrationEvent('ticket.created', eventPayload, context, auditEntry);
+    const forwarding = summarizeTicketForwarding(dispatchResults);
     return {
       toolName: 'create_ticket',
       status: 'success',
       message: 'Support-Ticket wurde erstellt.',
-      data: { ticketId, status: 'new' },
+      data: {
+        ticketId,
+        status: 'created',
+        forwardingStatus: forwarding.forwardingStatus,
+        webhookJobId: forwarding.webhookJobId,
+        subject,
+        category,
+        priority,
+        issueType,
+        affectedSystem,
+      },
     };
   }
 
@@ -592,9 +678,9 @@ export class ToolExecutorService {
     payload: Record<string, unknown>,
     context: ToolExecutionContext,
     auditEntry?: ToolAuditEntry,
-  ) {
+  ): Promise<IntegrationDispatchResult[]> {
     try {
-      await this.integrationEvents.dispatch(context.siteId, eventType, payload, {
+      return await this.integrationEvents.dispatch(context.siteId, eventType, payload, {
         tenantId: context.tenantId,
         conversationId: context.conversationId,
         messageId: context.messageId,
@@ -605,8 +691,38 @@ export class ToolExecutorService {
       });
     } catch {
       // Integration failures must not break the chat/tool result.
+      return [
+        {
+          integrationId: '',
+          providerKey: 'integration-event-dispatcher',
+          connectionKey: 'ticket.created',
+          type: 'event_dispatch',
+          status: 'failed',
+          message: 'Integration dispatch failed.',
+        },
+      ];
     }
   }
+}
+
+function summarizeTicketForwarding(results: IntegrationDispatchResult[]): {
+  forwardingStatus: TicketForwardingStatus;
+  webhookJobId?: string;
+} {
+  if (!Array.isArray(results) || results.length === 0) {
+    return { forwardingStatus: 'not_configured' };
+  }
+
+  const queued = results.find((entry) => entry.status === 'queued');
+  if (queued) {
+    return { forwardingStatus: 'queued', webhookJobId: queued.webhookJobId };
+  }
+
+  if (results.some((entry) => entry.status === 'failed')) {
+    return { forwardingStatus: 'failed' };
+  }
+
+  return { forwardingStatus: 'not_configured' };
 }
 
 function failed(toolName: string, code: string, message: string): ToolExecutionResult {
@@ -634,8 +750,77 @@ function getNestedString(input: Record<string, unknown>, path: string[]) {
   return text(current);
 }
 
+function buildTicketCreatedPayload(input: {
+  ticketId: string;
+  subject: string;
+  description: string;
+  category: string;
+  priority: string;
+  urgency: string;
+  impact: string | null;
+  issueType: string | null;
+  affectedSystem: string | null;
+  affectedUsers: string | null;
+  reporterName: string | null;
+  reporterEmail: string | null;
+  reporterPhone: string | null;
+  company: string | null;
+  department: string | null;
+  location: string | null;
+  device: string | null;
+  operatingSystem: string | null;
+  errorMessage: string | null;
+  alreadyTried: string | null;
+  source: string;
+  conversationId: string;
+  siteId: string;
+  tenantId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}) {
+  return deepRedactSensitiveValues({
+    ticketId: input.ticketId,
+    subject: input.subject,
+    description: input.description,
+    category: input.category,
+    priority: input.priority,
+    urgency: input.urgency,
+    impact: input.impact,
+    issueType: input.issueType,
+    affectedSystem: input.affectedSystem,
+    affectedUsers: input.affectedUsers,
+    customerEmail: input.reporterEmail,
+    customerName: input.reporterName,
+    reporter: {
+      name: input.reporterName,
+      email: input.reporterEmail,
+      phone: input.reporterPhone,
+      company: input.company,
+      department: input.department,
+      location: input.location,
+    },
+    technicalContext: {
+      device: input.device,
+      operatingSystem: input.operatingSystem,
+      errorMessage: input.errorMessage,
+      alreadyTried: input.alreadyTried,
+    },
+    source: input.source,
+    conversationId: input.conversationId,
+    siteId: input.siteId,
+    tenantId: input.tenantId,
+    metadata: input.metadata,
+    status: 'new',
+    createdAt: input.createdAt,
+  }) as Record<string, unknown>;
+}
+
+function sanitizeTicketText(value: string) {
+  return redactSensitiveText(value);
+}
+
 function normalizePriority(value: string) {
-  return ['low', 'normal', 'high', 'urgent'].includes(value) ? value : 'normal';
+  return ['low', 'normal', 'high', 'urgent', 'critical'].includes(value) ? value : 'normal';
 }
 
 function extractLimitExceeded(error: unknown): { message: string } | null {

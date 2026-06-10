@@ -78,6 +78,7 @@ export class AgentOrchestratorService {
         enabled.has('ecommerce-product-advisor') || enabled.has('ecommerce_product_advisor'),
       propertyTicketingEnabled:
         enabled.has('property-ticketing') || enabled.has('property_ticket_agent'),
+      itSupportEnabled: enabled.has('it-support') || enabled.has('it_support'),
       supportEnabled: enabled.has('support-agent') || enabled.has('support_agent') || enabled.has('knowledge-faq'),
       primaryGoal: asString(leadConfig.primaryGoal) || undefined,
       intakeFlow: leadConfig.intakeFlow

@@ -135,14 +135,25 @@ function createHarness({
   domain = 'demo.example',
   intakeFlow,
   industry,
+  itSupportEnabled = false,
+  itSupportEnabledSites,
+  itSupportRequiredTicketFields,
+  ticketToolFails = false,
+  ticketForwardingStatus = 'queued',
 } = {}) {
   const conversations = new Map([
     ['conversation-1', { metadata: {} }],
   ]);
   const leads = [];
+  const tickets = [];
   const contactRequests = [];
   const emailJobs = [];
   const auditLogs = [];
+  const ticketEvents = [];
+  const isItSupportEnabledForSite = (siteId) =>
+    Array.isArray(itSupportEnabledSites)
+      ? itSupportEnabledSites.includes(siteId)
+      : itSupportEnabled;
 
   const db = {
     async query(sql, params = []) {
@@ -281,6 +292,23 @@ function createHarness({
               intakeFlow,
             },
           },
+          ...(isItSupportEnabledForSite(siteId)
+            ? [
+                {
+                  siteId,
+                  key: 'it-support',
+                  isEnabled: true,
+                  config: {
+                    requiredTicketFields: itSupportRequiredTicketFields || [
+                      'description',
+                      'affectedSystem',
+                      'impact',
+                      'reporterEmail',
+                    ],
+                  },
+                },
+              ]
+            : []),
         ];
       },
     },
@@ -304,14 +332,91 @@ function createHarness({
         return callback(db, async () => undefined);
       },
     },
+    undefined,
+    {
+      async executeTool(toolName, input, context = {}) {
+        if (toolName !== 'create_ticket') {
+          return { toolName, status: 'failed', message: 'Unsupported test tool' };
+        }
+        if (ticketToolFails) {
+          return { toolName, status: 'failed', message: 'Simulierter Fehler' };
+        }
+        const ticket = {
+          id: `ticket-${tickets.length + 1}`,
+          subject: input.subject,
+          description: input.description,
+          category: input.category,
+          priority: input.priority,
+          issueType: input.issueType,
+          affectedSystem: input.affectedSystem,
+          impact: input.impact,
+          reporterEmail: input.reporterEmail,
+          reporterName: input.reporterName,
+          reporterPhone: input.reporterPhone,
+          device: input.device,
+          operatingSystem: input.operatingSystem,
+          metadata: input.metadata,
+          tenantId: context.tenantId,
+          siteId: context.siteId,
+          conversationId: context.conversationId,
+        };
+        tickets.push(ticket);
+        ticketEvents.push({
+          eventType: 'ticket.created',
+          payload: {
+            ticketId: ticket.id,
+            subject: input.subject,
+            description: input.description,
+            category: input.category,
+            priority: input.priority,
+            urgency: input.urgency,
+            impact: input.impact,
+            issueType: input.issueType,
+            affectedSystem: input.affectedSystem,
+            affectedUsers: input.affectedUsers,
+            customerEmail: input.customerEmail,
+            customerName: input.customerName,
+            reporter: {
+              name: input.reporterName,
+              email: input.reporterEmail,
+              phone: input.reporterPhone,
+              department: input.department,
+              location: input.location,
+            },
+            technicalContext: {
+              device: input.device,
+              operatingSystem: input.operatingSystem,
+              errorMessage: input.errorMessage,
+              alreadyTried: input.alreadyTried,
+            },
+            source: input.source,
+            conversationId: input.conversationId,
+            tenantId: context.tenantId,
+            siteId: context.siteId,
+            metadata: input.metadata,
+          },
+        });
+        return {
+          toolName,
+          status: 'success',
+          message: 'Support-Ticket wurde erstellt.',
+          data: {
+            ticketId: ticket.id,
+            status: 'created',
+            forwardingStatus: ticketForwardingStatus,
+            webhookJobId: ticketForwardingStatus === 'queued' ? 'webhook-job-1' : undefined,
+          },
+        };
+      },
+    },
   );
 
-  async function decide(message, history = []) {
+  async function decide(message, history = [], overrides = {}) {
     return service.decide({
-      tenantId: 'tenant-1',
-      siteId: 'site-1',
-      conversationId: 'conversation-1',
-      sessionId: 'session-1',
+      tenantId: overrides.tenantId || 'tenant-1',
+      siteId: overrides.siteId || 'site-1',
+      conversationId: overrides.conversationId || 'conversation-1',
+      sessionId: overrides.sessionId || 'session-1',
       message,
       history,
     });
@@ -322,6 +427,8 @@ function createHarness({
     decide,
     conversations,
     leads,
+    tickets,
+    ticketEvents,
     contactRequests,
     emailJobs,
     auditLogs,
@@ -384,6 +491,837 @@ test('ChatAgentOrchestratorService rejects sensitive credentials without storing
   assert.match(result.answer, /MFA-Codes|Zahlungsdaten|Ausweisdaten/i);
   assert.equal(leads.length, 0);
   assert.equal(conversations.get('conversation-1').metadata.pendingLead, undefined);
+});
+
+test('ChatAgentOrchestratorService keeps IT support knowledge-first and stores pending ticket state', async () => {
+  const { decide, leads, conversations } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  const result = await decide('Mein VPN verbindet nicht');
+  const metadata = conversations.get('conversation-1').metadata;
+
+  assert.equal(result.handled, false);
+  assert.equal(result.action, 'normal_answer');
+  assert.equal(metadata.pendingTicket.status, 'solution_offered');
+  assert.equal(metadata.pendingTicket.issueType, 'vpn');
+  assert.match(metadata.pendingTicket.affectedSystem, /VPN/i);
+  assert.equal(metadata.pendingTicket.lastAssistantAsk, 'solution_check');
+  assert.equal(metadata.pendingTicket.solutionAttemptCount, 1);
+  assert.equal(metadata.pendingLead, null);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService completes full IT support flow end-to-end with ticket event payload', async () => {
+  const { decide, leads, conversations, tickets, ticketEvents } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  let result = await decide('Mein VPN verbindet nicht.');
+  let ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.action, 'normal_answer');
+  assert.equal(result.handled, false);
+  assert.equal(ticket.status, 'solution_offered');
+  assert.equal(ticket.issueType, 'vpn');
+  assert.match(ticket.affectedSystem, /VPN/i);
+  assert.equal(ticket.lastAssistantAsk, 'solution_check');
+  assert.equal(tickets.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, null);
+
+  result = await decide('Nein, hat nicht geholfen.');
+  ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /Support-Ticket öffnen/i);
+  assert.equal(ticket.status, 'ticket_offered');
+  assert.equal(ticket.lastAssistantAsk, 'ticket_confirmation');
+  assert.equal(tickets.length, 0);
+
+  result = await decide('Ja');
+  ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.equal(ticket.status, 'collecting');
+  assert.equal(ticket.ticketConsent, true);
+  assert.ok(ticket.nextExpectedField);
+  assert.equal(tickets.length, 0);
+
+  result = await decide('max@firma.de, betrifft VPN, nur mich, Windows Laptop, Fehler 809');
+  ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.equal(ticket.reporterEmail, 'max@firma.de');
+  assert.equal(ticket.impact, 'single_user');
+  assert.match(`${ticket.device || ''} ${ticket.operatingSystem || ''}`, /Windows|Laptop/i);
+  assert.match(ticket.errorMessage || '', /809/i);
+  assert.equal(ticket.status, 'ready_to_create');
+  assert.match(result.answer, /Support-Ticket gesammelt|Soll ich das Ticket jetzt erstellen/i);
+  assert.equal(tickets.length, 0);
+
+  result = await decide('Ja, bitte erstellen und weiterleiten.');
+  ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.equal(ticket.status, 'created');
+  assert.equal(ticket.createdTicketId, 'ticket-1');
+  assert.equal(tickets.length, 1);
+  assert.equal(tickets[0].category, 'it_support');
+  assert.equal(tickets[0].issueType, 'vpn');
+  assert.match(tickets[0].affectedSystem, /VPN/i);
+  assert.equal(tickets[0].impact, 'single_user');
+  assert.equal(tickets[0].reporterEmail, 'max@firma.de');
+  assert.ok(['normal', 'high'].includes(tickets[0].priority));
+  assert.equal(ticketEvents.length, 1);
+  assert.equal(ticketEvents[0].eventType, 'ticket.created');
+  assert.equal(ticketEvents[0].payload.subject, tickets[0].subject);
+  assert.equal(ticketEvents[0].payload.description, tickets[0].description);
+  assert.equal(ticketEvents[0].payload.category, 'it_support');
+  assert.equal(ticketEvents[0].payload.customerEmail, 'max@firma.de');
+  assert.equal(ticketEvents[0].payload.reporter.email, 'max@firma.de');
+  assert.match(`${ticketEvents[0].payload.technicalContext.device || ''} ${ticketEvents[0].payload.technicalContext.operatingSystem || ''}`, /Windows|Laptop/i);
+  assert.equal(ticketEvents[0].payload.impact, 'single_user');
+  assert.equal(ticketEvents[0].payload.issueType, 'vpn');
+  assert.match(ticketEvents[0].payload.affectedSystem, /VPN/i);
+  assert.equal(ticketEvents[0].payload.conversationId, 'conversation-1');
+  assert.equal(ticketEvents[0].payload.siteId, 'site-1');
+  assert.equal(ticketEvents[0].payload.tenantId, 'tenant-1');
+  assert.equal(ticketEvents[0].payload.metadata.sourceAgent, 'it-support-agent');
+  assert.equal(leads.length, 0);
+
+  result = await decide('Ja');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /bereits erstellt/i);
+  assert.equal(tickets.length, 1);
+  assert.equal(ticketEvents.length, 1);
+});
+
+test('ChatAgentOrchestratorService handles direct IT ticket request without creating before final confirmation', async () => {
+  const { decide, conversations, tickets, leads } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  let result = await decide('Bitte Ticket erstellen, Outlook sendet keine E-Mails. Meine E-Mail ist max@firma.de, nur ich bin betroffen.');
+  let ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.ok(['collecting', 'ready_to_create'].includes(ticket.status));
+  assert.equal(ticket.ticketConsent, true);
+  assert.ok(['outlook', 'email'].includes(ticket.issueType));
+  assert.match(ticket.affectedSystem || '', /Outlook|E-Mail/i);
+  assert.equal(ticket.reporterEmail, 'max@firma.de');
+  assert.equal(ticket.impact, 'single_user');
+  assert.equal(tickets.length, 0);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, null);
+  assert.equal(leads.length, 0);
+
+  result = await decide('Ja');
+  ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  if (ticket.status === 'created') {
+    assert.equal(tickets.length, 1);
+  } else {
+    assert.equal(ticket.status, 'collecting');
+    assert.ok(ticket.nextExpectedField);
+    assert.equal(tickets.length, 0);
+    assert.match(result.answer, /E-Mail-Adresse|betroffen|Telefon|Name|System|beschreibe|nicht funktioniert/i);
+  }
+});
+
+test('ChatAgentOrchestratorService applies custom IT required ticket fields per site config', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+    itSupportRequiredTicketFields: [
+      'description',
+      'affectedSystem',
+      'impact',
+      'reporterEmail',
+      'reporterPhone',
+    ],
+  });
+
+  let result = await decide('Kannst du ein Ticket erstellen? Mein VPN geht nicht. max@firma.de, nur mich.');
+  let ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.equal(ticket.status, 'collecting');
+  assert.ok(ticket.missingFields.includes('reporterPhone'));
+  assert.equal(ticket.nextExpectedField, 'reporterPhone');
+  assert.match(result.answer, /Telefonnummer/i);
+  assert.equal(tickets.length, 0);
+
+  result = await decide('+49123456789');
+  ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.equal(ticket.reporterPhone, '+49123456789');
+  assert.equal(ticket.status, 'ready_to_create');
+  assert.match(result.answer, /Soll ich das Ticket jetzt erstellen/i);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService keeps IT support tenant and site isolated', async () => {
+  const { decide, conversations, tickets, ticketEvents } = createHarness({
+    itSupportEnabledSites: ['site-a'],
+  });
+
+  await decide(
+    'Kannst du ein Ticket erstellen? Mein VPN geht nicht. max@firma.de, nur mich.',
+    [],
+    {
+      tenantId: 'tenant-a',
+      siteId: 'site-a',
+      conversationId: 'conversation-a',
+      sessionId: 'session-a',
+    },
+  );
+  await decide(
+    'Ja',
+    [],
+    {
+      tenantId: 'tenant-a',
+      siteId: 'site-a',
+      conversationId: 'conversation-a',
+      sessionId: 'session-a',
+    },
+  );
+
+  assert.equal(conversations.get('conversation-a').metadata.pendingTicket.status, 'created');
+  assert.equal(tickets.length, 1);
+  assert.equal(tickets[0].tenantId, 'tenant-a');
+  assert.equal(tickets[0].siteId, 'site-a');
+  assert.equal(ticketEvents[0].payload.tenantId, 'tenant-a');
+  assert.equal(ticketEvents[0].payload.siteId, 'site-a');
+
+  const siteBResult = await decide(
+    'Mein VPN verbindet nicht.',
+    [],
+    {
+      tenantId: 'tenant-b',
+      siteId: 'site-b',
+      conversationId: 'conversation-b',
+      sessionId: 'session-b',
+    },
+  );
+
+  assert.equal(siteBResult.handled, false);
+  assert.equal(conversations.get('conversation-b')?.metadata?.pendingTicket, undefined);
+  assert.equal(tickets.length, 1);
+});
+
+test('ChatAgentOrchestratorService blocks sensitive IT data before storing pending ticket or ticket', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  let result = await decide('Mein VPN geht nicht, mein Passwort ist Test123!');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /keine Passwörter|keine Passwoerter/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingTicket, undefined);
+  assert.equal(tickets.length, 0);
+
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'collecting',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      impact: 'single_user',
+      ticketConsent: true,
+      lastAssistantAsk: 'reporter_contact',
+      nextExpectedField: 'reporterEmail',
+    },
+  };
+
+  result = await decide('max@firma.de, mein MFA Code ist 123456');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /keine Passwörter|keine Passwoerter|MFA-Codes/i);
+  assert.doesNotMatch(JSON.stringify(conversations.get('conversation-1').metadata.pendingTicket), /123456/);
+  assert.equal(tickets.length, 0);
+
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ready_to_create',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      impact: 'single_user',
+      reporterEmail: 'max@firma.de',
+      lastAssistantAsk: 'ticket_final_confirmation',
+      missingFields: [],
+    },
+  };
+
+  result = await decide('Ja, mein API Key ist abc123');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /keine Passwörter|keine Passwoerter|MFA-Codes|Zahlungsdaten|Ausweisdaten/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingTicket.status, 'ready_to_create');
+  assert.doesNotMatch(JSON.stringify(conversations.get('conversation-1').metadata), /abc123/);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService offers IT ticket after failed solution', async () => {
+  const { decide, conversations, leads } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'solution_offered',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      lastAssistantAsk: 'solution_check',
+      solutionAttemptCount: 1,
+    },
+  };
+
+  const result = await decide('Nein, hat nicht geholfen');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /Support-Ticket öffnen/i);
+  assert.equal(ticket.status, 'ticket_offered');
+  assert.equal(ticket.lastAssistantAsk, 'ticket_confirmation');
+  assert.equal(ticket.nextExpectedField, 'ticketConsent');
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService marks IT solution as resolved after positive solution check', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'solution_offered',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      lastAssistantAsk: 'solution_check',
+      solutionAttemptCount: 1,
+    },
+  };
+
+  const result = await decide('Ja, hat geholfen');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /gelöst|geloest/i);
+  assert.equal(ticket.status, 'resolved');
+  assert.equal(ticket.nextExpectedField, undefined);
+  assert.deepEqual(ticket.missingFields, []);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService cancels offered IT ticket when user declines', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ticket_offered',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      lastAssistantAsk: 'ticket_confirmation',
+    },
+  };
+
+  const result = await decide('Nein, kein Ticket');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /kein Ticket/i);
+  assert.equal(ticket.status, 'cancelled');
+  assert.equal(ticket.ticketConsent, false);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService starts IT ticket collection after confirmation', async () => {
+  const { decide, conversations } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ticket_offered',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      lastAssistantAsk: 'ticket_confirmation',
+    },
+  };
+
+  const result = await decide('Ja');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.equal(ticket.status, 'collecting');
+  assert.equal(ticket.ticketConsent, true);
+  assert.ok(ticket.nextExpectedField);
+  assert.match(result.answer, /E-Mail-Adresse|betroffen|Nutzer|Unternehmen/i);
+});
+
+test('ChatAgentOrchestratorService cancels IT ticket collection on abort intent', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'collecting',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      ticketConsent: true,
+      lastAssistantAsk: 'reporter_contact',
+      nextExpectedField: 'reporterEmail',
+    },
+  };
+
+  const result = await decide('abbrechen');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /Ticketerfassung ab/i);
+  assert.equal(ticket.status, 'cancelled');
+  assert.equal(ticket.ticketConsent, false);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService starts IT ticket collection for direct ticket request', async () => {
+  const { decide, conversations, leads, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  const result = await decide('Kannst du ein Ticket erstellen? Mein VPN geht nicht.');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.ok(['collecting', 'ready_to_create'].includes(ticket.status));
+  assert.equal(ticket.ticketConsent, true);
+  assert.equal(ticket.issueType, 'vpn');
+  assert.match(ticket.affectedSystem || '', /VPN/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, null);
+  assert.equal(tickets.length, 0);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService starts IT ticket collection for human support handoff', async () => {
+  const { decide, conversations, leads, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  const result = await decide('Bitte an einen Mitarbeiter weiterleiten, Outlook geht nicht.');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.ok(['collecting', 'ready_to_create'].includes(ticket.status));
+  assert.equal(ticket.ticketConsent, true);
+  assert.ok(['outlook', 'email'].includes(ticket.issueType));
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, null);
+  assert.equal(tickets.length, 0);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService starts critical IT ticket intake safely for direct security request', async () => {
+  const { decide, conversations, leads, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  const result = await decide('Bitte Ticket erstellen, wir haben Phishing und Malware-Verdacht.');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /keine Passwörter|keine Passwoerter|MFA-Codes|vertraulichen Daten/i);
+  assert.match(result.answer, /keine weiteren Links|Anhänge|Anhaenge|Malware/i);
+  assert.ok(['collecting', 'ready_to_create'].includes(ticket.status));
+  assert.equal(ticket.ticketConsent, true);
+  assert.equal(ticket.issueType, 'security');
+  assert.ok(['urgent', 'critical'].includes(ticket.priority));
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, null);
+  assert.equal(tickets.length, 0);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService marks IT ticket ready after required fields are collected', async () => {
+  const { decide, conversations, leads } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'collecting',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      ticketConsent: true,
+    },
+  };
+
+  const result = await decide('max@firma.de, nur mich, Windows Laptop');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.equal(ticket.reporterEmail, 'max@firma.de');
+  assert.equal(ticket.impact, 'single_user');
+  assert.match(`${ticket.device || ''} ${ticket.operatingSystem || ''}`, /Windows|Laptop/i);
+  assert.equal(ticket.status, 'ready_to_create');
+  assert.equal(ticket.lastAssistantAsk, 'ticket_final_confirmation');
+  assert.match(result.answer, /Support-Ticket gesammelt/i);
+  assert.match(result.answer, /Soll ich das Ticket jetzt erstellen/i);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService creates a real IT ticket after final confirmation', async () => {
+  const { decide, conversations, leads, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ready_to_create',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet seit heute Morgen nicht',
+      impact: 'single_user',
+      urgency: 'normal',
+      priority: 'normal',
+      reporterEmail: 'max@firma.de',
+      device: 'Windows Laptop',
+      operatingSystem: 'Windows',
+      lastAssistantAsk: 'ticket_final_confirmation',
+      nextExpectedField: 'finalTicketConfirmation',
+      missingFields: [],
+    },
+  };
+
+  const result = await decide('Ja');
+  const ticketState = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /Support-Ticket erstellt/i);
+  assert.equal(ticketState.status, 'created');
+  assert.equal(ticketState.createdTicketId, 'ticket-1');
+  assert.equal(tickets.length, 1);
+  assert.equal(tickets[0].category, 'it_support');
+  assert.equal(tickets[0].issueType, 'vpn');
+  assert.equal(tickets[0].affectedSystem, 'VPN');
+  assert.equal(tickets[0].impact, 'single_user');
+  assert.equal(tickets[0].reporterEmail, 'max@firma.de');
+  assert.match(`${tickets[0].device || ''} ${tickets[0].operatingSystem || ''}`, /Windows|Laptop/i);
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, null);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService does not create duplicate IT tickets after creation', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'created',
+      createdTicketId: 'ticket-existing',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+    },
+  };
+
+  const result = await decide('Ja');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /bereits erstellt/i);
+  assert.match(result.answer, /ticket-existing/i);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService starts a new IT context after a created ticket when a new problem is sent', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'created',
+      createdTicketId: 'ticket-existing',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+    },
+  };
+
+  const result = await decide('Mein Drucker druckt nicht.');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.action, 'normal_answer');
+  assert.equal(result.handled, false);
+  assert.equal(ticket.status, 'solution_offered');
+  assert.equal(ticket.issueType, 'printer');
+  assert.match(ticket.affectedSystem, /Drucker/i);
+  assert.equal(ticket.createdTicketId, undefined);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService starts a new IT context after resolved and cancelled terminal states', async () => {
+  const resolvedHarness = createHarness({ itSupportEnabled: true });
+  resolvedHarness.conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'resolved',
+      issueType: 'vpn',
+      affectedSystem: 'VPN',
+      summary: 'VPN verbindet nicht',
+    },
+  };
+
+  await resolvedHarness.decide('Outlook geht jetzt auch nicht.');
+  let ticket = resolvedHarness.conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(ticket.status, 'solution_offered');
+  assert.ok(['outlook', 'email'].includes(ticket.issueType));
+  assert.equal(ticket.createdTicketId, undefined);
+  assert.equal(resolvedHarness.tickets.length, 0);
+
+  const cancelledHarness = createHarness({ itSupportEnabled: true });
+  cancelledHarness.conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'cancelled',
+      issueType: 'printer',
+      affectedSystem: 'Drucker',
+      summary: 'Druckerproblem',
+      ticketConsent: false,
+    },
+  };
+
+  await cancelledHarness.decide('Ich möchte doch ein Ticket erstellen, VPN geht nicht.');
+  ticket = cancelledHarness.conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.ok(['collecting', 'ready_to_create'].includes(ticket.status));
+  assert.equal(ticket.ticketConsent, true);
+  assert.equal(ticket.issueType, 'vpn');
+  assert.equal(ticket.createdTicketId, undefined);
+  assert.equal(cancelledHarness.tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService reports queued ticket forwarding only when integration dispatch queued', async () => {
+  const { decide, conversations } = createHarness({
+    itSupportEnabled: true,
+    ticketForwardingStatus: 'queued',
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ready_to_create',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet seit heute Morgen nicht',
+      affectedSystem: 'VPN',
+      impact: 'single_user',
+      reporterEmail: 'max@firma.de',
+      lastAssistantAsk: 'ticket_final_confirmation',
+    },
+  };
+
+  const result = await decide('Ja');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /zur Weiterleitung an den IT-Support eingereiht/i);
+});
+
+test('ChatAgentOrchestratorService does not claim forwarding when ticket forwarding is not configured', async () => {
+  const { decide, conversations } = createHarness({
+    itSupportEnabled: true,
+    ticketForwardingStatus: 'not_configured',
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ready_to_create',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet seit heute Morgen nicht',
+      affectedSystem: 'VPN',
+      impact: 'single_user',
+      reporterEmail: 'max@firma.de',
+      lastAssistantAsk: 'ticket_final_confirmation',
+    },
+  };
+
+  const result = await decide('Ja');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /Support-Ticket erstellt/i);
+  assert.match(result.answer, /automatische Weiterleitung.*noch nicht eingerichtet/i);
+  assert.doesNotMatch(result.answer, /zur Weiterleitung.*eingereiht|weitergeleitet/i);
+});
+
+test('ChatAgentOrchestratorService reports failed forwarding without claiming successful forwarding', async () => {
+  const { decide, conversations } = createHarness({
+    itSupportEnabled: true,
+    ticketForwardingStatus: 'failed',
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ready_to_create',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet seit heute Morgen nicht',
+      affectedSystem: 'VPN',
+      impact: 'single_user',
+      reporterEmail: 'max@firma.de',
+      lastAssistantAsk: 'ticket_final_confirmation',
+    },
+  };
+
+  const result = await decide('Ja');
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /Support-Ticket erstellt/i);
+  assert.match(result.answer, /Weiterleitung konnte gerade nicht bestätigt werden/i);
+  assert.doesNotMatch(result.answer, /zur Weiterleitung.*eingereiht|weitergeleitet/i);
+});
+
+test('ChatAgentOrchestratorService cancels ready IT ticket on final no', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ready_to_create',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      affectedSystem: 'VPN',
+      impact: 'single_user',
+      reporterEmail: 'max@firma.de',
+      lastAssistantAsk: 'ticket_final_confirmation',
+    },
+  };
+
+  const result = await decide('Nein');
+  const ticketState = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /kein Support-Ticket|kein Ticket/i);
+  assert.equal(ticketState.status, 'cancelled');
+  assert.equal(ticketState.ticketConsent, false);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService keeps ready IT ticket on unclear final answer', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ready_to_create',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      affectedSystem: 'VPN',
+      impact: 'single_user',
+      reporterEmail: 'max@firma.de',
+      lastAssistantAsk: 'ticket_final_confirmation',
+    },
+  };
+
+  const result = await decide('vielleicht');
+  const ticketState = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /Bitte antworte mit Ja oder Nein/i);
+  assert.equal(ticketState.status, 'ready_to_create');
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService keeps ready IT ticket when create_ticket fails', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+    ticketToolFails: true,
+  });
+  conversations.get('conversation-1').metadata = {
+    pendingTicket: {
+      status: 'ready_to_create',
+      summary: 'VPN verbindet nicht',
+      description: 'VPN verbindet nicht',
+      affectedSystem: 'VPN',
+      impact: 'single_user',
+      reporterEmail: 'max@firma.de',
+      lastAssistantAsk: 'ticket_final_confirmation',
+    },
+  };
+
+  const result = await decide('Ja');
+  const ticketState = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /konnte das Ticket gerade nicht erstellen/i);
+  assert.equal(ticketState.status, 'ready_to_create');
+  assert.equal(ticketState.createdTicketId, undefined);
+  assert.equal(tickets.length, 0);
+});
+
+test('ChatAgentOrchestratorService offers urgent IT ticket for critical outages', async () => {
+  const { decide, conversations, leads } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  const result = await decide('Unser komplettes Netzwerk ist down');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /kritischen IT-Vorfall|dringendes Support-Ticket/i);
+  assert.equal(ticket.status, 'ticket_offered');
+  assert.ok(['urgent', 'critical'].includes(ticket.priority));
+  assert.equal(ticket.impact, 'company_wide');
+  assert.equal(conversations.get('conversation-1').metadata.pendingLead, null);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService offers safe escalation for IT security incidents', async () => {
+  const { decide, conversations } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  const result = await decide('Wir haben eine Phishing-Mail bekommen und vielleicht Malware');
+  const ticket = conversations.get('conversation-1').metadata.pendingTicket;
+
+  assert.equal(result.handled, true);
+  assert.match(result.answer, /keine Passwörter|MFA-Codes|vertraulichen Daten/i);
+  assert.match(result.answer, /Support-Ticket|Eskalation|weiterleiten/i);
+  assert.equal(ticket.issueType, 'security');
+  assert.ok(['urgent', 'critical'].includes(ticket.priority));
+});
+
+test('ChatAgentOrchestratorService leaves IT-like messages untouched when IT support is inactive', async () => {
+  const { decide, conversations, leads } = createHarness();
+
+  const result = await decide('Mein VPN verbindet nicht');
+
+  assert.equal(result.handled, false);
+  assert.equal(result.action, 'normal_answer');
+  assert.equal(conversations.get('conversation-1').metadata.pendingTicket, undefined);
+  assert.equal(leads.length, 0);
+});
+
+test('ChatAgentOrchestratorService does not start IT pending tickets for generic appointment or employee requests', async () => {
+  const { decide, conversations, tickets } = createHarness({
+    itSupportEnabled: true,
+  });
+
+  const appointment = await decide('Ich möchte einen Termin vereinbaren');
+
+  assert.notEqual(conversations.get('conversation-1').metadata.pendingTicket?.status, 'collecting');
+  assert.equal(conversations.get('conversation-1').metadata.pendingTicket, undefined);
+  assert.equal(tickets.length, 0);
+  assert.notEqual(appointment.decision?.metadata?.rule, 'it_support');
+
+  conversations.get('conversation-1').metadata = {};
+  const employee = await decide('Ich möchte mit einem Mitarbeiter über meine Anfrage sprechen');
+
+  assert.equal(conversations.get('conversation-1').metadata.pendingTicket, undefined);
+  assert.equal(tickets.length, 0);
+  assert.notEqual(employee.decision?.reason, 'IT support module is active; critical or explicit ticket requests must be confirmed by the pending-ticket flow.');
 });
 
 test('ChatAgentOrchestratorService starts a pending lead and asks for the concern first', async () => {

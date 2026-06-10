@@ -9,11 +9,38 @@ import { SiteModulesService } from '../site-modules/site-modules.service';
 import { logEvent } from '../utils/logger';
 import { LeadMailerService } from '../modules/widget/services/lead-mailer.service';
 import { ReportMailerService } from '../modules/widget/services/report-mailer.service';
+import { ToolExecutorService } from '../tools/tool-executor.service';
 import {
   DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  normalizeItSupportModuleConfig,
   normalizeLocalServiceIntakeFlowConfig,
 } from '../site-modules/module-configs';
-import type { LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
+import type { ItSupportModuleConfig, LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
+import {
+  buildItSupportCancelledAnswer,
+  buildItSupportResolvedAnswer,
+  buildCreateTicketInputFromPendingTicket,
+  buildItTicketMissingFieldQuestion,
+  buildItTicketOfferAnswer,
+  buildItTicketReadyToCreateAnswer,
+  compactPendingTicketState,
+  extractItTicketFields,
+  getMissingItTicketFields,
+  hasCriticalItIncident,
+  hasExplicitTicketRequest,
+  hasItSupportHandoffRequest,
+  hasItSupportSignal,
+  hasSecurityIncident,
+  hasSolutionFailedReply,
+  hasSolutionWorkedReply,
+  hasTicketCollectionAbort,
+  hasTicketConfirmationNo,
+  hasTicketConfirmationYes,
+  shouldStartNewItSupportContext,
+  mergePendingTicket,
+  parsePendingTicketState,
+} from '../modules/it-support/it-support-flow';
+import type { PendingTicketForwardingStatus, PendingTicketState } from '../modules/it-support/it-support-flow';
 
 type ChatHistoryEntry = {
   role: 'user' | 'assistant' | 'system';
@@ -107,6 +134,7 @@ export class ChatAgentOrchestratorService {
     private readonly reportMailer: ReportMailerService,
     private readonly usageLimits: UsageLimitService,
     @Optional() private readonly decisionOrchestrator?: AgentOrchestratorService,
+    @Optional() private readonly toolExecutor?: ToolExecutorService,
   ) {}
 
   async decide(params: {
@@ -127,6 +155,7 @@ export class ChatAgentOrchestratorService {
     const askedForContact = wasContactRequested(params.history);
     const metadataState = await this.loadConversationMetadata(params.conversationId);
     const pendingLead = metadataState.pendingLead;
+    const pendingTicket = metadataState.pendingTicket;
     const activePendingLead = pendingLead?.status === 'pending' ? pendingLead : null;
     const currentConversationState = pendingLead?.status === 'completed' ? null : metadataState.conversationState;
     const pendingActive = activePendingLead?.status === 'pending';
@@ -175,6 +204,18 @@ export class ChatAgentOrchestratorService {
         answer: buildSensitiveDataAnswer(),
         decision: structuredDecision,
       };
+    }
+
+    const itSupportDecision = await this.handleItSupportFlow({
+      params,
+      text,
+      pendingTicket,
+      conversationState,
+      moduleContext,
+      structuredDecision,
+    });
+    if (itSupportDecision) {
+      return itSupportDecision;
     }
 
     if (localServiceFlow && hasCompletedLeadAcknowledgementIntent(text) && pendingLead?.status === 'completed') {
@@ -874,12 +915,471 @@ export class ChatAgentOrchestratorService {
     return null;
   }
 
+  private async handleItSupportFlow(input: {
+    params: {
+      tenantId: string;
+      siteId: string;
+      conversationId: string;
+      sessionId: string;
+      message: string;
+      history: ChatHistoryEntry[];
+    };
+    text: string;
+    pendingTicket: PendingTicketState | null;
+    conversationState: ConversationState | null;
+    moduleContext: {
+      itSupportEnabled: boolean;
+      itSupportConfig: ItSupportModuleConfig;
+    };
+    structuredDecision: AgentDecision | undefined;
+  }): Promise<ChatAgentDecision | null> {
+    if (!input.moduleContext.itSupportEnabled) {
+      return null;
+    }
+
+    const config = input.moduleContext.itSupportConfig;
+    const startsNewContext = shouldStartNewItSupportContext({
+      text: input.text,
+      pendingTicket: input.pendingTicket,
+    });
+    const activeTicket = startsNewContext
+      ? null
+      : isActivePendingTicket(input.pendingTicket)
+        ? input.pendingTicket
+        : null;
+    const critical = hasCriticalItIncident(input.text, config.escalationKeywords);
+    const securityIncident = hasSecurityIncident(input.text);
+    const supportSignal = hasItSupportSignal(input.text);
+    const explicitTicketRequest = hasExplicitTicketRequest(input.text);
+    const handoffRequest = hasItSupportHandoffRequest(input.text);
+    const hasItTicketContext = Boolean(activeTicket) || supportSignal || critical || securityIncident;
+    const directTicketRequest = (explicitTicketRequest || handoffRequest) && hasItTicketContext;
+
+    if (
+      input.pendingTicket?.status === 'created' &&
+      input.pendingTicket.createdTicketId &&
+      !startsNewContext &&
+      hasTicketConfirmationYes(input.text)
+    ) {
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: `Das Support-Ticket wurde bereits erstellt.\n\nTicket: ${input.pendingTicket.createdTicketId}`,
+        decision: input.structuredDecision,
+      };
+    }
+
+    if (!activeTicket && !supportSignal && !critical && !securityIncident && !directTicketRequest) {
+      return null;
+    }
+
+    if (activeTicket?.status === 'solution_offered') {
+      if (hasSolutionWorkedReply(input.text, activeTicket)) {
+        const resolvedTicket = mergePendingTicket(activeTicket, {
+          status: 'resolved',
+          completedAt: new Date().toISOString(),
+          nextExpectedField: undefined,
+          missingFields: [],
+        });
+        await this.saveConversationMetadata(input.params.conversationId, {
+          pendingLead: null,
+          pendingTicket: resolvedTicket,
+          conversationState: buildTicketConversationState(input.conversationState, resolvedTicket, 'completed'),
+        });
+        return {
+          action: 'normal_answer',
+          handled: true,
+          answer: buildItSupportResolvedAnswer(),
+          decision: input.structuredDecision,
+        };
+      }
+
+      if (directTicketRequest) {
+        const result = await this.collectItSupportTicketFields({
+          ...input,
+          pendingTicket: activeTicket,
+          patch: {
+            ...extractItTicketFields(input.params.message, activeTicket),
+            status: 'collecting',
+            ticketConsent: true,
+          },
+        });
+        if (securityIncident || critical) {
+          return {
+            ...result,
+            answer: withItSecurityWarning(result.answer || ''),
+          };
+        }
+        return result;
+      }
+
+      if (hasSolutionFailedReply(input.text, activeTicket)) {
+        const offeredTicket = mergePendingTicket(activeTicket, {
+          ...extractItTicketFields(input.params.message, activeTicket),
+          status: 'ticket_offered',
+          lastAssistantAsk: 'ticket_confirmation',
+          nextExpectedField: 'ticketConsent',
+        });
+        await this.saveConversationMetadata(input.params.conversationId, {
+          pendingLead: null,
+          pendingTicket: offeredTicket,
+          conversationState: buildTicketConversationState(input.conversationState, offeredTicket, 'qualification'),
+        });
+        return {
+          action: 'normal_answer',
+          handled: true,
+          answer: buildItTicketOfferAnswer(offeredTicket),
+          decision: input.structuredDecision,
+        };
+      }
+    }
+
+    if (activeTicket?.status === 'ticket_offered') {
+      if (hasTicketConfirmationNo(input.text)) {
+        const cancelledTicket = mergePendingTicket(activeTicket, {
+          status: 'cancelled',
+          ticketConsent: false,
+          completedAt: new Date().toISOString(),
+          missingFields: [],
+        });
+        await this.saveConversationMetadata(input.params.conversationId, {
+          pendingLead: null,
+          pendingTicket: cancelledTicket,
+          conversationState: buildTicketConversationState(input.conversationState, cancelledTicket, 'completed'),
+        });
+        return {
+          action: 'normal_answer',
+          handled: true,
+          answer: buildItSupportCancelledAnswer(),
+          decision: input.structuredDecision,
+        };
+      }
+
+      if (hasTicketConfirmationYes(input.text, activeTicket)) {
+        return this.collectItSupportTicketFields({
+          ...input,
+          pendingTicket: activeTicket,
+          patch: {
+            ...extractItTicketFields(input.params.message, activeTicket),
+            status: 'collecting',
+            ticketConsent: true,
+          },
+        });
+      }
+
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildItTicketOfferAnswer(activeTicket),
+        decision: input.structuredDecision,
+      };
+    }
+
+    if (activeTicket?.status === 'collecting') {
+      if (hasTicketCollectionAbort(input.text)) {
+        const cancelledTicket = mergePendingTicket(activeTicket, {
+          status: 'cancelled',
+          ticketConsent: false,
+          completedAt: new Date().toISOString(),
+          missingFields: [],
+          nextExpectedField: undefined,
+        });
+        await this.saveConversationMetadata(input.params.conversationId, {
+          pendingLead: null,
+          pendingTicket: cancelledTicket,
+          conversationState: buildTicketConversationState(input.conversationState, cancelledTicket, 'completed'),
+        });
+        return {
+          action: 'normal_answer',
+          handled: true,
+          answer: 'Alles klar, ich breche die Ticketerfassung ab.',
+          decision: input.structuredDecision,
+        };
+      }
+
+      return this.collectItSupportTicketFields({
+        ...input,
+        pendingTicket: activeTicket,
+        patch: {
+          ...extractItTicketFields(input.params.message, activeTicket),
+          status: 'collecting',
+          ticketConsent: true,
+        },
+      });
+    }
+
+    if (activeTicket?.status === 'ready_to_create') {
+      if (hasTicketConfirmationNo(input.text)) {
+        const cancelledTicket = mergePendingTicket(activeTicket, {
+          status: 'cancelled',
+          ticketConsent: false,
+          completedAt: new Date().toISOString(),
+          missingFields: [],
+          nextExpectedField: undefined,
+        });
+        await this.saveConversationMetadata(input.params.conversationId, {
+          pendingLead: null,
+          pendingTicket: cancelledTicket,
+          conversationState: buildTicketConversationState(input.conversationState, cancelledTicket, 'completed'),
+        });
+        return {
+          action: 'normal_answer',
+          handled: true,
+          answer: buildItSupportCancelledAnswer(),
+          decision: input.structuredDecision,
+        };
+      }
+
+      if (hasTicketConfirmationYes(input.text, activeTicket) || directTicketRequest) {
+        if (activeTicket.createdTicketId) {
+          return {
+            action: 'normal_answer',
+            handled: true,
+            answer: `Das Support-Ticket wurde bereits erstellt.\n\nTicket: ${activeTicket.createdTicketId}`,
+            decision: input.structuredDecision,
+          };
+        }
+
+        if (!this.toolExecutor) {
+          return {
+            action: 'normal_answer',
+            handled: true,
+            answer:
+              'Ich konnte das Ticket gerade nicht erstellen. Bitte versuche es erneut oder kontaktiere den Support direkt.',
+            decision: input.structuredDecision,
+          };
+        }
+
+        try {
+          const result = await this.toolExecutor.executeTool(
+            'create_ticket',
+            buildCreateTicketInputFromPendingTicket(activeTicket, {
+              conversationId: input.params.conversationId,
+              tenantId: input.params.tenantId,
+              siteId: input.params.siteId,
+            }),
+            {
+              tenantId: input.params.tenantId,
+              siteId: input.params.siteId,
+              conversationId: input.params.conversationId,
+              source: 'widget',
+              agentKey: 'it-support-agent',
+              moduleKey: 'it-support',
+            },
+          );
+
+          const ticketId = asString(asObject(result.data).ticketId);
+          const forwardingStatus = parseTicketForwardingStatus(asString(asObject(result.data).forwardingStatus));
+          if (result.status !== 'success' || !ticketId) {
+            return {
+              action: 'normal_answer',
+              handled: true,
+              answer:
+                'Ich konnte das Ticket gerade nicht erstellen. Bitte versuche es erneut oder kontaktiere den Support direkt.',
+              decision: input.structuredDecision,
+            };
+          }
+
+          const createdTicket = mergePendingTicket(activeTicket, {
+            status: 'created',
+            createdTicketId: ticketId,
+            forwardingStatus,
+            completedAt: new Date().toISOString(),
+            missingFields: [],
+            nextExpectedField: undefined,
+          });
+          await this.saveConversationMetadata(input.params.conversationId, {
+            pendingLead: null,
+            pendingTicket: createdTicket,
+            conversationState: buildTicketConversationState(input.conversationState, createdTicket, 'completed'),
+          });
+
+          return {
+            action: 'normal_answer',
+            handled: true,
+            answer: buildCreatedItTicketAnswer(createdTicket, forwardingStatus),
+            decision: input.structuredDecision,
+          };
+        } catch {
+          return {
+            action: 'normal_answer',
+            handled: true,
+            answer:
+              'Ich konnte das Ticket gerade nicht erstellen. Bitte versuche es erneut oder kontaktiere den Support direkt.',
+            decision: input.structuredDecision,
+          };
+        }
+      }
+
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer:
+          `${buildItTicketReadyToCreateAnswer(activeTicket)}\n\nBitte antworte mit Ja oder Nein.`,
+        decision: input.structuredDecision,
+      };
+    }
+
+    const extracted = extractItTicketFields(input.params.message, activeTicket);
+    const baseDirectTicketPatch = {
+      ...extracted,
+      status: 'collecting' as const,
+      ticketConsent: true,
+      issueType: securityIncident
+        ? 'security'
+        : extracted.issueType || (handoffRequest ? 'generic_it' : undefined),
+      urgency: securityIncident
+        ? 'critical' as const
+        : critical
+          ? 'urgent' as const
+          : extracted.urgency,
+      priority: securityIncident
+        ? 'critical' as const
+        : critical
+          ? 'urgent' as const
+          : extracted.urgency,
+      impact: extracted.impact || (/\b(komplett down|alles down|firma steht|unternehmen|alle)\b/i.test(input.text) ? 'company_wide' as const : undefined),
+    };
+
+    if (directTicketRequest) {
+      const result = await this.collectItSupportTicketFields({
+        ...input,
+        pendingTicket: activeTicket || { status: 'collecting' },
+        patch: baseDirectTicketPatch,
+      });
+      if (securityIncident || critical) {
+        return {
+          ...result,
+          answer: withItSecurityWarning(result.answer || ''),
+        };
+      }
+      return result;
+    }
+
+    const priorityPatch = critical || securityIncident
+      ? {
+          status: 'ticket_offered' as const,
+          issueType: securityIncident ? 'security' : extracted.issueType,
+          urgency: securityIncident ? 'critical' as const : 'urgent' as const,
+          priority: securityIncident ? 'critical' as const : 'urgent' as const,
+          impact: extracted.impact || (/\b(komplett down|alles down|firma steht|unternehmen|alle)\b/i.test(input.text) ? 'company_wide' as const : undefined),
+          lastAssistantAsk: 'ticket_confirmation' as const,
+          nextExpectedField: 'ticketConsent',
+        }
+      : explicitTicketRequest
+        ? {
+            status: 'ticket_offered' as const,
+            lastAssistantAsk: 'ticket_confirmation' as const,
+            nextExpectedField: 'ticketConsent',
+          }
+        : null;
+
+    if (priorityPatch) {
+      const ticket = mergePendingTicket(activeTicket, {
+        ...extracted,
+        ...priorityPatch,
+      });
+      await this.saveConversationMetadata(input.params.conversationId, {
+        pendingLead: null,
+        pendingTicket: ticket,
+        conversationState: buildTicketConversationState(input.conversationState, ticket, 'qualification'),
+      });
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildItTicketOfferAnswer(ticket),
+        decision: input.structuredDecision,
+      };
+    }
+
+    const ticket = mergePendingTicket(activeTicket, {
+      ...extracted,
+      status: 'solution_offered',
+      solutionAttemptCount: (activeTicket?.solutionAttemptCount || 0) + 1,
+      lastAssistantAsk: 'solution_check',
+      nextExpectedField: 'solution_check',
+    });
+    await this.saveConversationMetadata(input.params.conversationId, {
+      pendingLead: null,
+      pendingTicket: ticket,
+      conversationState: buildTicketConversationState(input.conversationState, ticket, 'discovery', 'answer_question'),
+    });
+
+    return {
+      action: 'normal_answer',
+      handled: false,
+      decision: input.structuredDecision,
+    };
+  }
+
+  private async collectItSupportTicketFields(input: {
+    params: {
+      conversationId: string;
+      message: string;
+    };
+    pendingTicket: PendingTicketState;
+    conversationState: ConversationState | null;
+    moduleContext: {
+      itSupportConfig: ItSupportModuleConfig;
+    };
+    structuredDecision: AgentDecision | undefined;
+    patch: Partial<PendingTicketState>;
+  }): Promise<ChatAgentDecision> {
+    const collectingTicket = mergePendingTicket(input.pendingTicket, input.patch);
+    const missingFields = getMissingItTicketFields(
+      collectingTicket,
+      input.moduleContext.itSupportConfig.requiredTicketFields,
+    );
+
+    if (missingFields.length > 0) {
+      const ticketWithMissing = mergePendingTicket(collectingTicket, {
+        status: 'collecting',
+        missingFields,
+        nextExpectedField: missingFields[0],
+        lastAssistantAsk: mapTicketMissingFieldToAssistantAsk(missingFields[0]),
+      });
+      await this.saveConversationMetadata(input.params.conversationId, {
+        pendingLead: null,
+        pendingTicket: ticketWithMissing,
+        conversationState: buildTicketConversationState(input.conversationState, ticketWithMissing, 'contact_collection'),
+      });
+      return {
+        action: 'normal_answer',
+        handled: true,
+        answer: buildItTicketMissingFieldQuestion(missingFields, ticketWithMissing),
+        decision: input.structuredDecision,
+      };
+    }
+
+    const readyTicket = mergePendingTicket(collectingTicket, {
+      status: 'ready_to_create',
+      missingFields: [],
+      lastAssistantAsk: 'ticket_final_confirmation',
+      nextExpectedField: 'finalTicketConfirmation',
+    });
+    await this.saveConversationMetadata(input.params.conversationId, {
+      pendingLead: null,
+      pendingTicket: readyTicket,
+      conversationState: buildTicketConversationState(input.conversationState, readyTicket, 'contact_collection'),
+    });
+    return {
+      action: 'normal_answer',
+      handled: true,
+      answer: buildItTicketReadyToCreateAnswer(readyTicket),
+      decision: input.structuredDecision,
+    };
+  }
+
   private async getModuleContext(siteId: string) {
     const modules = await this.siteModules.listForSite(siteId);
     const leadSales = modules.find((module) =>
       ['lead-sales', 'lead_sales'].includes(module.key),
     );
     const leadConfig = asObject(leadSales?.config);
+    const itSupport = modules.find((module) =>
+      ['it-support', 'it_support'].includes(module.key),
+    );
+    const itSupportConfig = normalizeItSupportModuleConfig(asObject(itSupport?.config));
 
     return {
       leadSalesEnabled: Boolean(leadSales?.isEnabled),
@@ -889,6 +1389,8 @@ export class ChatAgentOrchestratorService {
       intakeFlow: leadConfig.intakeFlow
         ? normalizeLocalServiceIntakeFlowConfig(leadConfig.intakeFlow)
         : undefined,
+      itSupportEnabled: Boolean(itSupport?.isEnabled),
+      itSupportConfig,
     };
   }
 
@@ -1081,6 +1583,7 @@ export class ChatAgentOrchestratorService {
   private async loadConversationMetadata(conversationId: string): Promise<{
     pendingLead: PendingLeadState | null;
     conversationState: ConversationState | null;
+    pendingTicket: PendingTicketState | null;
   }> {
     const res = await this.db.query<ConversationMetadataRow>(
       `SELECT id, metadata
@@ -1093,6 +1596,7 @@ export class ChatAgentOrchestratorService {
     return {
       pendingLead: parsePendingLeadState(metadata.pendingLead),
       conversationState: parseConversationState(metadata.conversationState),
+      pendingTicket: parsePendingTicketState(metadata.pendingTicket),
     };
   }
 
@@ -1104,19 +1608,23 @@ export class ChatAgentOrchestratorService {
   private async saveConversationMetadata(
     conversationId: string,
     state: {
-      pendingLead?: PendingLeadState;
+      pendingLead?: PendingLeadState | null;
       conversationState?: ConversationState;
+      pendingTicket?: PendingTicketState | null;
     },
   ) {
     const patch: Record<string, unknown> = {};
-    if (state.pendingLead) {
-      patch.pendingLead = compactPendingLeadState(state.pendingLead);
+    if (state.pendingLead !== undefined) {
+      patch.pendingLead = state.pendingLead ? compactPendingLeadState(state.pendingLead) : null;
     }
     if (state.conversationState) {
       const compactState = compactConversationState(state.conversationState);
       if (Object.keys(compactState).length > 0) {
         patch.conversationState = compactState;
       }
+    }
+    if (state.pendingTicket !== undefined) {
+      patch.pendingTicket = state.pendingTicket ? compactPendingTicketState(state.pendingTicket) : null;
     }
 
     if (Object.keys(patch).length === 0) {
@@ -1250,6 +1758,98 @@ export class ChatAgentOrchestratorService {
       });
     }
   }
+}
+
+function isActivePendingTicket(ticket: PendingTicketState | null): ticket is PendingTicketState {
+  return Boolean(
+    ticket &&
+      !['created', 'cancelled', 'resolved'].includes(ticket.status),
+  );
+}
+
+function parseTicketForwardingStatus(value: string): PendingTicketForwardingStatus {
+  if (['queued', 'not_configured', 'failed', 'unknown'].includes(value)) {
+    return value as PendingTicketForwardingStatus;
+  }
+  return 'unknown';
+}
+
+function mapTicketMissingFieldToAssistantAsk(field: string): PendingTicketState['lastAssistantAsk'] {
+  if (field === 'reporterEmail' || field === 'reporterPhone' || field === 'reporterName') {
+    return 'reporter_contact';
+  }
+  if (field === 'impact') {
+    return 'impact';
+  }
+  if (field === 'affectedSystem') {
+    return 'affected_system';
+  }
+  if (field === 'errorMessage') {
+    return 'error_message';
+  }
+  return 'description';
+}
+
+function buildTicketConversationState(
+  previous: ConversationState | null,
+  ticket: PendingTicketState,
+  stage: ConversationState['stage'],
+  goal: ConversationState['goal'] = 'create_ticket',
+): ConversationState {
+  return {
+    intent: 'ticket',
+    stage,
+    topic: ticket.summary || ticket.description || previous?.topic || null,
+    urgency: ticket.urgency || previous?.urgency || null,
+    goal,
+    collectedFields: {
+      ...previous?.collectedFields,
+      concern: ticket.summary || ticket.description || previous?.collectedFields?.concern,
+      email: ticket.reporterEmail || previous?.collectedFields?.email,
+      phone: ticket.reporterPhone || previous?.collectedFields?.phone,
+      name: ticket.reporterName || previous?.collectedFields?.name,
+    },
+    missingFields: ticket.missingFields || [],
+    nextExpectedField: ticket.nextExpectedField || null,
+    lastUserIntent: 'ticket',
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function buildCreatedItTicketAnswer(
+  ticket: PendingTicketState,
+  forwardingStatus: PendingTicketForwardingStatus = ticket.forwardingStatus || 'unknown',
+) {
+  const headline = forwardingStatus === 'queued'
+    ? 'Danke, ich habe das Support-Ticket erstellt und zur Weiterleitung an den IT-Support eingereiht.'
+    : forwardingStatus === 'not_configured'
+      ? 'Danke, ich habe das Support-Ticket erstellt. Die automatische Weiterleitung ist für diese Website noch nicht eingerichtet.'
+      : forwardingStatus === 'failed'
+        ? 'Danke, ich habe das Support-Ticket erstellt. Die automatische Weiterleitung konnte gerade nicht bestätigt werden.'
+        : 'Danke, ich habe das Support-Ticket erstellt.';
+
+  return [
+    headline,
+    '',
+    `Ticket: ${ticket.createdTicketId || 'erstellt'}`,
+    '',
+    'Zusammenfassung:',
+    `- Problem: ${ticket.description || ticket.summary || 'nicht angegeben'}`,
+    `- Betroffenes System: ${ticket.affectedSystem || 'nicht angegeben'}`,
+    `- Auswirkung: ${ticket.impact || 'nicht angegeben'}`,
+    `- Kontakt: ${ticket.reporterEmail || ticket.reporterPhone || ticket.reporterName || 'nicht angegeben'}`,
+    `- Priorität: ${ticket.priority || 'normal'}`,
+    '',
+    'Bitte gib hier weiterhin keine Passwörter, MFA-Codes oder vertraulichen Daten ein.',
+  ].join('\n');
+}
+
+function withItSecurityWarning(answer: string) {
+  const warning = [
+    'Das klingt nach einem kritischen IT- oder Sicherheitsvorfall.',
+    'Bitte öffnen Sie keine weiteren Links oder Anhänge, geben Sie keine Passwörter, MFA-Codes oder vertraulichen Daten ein und nutzen Sie das betroffene Gerät bei Malware-Verdacht möglichst nicht weiter.',
+  ].join(' ');
+  return `${warning}\n\n${answer}`;
 }
 
 function parsePendingLeadState(value: unknown): PendingLeadState | null {
@@ -1483,7 +2083,7 @@ function hasLocalServiceStopIntent(text: string) {
 }
 
 function hasSensitiveDataInput(text: string) {
-  return /\b((passwort|kennwort)\s*(ist|lautet|:)|(?:mfa|2fa|tan|pin)(?:\s*code)?\s*(ist|lautet|:)|kreditkarte|kartennummer|cvv|cvc|iban|ausweisnummer|personalausweis|reisepass|zahlungsdaten)\b/i.test(text);
+  return /\b((passwort|kennwort)\s*(ist|lautet|:)|(?:mfa|2fa|tan|pin)(?:\s*code)?\s*(ist|lautet|:)|api[-_\s]?key\s*(ist|lautet|:)?|token\s*(ist|lautet|:)?|secret\s*(ist|lautet|:)?|kreditkarte|kartennummer|cvv|cvc|iban|ausweisnummer|personalausweis|reisepass|zahlungsdaten)\b/i.test(text);
 }
 
 function hasBusinessNeedSignal(text: string, intakeFlow?: LocalServiceIntakeFlowConfig) {

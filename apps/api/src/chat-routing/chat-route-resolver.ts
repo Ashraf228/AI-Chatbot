@@ -1,15 +1,19 @@
 import { ChatRouteContext, ChatRouteDecision } from './chat-route-types';
 import {
   normalizeEcommerceProductAdvisorModuleConfig,
+  normalizeItSupportModuleConfig,
   normalizeLeadSalesModuleConfig,
   normalizePropertyTicketingModuleConfig,
 } from '../site-modules/module-configs';
 import type { LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
+import { buildItSupportAnswerGuide } from '../modules/it-support/it-support-flow';
 
 const ECOMMERCE_PATTERN =
   /\b(shop|shopify|produkt|produkte|artikel|kaufen|bestellen|bestellung|kollektion|variante|groesse|größe|farbe|lieferung|versand|retoure|retouren|rueckgabe|rückgabe|umtausch|preis|preise|kostet|verfuegbar|verfügbar|verfuegbarkeit|verfügbarkeit|lager)\b/i;
 const PROPERTY_PATTERN =
-  /\b(mieter|wohnung|schaden|reparatur|heizung|wasser|leckt|leck|ticket|stoerung|störung|hausverwaltung|defekt|passwort|kennwort|mfa|2fa|vpn|wlan|wifi|netzwerk|outlook|e-mail|email|drucker|printer|geraet|gerät|laptop|pc|software|zugriff|berechtigung|login|anmeldung|server|systemausfall|datenverlust|sicherheitsvorfall|phishing|malware|virus|ransomware)\b/i;
+  /\b(mieter|wohnung|schaden|wasserschaden|reparatur|heizung|wasser|leckt|leck|ticket|stoerung|störung|hausverwaltung|defekt|passwort|kennwort|mfa|2fa|vpn|wlan|wifi|netzwerk|outlook|e-mail|email|drucker|printer|geraet|gerät|laptop|pc|software|zugriff|berechtigung|login|anmeldung|server|systemausfall|datenverlust|sicherheitsvorfall|phishing|malware|virus|ransomware)\b/i;
+const IT_SUPPORT_PATTERN =
+  /\b(passwort|kennwort|mfa|2fa|vpn|wlan|wifi|netzwerk|outlook|e-mail|email|drucker|printer|gerät|geraet|laptop|pc|software|zugriff|berechtigung|login|anmeldung|server|systemausfall|datenverlust|sicherheitsvorfall|phishing|malware|virus|ransomware|konto gesperrt|login blockiert)\b/i;
 const SALES_PATTERN =
   /\b(ki|support|marketing|prozess|prozesse|automatisierung|mitarbeiter|entlast|vertrieb|lead|kundenservice|beratung|kontakt|termin|angebot|anfrage|rueckruf|rückruf)\b/i;
 const AFFIRMATION_PATTERN = /^(ja|jap|yes|bitte|gern|gerne|okay|ok|klingt gut|passt)\b/i;
@@ -91,6 +95,27 @@ export function resolveChatRoute(context: ChatRouteContext): ChatRouteDecision {
   const propertyConfig = normalizePropertyTicketingModuleConfig(
     context.moduleConfigs?.['property-ticketing'],
   );
+  const itSupportConfig = normalizeItSupportModuleConfig(
+    context.moduleConfigs?.['it-support'],
+  );
+
+  if (
+    hasModule(context.enabledModuleKeys, 'it-support') &&
+    IT_SUPPORT_PATTERN.test(normalizedMessage)
+  ) {
+    return {
+      route: 'agent',
+      reason: 'it_support_intent',
+      moduleKey: 'it-support',
+      agentKey: 'it-support-agent',
+      guide: buildItSupportAnswerGuide({ config: itSupportConfig }),
+      cta: {
+        action: 'lead_capture',
+        label: itSupportConfig.ctaLabel,
+        description: itSupportConfig.ctaDescription,
+      },
+    };
+  }
 
   if (
     hasModule(context.enabledModuleKeys, 'property-ticketing') &&

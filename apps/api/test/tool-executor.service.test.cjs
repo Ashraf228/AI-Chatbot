@@ -6,7 +6,11 @@ const { ToolRegistryService } = require('../dist/tools/tool-registry.service.js'
 const { ChatPipelineService } = require('../dist/ai/chat-pipeline/chat-pipeline.service.js');
 const { ResponseComposerService } = require('../dist/ai/chat-pipeline/response-composer.service.js');
 
-function createToolHarness({ usageLimits } = {}) {
+function createToolHarness({
+  usageLimits,
+  integrationDispatchResults,
+  integrationDispatchThrows = false,
+} = {}) {
   const conversations = new Map([
     ['conversation-1', { id: 'conversation-1', session_id: 'session-1', metadata: {} }],
   ]);
@@ -118,8 +122,24 @@ function createToolHarness({ usageLimits } = {}) {
           runId: params[3],
           subject: params[4],
           description: params[5],
-          email: params[6],
-          priority: params[7],
+          reporterName: params[6],
+          email: params[7],
+          location: params[8],
+          priority: params[9],
+          reporterPhone: params[10],
+          category: params[11],
+          issueType: params[12],
+          affectedSystem: params[13],
+          impact: params[14],
+          urgency: params[15],
+          affectedUsers: params[16],
+          device: params[17],
+          operatingSystem: params[18],
+          errorMessage: params[19],
+          alreadyTried: params[20],
+          department: params[21],
+          source: params[22],
+          metadata: JSON.parse(params[23]),
         });
         return { rows: [] };
       }
@@ -154,7 +174,20 @@ function createToolHarness({ usageLimits } = {}) {
   const integrationEvents = {
     async dispatch(siteId, eventType, payload, context) {
       dispatchedEvents.push({ siteId, eventType, payload, context });
-      return [{ status: 'queued', providerKey: 'webhook', connectionKey: 'primary' }];
+      if (integrationDispatchThrows) {
+        throw new Error('dispatcher failed');
+      }
+      return integrationDispatchResults || [
+        {
+          integrationId: 'integration-1',
+          status: 'queued',
+          providerKey: 'webhook',
+          connectionKey: 'primary',
+          type: 'ticket_webhook',
+          message: 'queued',
+          webhookJobId: 'webhook-job-1',
+        },
+      ];
     },
   };
   const embedder = {
@@ -305,8 +338,153 @@ test('ToolExecutorService create_ticket success stores ticket', async () => {
   }, context);
 
   assert.equal(result.status, 'success');
+  assert.equal(result.data.status, 'created');
+  assert.equal(result.data.forwardingStatus, 'queued');
+  assert.equal(result.data.webhookJobId, 'webhook-job-1');
   assert.equal(tickets.length, 1);
   assert.equal(tickets[0].subject, 'Bestellung defekt');
+});
+
+test('ToolExecutorService create_ticket reports not_configured when no ticket integration is dispatched', async () => {
+  const { service, context, tickets, dispatchedEvents } = createToolHarness({
+    integrationDispatchResults: [],
+  });
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'VPN Problem',
+    description: 'VPN verbindet nicht',
+    customerEmail: 'kunde@example.de',
+  }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.data.status, 'created');
+  assert.equal(result.data.forwardingStatus, 'not_configured');
+  assert.equal(result.data.webhookJobId, undefined);
+  assert.equal(tickets.length, 1);
+  assert.equal(dispatchedEvents.length, 1);
+});
+
+test('ToolExecutorService create_ticket reports failed forwarding when dispatch fails after ticket creation', async () => {
+  const { service, context, tickets, dispatchedEvents } = createToolHarness({
+    integrationDispatchThrows: true,
+  });
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'VPN Problem',
+    description: 'VPN verbindet nicht',
+    customerEmail: 'kunde@example.de',
+  }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.data.status, 'created');
+  assert.equal(result.data.forwardingStatus, 'failed');
+  assert.equal(tickets.length, 1);
+  assert.equal(dispatchedEvents.length, 1);
+});
+
+test('ToolExecutorService create_ticket accepts IT support fields and dispatches structured event payload', async () => {
+  const { service, context, tickets, dispatchedEvents } = createToolHarness();
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'IT-Support: VPN verbindet nicht',
+    description: 'VPN verbindet nicht seit heute Morgen',
+    category: 'it_support',
+    priority: 'normal',
+    issueType: 'vpn',
+    affectedSystem: 'VPN',
+    impact: 'single_user',
+    urgency: 'normal',
+    affectedUsers: '1',
+    reporterEmail: 'max@firma.de',
+    reporterName: 'Max Muster',
+    reporterPhone: '+491234567',
+    company: 'Firma GmbH',
+    department: 'IT',
+    location: 'Berlin',
+    device: 'Windows Laptop',
+    operatingSystem: 'Windows',
+    errorMessage: 'Fehler 809',
+    alreadyTried: 'VPN-App neu gestartet',
+    conversationId: 'conversation-1',
+    metadata: {
+      sourceAgent: 'it-support-agent',
+    },
+  }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(tickets.length, 1);
+  assert.equal(tickets[0].category, 'it_support');
+  assert.equal(tickets[0].issueType, 'vpn');
+  assert.equal(tickets[0].affectedSystem, 'VPN');
+  assert.equal(tickets[0].impact, 'single_user');
+  assert.equal(tickets[0].urgency, 'normal');
+  assert.equal(tickets[0].affectedUsers, '1');
+  assert.equal(tickets[0].email, 'max@firma.de');
+  assert.equal(tickets[0].reporterName, 'Max Muster');
+  assert.equal(tickets[0].reporterPhone, '+491234567');
+  assert.equal(tickets[0].department, 'IT');
+  assert.equal(tickets[0].location, 'Berlin');
+  assert.equal(tickets[0].device, 'Windows Laptop');
+  assert.equal(tickets[0].operatingSystem, 'Windows');
+  assert.equal(tickets[0].metadata.conversationId, 'conversation-1');
+  assert.equal(dispatchedEvents[0].eventType, 'ticket.created');
+  assert.equal(dispatchedEvents[0].payload.ticketId, result.data.ticketId);
+  assert.equal(dispatchedEvents[0].payload.subject, 'IT-Support: VPN verbindet nicht');
+  assert.equal(dispatchedEvents[0].payload.description, 'VPN verbindet nicht seit heute Morgen');
+  assert.equal(dispatchedEvents[0].payload.category, 'it_support');
+  assert.equal(dispatchedEvents[0].payload.priority, 'normal');
+  assert.equal(dispatchedEvents[0].payload.customerEmail, 'max@firma.de');
+  assert.equal(dispatchedEvents[0].payload.customerName, 'Max Muster');
+  assert.equal(dispatchedEvents[0].payload.reporter.email, 'max@firma.de');
+  assert.equal(dispatchedEvents[0].payload.reporter.name, 'Max Muster');
+  assert.equal(dispatchedEvents[0].payload.reporter.phone, '+491234567');
+  assert.equal(dispatchedEvents[0].payload.reporter.department, 'IT');
+  assert.equal(dispatchedEvents[0].payload.reporter.location, 'Berlin');
+  assert.equal(dispatchedEvents[0].payload.technicalContext.device, 'Windows Laptop');
+  assert.equal(dispatchedEvents[0].payload.technicalContext.operatingSystem, 'Windows');
+  assert.equal(dispatchedEvents[0].payload.technicalContext.errorMessage, 'Fehler 809');
+  assert.equal(dispatchedEvents[0].payload.technicalContext.alreadyTried, 'VPN-App neu gestartet');
+  assert.equal(dispatchedEvents[0].payload.urgency, 'normal');
+  assert.equal(dispatchedEvents[0].payload.impact, 'single_user');
+  assert.equal(dispatchedEvents[0].payload.affectedUsers, '1');
+  assert.equal(dispatchedEvents[0].payload.affectedSystem, 'VPN');
+  assert.equal(dispatchedEvents[0].payload.issueType, 'vpn');
+  assert.equal(dispatchedEvents[0].payload.source, 'chat');
+  assert.equal(dispatchedEvents[0].payload.conversationId, 'conversation-1');
+  assert.equal(dispatchedEvents[0].payload.tenantId, 'tenant-1');
+  assert.equal(dispatchedEvents[0].payload.siteId, 'site-1');
+  assert.equal(dispatchedEvents[0].payload.metadata.sourceAgent, 'it-support-agent');
+});
+
+test('ToolExecutorService create_ticket redacts sensitive IT values from ticket, event and audit payloads', async () => {
+  const { service, context, tickets, dispatchedEvents, toolInvocations } = createToolHarness();
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'API key ist abc123',
+    description: 'Passwort ist Test123 und token ist xyz789',
+    category: 'it_support',
+    issueType: 'security',
+    affectedSystem: 'Login',
+    reporterEmail: 'max@firma.de',
+    errorMessage: 'MFA Code ist 123456',
+    alreadyTried: 'secret ist topsecret',
+    metadata: {
+      nested: {
+        note: 'access_token xyz und refresh_token refresh123',
+        client_secret: 'client123',
+      },
+      attempts: ['Bearer abcdef123456', 'password ist NochGeheimer'],
+    },
+  }, context);
+
+  assert.equal(result.status, 'success');
+  const serializedTicket = JSON.stringify(tickets[0]);
+  const serializedPayload = JSON.stringify(dispatchedEvents[0].payload);
+  const serializedAuditInput = JSON.stringify(toolInvocations[0].input);
+  assert.doesNotMatch(serializedTicket, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
+  assert.doesNotMatch(serializedPayload, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
+  assert.doesNotMatch(serializedAuditInput, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
+  assert.match(`${serializedTicket} ${serializedPayload} ${serializedAuditInput}`, /\[redacted\]/);
 });
 
 test('ToolExecutorService create_ticket returns missing_fields without description', async () => {

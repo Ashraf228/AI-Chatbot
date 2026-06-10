@@ -5,6 +5,8 @@ export type ToolExecutionContext = {
   messageId?: string;
   source: 'widget' | 'dashboard' | 'api' | 'system';
   decisionId?: string;
+  agentKey?: string;
+  moduleKey?: string;
   userId?: string;
   visitorId?: string;
 };

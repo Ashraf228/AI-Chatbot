@@ -7,6 +7,12 @@ import {
   AgentPolicyContext,
 } from './agent-decision.types';
 import type { LocalServiceIntakeFlowConfig } from '../../site-modules/module-configs';
+import {
+  hasCriticalItIncident,
+  hasExplicitTicketRequest,
+  hasItSupportSignal,
+  hasSecurityIncident,
+} from '../../modules/it-support/it-support-flow';
 
 @Injectable()
 export class AgentPolicyService {
@@ -59,6 +65,39 @@ export class AgentPolicyService {
         requiredFields: ['intent'],
         suggestedTools: [],
         nextAction: 'ask_for_missing_context',
+      });
+    }
+
+    const hasItSupportContext =
+      hasItSupportSignal(text) ||
+      hasCriticalItIncident(text) ||
+      hasSecurityIncident(text);
+    const explicitItTicketRequest = hasExplicitTicketRequest(text) && hasItSupportContext;
+
+    if (context.moduleContext.itSupportEnabled && hasItSupportContext) {
+      if (hasCriticalItIncident(text) || hasSecurityIncident(text) || explicitItTicketRequest) {
+        return this.buildDecision({
+          type: hasSecurityIncident(text) || hasCriticalItIncident(text) ? 'handoff' : 'ask_followup',
+          confidence: 0.9,
+          reason: 'IT support module is active; critical or explicit ticket requests must be confirmed by the pending-ticket flow.',
+          message:
+            'Das klingt nach einem IT-Support-Fall. Bitte keine Passwörter, MFA-Codes oder vertraulichen Daten eingeben. Ich kann ein Support-Ticket oder eine Eskalation vorbereiten, wenn du das bestätigst.',
+          collectedFields,
+          requiredFields: ['ticket_confirmation'],
+          suggestedTools: [],
+          nextAction: 'ask_for_missing_context',
+        });
+      }
+
+      return this.buildDecision({
+        type: 'answer',
+        confidence: 0.86,
+        reason: 'IT support module is active; standard IT issues should use knowledge first before ticket creation.',
+        message: '',
+        collectedFields,
+        requiredFields: [],
+        suggestedTools: ['query_knowledge'],
+        nextAction: 'continue_answer',
       });
     }
 

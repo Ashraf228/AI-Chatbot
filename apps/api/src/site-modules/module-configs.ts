@@ -40,6 +40,19 @@ export type PropertyTicketingModuleConfig = {
   handoffInstruction: string;
 };
 
+export type ItSupportModuleConfig = {
+  intakeMode: 'knowledge_first' | 'ticket_first';
+  ticketConfirmationRequired: boolean;
+  maxTroubleshootingSteps: number;
+  urgencyStyle: 'brief' | 'structured';
+  ctaLabel: string;
+  ctaDescription: string;
+  requiredTicketFields: string[];
+  escalationKeywords: string[];
+  safeTroubleshootingInstruction: string;
+  handoffInstruction: string;
+};
+
 export const DEFAULT_LEAD_SALES_MODULE_CONFIG: LeadSalesModuleConfig = {
   primaryGoal: 'lead_capture',
   ctaLabel: 'Kontaktdaten hinterlassen',
@@ -136,6 +149,54 @@ export const DEFAULT_PROPERTY_TICKETING_MODULE_CONFIG: PropertyTicketingModuleCo
     'Fuehre nach einer kurzen Qualifizierung sichtbar in die Fallaufnahme oder Weiterleitung. Frage niemals nach Passwoertern, MFA-Codes oder Admin-Zugangsdaten.',
 };
 
+export const DEFAULT_IT_SUPPORT_MODULE_CONFIG: ItSupportModuleConfig = {
+  intakeMode: 'knowledge_first',
+  ticketConfirmationRequired: true,
+  maxTroubleshootingSteps: 2,
+  urgencyStyle: 'structured',
+  ctaLabel: 'Support-Ticket öffnen',
+  ctaDescription: 'Ich erfasse das Problem und leite es an den IT-Support weiter.',
+  requiredTicketFields: [
+    'description',
+    'affectedSystem',
+    'impact',
+    'reporterEmail',
+  ],
+  escalationKeywords: [
+    'datenverlust',
+    'sicherheitsvorfall',
+    'phishing',
+    'malware',
+    'ransomware',
+    'serverausfall',
+    'netzwerkausfall',
+    'komplett down',
+    'mfa gesperrt',
+    '2fa gesperrt',
+    'konto gesperrt',
+    'login blockiert',
+  ],
+  safeTroubleshootingInstruction:
+    'Gib nur sichere First-Level-Schritte aus. Frage niemals nach Passwörtern, MFA-Codes, API-Keys oder Admin-Zugangsdaten. Gib keine riskanten PowerShell-, Terminal-, Registry- oder Löschbefehle ohne verifizierte Wissensbasis.',
+  handoffInstruction:
+    'Bei Sicherheitsvorfällen, Datenverlust, Komplettausfällen, Kontoübernahme oder unklaren Risiken immer Ticket oder menschliche Übergabe anbieten.',
+};
+
+export const IT_SUPPORT_ALLOWED_REQUIRED_TICKET_FIELDS = [
+  'description',
+  'affectedSystem',
+  'impact',
+  'reporterEmail',
+  'reporterPhone',
+  'reporterName',
+  'device',
+  'operatingSystem',
+  'errorMessage',
+  'alreadyTried',
+  'department',
+  'location',
+] as const;
+
 function asObject(config: Record<string, unknown> | null | undefined) {
   return config && typeof config === 'object' && !Array.isArray(config) ? config : {};
 }
@@ -154,6 +215,62 @@ function asStringArray(value: unknown, fallback: string[]) {
     .map((entry) => entry.trim());
 
   return entries.length > 0 ? entries : fallback;
+}
+
+function asBoolean(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function asClampedInteger(value: unknown, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(parsed, max));
+}
+
+function dedupeStringArray(entries: string[]) {
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const entry of entries) {
+    const normalized = entry.trim();
+    const key = normalized.toLowerCase();
+    if (!normalized || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    output.push(normalized);
+  }
+  return output;
+}
+
+function normalizeItSupportRequiredTicketFields(value: unknown) {
+  if (!Array.isArray(value)) {
+    return DEFAULT_IT_SUPPORT_MODULE_CONFIG.requiredTicketFields;
+  }
+
+  const allowed = new Set<string>(IT_SUPPORT_ALLOWED_REQUIRED_TICKET_FIELDS);
+  const normalized = dedupeStringArray(
+    value.filter((entry): entry is string => typeof entry === 'string'),
+  ).filter((entry) => allowed.has(entry));
+
+  return normalized.length > 0
+    ? normalized
+    : DEFAULT_IT_SUPPORT_MODULE_CONFIG.requiredTicketFields;
+}
+
+function normalizeEscalationKeywords(value: unknown) {
+  if (!Array.isArray(value)) {
+    return DEFAULT_IT_SUPPORT_MODULE_CONFIG.escalationKeywords;
+  }
+
+  const normalized = dedupeStringArray(
+    value.filter((entry): entry is string => typeof entry === 'string'),
+  );
+
+  return normalized.length > 0
+    ? normalized
+    : DEFAULT_IT_SUPPORT_MODULE_CONFIG.escalationKeywords;
 }
 
 function normalizeQuestionTexts(value: unknown, fallback: Record<string, string>) {
@@ -287,6 +404,52 @@ export function normalizePropertyTicketingModuleConfig(
   };
 }
 
+export function normalizeItSupportModuleConfig(
+  config: Record<string, unknown> | null | undefined,
+): ItSupportModuleConfig {
+  const source = asObject(config);
+  const intakeMode =
+    source.intakeMode === 'ticket_first'
+      ? 'ticket_first'
+      : DEFAULT_IT_SUPPORT_MODULE_CONFIG.intakeMode;
+  const urgencyStyle =
+    source.urgencyStyle === 'brief'
+      ? 'brief'
+      : DEFAULT_IT_SUPPORT_MODULE_CONFIG.urgencyStyle;
+
+  return {
+    intakeMode,
+    ticketConfirmationRequired: source.ticketConfirmationRequired === false
+      ? true
+      : asBoolean(
+          source.ticketConfirmationRequired,
+          DEFAULT_IT_SUPPORT_MODULE_CONFIG.ticketConfirmationRequired,
+        ),
+    maxTroubleshootingSteps: asClampedInteger(
+      source.maxTroubleshootingSteps,
+      DEFAULT_IT_SUPPORT_MODULE_CONFIG.maxTroubleshootingSteps,
+      1,
+      5,
+    ),
+    urgencyStyle,
+    ctaLabel: asNonEmptyString(source.ctaLabel, DEFAULT_IT_SUPPORT_MODULE_CONFIG.ctaLabel),
+    ctaDescription: asNonEmptyString(
+      source.ctaDescription,
+      DEFAULT_IT_SUPPORT_MODULE_CONFIG.ctaDescription,
+    ),
+    requiredTicketFields: normalizeItSupportRequiredTicketFields(source.requiredTicketFields),
+    escalationKeywords: normalizeEscalationKeywords(source.escalationKeywords),
+    safeTroubleshootingInstruction: asNonEmptyString(
+      source.safeTroubleshootingInstruction,
+      DEFAULT_IT_SUPPORT_MODULE_CONFIG.safeTroubleshootingInstruction,
+    ),
+    handoffInstruction: asNonEmptyString(
+      source.handoffInstruction,
+      DEFAULT_IT_SUPPORT_MODULE_CONFIG.handoffInstruction,
+    ),
+  };
+}
+
 export function normalizeModuleConfig(
   moduleKey: string,
   config: Record<string, unknown> | null | undefined,
@@ -301,6 +464,10 @@ export function normalizeModuleConfig(
 
   if (moduleKey === 'property-ticketing') {
     return normalizePropertyTicketingModuleConfig(config);
+  }
+
+  if (moduleKey === 'it-support') {
+    return normalizeItSupportModuleConfig(config);
   }
 
   return asObject(config);

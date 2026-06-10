@@ -1,4 +1,5 @@
 import {
+  DEFAULT_IT_SUPPORT_MODULE_CONFIG,
   DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
 } from '../site-modules/module-configs';
 import type { LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
@@ -42,6 +43,7 @@ function baseModules(overrides: Partial<Record<string, SiteModulePatch>>) {
     'knowledge-faq': { key: 'knowledge-faq', isEnabled: true },
     'ecommerce-product-advisor': { key: 'ecommerce-product-advisor', isEnabled: false },
     'property-ticketing': { key: 'property-ticketing', isEnabled: false },
+    'it-support': { key: 'it-support', isEnabled: false },
     'reporting-insights': { key: 'reporting-insights', isEnabled: true },
   };
 
@@ -245,26 +247,48 @@ export const INDUSTRY_TEMPLATES: Record<string, IndustryTemplate> = {
     version: 1,
     label: 'IT-Support',
     setupGoal: 'support',
-    welcomeMessage: 'Hi! Ich helfe dir bei Support-Fragen und der ersten Einordnung des Problems.',
+    welcomeMessage: 'Guten Tag. Ich helfe bei IT-Support-Fragen und der ersten Einordnung des Problems.',
     systemPrompt:
-      'Ordne Support-Fälle sauber ein, unterscheide zwischen Rückfrage und Störung und leite bei Bedarf in eine strukturierte Kontaktaufnahme weiter.',
+      'Sie sind ein First-Level-Support-Assistent für IT-Support. Beantworten Sie zunächst sichere Standardfragen aus Wissensbasis oder verifizierten Inhalten. Fragen Sie niemals nach Passwörtern, MFA-Codes, API-Keys oder Admin-Zugangsdaten. Bieten Sie bei größeren Problemen ein Support-Ticket an. Eskalieren Sie Sicherheitsvorfälle, Datenverlust, Komplettausfälle, Kontoübernahmen und unklare Risiken an einen Menschen.',
     tone: 'professional',
-    ctaText: 'Supportfall vorbereiten',
+    ctaText: 'Support-Ticket öffnen',
     recommendedQuestions: {
       '/': [
-        'Geht es um eine Störung, eine Rückfrage oder eine neue Anfrage?',
-        'Soll ich zuerst das Problem eingrenzen oder direkt einen Rückruf vorbereiten?',
+        'Mein VPN verbindet nicht.',
+        'Outlook sendet keine E-Mails.',
+        'Ich möchte ein Support-Ticket öffnen.',
       ],
     },
-    topTestQuestions: ['Ich habe eine Störung, was soll ich tun?', 'Wie erreiche ich den Support?', 'Kannst du mein Problem eingrenzen?'],
-    reportKpis: ['startedChats', 'supportHandoffs', 'fallbackAnswers', 'topQuestions'],
+    topTestQuestions: [
+      'Mein VPN verbindet nicht',
+      'Wie setze ich mein Passwort zurück?',
+      'Wir haben eine Phishing-Mail erhalten',
+    ],
+    reportKpis: [
+      'startedChats',
+      'resolvedByKnowledge',
+      'tickets',
+      'handoffs',
+      'topQuestions',
+    ],
     brandingDefaults: {
       brandColor: '#2563eb',
       accentColor: '#e0ecff',
       fontFamily: 'system',
       botName: 'Support-Assistent',
     },
-    modules: baseModules({}),
+    modules: baseModules({
+      'lead-sales': { key: 'lead-sales', isEnabled: false },
+      'knowledge-faq': { key: 'knowledge-faq', isEnabled: true },
+      'it-support': {
+        key: 'it-support',
+        isEnabled: true,
+        config: DEFAULT_IT_SUPPORT_MODULE_CONFIG,
+      },
+      'property-ticketing': { key: 'property-ticketing', isEnabled: false },
+      'ecommerce-product-advisor': { key: 'ecommerce-product-advisor', isEnabled: false },
+      'reporting-insights': { key: 'reporting-insights', isEnabled: true },
+    }),
   },
   'medical-practice': {
     key: 'medical-practice',

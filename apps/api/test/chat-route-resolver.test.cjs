@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { resolveChatRoute } = require('../dist/chat-routing/chat-route-resolver.js');
 const {
   DEFAULT_LOCAL_SERVICE_INTAKE_FLOW,
+  DEFAULT_IT_SUPPORT_MODULE_CONFIG,
 } = require('../dist/site-modules/module-configs.js');
 
 function buildLocalServiceFlow(overrides = {}) {
@@ -116,6 +117,61 @@ test('chat route resolver uses property agent when damage/ticket intent is detec
   assert.equal(decision.route, 'agent');
   assert.equal(decision.agentKey, 'property-ticket-agent');
   assert.equal(decision.cta?.label, 'Stoerung jetzt aufnehmen');
+});
+
+test('chat route resolver uses dedicated IT support agent before property ticketing', async () => {
+  const decision = resolveChatRoute({
+    message: 'Mein VPN verbindet nicht und MFA ist gesperrt',
+    enabledModuleKeys: ['knowledge-faq', 'property-ticketing', 'it-support'],
+    history: [],
+    moduleConfigs: {
+      'it-support': {
+        ...DEFAULT_IT_SUPPORT_MODULE_CONFIG,
+        ctaLabel: 'IT-Ticket öffnen',
+      },
+      'property-ticketing': {
+        intakeMode: 'ticket_system',
+      },
+    },
+  });
+
+  assert.equal(decision.route, 'agent');
+  assert.equal(decision.reason, 'it_support_intent');
+  assert.equal(decision.moduleKey, 'it-support');
+  assert.equal(decision.agentKey, 'it-support-agent');
+  assert.equal(decision.cta?.label, 'IT-Ticket öffnen');
+  assert.match(decision.guide, /IT-First-Level-Support/i);
+  assert.match(decision.guide, /Wissensbasis/i);
+  assert.match(decision.guide, /Passwörtern|Passwoertern/i);
+  assert.match(decision.guide, /Hat das geholfen/i);
+  assert.match(decision.guide, /MFA-Codes/i);
+  assert.match(decision.guide, /API-Keys/i);
+  assert.match(decision.guide, /Tokens/i);
+  assert.match(decision.guide, /Secrets/i);
+  assert.match(decision.guide, /PowerShell/i);
+  assert.match(decision.guide, /Terminal/i);
+  assert.match(decision.guide, /Registry/i);
+  assert.match(decision.guide, /Löschbefehle|Loeschbefehle/i);
+  assert.match(decision.guide, /Tickets nur nach klarer Anfrage oder Bestätigung/i);
+});
+
+test('chat route resolver keeps property incidents out of IT support when no IT signal exists', async () => {
+  const decision = resolveChatRoute({
+    message: 'Ich möchte einen Wasserschaden melden',
+    enabledModuleKeys: ['knowledge-faq', 'property-ticketing', 'it-support'],
+    history: [],
+    moduleConfigs: {
+      'it-support': DEFAULT_IT_SUPPORT_MODULE_CONFIG,
+      'property-ticketing': {
+        intakeMode: 'ticket_system',
+      },
+    },
+  });
+
+  assert.equal(decision.route, 'agent');
+  assert.equal(decision.reason, 'property_ticket_intent');
+  assert.equal(decision.moduleKey, 'property-ticketing');
+  assert.equal(decision.agentKey, 'property-ticket-agent');
 });
 
 test('chat route resolver uses ticket agent for common IT support cases', async () => {

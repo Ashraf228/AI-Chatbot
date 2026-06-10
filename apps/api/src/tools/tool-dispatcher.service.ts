@@ -14,6 +14,7 @@ import { VectorService } from '../vector/vector.service';
 import { PropertyTicketingService } from '../modules/property-ticketing/property-ticketing.service';
 import { UsageLimitService } from '../billing/usage-limit.service';
 import { logEvent } from '../utils/logger';
+import { deepRedactSensitiveValues, redactSensitiveText } from '../modules/it-support/it-support-flow';
 
 type AgentRunRow = {
   id: string;
@@ -448,14 +449,38 @@ export class ToolDispatcherService {
     run: AgentRunRow,
     inputPayload: Record<string, unknown>,
   ) {
-    const title = normalizeString(inputPayload.title) || 'Neuer Support-Fall';
-    const description = normalizeString(inputPayload.description || inputPayload.message);
-    const reporterName = normalizeString(inputPayload.reporterName || inputPayload.name) || null;
-    const reporterEmail = normalizeString(inputPayload.reporterEmail || inputPayload.email) || null;
+    const title = redactSensitiveText(normalizeString(inputPayload.title || inputPayload.subject) || 'Neuer Support-Fall');
+    const description = redactSensitiveText(normalizeString(inputPayload.description || inputPayload.message));
+    const reporterName = normalizeString(inputPayload.reporterName || inputPayload.customerName || inputPayload.name) || null;
+    const reporterEmail = normalizeString(inputPayload.reporterEmail || inputPayload.customerEmail || inputPayload.email) || null;
+    const reporterPhone = normalizeString(inputPayload.reporterPhone || inputPayload.phone) || null;
+    const company = normalizeString(inputPayload.company) || null;
     const location = normalizeString(inputPayload.location || inputPayload.unit) || null;
-    const priority = ['low', 'normal', 'high', 'urgent'].includes(normalizeString(inputPayload.priority))
+    const priority = ['low', 'normal', 'high', 'urgent', 'critical'].includes(normalizeString(inputPayload.priority))
       ? normalizeString(inputPayload.priority)
       : 'normal';
+    const category = normalizeString(inputPayload.category) || 'support';
+    const issueType = normalizeString(inputPayload.issueType) || null;
+    const affectedSystem = normalizeString(inputPayload.affectedSystem) || null;
+    const impact = normalizeString(inputPayload.impact) || null;
+    const urgency = ['low', 'normal', 'high', 'urgent', 'critical'].includes(normalizeString(inputPayload.urgency))
+      ? normalizeString(inputPayload.urgency)
+      : priority;
+    const affectedUsers = normalizeString(inputPayload.affectedUsers) || null;
+    const device = normalizeString(inputPayload.device) || null;
+    const operatingSystem = normalizeString(inputPayload.operatingSystem) || null;
+    const errorMessage = normalizeString(inputPayload.errorMessage)
+      ? redactSensitiveText(normalizeString(inputPayload.errorMessage))
+      : null;
+    const alreadyTried = normalizeString(inputPayload.alreadyTried)
+      ? redactSensitiveText(normalizeString(inputPayload.alreadyTried))
+      : null;
+    const department = normalizeString(inputPayload.department) || null;
+    const source = normalizeString(inputPayload.source) || 'chat';
+    const conversationId = normalizeString(inputPayload.conversationId) || null;
+    const metadata = normalizeObject(
+      deepRedactSensitiveValues(inputPayload.metadata) as Record<string, unknown> | null | undefined,
+    );
     const explicitForward =
       inputPayload.forwardExternally === true ||
       inputPayload.forwardWebhook === true ||
@@ -479,9 +504,56 @@ export class ToolDispatcherService {
          location,
          priority,
          status,
+         reporter_phone,
+         category,
+         issue_type,
+         affected_system,
+         impact,
+         urgency,
+         affected_users,
+         device,
+         operating_system,
+         error_message,
+         already_tried,
+         department,
+         source,
+         metadata,
          created_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'new', now())`,
-      [id, run.tenant_id, run.site_id, run.id, title, description, reporterName, reporterEmail, location, priority],
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'new',
+         $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+         $21, $22, $23, $24::jsonb, now()
+       )`,
+      [
+        id,
+        run.tenant_id,
+        run.site_id,
+        run.id,
+        title,
+        description,
+        reporterName,
+        reporterEmail,
+        location,
+        priority,
+        reporterPhone,
+        category,
+        issueType,
+        affectedSystem,
+        impact,
+        urgency,
+        affectedUsers,
+        device,
+        operatingSystem,
+        errorMessage,
+        alreadyTried,
+        department,
+        source,
+        JSON.stringify({
+          ...metadata,
+          company,
+          conversationId,
+        }),
+      ],
     );
 
     const propertyConfig = await this.propertyTicketing.getConfigForSite(run.site_id);
@@ -524,17 +596,36 @@ export class ToolDispatcherService {
           providerKey: 'ticket-webhook',
           connectionKey: 'primary',
           endpointUrl,
-          payload: {
+          payload: buildTicketWebhookPayload({
             ticketId: id,
+            subject: title,
             title,
             description,
+            category,
+            priority,
+            urgency,
+            impact,
+            issueType,
+            affectedSystem,
+            affectedUsers,
             reporterName,
             reporterEmail,
+            reporterPhone,
+            company,
+            department,
             location,
-            priority,
+            device,
+            operatingSystem,
+            errorMessage,
+            alreadyTried,
             status: 'new',
-            source: 'create_ticket',
-          },
+            source,
+            conversationId,
+            siteId: run.site_id,
+            tenantId: run.tenant_id || null,
+            metadata,
+            createdAt: new Date().toISOString(),
+          }),
           headers,
         });
 
@@ -549,7 +640,10 @@ export class ToolDispatcherService {
     return {
       ticketId: id,
       title,
+      category,
       priority,
+      issueType,
+      affectedSystem,
       status: 'new',
       forwardedToExternal,
       forwardingStatus,
@@ -638,4 +732,72 @@ function extractLimitExceeded(error: unknown): { message: string } | null {
 
   const message = normalizeString(responseObject.message) || 'Plan-Limit erreicht.';
   return { message };
+}
+
+function buildTicketWebhookPayload(input: {
+  ticketId: string;
+  subject: string;
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  urgency: string;
+  impact: string | null;
+  issueType: string | null;
+  affectedSystem: string | null;
+  affectedUsers: string | null;
+  reporterName: string | null;
+  reporterEmail: string | null;
+  reporterPhone: string | null;
+  company: string | null;
+  department: string | null;
+  location: string | null;
+  device: string | null;
+  operatingSystem: string | null;
+  errorMessage: string | null;
+  alreadyTried: string | null;
+  status: string;
+  source: string;
+  conversationId: string | null;
+  siteId: string;
+  tenantId: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}) {
+  return deepRedactSensitiveValues({
+    ticketId: input.ticketId,
+    subject: input.subject,
+    title: input.title,
+    description: input.description,
+    category: input.category,
+    priority: input.priority,
+    urgency: input.urgency,
+    impact: input.impact,
+    issueType: input.issueType,
+    affectedSystem: input.affectedSystem,
+    affectedUsers: input.affectedUsers,
+    customerEmail: input.reporterEmail,
+    customerName: input.reporterName,
+    reporter: {
+      name: input.reporterName,
+      email: input.reporterEmail,
+      phone: input.reporterPhone,
+      company: input.company,
+      department: input.department,
+      location: input.location,
+    },
+    technicalContext: {
+      device: input.device,
+      operatingSystem: input.operatingSystem,
+      errorMessage: input.errorMessage,
+      alreadyTried: input.alreadyTried,
+    },
+    status: input.status,
+    source: input.source,
+    conversationId: input.conversationId,
+    siteId: input.siteId,
+    tenantId: input.tenantId,
+    metadata: input.metadata,
+    createdAt: input.createdAt,
+  }) as Record<string, unknown>;
 }

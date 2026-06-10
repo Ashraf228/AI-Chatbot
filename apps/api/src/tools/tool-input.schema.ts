@@ -52,12 +52,33 @@ function normalizeScheduleContact(input: Record<string, unknown>): ToolInputVali
 }
 
 function normalizeCreateTicket(input: Record<string, unknown>): ToolInputValidation {
+  const reporterEmail = text(input.reporterEmail || input.customerEmail || input.email);
+  const reporterName = text(input.reporterName || input.customerName || input.name);
   const normalized = {
     subject: text(input.subject || input.title),
     description: text(input.description || input.message || input.concern),
     priority: text(input.priority) || 'normal',
     category: text(input.category),
-    customerEmail: text(input.customerEmail || input.reporterEmail || input.email),
+    customerEmail: text(input.customerEmail) || reporterEmail,
+    customerName: text(input.customerName) || reporterName,
+    issueType: text(input.issueType),
+    affectedSystem: text(input.affectedSystem),
+    impact: text(input.impact),
+    urgency: text(input.urgency),
+    affectedUsers: text(input.affectedUsers),
+    reporterName,
+    reporterEmail,
+    reporterPhone: text(input.reporterPhone || input.phone),
+    company: text(input.company),
+    department: text(input.department),
+    location: text(input.location),
+    device: text(input.device),
+    operatingSystem: text(input.operatingSystem),
+    errorMessage: text(input.errorMessage),
+    alreadyTried: text(input.alreadyTried),
+    source: text(input.source) || 'chat',
+    conversationId: text(input.conversationId),
+    metadata: record(input.metadata),
   };
   const missingFields = [
     ...(!normalized.subject ? ['subject'] : []),
@@ -135,12 +156,42 @@ function sanitizeRecord(input: Record<string, unknown>): Record<string, unknown>
       if (/phone|telefon|name/i.test(key)) {
         return [key, value ? '[redacted]' : value];
       }
+      if (typeof value === 'string') {
+        return [key, redactSensitiveTextForLog(value)];
+      }
+      if (Array.isArray(value)) {
+        return [key, value.map((entry) => sanitizeValueForLog(entry))];
+      }
       if (value && typeof value === 'object' && !Array.isArray(value)) {
         return [key, sanitizeRecord(value as Record<string, unknown>)];
       }
       return [key, value];
     }),
   );
+}
+
+function sanitizeValueForLog(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return redactSensitiveTextForLog(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeValueForLog(entry));
+  }
+  if (value && typeof value === 'object') {
+    return sanitizeRecord(value as Record<string, unknown>);
+  }
+  return value;
+}
+
+function redactSensitiveTextForLog(value: string) {
+  return value
+    .replace(/\b(passwort|password|kennwort)\s*(?:ist|lautet|:)?\s*\S+/gi, '$1 [redacted]')
+    .replace(/\b(mfa|2fa|tan|pin)(?:\s*code)?\s*(?:ist|lautet|:)?\s*\S+/gi, '$1 [redacted]')
+    .replace(/\b(bearer\s+token)\s*(?:ist|lautet|=|:)?\s*\S+/gi, '$1 [redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{6,}/g, 'Bearer [redacted]')
+    .replace(/\b(client_secret|access_token|refresh_token)\s*(?:ist|lautet|=|:)?\s*\S+/gi, '$1 [redacted]')
+    .replace(/\b(api[-_\s]?key)\s*(?:ist|lautet|=|:)?\s*\S+/gi, '$1 [redacted]')
+    .replace(/\b(token|secret)\s*(?:ist|lautet|=|:)?\s*\S+/gi, '$1 [redacted]');
 }
 
 function text(value: unknown) {

@@ -29,3 +29,33 @@ test('local-service-first-contact template configures the Handwerker first-conta
   assert.equal(modulesByKey['property-ticketing'].isEnabled, false);
   assert.equal(modulesByKey['lead-sales'].config.intakeFlow.templateKey, 'local-service-first-contact');
 });
+
+test('it-support template enables dedicated IT support module and agent foundation', () => {
+  const template = getIndustryTemplate('it-support');
+
+  assert.equal(template.label, 'IT-Support');
+  assert.equal(template.setupGoal, 'support');
+  assert.match(template.systemPrompt, /First-Level-Support/i);
+  assert.match(template.systemPrompt, /Passwörtern|Passwoertern/i);
+  assert.match(template.systemPrompt, /Sicherheitsvorfälle|Sicherheitsvorfaelle|Sicherheitsvorfall/i);
+  assert.deepEqual(template.reportKpis, [
+    'startedChats',
+    'resolvedByKnowledge',
+    'tickets',
+    'handoffs',
+    'topQuestions',
+  ]);
+  assert.ok(template.topTestQuestions.includes('Mein VPN verbindet nicht'));
+  assert.ok(template.topTestQuestions.includes('Wir haben eine Phishing-Mail erhalten'));
+
+  const modulesByKey = Object.fromEntries(template.modules.map((module) => [module.key, module]));
+
+  assert.equal(modulesByKey['lead-sales'].isEnabled, false);
+  assert.equal(modulesByKey['knowledge-faq'].isEnabled, true);
+  assert.equal(modulesByKey['it-support'].isEnabled, true);
+  assert.equal(modulesByKey['it-support'].config.intakeMode, 'knowledge_first');
+  assert.equal(modulesByKey['it-support'].config.ticketConfirmationRequired, true);
+  assert.equal(modulesByKey['property-ticketing'].isEnabled, false);
+  assert.equal(modulesByKey['ecommerce-product-advisor'].isEnabled, false);
+  assert.equal(modulesByKey['reporting-insights'].isEnabled, true);
+});

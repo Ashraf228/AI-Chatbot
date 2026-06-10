@@ -36,6 +36,15 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     toolKeys: ['create_ticket', 'push_webhook', 'query_knowledge'],
     defaultToolPlan: ['query_knowledge', 'create_ticket', 'push_webhook'],
   },
+  {
+    key: 'it-support-agent',
+    label: 'IT-Support-Agent',
+    description: 'First-Level-Support, Wissensfragen, Triage und strukturierte IT-Tickets.',
+    category: 'support',
+    requiredModuleKeys: ['it-support', 'knowledge-faq'],
+    toolKeys: ['query_knowledge', 'create_ticket', 'push_webhook', 'handoff'],
+    defaultToolPlan: ['query_knowledge', 'create_ticket', 'push_webhook'],
+  },
 ];
 
 export function getAgentDefinition(key: string) {

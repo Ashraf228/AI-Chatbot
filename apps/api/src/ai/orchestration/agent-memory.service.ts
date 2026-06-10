@@ -26,12 +26,21 @@ export class AgentMemoryService {
     );
     const metadata = asObject(res.rows[0]?.metadata);
     const pendingLead = asObject(metadata.pendingLead);
+    const pendingTicket = asObject(metadata.pendingTicket);
     const conversationState = asObject(metadata.conversationState);
     const collectedFields = asObject(conversationState.collectedFields);
     const extracted = this.extractFields(input.message);
 
     return {
       pendingLeadStatus: parseStatus(asString(pendingLead.status)),
+      pendingTicketStatus: parsePendingTicketStatus(asString(pendingTicket.status)),
+      pendingTicketIssueType: asString(pendingTicket.issueType) || undefined,
+      pendingTicketSummary:
+        asString(pendingTicket.summary) ||
+        asString(pendingTicket.description) ||
+        undefined,
+      pendingTicketUrgency: asString(pendingTicket.urgency) || undefined,
+      pendingTicketImpact: asString(pendingTicket.impact) || undefined,
       knownEmail: extracted.email || asString(pendingLead.email) || asString(collectedFields.email) || undefined,
       knownPhone: extracted.phone || asString(pendingLead.phone) || asString(collectedFields.phone) || undefined,
       knownName: extracted.name || asString(pendingLead.name) || asString(collectedFields.name) || undefined,
@@ -96,6 +105,24 @@ function parseStringArray(value: unknown) {
 function parseStatus(value: string): AgentMemory['pendingLeadStatus'] {
   if (value === 'pending' || value === 'completed') {
     return value;
+  }
+  return undefined;
+}
+
+function parsePendingTicketStatus(value: string): AgentMemory['pendingTicketStatus'] {
+  if (
+    [
+      'triage',
+      'solution_offered',
+      'ticket_offered',
+      'collecting',
+      'ready_to_create',
+      'created',
+      'cancelled',
+      'resolved',
+    ].includes(value)
+  ) {
+    return value as AgentMemory['pendingTicketStatus'];
   }
   return undefined;
 }
