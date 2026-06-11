@@ -1,4 +1,3 @@
-import { dashboardLabels } from "../../../lib/labels";
 import { Input } from "../../shared/Input";
 import { Select } from "../../shared/Select";
 import type { CustomerStatusTone } from "../customer-status";
@@ -44,7 +43,7 @@ export function CustomerDataStep({ value, onChange, explanation, status, statusL
         </label>
       </div>
       <label className="dashboard-field">
-        <span className="dashboard-field-label">{dashboardLabels.allowedDomains} (Pflicht)</span>
+        <span className="dashboard-field-label">Erlaubte Websites (Pflicht)</span>
         <textarea
           className="dashboard-textarea"
           rows={3}
