@@ -1,10 +1,11 @@
 export type WidgetEventName =
-  | "widget_loaded"
-  | "widget_opened"
-  | "widget_closed"
+  | "impression"
+  | "open"
+  | "close"
   | "chat_started"
   | "message_sent"
   | "message_received"
+  | "fallback"
   | "lead_modal_opened"
   | "lead_submitted"
   | "consent_accepted";

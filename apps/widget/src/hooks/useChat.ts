@@ -40,7 +40,7 @@ export function useChat() {
   } = useMessages(config.greeting);
 
   useEffect(() => {
-    void track("widget_loaded");
+    void track("impression");
   }, [track]);
 
   async function sendMessage(content: string) {

@@ -64,11 +64,11 @@ export class WidgetAdminReportsService {
         ),
         this.db.query<EventsSummaryRow>(
           `SELECT
-             COUNT(*) FILTER (WHERE event_type = 'impression')::int AS widget_impressions,
-             COUNT(*) FILTER (WHERE event_type = 'open')::int AS widget_openings,
+             COUNT(*) FILTER (WHERE event_type IN ('impression', 'widget_loaded', 'widget_impression'))::int AS widget_impressions,
+             COUNT(*) FILTER (WHERE event_type IN ('open', 'widget_opened'))::int AS widget_openings,
              COUNT(*) FILTER (WHERE event_type = 'chat_started')::int AS started_chats,
              COUNT(*) FILTER (
-               WHERE event_type = 'fallback'
+               WHERE event_type IN ('fallback', 'fallback_answer')
                  OR COALESCE((metadata->>'fallback')::boolean, false) = true
              )::int AS fallback_answers
            FROM widget_events

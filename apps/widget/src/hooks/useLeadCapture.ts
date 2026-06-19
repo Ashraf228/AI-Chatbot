@@ -33,7 +33,7 @@ export function useLeadCapture(options?: UseLeadCaptureOptions) {
       setState("success");
       setIsModalOpen(false);
       await options?.onSuccess?.(lead);
-      await track("lead_submitted", { email: lead.email });
+      await track("lead_submitted", { hasEmail: Boolean(lead.email) });
     } catch {
       setState("error");
     }

@@ -1,4 +1,5 @@
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { WIDGET_ANALYTICS_ACCEPTED_EVENT_TYPES } from '../analytics-events';
 
 export class TrackEventDto {
   @IsString()
@@ -10,15 +11,7 @@ export class TrackEventDto {
   sessionId!: string;
 
   @IsString()
-  @IsIn([
-    'widget_impression',
-    'widget_opened',
-    'chat_started',
-    'message_sent',
-    'message_received',
-    'fallback_answer',
-    'lead_submitted',
-  ])
+  @IsIn(WIDGET_ANALYTICS_ACCEPTED_EVENT_TYPES)
   eventType!: string;
 
   @IsString()

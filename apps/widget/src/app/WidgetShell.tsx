@@ -32,12 +32,12 @@ export function WidgetShell() {
 
   async function openWidget() {
     setIsOpen(true);
-    await track("widget_opened");
+    await track("open");
   }
 
   async function closeWidget() {
     setIsOpen(false);
-    await track("widget_closed");
+    await track("close");
   }
 
   async function handleAcceptConsent() {

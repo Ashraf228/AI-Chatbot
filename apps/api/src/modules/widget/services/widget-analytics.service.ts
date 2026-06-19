@@ -7,6 +7,7 @@ import { WidgetEventEntity } from '../entities/widget-event.entity';
 import { PrismaService } from '../../../db/prisma.service';
 import { WidgetConfigService } from './widget-config.service';
 import { WidgetSecurityService } from './widget-security.service';
+import { normalizeWidgetAnalyticsEventType } from '../analytics-events';
 
 @Injectable()
 export class WidgetAnalyticsService {
@@ -25,11 +26,12 @@ export class WidgetAnalyticsService {
     await this.widgetSecurityService.enforceOrigin(dto.siteKey, origin);
     await this.widgetSecurityService.assertSessionBelongsToSite(site.id, dto.sessionId);
     const id = randomUUID();
+    const eventType = normalizeWidgetAnalyticsEventType(dto.eventType);
 
     await this.db.query(
       `INSERT INTO widget_events(id, site_id, session_id, event_type, page_url, metadata, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, now())`,
-      [id, site.id, dto.sessionId, dto.eventType, dto.pageUrl, dto.metadata || {}],
+      [id, site.id, dto.sessionId, eventType, dto.pageUrl, dto.metadata || {}],
     );
 
     await this.db.query(
@@ -44,7 +46,7 @@ export class WidgetAnalyticsService {
       id,
       siteId: site.id,
       sessionId: dto.sessionId,
-      eventType: dto.eventType,
+      eventType,
       pageUrl: dto.pageUrl,
       metadata: dto.metadata || {},
       createdAt: new Date().toISOString(),
