@@ -20,6 +20,20 @@ This document summarizes the technical privacy handling in the AI-Chatbot platfo
 - Dispatch configured integrations.
 - Provide business analytics, reports and operational auditability.
 
+## Public Widget Consent And Session Lifecycle
+
+This section describes the technical implementation. It is not legal advice and does not make a compliance guarantee.
+
+When a site configuration has `consentRequired=true`, the public widget reads only the dedicated consent flag before consent. If no valid stored consent exists, the widget does not read, create or persist visitor/session identifiers, does not call `/widget/session`, does not send server-side analytics events and does not send chat messages. Known legacy widget identifier keys for the same site (`ssb_visitor_<siteId>` and `ssb_session_<siteId>`) are removed without using their values. Storage keys from other applications or other sites are not touched.
+
+Pre-consent analytics such as `impression`, `open`, `close` or `lead_modal_opened` are intentionally not buffered and are not replayed after consent. This creates a deliberate measurement boundary: analytics starts only after consent and a valid server session exist.
+
+After the visitor clicks "Einverstanden", the widget stores the consent flag first, removes legacy widget identifiers for that site if needed, creates or reuses exactly one server session via the idempotent session initializer, and only then sends `consent_accepted` with the resulting session ID. Further analytics events are best effort and require a valid session.
+
+When `consentRequired=false`, the widget initializes or reuses a server session during bootstrap as before. Chat and analytics remain best effort; analytics failures must not block chat usage.
+
+For session initialization after consent, the widget sends `sourceUrl` only as origin plus pathname. Query strings, URL fragments and URL credentials are stripped. `userAgent` is sent only after consent or when consent is not required.
+
 ## Retention Settings
 
 Default technical retention targets:

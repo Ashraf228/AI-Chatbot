@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 import type { PropsWithChildren } from "react";
 import { trackWidgetEvent } from "../../services/analyticsService";
+import { getStoredConsent } from "../../services/sessionService";
 import type { WidgetEvent, WidgetEventName } from "../../types/analytics";
 import { useConfigContext } from "./ConfigProvider";
 import { useSessionContext } from "./SessionProvider";
@@ -13,15 +14,24 @@ const AnalyticsContext = createContext<AnalyticsContextValue | null>(null);
 
 export function AnalyticsProvider({ children }: PropsWithChildren) {
   const config = useConfigContext();
-  const { sessionId } = useSessionContext();
+  const { consentAccepted, ensureSession } = useSessionContext();
 
   async function track(name: WidgetEventName, metadata?: Record<string, unknown>) {
+    if (config.consentRequired && !consentAccepted && !getStoredConsent(config.siteId)) {
+      return;
+    }
+
+    const session = await ensureSession();
+    if (!session) {
+      return;
+    }
+
     const event: WidgetEvent = {
       name,
       siteId: config.siteId,
       siteKey: config.siteKey,
       apiBase: config.apiBase,
-      sessionId,
+      sessionId: session.sessionId,
       metadata,
       createdAt: new Date().toISOString(),
     };

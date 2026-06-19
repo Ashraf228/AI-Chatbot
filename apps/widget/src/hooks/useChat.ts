@@ -13,11 +13,11 @@ function friendlyChatError(error: unknown) {
   }
 
   if (message.includes("HTTP 429")) {
-    return "Zu viele Anfragen in kurzer Zeit. Bitte warte einen Moment.";
+    return "Zu viele Anfragen in kurzer Zeit. Bitte warten Sie einen Moment.";
   }
 
   if (message.includes("HTTP 5")) {
-    return "Der Assistent ist gerade nicht erreichbar. Bitte versuche es gleich erneut.";
+    return "Der Assistent ist gerade nicht erreichbar. Bitte versuchen Sie es gleich erneut.";
   }
 
   return "Die Nachricht konnte gerade nicht zugestellt werden.";
@@ -26,7 +26,11 @@ function friendlyChatError(error: unknown) {
 export function useChat() {
   const config = useWidgetConfig();
   const { track } = useAnalytics();
-  const { sessionId, visitorId, setSessionId, consentAccepted } = useSessionContext();
+  const {
+    setSessionId,
+    consentAccepted,
+    ensureSession,
+  } = useSessionContext();
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const {
@@ -51,6 +55,13 @@ export function useChat() {
     }
 
     if (config.consentRequired && !consentAccepted) {
+      setError("Bitte stimmen Sie zuerst der Verarbeitung Ihrer Angaben zu, um den Chat zu starten.");
+      return;
+    }
+
+    const session = await ensureSession();
+    if (!session) {
+      setError("Die Chat-Sitzung konnte nicht gestartet werden. Bitte versuchen Sie es erneut.");
       return;
     }
 
@@ -67,11 +78,11 @@ export function useChat() {
       let streamedAnswer = "";
       const reply = await streamChatMessage({
         config,
-        sessionId,
-        visitorId,
+        sessionId: session.sessionId,
+        visitorId: session.visitorId,
         message: text,
         onStart: (nextSessionId) => {
-          if (nextSessionId && nextSessionId !== sessionId) {
+          if (nextSessionId && nextSessionId !== session.sessionId) {
             setSessionId(nextSessionId);
           }
         },
@@ -81,7 +92,7 @@ export function useChat() {
         },
       });
 
-      if (reply.sessionId && reply.sessionId !== sessionId) {
+      if (reply.sessionId && reply.sessionId !== session.sessionId) {
         setSessionId(reply.sessionId);
       }
 

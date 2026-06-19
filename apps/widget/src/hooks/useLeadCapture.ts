@@ -13,11 +13,22 @@ type UseLeadCaptureOptions = {
 export function useLeadCapture(options?: UseLeadCaptureOptions) {
   const config = useWidgetConfig();
   const { track } = useAnalytics();
-  const { sessionId } = useSessionContext();
+  const { consentAccepted, ensureSession } = useSessionContext();
   const [state, setState] = useState<LeadSubmissionState>("idle");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   async function openLeadCapture() {
+    if (config.consentRequired && !consentAccepted) {
+      setState("error");
+      return;
+    }
+
+    const session = await ensureSession();
+    if (!session) {
+      setState("error");
+      return;
+    }
+
     setIsModalOpen(true);
     await track("lead_modal_opened");
   }
@@ -29,7 +40,12 @@ export function useLeadCapture(options?: UseLeadCaptureOptions) {
   async function saveLead(lead: LeadPayload) {
     try {
       setState("submitting");
-      await submitLead(config, sessionId, lead);
+      const session = await ensureSession();
+      if (!session) {
+        throw new Error("Session unavailable");
+      }
+
+      await submitLead(config, session.sessionId, lead);
       setState("success");
       setIsModalOpen(false);
       await options?.onSuccess?.(lead);

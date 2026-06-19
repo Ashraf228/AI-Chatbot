@@ -17,6 +17,7 @@ type ChatWindowProps = {
   placeholder: string;
   messages: ChatMessage[];
   isSending: boolean;
+  chatDisabled?: boolean;
   error?: string | null;
   consentRequired: boolean;
   consentAccepted: boolean;
@@ -35,6 +36,7 @@ export function ChatWindow({
   placeholder,
   messages,
   isSending,
+  chatDisabled = false,
   error,
   consentRequired,
   consentAccepted,
@@ -64,7 +66,7 @@ export function ChatWindow({
           <div className="ssb-start-panel">
             <SuggestedQuestions
               questions={suggestedQuestions}
-              disabled={isSending || (consentRequired && !consentAccepted)}
+              disabled={isSending || chatDisabled || (consentRequired && !consentAccepted)}
               onSelect={onSendMessage}
             />
             <p className="ssb-start-panel__hint">
@@ -77,7 +79,7 @@ export function ChatWindow({
         <TypingIndicator visible={isSending} />
         <Composer
           placeholder={placeholder}
-          disabled={isSending || (consentRequired && !consentAccepted)}
+          disabled={isSending || chatDisabled || (consentRequired && !consentAccepted)}
           onSubmit={onSendMessage}
         />
       </div>

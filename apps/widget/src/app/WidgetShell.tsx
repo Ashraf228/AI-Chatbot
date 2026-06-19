@@ -9,7 +9,7 @@ import { useSessionContext } from "./providers/SessionProvider";
 export function WidgetShell() {
   const config = useWidgetConfig();
   const { track } = useAnalytics();
-  const { consentAccepted, acceptConsent } = useSessionContext();
+  const { consentAccepted, acceptConsent, sessionStatus, sessionError } = useSessionContext();
   const { messages, isSending, error, sendMessage } = useChat();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -41,7 +41,10 @@ export function WidgetShell() {
   }
 
   async function handleAcceptConsent() {
-    acceptConsent();
+    const session = await acceptConsent();
+    if (!session) {
+      return;
+    }
     await track("consent_accepted");
   }
 
@@ -62,7 +65,8 @@ export function WidgetShell() {
           placeholder={config.placeholder}
           messages={messages}
           isSending={isSending}
-          error={error}
+          chatDisabled={sessionStatus === "initializing"}
+          error={error || sessionError}
           consentRequired={config.consentRequired}
           consentAccepted={consentAccepted}
           onAcceptConsent={handleAcceptConsent}
