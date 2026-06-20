@@ -91,7 +91,7 @@ The smoke test runs `WidgetAdminReportsService.getSummary()` against the same st
 
 `message_sent` is verified at persistence level and as the fachlich equivalent `sentMessages` report field. The current report summary maps sent message counts from conversation messages, not directly from widget event rows, so the fake adapter provides a scoped message aggregate derived from the smoke-test `message_sent` event.
 
-The report service currently falls back from `startedChats = 0` to `totalSessions`. The smoke test keeps this existing behavior visible for Site B while still verifying that Site A and Site B aggregates remain isolated.
+Report counts treat `0` as a valid measured value. `null` and `undefined` are handled separately as missing values. For backward compatibility with older result shapes, `startedChats` falls back to `totalSessions` only when `started_chats` is missing or null, never when it is `0` or `"0"`. Report numeric fields are normalized so invalid values do not produce `NaN` or `Infinity`.
 
 ## Tenant And Site Isolation
 

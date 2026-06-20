@@ -190,6 +190,170 @@ test('WidgetAdminReportsService counts canonical and rollout legacy events witho
   assert.equal(summary.fallbackAnswers, 3);
 });
 
+function createSummaryService({
+  sessionsRow = { total_sessions: 0 },
+  eventsRow = {
+    widget_impressions: 0,
+    widget_openings: 0,
+    started_chats: 0,
+    fallback_answers: 0,
+  },
+  leadsRow = { leads: 0 },
+  averageDurationRow = { average_duration: 0 },
+  messagesRow = { user_messages: 0, assistant_messages: 0 },
+} = {}) {
+  return new WidgetAdminReportsService(
+    {
+      async query(sql) {
+        if (/COUNT\(\*\)::int AS total_sessions/i.test(sql)) return { rows: [sessionsRow] };
+        if (/COUNT\(\*\) FILTER[\s\S]*widget_impressions/i.test(sql)) return { rows: [eventsRow] };
+        if (/FROM widget_leads/i.test(sql)) return { rows: [leadsRow] };
+        if (/AVG\(EXTRACT\(EPOCH/i.test(sql)) return { rows: [averageDurationRow] };
+        if (/JOIN messages/i.test(sql) && /COUNT\(\*\) FILTER/i.test(sql)) return { rows: [messagesRow] };
+        if (/JOIN messages/i.test(sql)) return { rows: [] };
+        if (/GROUP BY page_url/i.test(sql)) return { rows: [] };
+        return { rows: [] };
+      },
+    },
+    {},
+    {},
+    {},
+  );
+}
+
+test('WidgetAdminReportsService preserves valid zero counts without session fallback', async () => {
+  const service = createSummaryService({
+    sessionsRow: { total_sessions: 5 },
+    eventsRow: {
+      widget_impressions: 0,
+      widget_openings: 0,
+      started_chats: 0,
+      fallback_answers: 0,
+    },
+    leadsRow: { leads: 0 },
+    messagesRow: { user_messages: 0, assistant_messages: 0 },
+  });
+
+  const summary = await service.getSummary('site-a');
+
+  assert.equal(summary.widgetImpressions, 0);
+  assert.equal(summary.widgetOpenings, 0);
+  assert.equal(summary.startedChats, 0);
+  assert.equal(summary.fallbackAnswers, 0);
+  assert.equal(summary.leadRate, 0);
+  assert.equal(summary.aiAnswerRate, 0);
+  assert.equal(Number.isFinite(summary.leadRate), true);
+  assert.equal(Number.isFinite(summary.aiAnswerRate), true);
+});
+
+test('WidgetAdminReportsService normalizes string zero counts to numeric zero', async () => {
+  const service = createSummaryService({
+    sessionsRow: { total_sessions: '5' },
+    eventsRow: {
+      widget_impressions: '0',
+      widget_openings: '0',
+      started_chats: '0',
+      fallback_answers: '0',
+    },
+    leadsRow: { leads: '0' },
+    messagesRow: { user_messages: '0', assistant_messages: '0' },
+  });
+
+  const summary = await service.getSummary('site-a');
+
+  assert.equal(summary.widgetImpressions, 0);
+  assert.equal(summary.widgetOpenings, 0);
+  assert.equal(summary.startedChats, 0);
+  assert.equal(summary.fallbackAnswers, 0);
+  assert.equal(summary.leads, 0);
+  assert.equal(summary.sentMessages, 0);
+});
+
+test('WidgetAdminReportsService uses session fallback only when started chats is missing', async () => {
+  const serviceWithNull = createSummaryService({
+    sessionsRow: { total_sessions: 5 },
+    eventsRow: {
+      widget_impressions: 0,
+      widget_openings: 0,
+      started_chats: null,
+      fallback_answers: 0,
+    },
+  });
+  const serviceWithUndefined = createSummaryService({
+    sessionsRow: { total_sessions: 4 },
+    eventsRow: {
+      widget_impressions: 0,
+      widget_openings: 0,
+      fallback_answers: 0,
+    },
+  });
+
+  assert.equal((await serviceWithNull.getSummary('site-a')).startedChats, 5);
+  assert.equal((await serviceWithUndefined.getSummary('site-a')).startedChats, 4);
+});
+
+test('WidgetAdminReportsService avoids NaN and Infinity for invalid or zero-denominator values', async () => {
+  const service = createSummaryService({
+    sessionsRow: { total_sessions: 0 },
+    eventsRow: {
+      widget_impressions: -1,
+      widget_openings: 'not-a-number',
+      started_chats: 0,
+      fallback_answers: -2,
+    },
+    leadsRow: { leads: 3 },
+    averageDurationRow: { average_duration: 'invalid-duration' },
+    messagesRow: { user_messages: 0, assistant_messages: 5 },
+  });
+
+  const summary = await service.getSummary('site-a');
+
+  assert.equal(summary.widgetImpressions, 0);
+  assert.equal(summary.widgetOpenings, 0);
+  assert.equal(summary.startedChats, 0);
+  assert.equal(summary.fallbackAnswers, 0);
+  assert.equal(summary.averageConversationDurationSeconds, 0);
+  assert.equal(summary.leadRate, 0);
+  assert.equal(summary.aiAnswerRate, 0);
+  for (const value of [
+    summary.widgetImpressions,
+    summary.widgetOpenings,
+    summary.startedChats,
+    summary.fallbackAnswers,
+    summary.averageConversationDurationSeconds,
+    summary.leadRate,
+    summary.aiAnswerRate,
+  ]) {
+    assert.equal(Number.isFinite(value), true);
+  }
+});
+
+test('WidgetAdminReportsService keeps positive report values unchanged', async () => {
+  const service = createSummaryService({
+    sessionsRow: { total_sessions: 10 },
+    eventsRow: {
+      widget_impressions: 7,
+      widget_openings: 4,
+      started_chats: 2,
+      fallback_answers: 1,
+    },
+    leadsRow: { leads: 1 },
+    averageDurationRow: { average_duration: 12.5 },
+    messagesRow: { user_messages: 4, assistant_messages: 2 },
+  });
+
+  const summary = await service.getSummary('site-a');
+
+  assert.equal(summary.widgetImpressions, 7);
+  assert.equal(summary.widgetOpenings, 4);
+  assert.equal(summary.startedChats, 2);
+  assert.equal(summary.fallbackAnswers, 1);
+  assert.equal(summary.sentMessages, 4);
+  assert.equal(summary.averageConversationDurationSeconds, 12.5);
+  assert.equal(summary.leadRate, 0.5);
+  assert.equal(summary.aiAnswerRate, 0.5);
+});
+
 test('widget analytics migration maps documented legacy values and leaves unknown values untouched', () => {
   const migration = fs.readFileSync(
     path.join(__dirname, '../migrations/023_normalize_widget_analytics_events.sql'),

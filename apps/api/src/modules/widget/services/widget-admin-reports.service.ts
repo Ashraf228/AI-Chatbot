@@ -6,19 +6,20 @@ import { ReportMailerService } from './report-mailer.service';
 import { ReportPayload, ReportRendererService } from './report-renderer.service';
 import { WidgetAdminSiteService } from './widget-admin-site.service';
 
-type TotalSessionsRow = { total_sessions: number };
+type ReportNumericValue = number | string | null | undefined;
+type TotalSessionsRow = { total_sessions: ReportNumericValue };
 type EventsSummaryRow = {
-  widget_impressions: number;
-  widget_openings: number;
-  started_chats: number;
-  fallback_answers: number;
+  widget_impressions: ReportNumericValue;
+  widget_openings: ReportNumericValue;
+  started_chats: ReportNumericValue;
+  fallback_answers: ReportNumericValue;
 };
-type LeadsCountRow = { leads: number };
-type AverageDurationRow = { average_duration: number };
+type LeadsCountRow = { leads: ReportNumericValue };
+type AverageDurationRow = { average_duration: ReportNumericValue };
 type CountedContentRow = { content: string; total: number };
 type CountedPageRow = { page_url: string; total: number };
-type MessageCountsRow = { user_messages: number; assistant_messages: number };
-type DropOffSessionsRow = { drop_off_sessions: number };
+type MessageCountsRow = { user_messages: ReportNumericValue; assistant_messages: ReportNumericValue };
+type DropOffSessionsRow = { drop_off_sessions: ReportNumericValue };
 type ReportSubscriptionRow = {
   id: string;
   site_id: string;
@@ -40,6 +41,12 @@ type ReportRunRow = {
   site_name: string | null;
 };
 type RecipientRow = { recipient_email: string };
+
+function toNonNegativeReportNumber(value: ReportNumericValue, fallback: ReportNumericValue = 0) {
+  const source = value ?? fallback;
+  const parsed = typeof source === 'number' ? source : Number(source);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
 
 @Injectable()
 export class WidgetAdminReportsService {
@@ -117,18 +124,18 @@ export class WidgetAdminReportsService {
         ),
       ]);
 
-    const totalSessions = sessionsRes.rows[0]?.total_sessions || 0;
-    const leads = leadsRes.rows[0]?.leads || 0;
-    const userMessages = messagesRes.rows[0]?.user_messages || 0;
-    const assistantMessages = messagesRes.rows[0]?.assistant_messages || 0;
-    const fallbackAnswers = eventsRes.rows[0]?.fallback_answers || 0;
-    const startedChats = eventsRes.rows[0]?.started_chats || totalSessions;
+    const totalSessions = toNonNegativeReportNumber(sessionsRes.rows[0]?.total_sessions);
+    const leads = toNonNegativeReportNumber(leadsRes.rows[0]?.leads);
+    const userMessages = toNonNegativeReportNumber(messagesRes.rows[0]?.user_messages);
+    const assistantMessages = toNonNegativeReportNumber(messagesRes.rows[0]?.assistant_messages);
+    const fallbackAnswers = toNonNegativeReportNumber(eventsRes.rows[0]?.fallback_answers);
+    const startedChats = toNonNegativeReportNumber(eventsRes.rows[0]?.started_chats, totalSessions);
     const aiAnswerRate = userMessages > 0 ? assistantMessages / userMessages : 0;
     const estimatedSupportRelief = Math.round(assistantMessages * 0.65);
 
     return {
-      widgetImpressions: eventsRes.rows[0]?.widget_impressions || 0,
-      widgetOpenings: eventsRes.rows[0]?.widget_openings || 0,
+      widgetImpressions: toNonNegativeReportNumber(eventsRes.rows[0]?.widget_impressions),
+      widgetOpenings: toNonNegativeReportNumber(eventsRes.rows[0]?.widget_openings),
       startedChats,
       sentMessages: userMessages,
       aiAnswerRate,
@@ -136,7 +143,7 @@ export class WidgetAdminReportsService {
       leads,
       leadRate: startedChats > 0 ? leads / startedChats : 0,
       averageConversationDurationSeconds:
-        Number(avgDurationRes.rows[0]?.average_duration || 0),
+        toNonNegativeReportNumber(avgDurationRes.rows[0]?.average_duration),
       estimatedSupportRelief,
       topQuestions: topQuestionsRes.rows.map((row) => ({
         question: row.content,
@@ -201,7 +208,7 @@ export class WidgetAdminReportsService {
         question: row.content,
         count: row.total,
       })),
-      dropOffSessions: dropOffRes.rows[0]?.drop_off_sessions || 0,
+      dropOffSessions: toNonNegativeReportNumber(dropOffRes.rows[0]?.drop_off_sessions),
       recommendations,
     };
   }
@@ -458,30 +465,30 @@ export class WidgetAdminReportsService {
       periodLabel: reportFrequency === 'weekly' ? 'Woche' : 'Monat',
       recipientEmail,
       metrics: {
-        widgetImpressions: Number(summary.widgetImpressions || 0),
-        widgetOpenings: Number(summary.widgetOpenings || 0),
-        startedChats: Number(summary.startedChats || 0),
-        sentMessages: Number(summary.sentMessages || 0),
-        aiAnswerRate: Number(summary.aiAnswerRate || 0),
-        fallbackAnswers: Number(summary.fallbackAnswers || 0),
-        leads: Number(summary.leads || 0),
-        leadRate: Number(summary.leadRate || 0),
-        averageConversationDurationSeconds: Number(summary.averageConversationDurationSeconds || 0),
-        estimatedSupportRelief: Number(summary.estimatedSupportRelief || 0),
+        widgetImpressions: toNonNegativeReportNumber(summary.widgetImpressions),
+        widgetOpenings: toNonNegativeReportNumber(summary.widgetOpenings),
+        startedChats: toNonNegativeReportNumber(summary.startedChats),
+        sentMessages: toNonNegativeReportNumber(summary.sentMessages),
+        aiAnswerRate: toNonNegativeReportNumber(summary.aiAnswerRate),
+        fallbackAnswers: toNonNegativeReportNumber(summary.fallbackAnswers),
+        leads: toNonNegativeReportNumber(summary.leads),
+        leadRate: toNonNegativeReportNumber(summary.leadRate),
+        averageConversationDurationSeconds: toNonNegativeReportNumber(summary.averageConversationDurationSeconds),
+        estimatedSupportRelief: toNonNegativeReportNumber(summary.estimatedSupportRelief),
         topQuestions: Array.isArray(summary.topQuestions) ? summary.topQuestions : [],
         mostActivePages: Array.isArray(summary.mostActivePages)
           ? summary.mostActivePages.map((item) => ({
               pageUrl: item.pageUrl,
-              impressions: Number(item.count || 0),
-              openings: Number(item.count || 0),
+              impressions: toNonNegativeReportNumber(item.count),
+              openings: toNonNegativeReportNumber(item.count),
             }))
           : [],
         unansweredQuestions: Array.isArray(optimization.unansweredQuestions)
           ? optimization.unansweredQuestions.length
           : 0,
         dropOffRate:
-          Number(summary.startedChats || 0) > 0
-            ? Number(optimization.dropOffSessions || 0) / Number(summary.startedChats || 1)
+          toNonNegativeReportNumber(summary.startedChats) > 0
+            ? toNonNegativeReportNumber(optimization.dropOffSessions) / toNonNegativeReportNumber(summary.startedChats, 1)
             : 0,
       },
       recommendations:

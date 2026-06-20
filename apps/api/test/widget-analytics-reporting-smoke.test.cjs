@@ -464,7 +464,7 @@ test('widget analytics controller flow normalizes, persists and reports events w
     assert.deepEqual(summaryCounts(await reports.getSummary(siteB.id)), {
       impression: 1,
       open: 1,
-      chat_started: 1,
+      chat_started: 0,
       message_sent: 0,
       fallback: 0,
     });
