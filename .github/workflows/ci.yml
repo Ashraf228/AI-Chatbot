@@ -99,7 +99,9 @@ jobs:
         run: docker compose --env-file .env.example build api
 
       - name: Build Dashboard image
-        run: docker compose --env-file .env.example build dashboard
+        run: |
+          docker compose --env-file .env.example build dashboard
+          docker build --target build -t ai-chatbot-dashboard-build apps/dashboard
 
       - name: Build Widget image
         run: docker compose --env-file .env.example build widget
@@ -127,4 +129,5 @@ jobs:
       - name: Verify dashboard production dependency tree
         run: |
           set -euo pipefail
-          docker run --rm --entrypoint node ai-chatbot-dashboard -e "const p=require('next/package.json'); console.log('next='+p.version); try { const postcss=require('postcss/package.json'); console.log('postcss='+postcss.version); if (postcss.version !== '8.5.15') process.exit(1); } catch (error) { if (error && error.code === 'MODULE_NOT_FOUND') { console.log('postcss=not-present-runtime'); process.exit(0); } throw error; }"
+          docker run --rm --entrypoint node ai-chatbot-dashboard-build -e "const p=require('next/package.json'); const postcss=require('postcss/package.json'); console.log('next='+p.version); console.log('postcss='+postcss.version); if (postcss.version !== '8.5.15') process.exit(1)"
+          docker run --rm --entrypoint node ai-chatbot-dashboard -e "try { const postcss=require('postcss/package.json'); console.log('runtime-postcss='+postcss.version); if (postcss.version !== '8.5.15') process.exit(1); } catch (error) { if (error && error.code === 'MODULE_NOT_FOUND') { console.log('runtime-postcss=not-present'); process.exit(0); } throw error; }"
