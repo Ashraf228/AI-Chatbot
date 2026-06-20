@@ -4,4 +4,11 @@ coverage
 *.log
 .env
 .env.*
+secrets
+backups
+certs
+*.pem
+*.key
+*.crt
 tsconfig.tsbuildinfo
+npm-debug.log*

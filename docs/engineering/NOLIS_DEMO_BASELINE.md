@@ -58,3 +58,12 @@ npm-Version: `11.12.1`
 - Standalone-Audits der Docker-Kontexte `apps/api`, `apps/dashboard`, `apps/widget` und `apps/reporter`: clean.
 - Root-Produktionsaudit: keine High- oder Critical-Findings; verbleibend ist das dokumentierte moderate Next/PostCSS-Finding.
 - Bekannte Ausnahme: `next@16.2.9` buendelt im Root-Workspace weiterhin internes `postcss@8.4.31`; kein Force-Fix, kein Downgrade, keine Canary-Version.
+
+## Follow-up 2026-06-20 Runtime- und CI-Konsistenz
+
+- Ziel: lokale, CI- und Docker-Buildpfade auf Node.js `24.17.0`, reproduzierbare `npm ci`-Installationen und getrennte Typecheck-/Build-Gates ausrichten.
+- Dashboard-Typecheck und Dashboard-Produktionsbuild sind getrennte Gates.
+- Dashboard und Reporter besitzen eigenstaendige Lockfiles fuer ihre Docker-Kontexte.
+- Widget-SDK besitzt einen eigenstaendigen Lockfile fuer den Loader-Build.
+- Dockerfiles verwenden keine Node-20- oder schwebenden Node-Tags mehr.
+- Docker-Build-Verifikation bleibt Voraussetzung fuer externen NOLIS-Zugang.

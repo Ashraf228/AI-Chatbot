@@ -2,6 +2,9 @@
   "name": "ai-chatbot",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24.17.0 <25"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -57,11 +60,12 @@
     "dev:widget": "npm run dev --workspace=apps/widget",
     "dev:reporter": "npm run dev --workspace=apps/reporter",
     "check:api": "npm exec tsc -- --noEmit -p apps/api/tsconfig.json",
-    "check:dashboard": "npm run build --workspace=apps/dashboard",
+    "check:dashboard": "npm run typecheck --workspace=apps/dashboard",
     "check:widget": "npm exec tsc -- --noEmit -p apps/widget/tsconfig.json",
     "check:reporter": "npm exec tsc -- --noEmit -p apps/reporter/tsconfig.json",
     "check:all": "npm run check:api && npm run check:dashboard && npm run check:widget && npm run check:reporter",
     "security:audit:report": "npm audit --omit=dev",
-    "security:audit:blocking": "npm audit --omit=dev --audit-level=high"
+    "security:audit:blocking": "npm audit --omit=dev --audit-level=high",
+    "security:audit:production-contexts": "bash scripts/security/audit-production-contexts.sh"
   }
 }

@@ -1,12 +1,13 @@
-FROM node:20-alpine AS build
+FROM node:24.17.0-alpine AS build
 WORKDIR /app
+ENV CI=true
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
 RUN npm run build
 RUN npm prune --omit=dev
 
-FROM node:20-alpine
+FROM node:24.17.0-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/dist ./dist

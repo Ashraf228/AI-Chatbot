@@ -11,6 +11,7 @@ package-lock.json
 !apps/dashboard/package-lock.json
 !apps/reporter/package-lock.json
 !apps/widget/package-lock.json
+!packages/widget-sdk/package-lock.json
 dist/
 coverage/
 .next/

@@ -1,5 +1,6 @@
-FROM node:20-alpine AS widget-build
+FROM node:24.17.0-alpine AS widget-build
 WORKDIR /app/apps/widget
+ENV CI=true
 
 COPY apps/widget/package.json apps/widget/package-lock.json* ./
 RUN npm ci
@@ -8,11 +9,12 @@ COPY apps/widget ./
 COPY packages/widget-sdk/src/runtime-config.ts /app/packages/widget-sdk/src/runtime-config.ts
 RUN npm run build
 
-FROM node:20-alpine AS loader-build
+FROM node:24.17.0-alpine AS loader-build
 WORKDIR /app/packages/widget-sdk
+ENV CI=true
 
-COPY packages/widget-sdk/package.json ./
-RUN npm install
+COPY packages/widget-sdk/package.json packages/widget-sdk/package-lock.json* ./
+RUN npm ci
 
 COPY packages/widget-sdk ./
 RUN npm run build

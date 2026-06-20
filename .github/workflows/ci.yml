@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  CI: "true"
+  NEXT_TELEMETRY_DISABLED: "1"
+
+jobs:
+  source-gate:
+    name: Source gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.17.0
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Print npm version
+        run: npm -v
+
+      - name: Verify lockfiles unchanged
+        run: git diff --exit-code -- package-lock.json apps/api/package-lock.json apps/dashboard/package-lock.json apps/widget/package-lock.json apps/reporter/package-lock.json packages/widget-sdk/package-lock.json
+
+      - name: Typecheck API
+        run: npm run check:api
+
+      - name: Typecheck Dashboard
+        run: npm run check:dashboard
+
+      - name: Typecheck Widget
+        run: npm run check:widget
+
+      - name: Typecheck Reporter
+        run: npm run check:reporter
+
+      - name: Smoke tests
+        run: npm run test:smoke
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: Build API
+        run: npm run build:api
+
+      - name: Build Dashboard
+        run: npm run build:dashboard
+
+      - name: Build Widget
+        run: npm run build:widget
+
+      - name: Build Reporter
+        run: npm run build:reporter
+
+  security-audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.17.0
+          cache: npm
+
+      - name: Run production-context audits
+        run: npm run security:audit:production-contexts
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DOCKER_BUILDKIT: "1"
+      COMPOSE_DOCKER_CLI_BUILD: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Compose config
+        run: docker compose --env-file .env.example config
+
+      - name: Build API image
+        run: docker compose --env-file .env.example build api
+
+      - name: Build Dashboard image
+        run: docker compose --env-file .env.example build dashboard
+
+      - name: Build Widget image
+        run: docker compose --env-file .env.example build widget
+
+      - name: Build Reporter image
+        run: docker compose --env-file .env.example build reporter
+
+      - name: Build Proxy image
+        run: docker compose --env-file .env.example build proxy
+
+      - name: Verify built images
+        run: |
+          set -euo pipefail
+          docker image inspect ai-chatbot-api >/dev/null
+          docker image inspect ai-chatbot-dashboard >/dev/null
+          docker image inspect ai-chatbot-widget >/dev/null
+          docker image inspect ai-chatbot-reporter >/dev/null
+          docker run --rm --entrypoint node ai-chatbot-api -v | grep '^v24.17.0$'
+          docker run --rm --entrypoint node ai-chatbot-dashboard -v | grep '^v24.17.0$'
+          docker run --rm --entrypoint node ai-chatbot-reporter -v | grep '^v24.17.0$'
+          test "$(docker image inspect ai-chatbot-api --format '{{.Config.User}}')" = "node"
+          test "$(docker image inspect ai-chatbot-dashboard --format '{{.Config.User}}')" = "node"
+          test "$(docker image inspect ai-chatbot-reporter --format '{{.Config.User}}')" = "node"
+
+      - name: Verify dashboard production dependency tree
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node ai-chatbot-dashboard -e "const p=require('next/package.json'); console.log('next='+p.version); try { const postcss=require('postcss/package.json'); console.log('postcss='+postcss.version); if (postcss.version !== '8.5.15') process.exit(1); } catch (error) { if (error && error.code === 'MODULE_NOT_FOUND') { console.log('postcss=not-present-runtime'); process.exit(0); } throw error; }"
