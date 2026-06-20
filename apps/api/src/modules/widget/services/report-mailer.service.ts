@@ -42,6 +42,8 @@ export class ReportMailerService {
         host,
         port,
         secure: port === 465,
+        disableFileAccess: true,
+        disableUrlAccess: true,
         auth: {
           user,
           pass,

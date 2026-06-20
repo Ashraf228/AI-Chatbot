@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "ioredis": "^5.10.1",
-    "next": "16.2.6",
+    "next": "16.2.9",
     "react": "19.2.5",
     "react-dom": "19.2.5"
   },
@@ -19,5 +19,8 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
   }
 }

@@ -8,6 +8,8 @@
 node_modules/
 package-lock.json
 !apps/api/package-lock.json
+!apps/dashboard/package-lock.json
+!apps/reporter/package-lock.json
 !apps/widget/package-lock.json
 dist/
 coverage/

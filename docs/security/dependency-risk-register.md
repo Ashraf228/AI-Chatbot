@@ -1,6 +1,6 @@
 # Dependency Risk Register
 
-Stand: 2026-05-28
+Stand: 2026-06-19
 
 Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produktionskandidaten. Es ersetzt keinen externen Security-Scan.
 
@@ -60,3 +60,38 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
 - `qs`: von `6.15.1` auf `6.15.2` aktualisiert.
 - `fast-uri`: von `3.1.0` auf `3.1.2` aktualisiert.
 - `brace-expansion`: von `5.0.5` auf `5.0.6` aktualisiert.
+
+## 2026-06-19 - NOLIS Demonstrator Dependency Recheck
+
+- Ziel: Produktionsrelevante Audit-Findings vor externem Demonstratorzugang reduzieren, ohne `npm audit fix --force`, Downgrade, Canary, Beta oder Release Candidate.
+- Ergebnis `npm audit --omit=dev`: `0` critical, `0` high, verbleibend nur das dokumentierte moderate Next/PostCSS-Finding im Root-Workspace-Audit.
+- Standalone-Audits der produktiven Docker-Kontexte:
+  - `apps/api`: clean.
+  - `apps/dashboard`: clean.
+  - `apps/widget`: clean.
+  - `apps/reporter`: clean.
+- Behobene Findings:
+  - `multer`: `2.1.1` -> `2.2.0`; direkter API-Pin plus Override fuer `@nestjs/platform-express`.
+  - `nodemailer`: `8.0.6` -> `9.0.1` in API und Reporter.
+  - `tsx`/`esbuild`: Reporter `tsx` auf `4.22.4`, `esbuild` per Override auf `0.28.1`.
+  - `qs`: per Override auf `6.15.2` fuer API-Standalone-Kontext.
+- Zusaetzliche Härtung:
+  - API- und Reporter-Mailtransporte setzen `disableFileAccess` und `disableUrlAccess`.
+  - PDF-Upload-Konfiguration bleibt auf PDF-MIME-Type und 15-MB-Dateigrenze begrenzt und ist gezielt getestet.
+- Verbleibendes Finding:
+  - Package: `postcss <8.5.10`.
+  - Advisory: GHSA-qx2v-qp2m-jg93 / CVE-2026-41305.
+  - Severity: moderate.
+  - Pfad im Root-Workspace-Audit: `apps/dashboard` -> `next@16.2.9` -> internes `postcss@8.4.31`.
+  - `next@latest` ist `16.2.9` und buendelt weiterhin `postcss@8.4.31`.
+  - `npm audit fix --force` wuerde einen riskanten Downgrade-Pfad vorschlagen und wurde nicht verwendet.
+  - `apps/dashboard` nutzt im eigenen Docker-Kontext einen eigenen Lockfile-Stand mit `postcss@8.5.15`; der standalone Audit ist clean.
+- Angriffspfadbewertung:
+  - Oeffentliches Widget und API verwenden den Next-internen PostCSS-Pfad nicht.
+  - Dashboard verarbeitet keine freien Custom-CSS-Strings von Kunden.
+  - Branding bleibt auf validierte/kontrollierte Felder begrenzt.
+  - Kein bekannter direkter Angriffspfad fuer den isolierten NOLIS-Demonstrator.
+- Entscheidung:
+  - High/Critical bleiben Blocker.
+  - Das moderate Next/PostCSS-Risiko bleibt als zeitlich begrenzte Ausnahme akzeptiert.
+  - Naechster Review: spaetestens 2026-07-03 oder sobald ein stabiler Next-Patch mit internem `postcss>=8.5.10` verfuegbar ist.

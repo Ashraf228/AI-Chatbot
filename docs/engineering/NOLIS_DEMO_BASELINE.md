@@ -47,3 +47,14 @@ npm-Version: `11.12.1`
 2. Bekannten Next/PostCSS-Befund weiter als Risiko dokumentieren, bis ein sicherer Stable-Patch verfuegbar ist.
 3. Vor externem Zugang Tenant-/Site-Scope, Auth und Staging-Smoke gezielt erneut pruefen.
 4. Fuer den NOLIS-Demonstrator nur isolierte Testdaten und klar gekennzeichnete Demo-Flows verwenden.
+
+## Recheck 2026-06-19 nach Dependency-Härtung
+
+- Commit vor Härtung: `014f1571f088128eae1d6b92f3a7fd50a2a66a5e`.
+- Node-Version: `v25.9.0`.
+- npm-Version: `11.12.1`.
+- Behoben: `multer` auf `2.2.0`, `nodemailer` auf `9.0.1`, Reporter-`tsx`/`esbuild` auf sichere stabile Versionen, `qs` auf `6.15.2`.
+- Zusaetzlich gehaertet: Nodemailer-Transporte deaktivieren Datei- und URL-Zugriff; PDF-Upload-Limit und PDF-MIME-Filter sind gezielt testbar.
+- Standalone-Audits der Docker-Kontexte `apps/api`, `apps/dashboard`, `apps/widget` und `apps/reporter`: clean.
+- Root-Produktionsaudit: keine High- oder Critical-Findings; verbleibend ist das dokumentierte moderate Next/PostCSS-Finding.
+- Bekannte Ausnahme: `next@16.2.9` buendelt im Root-Workspace weiterhin internes `postcss@8.4.31`; kein Force-Fix, kein Downgrade, keine Canary-Version.

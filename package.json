@@ -8,7 +8,26 @@
   ],
   "overrides": {
     "@nestjs/common": "11.1.19",
-    "@nestjs/core": "11.1.19"
+    "@nestjs/core": "11.1.19",
+    "@nestjs/platform-express": {
+      ".": "11.1.19",
+      "multer": "2.2.0"
+    },
+    "next": {
+      ".": "16.2.9",
+      "postcss": "8.5.15"
+    },
+    "qs": "6.15.2",
+    "body-parser": {
+      "qs": "6.15.2"
+    },
+    "express": {
+      "qs": "6.15.2"
+    },
+    "tsx": {
+      ".": "4.22.4",
+      "esbuild": "0.28.1"
+    }
   },
   "devDependencies": {
     "@nestjs/common": "11.1.19",

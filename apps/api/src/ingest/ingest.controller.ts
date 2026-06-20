@@ -100,6 +100,19 @@ class SourceActiveDto {
   isActive!: boolean;
 }
 
+export const PDF_UPLOAD_OPTIONS = {
+  storage: memoryStorage(),
+  limits: {
+    fileSize: 15 * 1024 * 1024, // 15 MB
+  },
+  fileFilter: (_req: unknown, file: { mimetype: string }, cb: (error: Error | null, acceptFile: boolean) => void) => {
+    if (file.mimetype !== 'application/pdf') {
+      return cb(new BadRequestException('Only PDF files are allowed'), false);
+    }
+    cb(null, true);
+  },
+};
+
 @UseGuards(AdminKeyGuard)
 @Controller('admin/ingest')
 export class IngestController {
@@ -338,20 +351,7 @@ export class IngestController {
 
   // PDF upload: multipart/form-data: file + siteId
   @Post('pdf')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: {
-        fileSize: 15 * 1024 * 1024, // 15 MB
-      },
-      fileFilter: (_req, file, cb) => {
-        if (file.mimetype !== 'application/pdf') {
-          return cb(new BadRequestException('Only PDF files are allowed'), false);
-        }
-        cb(null, true);
-      },
-    }),
-  )
+  @UseInterceptors(FileInterceptor('file', PDF_UPLOAD_OPTIONS))
   async pdf(
     @UploadedFile() file: Express.Multer.File,
     @Body('siteId') siteId: string,
