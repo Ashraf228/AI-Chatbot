@@ -10,7 +10,7 @@
     "start:dev": "nest start --watch",
     "build": "nest build",
     "migrate": "npm run build && node dist/db/run-migrations.js",
-    "test:smoke": "npm run build && node --test test/*.test.cjs"
+    "test:smoke": "npm run build && node --test --test-concurrency=1 test/*.test.cjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.19",
