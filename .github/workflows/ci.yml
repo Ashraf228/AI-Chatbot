@@ -45,6 +45,9 @@ jobs:
       - name: Typecheck API
         run: npm run check:api
 
+      - name: Analytics contract tests
+        run: npm run test:analytics-contract
+
       - name: Typecheck Dashboard
         run: npm run check:dashboard
 
