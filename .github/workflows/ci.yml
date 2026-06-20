@@ -28,6 +28,14 @@ jobs:
       - name: Install root dependencies
         run: npm ci
 
+      - name: Install app dependencies
+        run: |
+          npm ci --prefix apps/api
+          npm ci --prefix apps/dashboard
+          npm ci --prefix apps/widget
+          npm ci --prefix apps/reporter
+          npm ci --prefix packages/widget-sdk
+
       - name: Print npm version
         run: npm -v
 
