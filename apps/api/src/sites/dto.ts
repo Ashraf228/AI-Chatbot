@@ -1,4 +1,4 @@
-import { IsArray, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
 
 export type SiteConfigInput = Record<string, unknown>;
 
@@ -9,10 +9,12 @@ export class CreateSiteDto {
   @IsString() name!: string;
   @IsArray() allowedDomains!: string[];
   @IsOptional() @IsObject() config?: SiteConfigInput;
+  @IsOptional() @IsBoolean() isEvaluationDemo?: boolean;
 }
 
 export class UpdateSiteDto {
   @IsOptional() @IsString() siteKey?: string;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsArray() allowedDomains?: string[];
+  @IsOptional() @IsBoolean() isEvaluationDemo?: boolean;
 }

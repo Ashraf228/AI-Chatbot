@@ -14,8 +14,16 @@ type TenantUserRow = {
   is_active: boolean;
   metadata: Record<string, unknown> | null;
   expires_at: string | null;
+  evaluation_site_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type EvaluationSiteRow = {
+  id: string;
+  tenant_id: string | null;
+  is_evaluation_demo: boolean;
+  is_active: boolean;
 };
 
 function normalizeRecord(value: Record<string, unknown> | null | undefined) {
@@ -58,6 +66,12 @@ function isExpired(expiresAt: string | null | undefined) {
 
   const timestamp = Date.parse(expiresAt);
   return Number.isFinite(timestamp) && timestamp <= Date.now();
+}
+
+function normalizeOptionalId(value: string | null | undefined) {
+  if (value === undefined) return undefined;
+  if (value === null || value.trim() === '') return null;
+  return value.trim();
 }
 
 function hashPassword(password: string) {
@@ -110,9 +124,48 @@ export class TenantUsersService {
       isActive: row.is_active,
       metadata: sanitizeMetadata(metadata),
       expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
+      evaluationSiteId: row.evaluation_site_id || null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+
+  private async resolveEvaluationSiteId(params: {
+    tenantId: string;
+    role: TenantUserRole;
+    evaluationSiteId: string | null | undefined;
+  }) {
+    const evaluationSiteId = normalizeOptionalId(params.evaluationSiteId);
+    if (evaluationSiteId === undefined) {
+      return undefined;
+    }
+    if (evaluationSiteId === null) {
+      return null;
+    }
+    if (params.role !== 'viewer') {
+      throw new BadRequestException('evaluationSiteId requires role viewer');
+    }
+
+    const site = await this.db.query<EvaluationSiteRow>(
+      `SELECT
+         id,
+         tenant_id,
+         is_evaluation_demo,
+         CASE
+           WHEN config ? 'isActive' THEN lower(config->>'isActive') = 'true'
+           ELSE true
+         END AS is_active
+       FROM sites
+       WHERE id = $1
+       LIMIT 1`,
+      [evaluationSiteId],
+    );
+    const row = site.rows[0];
+    if (!row || row.tenant_id !== params.tenantId || !row.is_evaluation_demo || !row.is_active) {
+      throw new BadRequestException('evaluationSiteId must reference an active evaluation demo site in the same tenant');
+    }
+
+    return evaluationSiteId;
   }
 
   async listForTenant(tenantId: string) {
@@ -127,6 +180,7 @@ export class TenantUsersService {
          is_active,
          metadata,
          expires_at,
+         evaluation_site_id,
          created_at,
          updated_at
        FROM tenant_users
@@ -146,6 +200,7 @@ export class TenantUsersService {
     metadata?: Record<string, unknown>;
     password?: string;
     expiresAt?: string | null;
+    evaluationSiteId?: string | null;
   }) {
     const tenantId = await this.tenants.ensureTenantExists(input.tenantId);
     const email = normalizeEmail(input.email);
@@ -162,6 +217,11 @@ export class TenantUsersService {
     const id = randomUUID();
     const metadata = normalizeRecord(input.metadata);
     const expiresAt = normalizeExpiresAt(input.expiresAt);
+    const evaluationSiteId = await this.resolveEvaluationSiteId({
+      tenantId,
+      role,
+      evaluationSiteId: input.evaluationSiteId,
+    });
 
     if (typeof input.password === 'string' && input.password.trim()) {
       metadata.passwordHash = hashPassword(input.password.trim());
@@ -177,16 +237,18 @@ export class TenantUsersService {
          is_active,
          metadata,
          expires_at,
+         evaluation_site_id,
          created_at,
          updated_at
-       ) VALUES ($1, $2, $3, $4, $5, true, $6::jsonb, $7::timestamptz, now(), now())
+       ) VALUES ($1, $2, $3, $4, $5, true, $6::jsonb, $7::timestamptz, $8, now(), now())
        ON CONFLICT (tenant_id, email) DO UPDATE SET
          display_name = EXCLUDED.display_name,
          role = EXCLUDED.role,
          metadata = EXCLUDED.metadata,
          expires_at = EXCLUDED.expires_at,
+         evaluation_site_id = EXCLUDED.evaluation_site_id,
          updated_at = now()`,
-      [id, tenantId, email, displayName, role, JSON.stringify(metadata), expiresAt ?? null],
+      [id, tenantId, email, displayName, role, JSON.stringify(metadata), expiresAt ?? null, evaluationSiteId ?? null],
     );
 
     const users = await this.listForTenant(tenantId);
@@ -205,6 +267,7 @@ export class TenantUsersService {
     metadata?: Record<string, unknown>;
     password?: string;
     expiresAt?: string | null;
+    evaluationSiteId?: string | null;
   }) {
     const normalizedId = resolveSiteKey(id, id);
     if (!normalizedId) {
@@ -221,6 +284,7 @@ export class TenantUsersService {
          is_active,
          metadata,
          expires_at,
+         evaluation_site_id,
          created_at,
          updated_at
        FROM tenant_users
@@ -239,6 +303,16 @@ export class TenantUsersService {
     const nextIsActive = typeof input.isActive === 'boolean' ? input.isActive : row.is_active;
     const nextExpiresAt =
       input.expiresAt !== undefined ? normalizeExpiresAt(input.expiresAt) : row.expires_at;
+    const resolvedEvaluationSiteId = await this.resolveEvaluationSiteId({
+      tenantId: row.tenant_id,
+      role: nextRole,
+      evaluationSiteId: input.evaluationSiteId,
+    });
+    const nextEvaluationSiteId =
+      resolvedEvaluationSiteId !== undefined ? resolvedEvaluationSiteId : row.evaluation_site_id;
+    if (nextRole !== 'viewer' && nextEvaluationSiteId) {
+      throw new BadRequestException('evaluationSiteId requires role viewer');
+    }
     const nextMetadata =
       input.metadata !== undefined ? normalizeRecord(input.metadata) : normalizeRecord(row.metadata);
 
@@ -253,6 +327,7 @@ export class TenantUsersService {
            is_active = $4,
            metadata = $5::jsonb,
            expires_at = $6::timestamptz,
+           evaluation_site_id = $7,
            updated_at = now()
        WHERE id = $1`,
       [
@@ -262,6 +337,7 @@ export class TenantUsersService {
         nextIsActive,
         JSON.stringify(nextMetadata),
         nextExpiresAt ?? null,
+        nextEvaluationSiteId ?? null,
       ],
     );
 
@@ -296,6 +372,7 @@ export class TenantUsersService {
          is_active,
          metadata,
          expires_at,
+         evaluation_site_id,
          created_at,
          updated_at
        FROM tenant_users

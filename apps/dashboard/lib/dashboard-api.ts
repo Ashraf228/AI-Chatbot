@@ -40,6 +40,12 @@ export function getDashboardBackendHeaders(
     if (session.tenantId) {
       nextHeaders.set("X-DASHBOARD-TENANT", session.tenantId);
     }
+    if (session.tenantUserId) {
+      nextHeaders.set("X-DASHBOARD-TENANT-USER", session.tenantUserId);
+    }
+    if (session.sessionExpiresAt) {
+      nextHeaders.set("X-DASHBOARD-SESSION-EXPIRES", session.sessionExpiresAt);
+    }
   }
   return Object.fromEntries(nextHeaders.entries());
 }

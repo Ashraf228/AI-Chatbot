@@ -33,6 +33,7 @@ export class SitesController {
         name: dto.name,
         allowedDomains: dto.allowedDomains,
         config: dto.config ?? {},
+        isEvaluationDemo: dto.isEvaluationDemo,
       },
     );
   }

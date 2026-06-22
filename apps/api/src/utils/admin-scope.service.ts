@@ -6,6 +6,8 @@ export type DashboardAuthContext = {
   role?: DashboardRole | 'viewer' | string | null;
   actorId?: string | null;
   tenantId?: string | null;
+  tenantUserId?: string | null;
+  sessionExpiresAt?: string | null;
   authMode?: string | null;
 };
 

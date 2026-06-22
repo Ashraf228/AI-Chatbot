@@ -24,6 +24,8 @@ export class AdminKeyGuard implements CanActivate {
     const dashboardRole = request.headers['x-dashboard-role'];
     const dashboardActor = request.headers['x-dashboard-actor'];
     const dashboardTenant = request.headers['x-dashboard-tenant'];
+    const dashboardTenantUser = request.headers['x-dashboard-tenant-user'];
+    const dashboardSessionExpires = request.headers['x-dashboard-session-expires'];
     const expectedAdminKey = process.env.ADMIN_KEY?.trim();
     const expectedDashboardToken = process.env.DASHBOARD_INTERNAL_TOKEN?.trim();
     const requiredRoles =
@@ -78,6 +80,8 @@ export class AdminKeyGuard implements CanActivate {
       role: typeof dashboardRole === 'string' ? dashboardRole : 'operator',
       actorId: typeof dashboardActor === 'string' ? dashboardActor : 'dashboard',
       tenantId: typeof dashboardTenant === 'string' ? dashboardTenant : null,
+      tenantUserId: typeof dashboardTenantUser === 'string' ? dashboardTenantUser : null,
+      sessionExpiresAt: typeof dashboardSessionExpires === 'string' ? dashboardSessionExpires : null,
       authMode: 'dashboard-token',
     };
 

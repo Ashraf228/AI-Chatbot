@@ -2,6 +2,9 @@ const VIEWER_ALLOWED_PATHS = new Set([
   "/evaluation",
   "/api/auth/logout",
   "/api/auth/session",
+  "/api/evaluation/context",
+  "/api/evaluation/chat/session",
+  "/api/evaluation/chat/message",
 ]);
 
 export function isViewerAllowedPath(pathname: string) {

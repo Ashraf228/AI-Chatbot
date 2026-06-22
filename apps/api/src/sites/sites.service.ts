@@ -16,6 +16,7 @@ type SiteRow = {
   allowed_domains: string[];
   public_key: string | null;
   config: Record<string, unknown>;
+  is_evaluation_demo?: boolean;
   created_at?: string;
 };
 
@@ -52,6 +53,7 @@ export class SitesService {
     return {
       ...row,
       config,
+      is_evaluation_demo: row.is_evaluation_demo === true,
       site_key: configuredSiteKey || row.id,
     };
   }
@@ -84,6 +86,7 @@ export class SitesService {
     name: string;
     allowedDomains: string[];
     config?: SiteConfigInput;
+    isEvaluationDemo?: boolean;
   }) {
     const name = params.name.trim();
     const tenantId = await this.tenants.ensureTenantExists(params.tenantId.trim());
@@ -104,15 +107,16 @@ export class SitesService {
       await this.assertUniqueSiteKey(resolvedSiteKey, id, tx);
 
       await tx.query(
-        `INSERT INTO sites(id, site_key, tenant_id, name, allowed_domains, public_key, config)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO sites(id, site_key, tenant_id, name, allowed_domains, public_key, config, is_evaluation_demo)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (id) DO UPDATE SET
            site_key=EXCLUDED.site_key,
            tenant_id=EXCLUDED.tenant_id,
            name=EXCLUDED.name,
            allowed_domains=EXCLUDED.allowed_domains,
-           config=(sites.config - 'siteKey') || EXCLUDED.config`,
-        [id, resolvedSiteKey, tenantId, name, params.allowedDomains, publicKey, nextConfig],
+           config=(sites.config - 'siteKey') || EXCLUDED.config,
+           is_evaluation_demo=EXCLUDED.is_evaluation_demo`,
+        [id, resolvedSiteKey, tenantId, name, params.allowedDomains, publicKey, nextConfig, params.isEvaluationDemo === true],
       );
     });
 
@@ -137,6 +141,7 @@ export class SitesService {
       siteKey?: string;
       name?: string;
       allowedDomains?: string[];
+      isEvaluationDemo?: boolean;
     },
   ) {
     const site = await this.getSite(siteId);
@@ -153,6 +158,8 @@ export class SitesService {
       Array.isArray(params.allowedDomains) && params.allowedDomains.length > 0
         ? params.allowedDomains.map((entry) => entry.trim()).filter(Boolean)
         : site.allowed_domains;
+    const nextIsEvaluationDemo =
+      typeof params.isEvaluationDemo === 'boolean' ? params.isEvaluationDemo : site.is_evaluation_demo === true;
 
     await this.assertUniqueSiteKey(nextSiteKey, siteId);
 
@@ -160,9 +167,10 @@ export class SitesService {
       `UPDATE sites
        SET name = $2,
            site_key = $3,
-           allowed_domains = $4
+           allowed_domains = $4,
+           is_evaluation_demo = $5
        WHERE id = $1`,
-      [siteId, nextName, nextSiteKey, nextAllowedDomains],
+      [siteId, nextName, nextSiteKey, nextAllowedDomains, nextIsEvaluationDemo],
     );
 
     return this.getSite(siteId);

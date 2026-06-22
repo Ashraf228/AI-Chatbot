@@ -35,6 +35,11 @@ export class CreateTenantUserDto {
   @IsISO8601()
   @MaxLength(80)
   expiresAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  evaluationSiteId?: string | null;
 }
 
 export class UpdateTenantUserDto {
@@ -66,6 +71,11 @@ export class UpdateTenantUserDto {
   @IsISO8601()
   @MaxLength(80)
   expiresAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  evaluationSiteId?: string | null;
 }
 
 export class AuthenticateTenantUserDto {

@@ -152,8 +152,12 @@ describe("viewer dashboard sessions", () => {
     expect(isViewerAllowedPath("/evaluation")).toBe(true);
     expect(isViewerAllowedPath("/api/auth/session")).toBe(true);
     expect(isViewerAllowedPath("/api/auth/logout")).toBe(true);
+    expect(isViewerAllowedPath("/api/evaluation/context")).toBe(true);
+    expect(isViewerAllowedPath("/api/evaluation/chat/session")).toBe(true);
+    expect(isViewerAllowedPath("/api/evaluation/chat/message")).toBe(true);
     expect(isViewerAllowedPath("/sites")).toBe(false);
     expect(isViewerAllowedPath("/api/sites")).toBe(false);
     expect(isViewerAllowedPath("/api/auth/session/extra")).toBe(false);
+    expect(isViewerAllowedPath("/api/evaluation-evil")).toBe(false);
   });
 });

@@ -188,3 +188,175 @@ test('TenantUsersService.update rejects invalid expiresAt values', async () => {
     /expiresAt must be a valid ISO timestamp/,
   );
 });
+
+test('TenantUsersService.update accepts active same-tenant evaluation demo sites for viewers', async () => {
+  const dbCalls = [];
+  const service = new TenantUsersService(
+    {
+      async query(sql, params) {
+        dbCalls.push({ sql, params });
+
+        if (/FROM sites/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'site-demo',
+                tenant_id: 'tenant-1',
+                is_evaluation_demo: true,
+                is_active: true,
+              },
+            ],
+          };
+        }
+
+        if (/FROM tenant_users/i.test(sql) && params?.[0] === 'user-1') {
+          return {
+            rows: [
+              {
+                id: 'user-1',
+                tenant_id: 'tenant-1',
+                email: 'viewer@example.com',
+                display_name: 'Viewer Eins',
+                role: 'viewer',
+                is_active: true,
+                metadata: {},
+                expires_at: null,
+                evaluation_site_id: null,
+                created_at: '2026-05-05T08:00:00.000Z',
+                updated_at: '2026-05-05T08:00:00.000Z',
+              },
+            ],
+          };
+        }
+
+        if (/FROM tenant_users/i.test(sql) && params?.[0] === 'tenant-1') {
+          return {
+            rows: [
+              {
+                id: 'user-1',
+                tenant_id: 'tenant-1',
+                email: 'viewer@example.com',
+                display_name: 'Viewer Eins',
+                role: 'viewer',
+                is_active: true,
+                metadata: {},
+                expires_at: null,
+                evaluation_site_id: 'site-demo',
+                created_at: '2026-05-05T08:00:00.000Z',
+                updated_at: '2026-05-05T08:00:00.000Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      },
+    },
+    {
+      async ensureTenantExists(id) {
+        return id;
+      },
+    },
+  );
+
+  const result = await service.update('user-1', {
+    role: 'viewer',
+    evaluationSiteId: 'site-demo',
+  });
+
+  assert.equal(result.evaluationSiteId, 'site-demo');
+  assert.ok(dbCalls.some((call) => /evaluation_site_id = \$7/i.test(call.sql)));
+});
+
+test('TenantUsersService.update rejects evaluation demo sites outside the tenant', async () => {
+  const service = new TenantUsersService(
+    {
+      async query(sql, params) {
+        if (/FROM sites/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'site-demo',
+                tenant_id: 'tenant-2',
+                is_evaluation_demo: true,
+                is_active: true,
+              },
+            ],
+          };
+        }
+
+        if (/FROM tenant_users/i.test(sql) && params?.[0] === 'user-1') {
+          return {
+            rows: [
+              {
+                id: 'user-1',
+                tenant_id: 'tenant-1',
+                email: 'viewer@example.com',
+                display_name: 'Viewer Eins',
+                role: 'viewer',
+                is_active: true,
+                metadata: {},
+                expires_at: null,
+                evaluation_site_id: null,
+                created_at: '2026-05-05T08:00:00.000Z',
+                updated_at: '2026-05-05T08:00:00.000Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      },
+    },
+    {
+      async ensureTenantExists(id) {
+        return id;
+      },
+    },
+  );
+
+  await assert.rejects(
+    () => service.update('user-1', { role: 'viewer', evaluationSiteId: 'site-demo' }),
+    /evaluationSiteId must reference an active evaluation demo site in the same tenant/,
+  );
+});
+
+test('TenantUsersService.update rejects evaluation demo site assignment for non-viewer roles', async () => {
+  const service = new TenantUsersService(
+    {
+      async query(sql, params) {
+        if (/FROM tenant_users/i.test(sql) && params?.[0] === 'user-1') {
+          return {
+            rows: [
+              {
+                id: 'user-1',
+                tenant_id: 'tenant-1',
+                email: 'editor@example.com',
+                display_name: 'Editor Eins',
+                role: 'editor',
+                is_active: true,
+                metadata: {},
+                expires_at: null,
+                evaluation_site_id: null,
+                created_at: '2026-05-05T08:00:00.000Z',
+                updated_at: '2026-05-05T08:00:00.000Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      },
+    },
+    {
+      async ensureTenantExists(id) {
+        return id;
+      },
+    },
+  );
+
+  await assert.rejects(
+    () => service.update('user-1', { role: 'editor', evaluationSiteId: 'site-demo' }),
+    /evaluationSiteId requires role viewer/,
+  );
+});

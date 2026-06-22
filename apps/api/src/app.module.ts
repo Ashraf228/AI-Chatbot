@@ -32,6 +32,7 @@ import { SiteDataModule } from './site-data/site-data.module';
 import { BusinessAnalyticsModule } from './business-analytics/business-analytics.module';
 import { BillingModule } from './billing/billing.module';
 import { ItSupportModule } from './modules/it-support/it-support.module';
+import { EvaluationModule } from './evaluation/evaluation.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { ItSupportModule } from './modules/it-support/it-support.module';
     BusinessAnalyticsModule,
     BillingModule,
     ItSupportModule,
+    EvaluationModule,
   ],
   controllers: [HealthController],
   providers: [
