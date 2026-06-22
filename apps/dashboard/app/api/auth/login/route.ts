@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   createAdminSessionToken,
   createOperatorSessionToken,
-  createCustomerSessionToken,
+  createTenantSessionToken,
   getSessionCookieOptions,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth";
@@ -19,6 +19,7 @@ import {
   isLoginRateLimited,
   registerLoginFailure,
 } from "@/lib/login-rate-limit";
+import { resolveTenantLoginSessionInput } from "@/lib/tenant-user-role";
 
 function getClientIp(req: Request) {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -99,16 +100,15 @@ export async function POST(req: Request) {
 
   const backendPayload = (await backendResponse.json().catch(() => null)) as
     | {
+        id?: string;
         tenantId?: string;
         email?: string;
         displayName?: string;
+        role?: string;
+        expiresAt?: string | null;
       }
     | { message?: string }
     | null;
-  const backendMessage =
-    backendPayload && typeof backendPayload === "object" && "message" in backendPayload
-      ? backendPayload.message
-      : undefined;
   const authenticatedCustomer =
     backendPayload && typeof backendPayload === "object" && "tenantId" in backendPayload
       ? backendPayload
@@ -116,20 +116,30 @@ export async function POST(req: Request) {
 
   if (!backendResponse.ok) {
     await registerLoginFailure(ip);
-    return NextResponse.json(
-      { message: backendMessage || "Invalid credentials" },
-      { status: backendResponse.status === 401 ? 401 : 500 }
-    );
+    return NextResponse.json({ message: "Invalid credentials" }, { status: 401 });
+  }
+
+  const tenantSessionInput = resolveTenantLoginSessionInput(authenticatedCustomer);
+  if (!tenantSessionInput) {
+    await registerLoginFailure(ip);
+    return NextResponse.json({ message: "Invalid credentials" }, { status: 401 });
   }
 
   await clearLoginFailures(ip);
-  const res = NextResponse.json({ ok: true, role: "customer" });
+  const res = NextResponse.json({
+    ok: true,
+    role: tenantSessionInput.role,
+    redirectTo: tenantSessionInput.role === "viewer" ? "/evaluation" : "/sites",
+  });
   res.cookies.set(
     SESSION_COOKIE_NAME,
-    await createCustomerSessionToken({
-      tenantId: authenticatedCustomer?.tenantId || tenantId,
-      email: authenticatedCustomer?.email || email,
-      displayName: authenticatedCustomer?.displayName || email,
+    await createTenantSessionToken({
+      role: tenantSessionInput.role,
+      tenantId: tenantSessionInput.tenantId,
+      tenantUserId: tenantSessionInput.tenantUserId,
+      email: tenantSessionInput.email,
+      displayName: tenantSessionInput.displayName,
+      accountExpiresAt: tenantSessionInput.accountExpiresAt,
     }),
     getSessionCookieOptions()
   );

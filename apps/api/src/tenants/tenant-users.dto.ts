@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsISO8601, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export const TENANT_USER_ROLES = ['owner', 'admin', 'manager', 'editor', 'viewer'] as const;
 export type TenantUserRole = (typeof TENANT_USER_ROLES)[number];
@@ -29,6 +29,12 @@ export class CreateTenantUserDto {
   @IsString()
   @MaxLength(255)
   password?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsISO8601()
+  @MaxLength(80)
+  expiresAt?: string | null;
 }
 
 export class UpdateTenantUserDto {
@@ -54,6 +60,12 @@ export class UpdateTenantUserDto {
   @IsString()
   @MaxLength(255)
   password?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsISO8601()
+  @MaxLength(80)
+  expiresAt?: string | null;
 }
 
 export class AuthenticateTenantUserDto {

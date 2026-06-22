@@ -127,7 +127,7 @@ export class IngestController {
   @Get('knowledge')
   async listKnowledge(@Query('siteId') siteId: string, @Req() req: { dashboardAuth?: unknown }) {
     await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+      allowedRoles: ['admin', 'operator', 'customer'],
     });
     return this.ingest.listKnowledge(siteId);
   }
@@ -135,7 +135,7 @@ export class IngestController {
   @Get('sources')
   async listSources(@Query('siteId') siteId: string, @Req() req: { dashboardAuth?: unknown }) {
     await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+      allowedRoles: ['admin', 'operator', 'customer'],
     });
     return this.ingest.listSources(siteId);
   }

@@ -2,16 +2,23 @@ export const SESSION_COOKIE_NAME = "ssb_admin";
 const SESSION_TTL_SECONDS = 60 * 60 * 8;
 const MIN_SESSION_SECRET_LENGTH = 32;
 
-export type DashboardSessionRole = "admin" | "operator" | "customer";
+export type DashboardSessionRole = "admin" | "operator" | "customer" | "viewer";
 export type DashboardSession = {
   role: DashboardSessionRole;
   sub: string;
   exp: number;
   iat: number;
   tenantId?: string;
+  tenantUserId?: string;
   email?: string;
   displayName?: string;
+  sessionIssuedAt: string;
+  sessionExpiresAt: string;
+  accountExpiresAt?: string;
 };
+
+const SESSION_ROLES = new Set<DashboardSessionRole>(["admin", "operator", "customer", "viewer"]);
+const TENANT_SESSION_ROLES = new Set<DashboardSessionRole>(["customer", "viewer"]);
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
@@ -95,7 +102,22 @@ export function getSessionCookieOptions() {
   };
 }
 
-async function createSessionToken(payload: Omit<DashboardSession, "iat" | "exp">) {
+function parseFutureTimestamp(value?: string | null) {
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return undefined;
+  return timestamp;
+}
+
+function resolveSessionExpiry(accountExpiresAt?: string) {
+  const defaultExpiry = Date.now() + SESSION_TTL_SECONDS * 1000;
+  const accountExpiry = parseFutureTimestamp(accountExpiresAt);
+  return typeof accountExpiry === "number" ? Math.min(defaultExpiry, accountExpiry) : defaultExpiry;
+}
+
+async function createSessionToken(
+  payload: Omit<DashboardSession, "iat" | "exp" | "sessionIssuedAt" | "sessionExpiresAt">,
+) {
   const secret = getSessionSecret();
   if (!secret || secret.length < MIN_SESSION_SECRET_LENGTH) {
     throw new Error(
@@ -103,12 +125,20 @@ async function createSessionToken(payload: Omit<DashboardSession, "iat" | "exp">
     );
   }
 
+  if (TENANT_SESSION_ROLES.has(payload.role) && !payload.tenantId) {
+    throw new Error("Tenant-bound sessions require tenantId.");
+  }
+
+  const issuedAt = Date.now();
+  const expiresAt = resolveSessionExpiry(payload.accountExpiresAt);
   const randomBytes = crypto.getRandomValues(new Uint8Array(16));
   const encodedPayload = base64UrlEncode(
     JSON.stringify({
       ...payload,
-      iat: Date.now(),
-      exp: Date.now() + SESSION_TTL_SECONDS * 1000,
+      iat: issuedAt,
+      exp: expiresAt,
+      sessionIssuedAt: new Date(issuedAt).toISOString(),
+      sessionExpiresAt: new Date(expiresAt).toISOString(),
       jti: bytesToBase64(randomBytes),
     })
   );
@@ -133,15 +163,46 @@ export async function createOperatorSessionToken() {
 
 export async function createCustomerSessionToken(input: {
   tenantId: string;
+  tenantUserId?: string;
   email: string;
   displayName: string;
+  accountExpiresAt?: string | null;
+}) {
+  return createTenantSessionToken({
+    role: "customer",
+    ...input,
+  });
+}
+
+export async function createViewerSessionToken(input: {
+  tenantId: string;
+  tenantUserId?: string;
+  email: string;
+  displayName: string;
+  accountExpiresAt?: string | null;
+}) {
+  return createTenantSessionToken({
+    role: "viewer",
+    ...input,
+  });
+}
+
+export async function createTenantSessionToken(input: {
+  role: "customer" | "viewer";
+  tenantId: string;
+  tenantUserId?: string;
+  email: string;
+  displayName: string;
+  accountExpiresAt?: string | null;
 }) {
   return createSessionToken({
-    role: "customer",
+    role: input.role,
     sub: `customer:${input.tenantId}:${input.email.toLowerCase()}`,
     tenantId: input.tenantId,
+    tenantUserId: input.tenantUserId,
     email: input.email.toLowerCase(),
     displayName: input.displayName,
+    accountExpiresAt: input.accountExpiresAt || undefined,
   });
 }
 
@@ -160,21 +221,41 @@ export async function verifySessionToken(token?: string | null): Promise<Dashboa
   try {
     const parsed = JSON.parse(base64UrlDecode(payload));
     const role = parsed?.role;
-    if (
-      (role !== "admin" && role !== "operator" && role !== "customer") ||
-      Number(parsed?.exp) <= Date.now()
-    ) {
+    const exp = Number(parsed?.exp);
+    const iat = Number(parsed?.iat || 0);
+    const tenantId = typeof parsed?.tenantId === "string" ? parsed.tenantId : undefined;
+    const accountExpiresAt =
+      typeof parsed?.accountExpiresAt === "string" ? parsed.accountExpiresAt : undefined;
+    const accountExpiry = parseFutureTimestamp(accountExpiresAt);
+
+    if (!SESSION_ROLES.has(role) || !Number.isFinite(exp) || exp <= Date.now()) {
+      return null;
+    }
+
+    if (TENANT_SESSION_ROLES.has(role) && !tenantId) {
+      return null;
+    }
+
+    if (accountExpiresAt && (!accountExpiry || accountExpiry <= Date.now() || exp > accountExpiry)) {
       return null;
     }
 
     return {
       role,
       sub: String(parsed?.sub || ""),
-      exp: Number(parsed?.exp),
-      iat: Number(parsed?.iat || 0),
-      tenantId: typeof parsed?.tenantId === "string" ? parsed.tenantId : undefined,
+      exp,
+      iat,
+      tenantId,
+      tenantUserId: typeof parsed?.tenantUserId === "string" ? parsed.tenantUserId : undefined,
       email: typeof parsed?.email === "string" ? parsed.email : undefined,
       displayName: typeof parsed?.displayName === "string" ? parsed.displayName : undefined,
+      sessionIssuedAt:
+        typeof parsed?.sessionIssuedAt === "string"
+          ? parsed.sessionIssuedAt
+          : new Date(iat || 0).toISOString(),
+      sessionExpiresAt:
+        typeof parsed?.sessionExpiresAt === "string" ? parsed.sessionExpiresAt : new Date(exp).toISOString(),
+      accountExpiresAt,
     };
   } catch {
     return null;

@@ -58,11 +58,15 @@ export class AdminKeyGuard implements CanActivate {
       return true;
     }
 
-    if (
-      requiredRoles.length > 0 &&
-      (typeof dashboardRole !== 'string' ||
-        !['admin', 'operator', 'customer', 'viewer'].includes(dashboardRole))
-    ) {
+    if (typeof dashboardRole === 'string' && !['admin', 'operator', 'customer', 'viewer'].includes(dashboardRole)) {
+      throw new UnauthorizedException('dashboard role required');
+    }
+
+    if (dashboardRole === 'viewer' && requiredRoles.length === 0) {
+      throw new ForbiddenException('insufficient dashboard role');
+    }
+
+    if (requiredRoles.length > 0 && typeof dashboardRole !== 'string') {
       throw new UnauthorizedException('dashboard role required');
     }
 

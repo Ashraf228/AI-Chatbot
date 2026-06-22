@@ -1,4 +1,5 @@
 import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth-core";
+import { isViewerAllowedPath } from "@/lib/viewer-access";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
@@ -8,6 +9,7 @@ const PUBLIC_PATHS = new Set([
   "/healthz",
   "/api/auth/login",
   "/api/auth/logout",
+  "/api/auth/session",
 ]);
 
 const CUSTOMER_BLOCKED_PREFIXES = [
@@ -56,7 +58,7 @@ export default async function proxy(request: NextRequest) {
       const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
       const session = await verifySessionToken(token);
       if (session) {
-        return NextResponse.redirect(new URL("/sites", request.url));
+        return NextResponse.redirect(new URL(session.role === "viewer" ? "/evaluation" : "/sites", request.url));
       }
     }
 
@@ -67,6 +69,16 @@ export default async function proxy(request: NextRequest) {
   const session = await verifySessionToken(token);
 
   if (session) {
+    if (session.role === "viewer") {
+      if (isViewerAllowedPath(pathname)) {
+        return NextResponse.next();
+      }
+
+      return pathname.startsWith("/api/")
+        ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
+        : NextResponse.redirect(new URL("/evaluation", request.url));
+    }
+
     if (session.role === "customer") {
       if (CUSTOMER_BLOCKED_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
         return pathname.startsWith("/api/")

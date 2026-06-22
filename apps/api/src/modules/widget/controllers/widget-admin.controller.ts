@@ -27,7 +27,7 @@ export class WidgetAdminController {
   @Get('sites/:siteId')
   async getSite(@Param('siteId') siteId: string, @Req() req: { dashboardAuth?: unknown }) {
     await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+      allowedRoles: ['admin', 'operator', 'customer'],
     });
     return this.widgetAdminService.getSite(siteId);
   }
@@ -117,7 +117,7 @@ export class WidgetAdminController {
     const auth = this.scope.getAuth(req);
     if (query.siteId) {
       await this.scope.assertSiteAccess(auth, query.siteId, {
-        allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+        allowedRoles: ['admin', 'operator', 'customer'],
       });
     } else {
       this.scope.assertRole(auth, ['admin']);
@@ -178,7 +178,7 @@ export class WidgetAdminController {
     const auth = this.scope.getAuth(req);
     if (query.siteId) {
       await this.scope.assertSiteAccess(auth, query.siteId, {
-        allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+        allowedRoles: ['admin', 'operator', 'customer'],
       });
     } else {
       this.scope.assertRole(auth, ['admin']);
@@ -191,7 +191,7 @@ export class WidgetAdminController {
     const auth = this.scope.getAuth(req);
     if (query.siteId) {
       await this.scope.assertSiteAccess(auth, query.siteId, {
-        allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+        allowedRoles: ['admin', 'operator', 'customer'],
       });
     } else {
       this.scope.assertRole(auth, ['admin']);
@@ -204,7 +204,7 @@ export class WidgetAdminController {
     const auth = this.scope.getAuth(req);
     if (query.siteId) {
       await this.scope.assertSiteAccess(auth, query.siteId, {
-        allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+        allowedRoles: ['admin', 'operator', 'customer'],
       });
     } else {
       this.scope.assertRole(auth, ['admin']);
@@ -217,7 +217,7 @@ export class WidgetAdminController {
     const auth = this.scope.getAuth(req);
     if (query.siteId) {
       await this.scope.assertSiteAccess(auth, query.siteId, {
-        allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+        allowedRoles: ['admin', 'operator', 'customer'],
       });
     } else {
       this.scope.assertRole(auth, ['admin']);

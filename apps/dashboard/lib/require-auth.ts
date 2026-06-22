@@ -22,7 +22,11 @@ function isAllowedRole(
     return true;
   }
 
-  return Boolean(options.allowCustomer);
+  if (role === "customer") {
+    return Boolean(options.allowCustomer);
+  }
+
+  return false;
 }
 
 export async function requireAuth(options: RequireAuthOptions = {}) {

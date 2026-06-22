@@ -64,6 +64,10 @@ export function filterSitesForSession<T extends SiteLike>(
   session: DashboardSession,
   sites: T[]
 ) {
+  if (session.role === "viewer") {
+    return [];
+  }
+
   if (session.role !== "customer" || !session.tenantId) {
     return sites;
   }
@@ -94,6 +98,10 @@ export async function assertSiteAccess(
   session: DashboardSession,
   siteId: string
 ) {
+  if (session.role === "viewer") {
+    throw new Error("Forbidden");
+  }
+
   if (session.role !== "customer") {
     return;
   }

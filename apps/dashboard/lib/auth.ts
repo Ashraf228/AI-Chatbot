@@ -3,6 +3,8 @@ export {
   createAdminSessionToken,
   createOperatorSessionToken,
   createCustomerSessionToken,
+  createTenantSessionToken,
+  createViewerSessionToken,
   type DashboardSession,
   type DashboardSessionRole,
   getSessionCookieOptions,

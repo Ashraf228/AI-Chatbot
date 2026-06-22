@@ -13,6 +13,7 @@ type TenantUserRow = {
   role: string;
   is_active: boolean;
   metadata: Record<string, unknown> | null;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -31,6 +32,32 @@ const PASSWORD_HASH_PREFIX = 'scrypt';
 function sanitizeMetadata(value: Record<string, unknown>) {
   const { passwordHash: _passwordHash, ...rest } = value;
   return rest;
+}
+
+function normalizeExpiresAt(value: string | null | undefined) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value.trim() === '') {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) {
+    throw new BadRequestException('expiresAt must be a valid ISO timestamp');
+  }
+
+  return new Date(timestamp).toISOString();
+}
+
+function isExpired(expiresAt: string | null | undefined) {
+  if (!expiresAt) {
+    return false;
+  }
+
+  const timestamp = Date.parse(expiresAt);
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
 }
 
 function hashPassword(password: string) {
@@ -82,6 +109,7 @@ export class TenantUsersService {
       role: this.normalizeRole(row.role),
       isActive: row.is_active,
       metadata: sanitizeMetadata(metadata),
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -98,6 +126,7 @@ export class TenantUsersService {
          role,
          is_active,
          metadata,
+         expires_at,
          created_at,
          updated_at
        FROM tenant_users
@@ -116,6 +145,7 @@ export class TenantUsersService {
     role?: TenantUserRole;
     metadata?: Record<string, unknown>;
     password?: string;
+    expiresAt?: string | null;
   }) {
     const tenantId = await this.tenants.ensureTenantExists(input.tenantId);
     const email = normalizeEmail(input.email);
@@ -131,6 +161,7 @@ export class TenantUsersService {
     const role = this.normalizeRole(input.role);
     const id = randomUUID();
     const metadata = normalizeRecord(input.metadata);
+    const expiresAt = normalizeExpiresAt(input.expiresAt);
 
     if (typeof input.password === 'string' && input.password.trim()) {
       metadata.passwordHash = hashPassword(input.password.trim());
@@ -145,15 +176,17 @@ export class TenantUsersService {
          role,
          is_active,
          metadata,
+         expires_at,
          created_at,
          updated_at
-       ) VALUES ($1, $2, $3, $4, $5, true, $6::jsonb, now(), now())
+       ) VALUES ($1, $2, $3, $4, $5, true, $6::jsonb, $7::timestamptz, now(), now())
        ON CONFLICT (tenant_id, email) DO UPDATE SET
          display_name = EXCLUDED.display_name,
          role = EXCLUDED.role,
          metadata = EXCLUDED.metadata,
+         expires_at = EXCLUDED.expires_at,
          updated_at = now()`,
-      [id, tenantId, email, displayName, role, JSON.stringify(metadata)],
+      [id, tenantId, email, displayName, role, JSON.stringify(metadata), expiresAt ?? null],
     );
 
     const users = await this.listForTenant(tenantId);
@@ -171,6 +204,7 @@ export class TenantUsersService {
     isActive?: boolean;
     metadata?: Record<string, unknown>;
     password?: string;
+    expiresAt?: string | null;
   }) {
     const normalizedId = resolveSiteKey(id, id);
     if (!normalizedId) {
@@ -186,6 +220,7 @@ export class TenantUsersService {
          role,
          is_active,
          metadata,
+         expires_at,
          created_at,
          updated_at
        FROM tenant_users
@@ -202,6 +237,8 @@ export class TenantUsersService {
     const nextDisplayName = input.displayName?.trim() || row.display_name;
     const nextRole = input.role ? this.normalizeRole(input.role) : this.normalizeRole(row.role);
     const nextIsActive = typeof input.isActive === 'boolean' ? input.isActive : row.is_active;
+    const nextExpiresAt =
+      input.expiresAt !== undefined ? normalizeExpiresAt(input.expiresAt) : row.expires_at;
     const nextMetadata =
       input.metadata !== undefined ? normalizeRecord(input.metadata) : normalizeRecord(row.metadata);
 
@@ -215,9 +252,17 @@ export class TenantUsersService {
            role = $3,
            is_active = $4,
            metadata = $5::jsonb,
+           expires_at = $6::timestamptz,
            updated_at = now()
        WHERE id = $1`,
-      [normalizedId, nextDisplayName, nextRole, nextIsActive, JSON.stringify(nextMetadata)],
+      [
+        normalizedId,
+        nextDisplayName,
+        nextRole,
+        nextIsActive,
+        JSON.stringify(nextMetadata),
+        nextExpiresAt ?? null,
+      ],
     );
 
     const users = await this.listForTenant(row.tenant_id);
@@ -250,6 +295,7 @@ export class TenantUsersService {
          role,
          is_active,
          metadata,
+         expires_at,
          created_at,
          updated_at
        FROM tenant_users
@@ -260,7 +306,7 @@ export class TenantUsersService {
     );
 
     const row = res.rows[0];
-    if (!row || !row.is_active) {
+    if (!row || !row.is_active || isExpired(row.expires_at)) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -278,6 +324,7 @@ export class TenantUsersService {
       displayName: user.displayName,
       role: user.role,
       isActive: user.isActive,
+      expiresAt: user.expiresAt,
     };
   }
 }

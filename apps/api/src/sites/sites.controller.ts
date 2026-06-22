@@ -78,7 +78,7 @@ export class SitesController {
   @Get(':siteId/status')
   async status(@Param('siteId') siteId: string, @Req() req: { dashboardAuth?: unknown }) {
     await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+      allowedRoles: ['admin', 'operator', 'customer'],
     });
     return this.statuses.resolveStatus(siteId);
   }

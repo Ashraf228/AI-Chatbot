@@ -9,7 +9,7 @@ const DASHBOARD_NAV_ITEMS = [
 ];
 
 export function getDashboardNav(role: DashboardSessionRole = "admin") {
-  if (role === "customer" || role === "operator") {
+  if (role === "customer" || role === "operator" || role === "viewer") {
     return DASHBOARD_NAV_ITEMS.filter((item) => item.href !== "/settings");
   }
 

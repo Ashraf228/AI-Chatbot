@@ -67,7 +67,7 @@ export class ConversationsController {
 
     if (siteId) {
       await this.scope.assertSiteAccess(auth, siteId, {
-        allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+        allowedRoles: ['admin', 'operator', 'customer'],
       });
       params.push(siteId);
       where = `WHERE c.site_id = $1`;
@@ -220,7 +220,7 @@ export class ConversationsController {
   @Get(':id')
   async detail(@Param('id') id: string, @Req() req: { dashboardAuth?: unknown }) {
     await this.scope.assertConversationAccess(this.scope.getAuth(req), id, {
-      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+      allowedRoles: ['admin', 'operator', 'customer'],
     });
 
     const conv = await this.db.query<ConversationRow>(

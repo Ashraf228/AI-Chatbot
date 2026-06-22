@@ -70,7 +70,7 @@ export class SiteUsageController {
   @Get()
   async siteUsage(@Param('siteId') siteId: string, @Req() req: { dashboardAuth?: unknown }) {
     await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator', 'customer', 'viewer'],
+      allowedRoles: ['admin', 'operator', 'customer'],
     });
     return this.usageLimits.getSiteUsage(siteId);
   }
