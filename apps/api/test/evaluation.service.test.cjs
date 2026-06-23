@@ -34,13 +34,19 @@ function createService(overrides = {}) {
           ],
         };
       }
+      if (/SELECT config FROM sites/i.test(sql)) {
+        return { rows: [{ config: overrides.siteConfig || null }] };
+      }
       return { rows: [] };
     },
   };
   const service = new EvaluationService(
     db,
     {
-      async process() {
+      async process(input) {
+        if (overrides.capturePipelineInput) {
+          overrides.capturePipelineInput(input);
+        }
         return {
           conversationId: 'conversation-1',
           sessionId: 'evaluation:eval-session-1',
@@ -80,6 +86,39 @@ test('EvaluationService context returns sanitized DTO without internal IDs', asy
   assert.equal(serialized.includes('tenant-1'), false);
   assert.equal(serialized.includes('viewer-1'), false);
   assert.equal(serialized.includes('site-demo'), false);
+});
+
+test('EvaluationService reads dynamic demo scenarios from site config and enables evaluation retrieval mode', async () => {
+  let pipelineInput = null;
+  const scenarios = [
+    { key: 'grounded-help', title: 'Soforthilfe', prompt: 'Wie pruefe ich den Status?' },
+    { key: 'handoff-preview', title: 'Uebergabe', prompt: 'Bitte Uebergabe vorbereiten.' },
+    { key: 'safe-non-answer', title: 'Nicht-Antwort', prompt: 'Trifft die KI eine Entscheidung?' },
+  ];
+  const { service } = createService({
+    siteConfig: {
+      evaluationWorkspace: {
+        workspaceTitle: 'Partner Demo',
+        scenarios,
+        technicalFeatures: ['Demo-Scope', 'Keine Produktivdaten'],
+      },
+    },
+    capturePipelineInput(input) {
+      pipelineInput = input;
+    },
+  });
+
+  const context = await service.context(access);
+  assert.equal(context.workspaceTitle, 'Partner Demo');
+  assert.deepEqual(context.scenarios.map((scenario) => scenario.key), scenarios.map((scenario) => scenario.key));
+  assert.deepEqual(context.technicalFeatures, ['Demo-Scope', 'Keine Produktivdaten']);
+
+  await service.sendMessage(access, {
+    conversationId: 'eval-session-1',
+    message: 'Wie pruefe ich den Status?',
+  });
+  assert.equal(pipelineInput.evaluationMode, true);
+  assert.equal(pipelineInput.siteConfig.evaluationWorkspace.workspaceTitle, 'Partner Demo');
 });
 
 test('EvaluationService rejects tenantId, siteId and role in chat session requests', async () => {

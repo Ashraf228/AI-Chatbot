@@ -119,6 +119,7 @@ export class VectorService {
     embedding: number[],
     k = 6,
     minScore?: number,
+    options: { demoOnly?: boolean } = {},
   ): Promise<VectorSearchRow[]> {
     const res = await this.db.query<VectorSearchRow>(
       `
@@ -143,6 +144,15 @@ export class VectorService {
           AND c.embedding IS NOT NULL
           AND COALESCE(ks.is_active, true) = true
           AND COALESCE(ks.sync_status, 'ready') = 'ready'
+          AND (
+            $6::boolean = false
+            OR (
+              c.metadata->>'demo' = 'true'
+              AND c.metadata->>'synthetic' = 'true'
+              AND COALESCE(ks.config->>'demo', 'false') = 'true'
+              AND COALESCE(ks.config->>'synthetic', 'false') = 'true'
+            )
+          )
       )
       SELECT
         id,
@@ -160,7 +170,7 @@ export class VectorService {
       ORDER BY distance
       LIMIT $4
       `,
-      [tenantId, siteId, this.toPgVectorLiteral(embedding), k, minScore ?? null],
+      [tenantId, siteId, this.toPgVectorLiteral(embedding), k, minScore ?? null, options.demoOnly === true],
     );
 
     return res.rows;

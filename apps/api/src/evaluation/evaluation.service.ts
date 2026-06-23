@@ -36,6 +36,10 @@ type EvaluationChatSessionRow = {
   expires_at: string;
 };
 
+type EvaluationSiteConfigRow = {
+  config: Record<string, unknown> | null;
+};
+
 function assertNoForbiddenKeys(body: Record<string, unknown>) {
   for (const key of Object.keys(body)) {
     if (FORBIDDEN_BODY_KEYS.has(key)) {
@@ -83,6 +87,29 @@ function resolveAnswerStatus(answer: string, sources: ChatPipelineSourceReferenc
   return sources.length > 0 ? 'answered' : 'answered';
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asStringArray(value: unknown, fallback: string[]) {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? value : fallback;
+}
+
+function asScenarioList(value: unknown) {
+  if (!Array.isArray(value)) return null;
+  const scenarios = value
+    .map((entry) => asRecord(entry))
+    .map((entry) => ({
+      key: typeof entry.key === 'string' ? entry.key : '',
+      title: typeof entry.title === 'string' ? entry.title : '',
+      prompt: typeof entry.prompt === 'string' ? entry.prompt : '',
+      expected: typeof entry.expected === 'string' ? entry.expected : undefined,
+      demo: true,
+    }))
+    .filter((entry) => entry.key && entry.title && entry.prompt);
+  return scenarios.length === 3 ? scenarios : null;
+}
+
 @Injectable()
 export class EvaluationService {
   constructor(
@@ -93,14 +120,38 @@ export class EvaluationService {
   ) {}
 
   async context(access: EvaluationAccessContext) {
+    const siteConfig = await this.loadSiteConfig(access.siteId);
+    const workspace = asRecord(siteConfig.evaluationWorkspace);
+    const scenarios = asScenarioList(workspace.scenarios) || [
+      {
+        key: 'knowledge-help',
+        title: 'Quellenbasierte Soforthilfe',
+        prompt: 'Welche Unterlagen brauche ich fuer eine typische Anfrage?',
+        demo: true,
+      },
+      {
+        key: 'handoff-preview',
+        title: 'Strukturierte Uebergabe',
+        prompt: 'Ich moechte mein Anliegen an einen Mitarbeiter uebergeben.',
+        demo: true,
+      },
+      {
+        key: 'knowledge-gap',
+        title: 'Sichere Nicht-Antwort bei fehlendem Wissen',
+        prompt: 'Welche verbindliche Entscheidung trifft das Fachverfahren?',
+        demo: true,
+      },
+    ];
     await this.audit('evaluation_workspace_opened', access, { result: 'ok' });
     return {
-      workspaceTitle: `${access.siteDisplayName} Evaluation`,
+      workspaceTitle: typeof workspace.workspaceTitle === 'string' ? workspace.workspaceTitle : `${access.siteDisplayName} Evaluation`,
       siteDisplayName: access.siteDisplayName,
       readOnly: true,
       demo: true,
       disclaimer:
-        'Kooperationsdemonstrator mit synthetischen Inhalten. Keine Verbindung zu Produktivsystemen oder externen Fachverfahren.',
+        typeof workspace.disclaimer === 'string'
+          ? workspace.disclaimer
+          : 'Kooperationsdemonstrator mit synthetischen Inhalten. Keine Verbindung zu Produktivsystemen oder externen Fachverfahren.',
       accountExpiresAt: access.accountExpiresAt,
       sessionExpiresAt: access.sessionExpiresAt,
       capabilities: [
@@ -108,32 +159,13 @@ export class EvaluationService {
         'Strukturierte Uebergabe als Vorschau ansehen',
         'Sichere Nicht-Antwort bei fehlendem Wissen pruefen',
       ],
-      scenarios: [
-        {
-          key: 'knowledge-help',
-          title: 'Quellenbasierte Soforthilfe',
-          prompt: 'Welche Unterlagen brauche ich fuer eine typische Anfrage?',
-          demo: true,
-        },
-        {
-          key: 'handoff-preview',
-          title: 'Strukturierte Uebergabe',
-          prompt: 'Ich moechte mein Anliegen an einen Mitarbeiter uebergeben.',
-          demo: true,
-        },
-        {
-          key: 'knowledge-gap',
-          title: 'Sichere Nicht-Antwort bei fehlendem Wissen',
-          prompt: 'Welche verbindliche Entscheidung trifft das Fachverfahren?',
-          demo: true,
-        },
-      ],
-      technicalFeatures: [
+      scenarios,
+      technicalFeatures: asStringArray(workspace.technicalFeatures, [
         'Mandanten- und Site-Trennung',
         'Zeitlich begrenzter Evaluationszugang',
         'Dedizierte Evaluation-Endpunkte',
         'Keine Verwaltungsentscheidung durch die KI',
-      ],
+      ]),
     };
   }
 
@@ -179,6 +211,7 @@ export class EvaluationService {
     }
 
     const session = await this.loadChatSession(access, conversationId);
+    const siteConfig = await this.loadSiteConfig(access.siteId);
     const result = await this.chatPipeline.process({
       tenantId: access.tenantId,
       siteId: access.siteId,
@@ -186,6 +219,8 @@ export class EvaluationService {
       message,
       source: 'dashboard',
       sourceUrl: 'https://evaluation.local/demo',
+      siteConfig,
+      evaluationMode: true,
     });
 
     await this.db.query(
@@ -227,6 +262,14 @@ export class EvaluationService {
       throw new ForbiddenException('Evaluation chat not available');
     }
     return row;
+  }
+
+  private async loadSiteConfig(siteId: string) {
+    const res = await this.db.query<EvaluationSiteConfigRow>(
+      `SELECT config FROM sites WHERE id = $1 LIMIT 1`,
+      [siteId],
+    );
+    return asRecord(res.rows[0]?.config);
   }
 
   private projectHandoff(result: { toolResults?: Array<{ toolName?: string; status?: string; message?: string }> }) {

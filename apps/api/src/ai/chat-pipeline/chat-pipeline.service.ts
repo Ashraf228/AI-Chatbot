@@ -320,6 +320,7 @@ export class ChatPipelineService {
           ? input.siteConfig.conversationFlow
           : undefined),
       sourceUrl: input.sourceUrl || null,
+      evaluationMode: input.evaluationMode === true,
     };
   }
 
@@ -555,7 +556,9 @@ export class ChatPipelineService {
 
     const retrievalStart = Date.now();
     const qEmbedding = await this.embedder.embed(input.message);
-    const hits = await this.vector.search(input.tenantId, input.siteId, qEmbedding, 6);
+    const hits = await this.vector.search(input.tenantId, input.siteId, qEmbedding, 6, undefined, {
+      demoOnly: input.evaluationMode === true,
+    });
     const retrievalTime = Date.now() - retrievalStart;
 
     logEvent('retrieval_result', {
@@ -608,7 +611,9 @@ export class ChatPipelineService {
       sources: this.responseComposer.buildSources(hits),
       strictFallbackAnswer:
         knowledgeMode === 'strict' && hits.length === 0
-          ? 'Dazu habe ich gerade keine passende Information im Unternehmenswissen gefunden. Bitte hinterlasse kurz deine Anfrage, dann kann ein Mensch das pruefen.'
+          ? input.evaluationMode === true
+            ? 'Diese Frage kann ich auf Grundlage der freigegebenen Demonstrationsinhalte nicht zuverlaessig beantworten.'
+            : 'Dazu habe ich gerade keine passende Information im Unternehmenswissen gefunden. Bitte hinterlasse kurz deine Anfrage, dann kann ein Mensch das pruefen.'
           : undefined,
       advisorFallbackAnswer:
         routeDecision.route === 'advisor' &&

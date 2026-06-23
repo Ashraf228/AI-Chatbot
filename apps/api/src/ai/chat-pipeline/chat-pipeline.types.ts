@@ -35,6 +35,7 @@ export type ChatPipelineInput = {
   systemPrompt?: string | null;
   conversationFlow?: unknown;
   sourceUrl?: string | null;
+  evaluationMode?: boolean;
 };
 
 export type ChatPipelineResult = {

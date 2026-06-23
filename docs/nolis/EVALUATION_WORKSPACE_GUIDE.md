@@ -18,6 +18,12 @@ Der Workspace bietet drei synthetische Szenarien:
 
 Eine Szenariokarte uebernimmt nur einen Beispieltext in das Eingabefeld. Die Nachricht wird erst gesendet, wenn der Nutzer bewusst auf Senden klickt.
 
+Die Szenarien werden serverseitig aus der Demo-Site-Konfiguration geliefert. Fuer das Profil `public-sector-product-support-demo` sind genau drei Szenarien vorgesehen:
+
+1. quellenbasierte Hilfe,
+2. strukturierte Uebergabevorschau,
+3. sichere Nicht-Antwort bei fehlender Grundlage.
+
 ## Quellenanzeige
 
 Wenn eine Antwort auf Demo-Wissen basiert, zeigt der Chat eine reduzierte Quellenliste. Die Quellenansicht enthaelt keine internen Dokument-IDs, Scores oder privaten Speicherorte.
@@ -33,3 +39,7 @@ Zum Beenden der Sitzung den Logout-Button im Kopfbereich verwenden.
 ## Hinweis
 
 Der Workspace arbeitet mit synthetischen Inhalten. Er ist kein Produktivsystem und keine produktive Fachverfahrensintegration.
+
+## Bereitstellung
+
+Provisioning, Verify und Reset sind in [DEMO_PROVISIONING.md](./DEMO_PROVISIONING.md) beschrieben. Der Content-Katalog liegt in [DEMO_CONTENT_CATALOG.md](./DEMO_CONTENT_CATALOG.md).
