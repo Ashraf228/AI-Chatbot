@@ -63,6 +63,9 @@ jobs:
       - name: Accessibility baseline tests
         run: npm run test:accessibility
 
+      - name: NOLIS golden question contract gate
+        run: npm run eval:nolis-demo
+
       - name: Smoke tests
         run: npm run test:smoke
 

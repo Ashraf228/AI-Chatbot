@@ -14,6 +14,7 @@ package-lock.json
 !packages/widget-sdk/package-lock.json
 dist/
 coverage/
+artifacts/
 .next/
 .vite/
 *.tsbuildinfo
