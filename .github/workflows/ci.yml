@@ -66,6 +66,12 @@ jobs:
       - name: NOLIS golden question contract gate
         run: npm run eval:nolis-demo
 
+      - name: Authorization matrix check
+        run: npm run security:check-authorization-matrix
+
+      - name: Security boundary gate
+        run: npm run test:security-boundaries
+
       - name: Smoke tests
         run: npm run test:smoke
 
@@ -100,6 +106,44 @@ jobs:
 
       - name: Run production-context audits
         run: npm run security:audit:production-contexts
+
+  security-postgres:
+    name: Security PostgreSQL isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: security_boundary_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d security_boundary_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SECURITY_POSTGRES_DATABASE_URL: postgres://postgres:postgres@localhost:5432/security_boundary_test
+      SECURITY_POSTGRES_EXECUTE: "1"
+      SECURITY_POSTGRES_REQUIRED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.17.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run isolated PostgreSQL security checks
+        run: npm run test:security:postgres
 
   docker-build:
     name: Docker build
