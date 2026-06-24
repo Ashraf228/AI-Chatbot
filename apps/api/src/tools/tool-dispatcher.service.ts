@@ -355,18 +355,8 @@ export class ToolDispatcherService {
       throw new BadRequestException('Connected integration is missing endpointUrl');
     }
 
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-    };
-
-    const bearerToken = normalizeString(connection.secrets.bearerToken);
-    const apiKey = normalizeString(connection.secrets.apiKey);
-
-    if (bearerToken) {
-      headers.authorization = `Bearer ${bearerToken}`;
-    } else if (apiKey) {
-      headers['x-api-key'] = apiKey;
-    }
+    const signingMode = connection.signingMode === 'hmac_sha256' ? 'hmac_sha256' : 'legacy_secret_header';
+    const headers = this.integrations.buildHeaders(connection.config, connection.secrets, signingMode);
 
     const queued = await this.webhookJobs.enqueue({
       tenantId: run.tenant_id || '',
@@ -377,6 +367,10 @@ export class ToolDispatcherService {
       endpointUrl,
       payload,
       headers,
+      signingMode,
+      signingSecret: signingMode === 'hmac_sha256'
+        ? this.integrations.getWebhookSigningSecret(connection.secrets)
+        : undefined,
     });
 
     return {

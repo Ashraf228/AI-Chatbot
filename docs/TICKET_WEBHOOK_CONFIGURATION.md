@@ -23,10 +23,14 @@ Use the `Ticket-Weiterleitung` card to configure:
 
 - `Aktiv` / `Inaktiv`
 - Webhook URL
-- Optional Signing Secret
+- HMAC Signing Secret
 - Test webhook
 
-The Signing Secret is stored through the existing integration secret mechanism and is never returned by the API in clear text. Existing generic outbound webhook jobs receive it as `x-webhook-secret` for backward compatibility. This is the legacy `legacy_secret_header` mode; new signed demo handoffs use the separate HMAC-SHA256 contract documented in `docs/security/WEBHOOK_HMAC_SIGNATURES.md`.
+The Signing Secret is stored through the existing integration secret mechanism and is never returned by the API in clear text.
+
+New generic webhook connections use `hmac_sha256` by default. In that mode the payload is signed and the secret is not transmitted with the request. Existing configurations that previously used the `x-webhook-secret` header remain explicitly marked as `legacy_secret_header` for backward compatibility. They are not migrated automatically.
+
+The HMAC header contract is documented in `docs/security/WEBHOOK_HMAC_SIGNATURES.md`.
 
 ## Backend Endpoints
 
@@ -81,9 +85,16 @@ The bot must not claim that a ticket was forwarded when forwarding is `not_confi
 - Private/internal URLs are blocked by the existing SSRF guard unless local development explicitly allows them.
 - Secrets are not included in webhook payloads.
 - Secrets are not returned by GET responses.
-- For new controlled integrations, prefer the HMAC-SHA256 contract over the legacy `x-webhook-secret` header.
+- New generic webhook connections use HMAC-SHA256 by default.
+- Existing `legacy_secret_header` connections may continue to send `x-webhook-secret` until they are migrated deliberately.
+- Migration to HMAC-SHA256 requires receiver-side signature verification, an HMAC secret, and a conscious configuration change by the Platform Owner.
+- Test the receiver signature verification before switching a legacy receiver to HMAC-SHA256.
 - Do not send passwords, MFA codes, API keys or payment details through tickets.
 - Webhook jobs keep historical delivery records; deleting the configuration does not delete previous jobs.
+
+## Legacy Review
+
+The current review target for `legacy_secret_header` connections is `2026-07-24`. This is a review date, not an announced shutdown date. Do not invent a cutoff date until the operational migration plan is approved.
 
 ## Operational Limits
 

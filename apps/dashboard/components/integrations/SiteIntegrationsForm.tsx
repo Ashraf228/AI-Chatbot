@@ -36,6 +36,8 @@ type SiteIntegration = {
   configuredSecretCount: number;
   configFields: IntegrationField[];
   secretFields: IntegrationField[];
+  signingMode?: "hmac_sha256" | "legacy_secret_header" | null;
+  hasSigningSecret?: boolean;
   lastTestedAt: string | null;
   lastTestStatus: string | null;
   lastError: string | null;
@@ -290,6 +292,19 @@ export function SiteIntegrationsForm({
                       ? ` · letzter Test ${new Date(integration.lastTestedAt).toLocaleString("de-DE")}`
                       : ""}
                   </p>
+                  {integration.type === "webhook" || integration.type === "crm_webhook" || integration.type === "ticket_webhook" ? (
+                    <p className="dashboard-copy dashboard-copy--muted">
+                      Signaturverfahren:{" "}
+                      {integration.signingMode === "legacy_secret_header" ? (
+                        <strong>Legacy-Secret-Header</strong>
+                      ) : (
+                        <strong>HMAC-SHA256</strong>
+                      )}
+                      {integration.signingMode === "legacy_secret_header"
+                        ? " · Migration auf HMAC-SHA256 einplanen."
+                        : " · Der Inhalt wird signiert; das Secret wird nicht mit der Anfrage übertragen."}
+                    </p>
+                  ) : null}
                   {integration.lastError ? (
                     <p className="dashboard-status dashboard-status--error">{integration.lastError}</p>
                   ) : null}
@@ -360,7 +375,9 @@ export function SiteIntegrationsForm({
                 <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
                   <p className="dashboard-copy dashboard-copy--muted">
                     Secret-Felder werden nur gesetzt, wenn du hier einen neuen Wert einträgst.
-                    Bereits konfigurierte Secrets: {integration.configuredSecretCount}/{integration.secretFieldCount}.
+                    {integration.type === "webhook" || integration.type === "crm_webhook" || integration.type === "ticket_webhook"
+                      ? ` Signing-Secret vorhanden: ${integration.hasSigningSecret ? "Ja" : "Nein"}.`
+                      : ` Bereits konfigurierte Secrets: ${integration.configuredSecretCount}/${integration.secretFieldCount}.`}
                   </p>
                   {integration.secretFields.map((field) => (
                     <div key={field.key} className="dashboard-field">

@@ -28,6 +28,8 @@ function createHarness({ initialConnection = null, dispatchResults } = {}) {
         status: input.enabled === false ? 'disconnected' : 'connected',
         config: input.config,
         configuredSecretCount: input.secrets?.signingSecret ? 1 : 0,
+        hasSigningSecret: Boolean(input.secrets?.signingSecret),
+        signingMode: 'hmac_sha256',
       };
       return connection;
     },
@@ -48,6 +50,8 @@ function createHarness({ initialConnection = null, dispatchResults } = {}) {
         configuredSecretCount: input.secrets?.signingSecret
           ? 1
           : connection?.configuredSecretCount || 0,
+        hasSigningSecret: Boolean(input.secrets?.signingSecret || connection?.hasSigningSecret),
+        signingMode: connection?.signingMode || 'hmac_sha256',
       };
       return connection;
     },
@@ -98,14 +102,14 @@ test('TicketWebhookConfigService creates ticket webhook config and does not retu
     enabled: true,
     label: 'IT Tickets',
     targetUrl: 'https://example.com/webhook',
-    signingSecret: 'test-secret',
+    signingSecret: Buffer.from('a'.repeat(32), 'utf8').toString('base64'),
   });
 
   assert.equal(calls.create.length, 1);
   assert.equal(calls.create[0].input.providerKey, 'ticket-webhook');
   assert.equal(calls.create[0].input.config.endpointUrl, 'https://example.com/webhook');
   assert.deepEqual(calls.create[0].input.config.events, ['ticket.created']);
-  assert.equal(calls.create[0].input.secrets.signingSecret, 'test-secret');
+  assert.equal(Buffer.from(calls.create[0].input.secrets.signingSecret, 'base64').length, 32);
   assert.equal(result.forwardingConfigured, true);
   assert.equal(result.hasSigningSecret, true);
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'signingSecret'), false);

@@ -3,6 +3,14 @@ import { randomUUID } from 'crypto';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../db/prisma.service';
 import { validatePublicIntegrationUrl } from '../integrations/integration-security';
+import { IntegrationSecretsService } from '../integrations/integration-secrets.service';
+import type { WebhookSigningMode } from '../integrations/integrations.service';
+import {
+  buildWebhookHeaders,
+  createWebhookDeliveryId,
+  decodeWebhookSecretB64,
+  serializeWebhookJson,
+} from '../webhooks/webhook-hmac';
 
 type WebhookJobRow = {
   id: string;
@@ -15,6 +23,12 @@ type WebhookJobRow = {
   method: string;
   headers: Record<string, string>;
   payload: Record<string, unknown>;
+  payload_body?: string | null;
+  signing_mode?: WebhookSigningMode | string | null;
+  event_id?: string | null;
+  last_delivery_id?: string | null;
+  signing_secret?: Record<string, unknown> | null;
+  signing_secret_encrypted?: boolean | null;
   retry_count: number;
   max_attempts: number;
   status?: string;
@@ -37,7 +51,10 @@ function clipText(value: string | null | undefined, maxLength = 4000) {
 export class WebhookJobsService {
   private isProcessing = false;
 
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly secretCrypto: IntegrationSecretsService,
+  ) {}
 
   async enqueue(input: {
     tenantId: string;
@@ -48,12 +65,17 @@ export class WebhookJobsService {
     endpointUrl: string;
     payload: Record<string, unknown>;
     headers?: Record<string, string>;
+    signingMode?: WebhookSigningMode;
+    signingSecret?: string;
     maxAttempts?: number;
     method?: string;
   }) {
     const id = randomUUID();
     const endpointUrl = await validatePublicIntegrationUrl(input.endpointUrl);
     const method = normalizeWebhookMethod(input.method);
+    const signingMode = input.signingMode || 'legacy_secret_header';
+    const payloadBody = serializeWebhookJson(input.payload || {}).toString('utf8');
+    const protectedSigningSecret = protectSigningSecret(this.secretCrypto, input.signingSecret || '');
 
     await this.db.query(
       `INSERT INTO webhook_jobs(
@@ -67,6 +89,11 @@ export class WebhookJobsService {
          method,
          headers,
          payload,
+         signing_mode,
+         event_id,
+         payload_body,
+         signing_secret,
+         signing_secret_encrypted,
          status,
          retry_count,
          max_attempts,
@@ -79,7 +106,7 @@ export class WebhookJobsService {
          created_at,
          updated_at
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, 'queued', 0, $11,
+         $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14::jsonb, $15, 'queued', 0, $16,
          now(), null, null, null, null, null, now(), now()
        )`,
       [
@@ -92,7 +119,12 @@ export class WebhookJobsService {
         endpointUrl,
         method,
         JSON.stringify(input.headers || {}),
-        JSON.stringify(input.payload || {}),
+        payloadBody,
+        signingMode,
+        `evt_${id}`,
+        payloadBody,
+        JSON.stringify(protectedSigningSecret.value),
+        protectedSigningSecret.encrypted,
         input.maxAttempts ?? 5,
       ],
     );
@@ -127,6 +159,12 @@ export class WebhookJobsService {
          method,
          headers,
          payload,
+         payload_body,
+         signing_mode,
+         event_id,
+         last_delivery_id,
+         signing_secret,
+         signing_secret_encrypted,
          retry_count,
          max_attempts,
          status,
@@ -210,6 +248,12 @@ export class WebhookJobsService {
          wj.method,
          wj.headers,
          wj.payload,
+         wj.payload_body,
+         wj.signing_mode,
+         wj.event_id,
+         wj.last_delivery_id,
+         wj.signing_secret,
+         wj.signing_secret_encrypted,
          wj.retry_count,
          wj.max_attempts`,
     );
@@ -219,17 +263,43 @@ export class WebhookJobsService {
 
   private async processJob(job: WebhookJobRow) {
     try {
+      const body = Buffer.from(job.payload_body || JSON.stringify(job.payload || {}), 'utf8');
+      const signingMode = job.signing_mode === 'hmac_sha256' ? 'hmac_sha256' : 'legacy_secret_header';
+      const deliveryId = createWebhookDeliveryId();
+      const headers = { ...(job.headers || {}) };
+      if (signingMode === 'hmac_sha256') {
+        const secretRecord = this.secretCrypto.decryptRecord(
+          job.signing_secret || {},
+          Boolean(job.signing_secret_encrypted),
+        );
+        const secret = decodeWebhookSecretB64(
+          typeof secretRecord.signingSecret === 'string' ? secretRecord.signingSecret : '',
+        );
+        if (!secret) {
+          await this.markJobFailure(job, 'Webhook HMAC signing secret missing or invalid', null, null, deliveryId);
+          return;
+        }
+        Object.assign(headers, buildWebhookHeaders({
+          secret,
+          eventId: job.event_id || `evt_${job.id}`,
+          deliveryId,
+          eventType: typeof job.payload?.eventType === 'string' ? job.payload.eventType : 'webhook.event',
+          timestamp: new Date().toISOString(),
+          body,
+        }));
+        delete headers['x-webhook-secret'];
+      }
       const response = await fetch(job.endpoint_url, {
         method: job.method || 'POST',
-        headers: job.headers || {},
-        body: JSON.stringify(job.payload || {}),
+        headers,
+        body,
         redirect: 'manual',
         signal: AbortSignal.timeout(10000),
       });
       const responseBody = clipText(await response.text());
 
       if (!response.ok) {
-        await this.markJobFailure(job, `Webhook returned ${response.status}`, response.status, responseBody);
+        await this.markJobFailure(job, `Webhook returned ${response.status}`, response.status, responseBody, deliveryId);
         return;
       }
 
@@ -238,12 +308,13 @@ export class WebhookJobsService {
          SET status = 'sent',
              completed_at = now(),
              locked_at = null,
+             last_delivery_id = $4,
              last_error = null,
              last_response_status = $2,
              last_response_body = $3,
              updated_at = now()
          WHERE id = $1`,
-        [job.id, response.status, responseBody],
+        [job.id, response.status, responseBody, deliveryId],
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown webhook error';
@@ -256,6 +327,7 @@ export class WebhookJobsService {
     message: string,
     responseStatus: number | null,
     responseBody: string | null,
+    deliveryId?: string | null,
   ) {
     const nextRetryCount = Number(job.retry_count || 0) + 1;
     const exhausted = nextRetryCount >= Number(job.max_attempts || 5);
@@ -270,6 +342,7 @@ export class WebhookJobsService {
            END,
            locked_at = null,
            completed_at = CASE WHEN $2 = 'failed' THEN now() ELSE completed_at END,
+           last_delivery_id = COALESCE($8, last_delivery_id),
            last_error = $5,
            last_response_status = $6,
            last_response_body = $7,
@@ -283,6 +356,7 @@ export class WebhookJobsService {
         message,
         responseStatus,
         responseBody,
+        deliveryId || null,
       ],
     );
   }
@@ -291,4 +365,17 @@ export class WebhookJobsService {
 function normalizeWebhookMethod(method: string | undefined) {
   const next = (method || 'POST').toUpperCase();
   return ['POST', 'PUT', 'PATCH'].includes(next) ? next : 'POST';
+}
+
+function protectSigningSecret(secretCrypto: IntegrationSecretsService, secret: string) {
+  if (!secret) {
+    return { value: {}, encrypted: false };
+  }
+  if (secretCrypto.isConfigured()) {
+    return {
+      value: secretCrypto.encryptRecord({ signingSecret: secret }),
+      encrypted: true,
+    };
+  }
+  return { value: { signingSecret: secret }, encrypted: false };
 }

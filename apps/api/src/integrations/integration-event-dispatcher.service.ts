@@ -5,6 +5,7 @@ import { PrismaService } from '../db/prisma.service';
 import { IntegrationEventType } from './integration-registry';
 import { maskSensitiveRecord, validatePublicIntegrationUrl } from './integration-security';
 import { IntegrationsService } from './integrations.service';
+import { createWebhookEventId, decodeWebhookSecretB64, serializeWebhookJson } from '../webhooks/webhook-hmac';
 
 export type IntegrationDispatchContext = {
   tenantId?: string | null;
@@ -87,7 +88,25 @@ export class IntegrationEventDispatcherService {
         }
 
         const jobId = randomUUID();
-        const headers = this.integrations.buildHeaders(connection.config, connection.secrets);
+        const signingMode = connection.signingMode === 'hmac_sha256' ? 'hmac_sha256' : 'legacy_secret_header';
+        const headers = this.integrations.buildHeaders(connection.config, connection.secrets, signingMode);
+        const payloadBody = serializeWebhookJson({
+          eventType,
+          siteId,
+          conversationId: context.conversationId || null,
+          source: context.source || 'system',
+          payload,
+          sentAt: new Date().toISOString(),
+        });
+        const signingSecret = signingMode === 'hmac_sha256'
+          ? this.integrations.getWebhookSigningSecret(connection.secrets)
+          : '';
+        if (signingMode === 'hmac_sha256' && !decodeWebhookSecretB64(signingSecret)) {
+          throw new Error('Webhook HMAC signing secret missing or invalid');
+        }
+        const protectedSigningSecret = signingMode === 'hmac_sha256'
+          ? this.integrations.protectJobSigningSecret(signingSecret)
+          : { value: {}, encrypted: false };
         await this.db.query(
           `INSERT INTO webhook_jobs(
              id,
@@ -100,6 +119,11 @@ export class IntegrationEventDispatcherService {
              method,
              headers,
              payload,
+             signing_mode,
+             event_id,
+             payload_body,
+             signing_secret,
+             signing_secret_encrypted,
              status,
              retry_count,
              max_attempts,
@@ -110,7 +134,7 @@ export class IntegrationEventDispatcherService {
              created_at,
              updated_at
            ) VALUES (
-             $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, 'queued', 0, 5,
+             $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14::jsonb, $15, 'queued', 0, 5,
              now(), null, null, null, now(), now()
            )`,
           [
@@ -123,14 +147,12 @@ export class IntegrationEventDispatcherService {
             await validatePublicIntegrationUrl(endpointUrl),
             methodFromConfig(connection.config),
             JSON.stringify(headers),
-            JSON.stringify({
-              eventType,
-              siteId,
-              conversationId: context.conversationId || null,
-              source: context.source || 'system',
-              payload,
-              sentAt: new Date().toISOString(),
-            }),
+            payloadBody.toString('utf8'),
+            signingMode,
+            createWebhookEventId(),
+            payloadBody.toString('utf8'),
+            JSON.stringify(protectedSigningSecret.value),
+            protectedSigningSecret.encrypted,
           ],
         );
 

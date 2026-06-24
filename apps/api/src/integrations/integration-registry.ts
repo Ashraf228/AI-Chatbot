@@ -55,7 +55,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
       { key: 'headers', label: 'Header als JSON', kind: 'textarea', placeholder: '{"x-source":"ai-chatbot"}' },
     ],
     secretFields: [
-      { key: 'secret', label: 'Optionales Secret', kind: 'password' },
+      { key: 'secret', label: 'HMAC-Signing-Secret', kind: 'password' },
       { key: 'bearerToken', label: 'Bearer Token', kind: 'password' },
     ],
   },
@@ -196,7 +196,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     secretFields: [
       {
         key: 'signingSecret',
-        label: 'Signing Secret',
+        label: 'HMAC-Signing-Secret',
         kind: 'password',
       },
       {

@@ -558,14 +558,8 @@ export class ToolExecutorService {
       return failed('push_webhook', 'endpoint_missing', 'Webhook endpoint is missing');
     }
 
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
-    const bearerToken = text(connection.secrets.bearerToken);
-    const apiKey = text(connection.secrets.apiKey);
-    if (bearerToken) {
-      headers.authorization = `Bearer ${bearerToken}`;
-    } else if (apiKey) {
-      headers['x-api-key'] = apiKey;
-    }
+    const signingMode = connection.signingMode === 'hmac_sha256' ? 'hmac_sha256' : 'legacy_secret_header';
+    const headers = this.integrations.buildHeaders(connection.config, connection.secrets, signingMode);
 
     const queued = await this.webhookJobs.enqueue({
       tenantId: context.tenantId,
@@ -580,6 +574,10 @@ export class ToolExecutorService {
         conversationId: context.conversationId,
       },
       headers,
+      signingMode,
+      signingSecret: signingMode === 'hmac_sha256'
+        ? this.integrations.getWebhookSigningSecret(connection.secrets)
+        : undefined,
     });
 
     return {

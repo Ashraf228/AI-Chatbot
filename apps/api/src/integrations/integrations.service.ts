@@ -11,6 +11,18 @@ import {
   IntegrationEventType,
 } from './integration-registry';
 import { maskSensitiveRecord, parseJsonRecord, validatePublicIntegrationUrl } from './integration-security';
+import {
+  buildWebhookHeaders,
+  createWebhookDeliveryId,
+  createWebhookEventId,
+  decodeWebhookSecretB64,
+  serializeWebhookJson,
+} from '../webhooks/webhook-hmac';
+
+export const WEBHOOK_SIGNING_MODES = ['hmac_sha256', 'legacy_secret_header'] as const;
+export type WebhookSigningMode = (typeof WEBHOOK_SIGNING_MODES)[number];
+const WEBHOOK_TYPES = ['webhook', 'crm_webhook', 'ticket_webhook'];
+const RESERVED_WEBHOOK_HEADER_PATTERN = /^(x-ssb-|x-webhook-secret$)/i;
 
 type IntegrationConnectionRow = {
   id: string;
@@ -23,6 +35,7 @@ type IntegrationConnectionRow = {
   config: Record<string, unknown> | null;
   secrets: Record<string, unknown> | null;
   secrets_encrypted?: boolean;
+  signing_mode?: WebhookSigningMode | string | null;
   created_at: string;
   updated_at: string;
 };
@@ -57,6 +70,39 @@ function readEvents(config: Record<string, unknown>, definition: IntegrationDefi
 function endpointFromConfig(config: Record<string, unknown>) {
   const value = config.url || config.endpointUrl || config.webhookUrl;
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function isWebhookDefinition(definition: IntegrationDefinition) {
+  return WEBHOOK_TYPES.includes(definition.type);
+}
+
+function normalizeSigningMode(value: unknown): WebhookSigningMode {
+  if (value === 'legacy_secret_header') {
+    return 'legacy_secret_header';
+  }
+  if (value === undefined || value === null || value === '' || value === 'hmac_sha256') {
+    return 'hmac_sha256';
+  }
+  throw new BadRequestException('Unbekannter Webhook-Signaturmodus.');
+}
+
+function signingModeFromRow(row?: IntegrationConnectionRow | null): WebhookSigningMode {
+  return row?.signing_mode === 'legacy_secret_header' ? 'legacy_secret_header' : 'hmac_sha256';
+}
+
+function readSigningSecret(secrets: Record<string, unknown>) {
+  const signingSecret = typeof secrets.signingSecret === 'string' ? secrets.signingSecret.trim() : '';
+  const legacySecret = typeof secrets.secret === 'string' ? secrets.secret.trim() : '';
+  return signingSecret || legacySecret;
+}
+
+function assertNoReservedWebhookHeaders(config: Record<string, unknown>) {
+  const parsedHeaders = parseJsonRecord(config.headers);
+  for (const key of Object.keys(parsedHeaders)) {
+    if (RESERVED_WEBHOOK_HEADER_PATTERN.test(key)) {
+      throw new BadRequestException('Reservierte Webhook-Signaturheader duerfen nicht manuell gesetzt werden.');
+    }
+  }
 }
 
 function publicConfig(config: Record<string, unknown>) {
@@ -150,7 +196,7 @@ export class IntegrationsService {
       testable: definition.testable,
       config: publicConfig(config),
       secretFieldCount: secretKeys.length,
-      configuredSecretCount: countConfiguredSecrets(secretKeys, secrets),
+      configuredSecretCount: isWebhookDefinition(definition) ? 0 : countConfiguredSecrets(secretKeys, secrets),
       configFields: definition.configFields,
       secretFields: definition.secretFields.map((field) => ({
         key: field.key,
@@ -158,6 +204,8 @@ export class IntegrationsService {
         kind: field.kind,
         placeholder: field.placeholder,
       })),
+      signingMode: isWebhookDefinition(definition) ? signingModeFromRow(row) : null,
+      hasSigningSecret: isWebhookDefinition(definition) ? Boolean(readSigningSecret(secrets)) : false,
       createdAt: row?.created_at ?? null,
       updatedAt: row?.updated_at ?? null,
       lastTestedAt: typeof config.lastTestedAt === 'string' ? config.lastTestedAt : null,
@@ -184,6 +232,7 @@ export class IntegrationsService {
          config,
          secrets,
          secrets_encrypted,
+         signing_mode,
          created_at,
          updated_at
        FROM integration_connections
@@ -282,7 +331,10 @@ export class IntegrationsService {
       const existing = existingRes.rows[0];
       const migratedExisting = await this.maybeEncryptStoredSecrets(existing);
       const nextConfig = normalizeRecord(connection.config?.values);
-      await this.validateConnectionConfig(definition, nextConfig, connection.status === 'connected');
+      const requestedSigningMode = isWebhookDefinition(definition)
+        ? normalizeSigningMode(nextConfig.signingMode)
+        : null;
+      delete nextConfig.signingMode;
       const incomingSecrets = normalizeRecord(connection.secrets?.values);
       const existingSecrets = this.secretCrypto.decryptRecord(
         normalizeRecord(migratedExisting?.secrets),
@@ -300,6 +352,16 @@ export class IntegrationsService {
           }),
         ),
       };
+      const signingMode = isWebhookDefinition(definition)
+        ? this.resolveWritableSigningMode(requestedSigningMode || 'hmac_sha256', migratedExisting)
+        : 'hmac_sha256';
+      await this.validateConnectionConfig(
+        definition,
+        nextConfig,
+        connection.status === 'connected',
+        signingMode,
+        nextSecrets,
+      );
 
       const displayName =
         connection.displayName?.trim() || migratedExisting?.display_name || definition.label;
@@ -320,10 +382,11 @@ export class IntegrationsService {
            config,
            secrets,
            secrets_encrypted,
+           signing_mode,
            created_at,
            updated_at
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, now(), now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, now(), now())
          ON CONFLICT (site_id, provider_key, connection_key) DO UPDATE SET
            tenant_id = EXCLUDED.tenant_id,
            display_name = EXCLUDED.display_name,
@@ -331,6 +394,7 @@ export class IntegrationsService {
            config = EXCLUDED.config,
            secrets = EXCLUDED.secrets,
            secrets_encrypted = EXCLUDED.secrets_encrypted,
+           signing_mode = EXCLUDED.signing_mode,
            updated_at = now()`,
         [
           migratedExisting?.id || randomUUID(),
@@ -343,6 +407,7 @@ export class IntegrationsService {
           JSON.stringify(nextConfig),
           JSON.stringify(encryptedSecrets),
           hasSecrets,
+          signingMode,
         ],
       );
     }
@@ -428,21 +493,34 @@ export class IntegrationsService {
     }
     const config = normalizeRecord(row.config);
     const secrets = this.secretCrypto.decryptRecord(normalizeRecord(row.secrets), Boolean(row.secrets_encrypted));
+    const signingMode = signingModeFromRow(row);
 
     try {
-      await this.validateConnectionConfig(definition, config, true);
-      if (['webhook', 'crm_webhook', 'ticket_webhook'].includes(definition.type)) {
+      await this.validateConnectionConfig(definition, config, true, signingMode, secrets);
+      if (isWebhookDefinition(definition)) {
         const endpointUrl = endpointFromConfig(config);
-        const headers = this.buildHeaders(config, secrets);
+        const payload = {
+          eventType: 'integration.test',
+          siteId,
+          integrationId,
+          sentAt: new Date().toISOString(),
+        };
+        const body = serializeWebhookJson(payload);
+        const headers = this.buildHeaders(config, secrets, signingMode);
+        const deliveryHeaders = signingMode === 'hmac_sha256'
+          ? buildWebhookHeaders({
+              secret: decodeWebhookSecretB64(readSigningSecret(secrets)) as Buffer,
+              eventId: createWebhookEventId(),
+              deliveryId: createWebhookDeliveryId(),
+              eventType: 'integration.test',
+              timestamp: new Date().toISOString(),
+              body,
+            })
+          : {};
         const response = await fetch(endpointUrl, {
           method: typeof config.method === 'string' ? config.method : 'POST',
-          headers,
-          body: JSON.stringify({
-            eventType: 'integration.test',
-            siteId,
-            integrationId,
-            sentAt: new Date().toISOString(),
-          }),
+          headers: { ...headers, ...deliveryHeaders },
+          body,
           redirect: 'manual',
           signal: AbortSignal.timeout(8000),
         });
@@ -489,6 +567,7 @@ export class IntegrationsService {
         type: definition.type,
         displayName: row.display_name,
         config,
+        signingMode: isWebhookDefinition(definition) ? signingModeFromRow(row) : null,
         secrets: this.secretCrypto.decryptRecord(normalizeRecord(row.secrets), Boolean(row.secrets_encrypted)),
       });
     }
@@ -535,6 +614,7 @@ export class IntegrationsService {
         normalizeRecord(row.secrets),
         Boolean(row.secrets_encrypted),
       ),
+      signingMode: isWebhookDefinition(definition) ? signingModeFromRow(row) : null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -545,28 +625,58 @@ export class IntegrationsService {
     return items.find((item) => item.providerKey === providerKey && item.connectionKey === connectionKey) || null;
   }
 
-  buildHeaders(config: Record<string, unknown>, secrets: Record<string, unknown>) {
+  buildHeaders(
+    config: Record<string, unknown>,
+    secrets: Record<string, unknown>,
+    signingMode: WebhookSigningMode = 'legacy_secret_header',
+  ) {
     const parsedHeaders = parseJsonRecord(config.headers);
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     for (const [key, value] of Object.entries(parsedHeaders)) {
-      if (typeof value === 'string' && key.toLowerCase() !== 'host') {
+      if (
+        typeof value === 'string'
+        && key.toLowerCase() !== 'host'
+        && !RESERVED_WEBHOOK_HEADER_PATTERN.test(key)
+      ) {
         headers[key] = value;
       }
     }
     const bearerToken = typeof secrets.bearerToken === 'string' ? secrets.bearerToken.trim() : '';
     const apiKey = typeof secrets.apiKey === 'string' ? secrets.apiKey.trim() : '';
-    const signingSecret = typeof secrets.signingSecret === 'string' ? secrets.signingSecret.trim() : '';
-    const secret = typeof secrets.secret === 'string' ? secrets.secret.trim() : '';
     if (bearerToken) {
       headers.authorization = `Bearer ${bearerToken}`;
     }
     if (apiKey) {
       headers['x-api-key'] = apiKey;
     }
-    if (signingSecret || secret) {
-      headers['x-webhook-secret'] = signingSecret || secret;
+    if (signingMode === 'legacy_secret_header') {
+      const signingSecret = readSigningSecret(secrets);
+      if (signingSecret) {
+        headers['x-webhook-secret'] = signingSecret;
+      }
     }
     return headers;
+  }
+
+  getWebhookSigningSecret(secrets: Record<string, unknown>) {
+    return readSigningSecret(secrets);
+  }
+
+  protectJobSigningSecret(secret: string) {
+    if (!secret) {
+      return { value: {}, encrypted: false };
+    }
+    if (this.secretCrypto.isConfigured()) {
+      return {
+        value: this.secretCrypto.encryptRecord({ signingSecret: secret }),
+        encrypted: true,
+      };
+    }
+    return { value: { signingSecret: secret }, encrypted: false };
+  }
+
+  unprotectJobSigningSecret(record: Record<string, unknown> | null | undefined, encrypted: boolean) {
+    return this.secretCrypto.decryptRecord(normalizeRecord(record), encrypted);
   }
 
   private async upsertOne(
@@ -598,19 +708,40 @@ export class IntegrationsService {
     definition: IntegrationDefinition,
     config: Record<string, unknown>,
     enabled: boolean,
+    signingMode: WebhookSigningMode = 'legacy_secret_header',
+    secrets: Record<string, unknown> = {},
   ) {
     if (!enabled) {
       return;
     }
-    if (['webhook', 'crm_webhook', 'ticket_webhook'].includes(definition.type)) {
+    if (isWebhookDefinition(definition)) {
       const endpointUrl = endpointFromConfig(config);
       if (!endpointUrl) {
         throw new BadRequestException('Webhook-URL fehlt.');
       }
       await validatePublicIntegrationUrl(endpointUrl);
-      parseJsonRecord(config.headers);
+      assertNoReservedWebhookHeaders(config);
       parseJsonRecord(config.fieldMapping);
+      if (signingMode === 'hmac_sha256' && !decodeWebhookSecretB64(readSigningSecret(secrets))) {
+        throw new BadRequestException('HMAC-Signing-Secret muss mindestens 32 zufaellige Bytes als Base64 enthalten.');
+      }
     }
+  }
+
+  private resolveWritableSigningMode(
+    requested: WebhookSigningMode,
+    existing?: IntegrationConnectionRow | null,
+  ): WebhookSigningMode {
+    if (existing?.signing_mode === 'legacy_secret_header') {
+      return 'legacy_secret_header';
+    }
+    if (!existing && requested === 'legacy_secret_header') {
+      throw new BadRequestException('Legacy-Secret-Header kann fuer neue Webhook-Verbindungen nicht ausgewaehlt werden.');
+    }
+    if (existing && requested === 'legacy_secret_header') {
+      throw new BadRequestException('Legacy-Secret-Header kann nicht fuer HMAC-Verbindungen aktiviert werden.');
+    }
+    return 'hmac_sha256';
   }
 
   private async patchTestState(

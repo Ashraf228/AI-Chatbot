@@ -18,6 +18,8 @@ type MaskedTicketConnection = {
   status?: 'connected' | 'disconnected';
   config?: Record<string, unknown>;
   configuredSecretCount?: number;
+  hasSigningSecret?: boolean;
+  signingMode?: 'hmac_sha256' | 'legacy_secret_header';
   lastTestedAt?: string | null;
   lastTestStatus?: string | null;
   lastError?: string | null;
@@ -30,6 +32,7 @@ export type TicketWebhookConfigResponse = {
   label: string;
   targetUrl: string;
   hasSigningSecret: boolean;
+  signingMode: 'hmac_sha256' | 'legacy_secret_header';
   lastTestStatus: string | null;
   lastTestAt: string | null;
   lastError: string | null;
@@ -200,7 +203,8 @@ export class TicketWebhookConfigService {
       enabled,
       label: connection?.displayName || connection?.label || 'Ticket-Weiterleitung',
       targetUrl,
-      hasSigningSecret: Boolean((connection?.configuredSecretCount || 0) > 0),
+      hasSigningSecret: Boolean(connection?.hasSigningSecret),
+      signingMode: connection?.signingMode || 'hmac_sha256',
       lastTestStatus,
       lastTestAt,
       lastError,
@@ -234,6 +238,6 @@ export class TicketWebhookConfigService {
   }
 
   private generateSigningSecret() {
-    return randomBytes(32).toString('base64url');
+    return randomBytes(32).toString('base64');
   }
 }

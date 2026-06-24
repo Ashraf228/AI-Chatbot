@@ -11,6 +11,7 @@ type TicketWebhookConfig = {
   label: string;
   targetUrl: string;
   hasSigningSecret: boolean;
+  signingMode: "hmac_sha256" | "legacy_secret_header";
   lastTestStatus: string | null;
   lastTestAt: string | null;
   lastError: string | null;
@@ -264,9 +265,14 @@ export function TicketWebhookSettingsCard({ siteId }: { siteId: string }) {
           <div>
             <h3 className="dashboard-card-title dashboard-card-title--sm">Signing Secret</h3>
             <p className="dashboard-copy dashboard-copy--muted">
+              {config.signingMode === "legacy_secret_header"
+                ? "Legacy-Secret-Header: bestehende Empfänger können weiterlaufen. Planen Sie eine Migration auf HMAC-SHA256."
+                : "HMAC-SHA256: Der Inhalt wird signiert; das Secret wird nicht mit der Anfrage übertragen."}
+            </p>
+            <p className="dashboard-copy dashboard-copy--muted">
               {config.hasSigningSecret
                 ? "Secret vorhanden. Der Wert wird nicht im Klartext angezeigt."
-                : "Optionales Secret für den Header x-webhook-secret."}
+                : "Für HMAC-SHA256 wird ein Secret mit mindestens 32 zufälligen Bytes benötigt."}
             </p>
           </div>
           <Button

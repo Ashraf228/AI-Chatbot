@@ -50,7 +50,7 @@
     "build:reporter": "npm run build --workspace=apps/reporter",
     "test:smoke": "npm run test:smoke --workspace=apps/api",
     "test:analytics-contract": "npm run build:api && node --test apps/api/test/widget-analytics-contract.test.cjs apps/api/test/widget-analytics-reporting-smoke.test.cjs",
-    "test:webhook-hmac": "npm run build:api && node --test apps/api/test/webhook-hmac.test.cjs apps/api/test/evaluation-handoff.service.test.cjs",
+    "test:webhook-hmac": "npm run build:api && node --test apps/api/test/webhook-hmac.test.cjs apps/api/test/evaluation-handoff.service.test.cjs apps/api/test/generic-webhook-signing.test.cjs",
     "test:e2e": "vitest run --config vitest.ui.config.ts",
     "build:all": "npm run build:api && npm run build:dashboard && npm run build:widget && npm run build:reporter",
     "db:migrate": "npm run migrate --workspace=apps/api",
