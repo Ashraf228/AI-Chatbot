@@ -360,6 +360,9 @@ export async function provisionEvaluationDemo(db, config, options = {}) {
 }
 
 export async function verifyEvaluationDemo(db, config) {
+  const handoffSecret = String(process.env.EVALUATION_MOCK_HANDOFF_SECRET_B64 || '').trim();
+  const decodedSecret = handoffSecret ? Buffer.from(handoffSecret, 'base64') : Buffer.alloc(0);
+  const mockOrigin = String(process.env.EVALUATION_MOCK_RECEIVER_ORIGIN || '').trim();
   const rows = await db.query(
     `SELECT
        (SELECT count(*)::int FROM tenants WHERE id = $1) AS tenant_count,
@@ -387,6 +390,11 @@ export async function verifyEvaluationDemo(db, config) {
     searchableChunks: Number(row.searchable_chunk_count || 0),
     scenarios: DEMO_SCENARIOS.length,
     unmarkedActiveDocumentsInEvaluationRetrieval: Number(row.unmarked_chunks || 0),
+    mockHandoff: {
+      enabled: process.env.EVALUATION_MOCK_HANDOFF_ENABLED === 'true',
+      secretConfigured: decodedSecret.length >= 32,
+      receiverOriginConfigured: Boolean(mockOrigin),
+    },
     configurationComplete:
       Number(row.tenant_count || 0) === 1 &&
       Number(row.demo_site_count || 0) === 1 &&
@@ -410,7 +418,9 @@ export async function resetEvaluationDemo(db, config, options = {}) {
        (SELECT count(*)::int FROM conversations c WHERE c.tenant_id = $1 AND c.site_id = $2 AND c.session_id LIKE 'evaluation:%') AS conversations,
        (SELECT count(*)::int FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.tenant_id = $1 AND c.site_id = $2 AND c.session_id LIKE 'evaluation:%') AS messages,
        (SELECT count(*)::int FROM evaluation_ticket_previews WHERE tenant_id = $1 AND site_id = $2) AS ticket_previews,
-       (SELECT count(*)::int FROM agent_tickets WHERE tenant_id = $1 AND site_id = $2 AND demo = true AND synthetic = true AND support_profile = 'product') AS demo_tickets`,
+       (SELECT count(*)::int FROM agent_tickets WHERE tenant_id = $1 AND site_id = $2 AND demo = true AND synthetic = true AND support_profile = 'product') AS demo_tickets,
+       (SELECT count(*)::int FROM evaluation_handoff_events WHERE tenant_id = $1 AND site_id = $2 AND demo = true AND synthetic = true) AS handoff_events,
+       (SELECT count(*)::int FROM evaluation_mock_handoff_receipts WHERE tenant_id = $1 AND site_id = $2) AS handoff_receipts`,
     [config.tenantSlug, config.siteSlug],
   );
   const planned = counts.rows[0] || {};
@@ -424,6 +434,29 @@ export async function resetEvaluationDemo(db, config, options = {}) {
     );
     const sessionIds = sessions.rows.map((entry) => entry.id);
     if (sessionIds.length > 0) {
+      await tx.query(
+        `DELETE FROM evaluation_mock_handoff_receipts
+         WHERE tenant_id = $1
+           AND site_id = $2
+           AND event_id IN (
+             SELECT event_id FROM evaluation_handoff_events
+             WHERE tenant_id = $1
+               AND site_id = $2
+               AND evaluation_chat_session_id = ANY($3::text[])
+               AND demo = true
+               AND synthetic = true
+           )`,
+        [config.tenantSlug, config.siteSlug, sessionIds],
+      );
+      await tx.query(
+        `DELETE FROM evaluation_handoff_events
+         WHERE tenant_id = $1
+           AND site_id = $2
+           AND evaluation_chat_session_id = ANY($3::text[])
+           AND demo = true
+           AND synthetic = true`,
+        [config.tenantSlug, config.siteSlug, sessionIds],
+      );
       await tx.query(
         `DELETE FROM agent_tickets
          WHERE tenant_id = $1

@@ -26,7 +26,7 @@ Use the `Ticket-Weiterleitung` card to configure:
 - Optional Signing Secret
 - Test webhook
 
-The Signing Secret is stored through the existing integration secret mechanism and is never returned by the API in clear text. If configured, outbound webhook jobs receive it as `x-webhook-secret`.
+The Signing Secret is stored through the existing integration secret mechanism and is never returned by the API in clear text. Existing generic outbound webhook jobs receive it as `x-webhook-secret` for backward compatibility. This is the legacy `legacy_secret_header` mode; new signed demo handoffs use the separate HMAC-SHA256 contract documented in `docs/security/WEBHOOK_HMAC_SIGNATURES.md`.
 
 ## Backend Endpoints
 
@@ -81,6 +81,7 @@ The bot must not claim that a ticket was forwarded when forwarding is `not_confi
 - Private/internal URLs are blocked by the existing SSRF guard unless local development explicitly allows them.
 - Secrets are not included in webhook payloads.
 - Secrets are not returned by GET responses.
+- For new controlled integrations, prefer the HMAC-SHA256 contract over the legacy `x-webhook-secret` header.
 - Do not send passwords, MFA codes, API keys or payment details through tickets.
 - Webhook jobs keep historical delivery records; deleting the configuration does not delete previous jobs.
 

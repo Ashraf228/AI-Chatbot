@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import compression = require('compression');
+import * as express from 'express';
 import type { Request } from 'express';
 import type { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 
@@ -92,9 +93,18 @@ function buildCorsOptions(req: Request, allowedOrigins: Set<string>): CorsOption
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: false });
+  const app = await NestFactory.create(AppModule, { cors: false, bodyParser: false });
   const allowedOrigins = parseAllowedOrigins();
 
+  const mockHandoffRawParser = express.raw({ type: 'application/json', limit: '64kb' });
+  app.use((req: Request, res: express.Response, next: express.NextFunction) => {
+    const path = req.path || req.url.split('?')[0];
+    return path === '/internal/evaluation/mock-handoff/v1'
+      ? mockHandoffRawParser(req, res, next)
+      : next();
+  });
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }));
   app.use(helmet());
   app.use(compression());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

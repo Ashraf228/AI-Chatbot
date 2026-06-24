@@ -157,9 +157,12 @@ describe("viewer dashboard sessions", () => {
     expect(isViewerAllowedPath("/api/evaluation/chat/message")).toBe(true);
     expect(isViewerAllowedPath("/api/evaluation/chat/ticket/confirm")).toBe(true);
     expect(isViewerAllowedPath("/api/evaluation/chat/ticket/cancel")).toBe(true);
+    expect(isViewerAllowedPath("/api/evaluation/chat/ticket/handoff")).toBe(true);
+    expect(isViewerAllowedPath("/api/evaluation/chat/ticket/handoff/status")).toBe(true);
     expect(isViewerAllowedPath("/sites")).toBe(false);
     expect(isViewerAllowedPath("/api/sites")).toBe(false);
     expect(isViewerAllowedPath("/api/auth/session/extra")).toBe(false);
+    expect(isViewerAllowedPath("/api/evaluation/chat/ticket/handoff/status/extra")).toBe(false);
     expect(isViewerAllowedPath("/api/evaluation-evil")).toBe(false);
   });
 });

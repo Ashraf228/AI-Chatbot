@@ -48,6 +48,9 @@ jobs:
       - name: Analytics contract tests
         run: npm run test:analytics-contract
 
+      - name: Webhook HMAC tests
+        run: npm run test:webhook-hmac
+
       - name: Typecheck Dashboard
         run: npm run check:dashboard
 

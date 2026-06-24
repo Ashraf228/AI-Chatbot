@@ -7,6 +7,8 @@ const VIEWER_ALLOWED_PATHS = new Set([
   "/api/evaluation/chat/message",
   "/api/evaluation/chat/ticket/confirm",
   "/api/evaluation/chat/ticket/cancel",
+  "/api/evaluation/chat/ticket/handoff",
+  "/api/evaluation/chat/ticket/handoff/status",
 ]);
 
 export function isViewerAllowedPath(pathname: string) {

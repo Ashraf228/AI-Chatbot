@@ -68,3 +68,14 @@ Fuer Evaluation-Tickets gilt:
 - kein E-Mail-Job
 - keine externe API
 - `forwardingStatus = not_configured`
+
+## Signierte Demo-Uebergabe
+
+Nach der Ticket-Bestaetigung kann ein Viewer separat eine interne Mock-Uebergabe ausloesen. Diese ist kein normaler `webhook_jobs`-Versand und keine externe Fachverfahren-Integration.
+
+- Browser-Request akzeptiert nur `conversationId`.
+- Receiver-URL, Secret, Signatur, Event-ID, Delivery-ID und Payload werden ausschliesslich serverseitig bestimmt.
+- Die Signatur folgt `docs/security/WEBHOOK_HMAC_SIGNATURES.md`.
+- Der interne Mock-Empfaenger prueft die HMAC-Signatur auf Raw-Body-Basis vor JSON-Parsing.
+- Der Browser sieht nur bereinigte Statusdaten und keine Header, Signaturen, Payloads oder internen IDs.
+- Auch bei erfolgreicher Mock-Uebergabe erfolgt keine Uebermittlung an NOLIS oder ein externes Ticketsystem.

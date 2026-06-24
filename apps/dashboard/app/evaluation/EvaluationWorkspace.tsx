@@ -29,6 +29,20 @@ type TicketPreview = {
   synthetic: true;
 };
 
+type HandoffStatus = {
+  status: string;
+  demoReference?: string;
+  attemptCount?: number;
+  signatureVerified?: boolean;
+  duplicateRecognized?: boolean;
+  receivedAt?: string | null;
+  httpStatus?: number | null;
+  retryable?: boolean;
+  errorCode?: string | null;
+  message?: string;
+  externalNotice?: string;
+};
+
 function formatDate(value?: string | null) {
   if (!value) return "Kein Ablaufdatum hinterlegt";
   const date = new Date(value);
@@ -50,6 +64,9 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
   const [error, setError] = useState("");
   const [retryMessage, setRetryMessage] = useState("");
   const [ticketResult, setTicketResult] = useState("");
+  const [ticketCreated, setTicketCreated] = useState(false);
+  const [handoffLoading, setHandoffLoading] = useState(false);
+  const [handoffStatus, setHandoffStatus] = useState<HandoffStatus | null>(null);
 
   const userQuestionCount = messages.filter((entry) => entry.role === "user").length;
   const sourcedAnswers = messages.filter((entry) => entry.role === "assistant" && (entry.sources || []).length > 0).length;
@@ -133,6 +150,8 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
       }
       const data = await response.json();
       setTicketResult(data.note || "Der Demo-Supportfall wurde im Demonstrator erfasst. Es erfolgte keine Übermittlung an ein externes Ticketsystem.");
+      setTicketCreated(true);
+      setHandoffStatus({ status: "not_requested", message: "Noch keine Demo-Übergabe ausgeführt." });
       setMessages((current) => [
         ...current,
         {
@@ -144,6 +163,29 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
       setTicketActionLoading(false);
+    }
+  }
+
+  async function runSignedHandoff() {
+    if (!conversationId || handoffLoading) return;
+    setHandoffLoading(true);
+    setError("");
+    setHandoffStatus({ status: "mock_delivering", message: "Signierte Demo-Übergabe wird geprüft." });
+    try {
+      const response = await fetch("/api/evaluation/chat/ticket/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || "Die signierte Demo-Übergabe konnte nicht ausgeführt werden.");
+      }
+      setHandoffStatus(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+    } finally {
+      setHandoffLoading(false);
     }
   }
 
@@ -288,6 +330,35 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
             {ticketResult && (
               <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
                 {ticketResult}
+              </div>
+            )}
+            {ticketCreated && (
+              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">Signierte Demo-Übergabe</p>
+                    <p className="mt-1">{handoffStatus?.message || "Noch keine Demo-Übergabe ausgeführt."}</p>
+                    {handoffStatus?.externalNotice && <p className="mt-1">{handoffStatus.externalNotice}</p>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={runSignedHandoff}
+                    disabled={handoffLoading}
+                    className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    {handoffLoading ? "Prüft..." : "Signierte Demo-Übergabe simulieren"}
+                  </button>
+                </div>
+                {handoffStatus && handoffStatus.status !== "not_requested" && (
+                  <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                    <div><dt className="font-semibold">Demo-Referenz</dt><dd>{handoffStatus.demoReference || "Nicht verfügbar"}</dd></div>
+                    <div><dt className="font-semibold">Status</dt><dd>{handoffStatus.status}</dd></div>
+                    <div><dt className="font-semibold">Versuche</dt><dd>{handoffStatus.attemptCount ?? 0}</dd></div>
+                    <div><dt className="font-semibold">Signatur geprüft</dt><dd>{handoffStatus.signatureVerified ? "Ja" : "Nein"}</dd></div>
+                    <div><dt className="font-semibold">Duplikat sicher erkannt</dt><dd>{handoffStatus.duplicateRecognized ? "Ja" : "Nein"}</dd></div>
+                    <div><dt className="font-semibold">Empfangen</dt><dd>{formatDate(handoffStatus.receivedAt)}</dd></div>
+                  </dl>
+                )}
               </div>
             )}
             {error && (

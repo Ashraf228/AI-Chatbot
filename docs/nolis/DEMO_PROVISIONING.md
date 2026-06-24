@@ -15,6 +15,7 @@ Das Provisioning erzeugt einen generischen Evaluation-Tenant, eine Demo-Site, ei
 - Szenarien: quellenbasierte Hilfe, strukturierte Uebergabevorschau, sichere Nicht-Antwort
 - Supportprofil: `product` fuer interne Demo-Supportfaelle mit expliziter Bestaetigung
 - Externe Weiterleitung: deaktiviert (`allowExternalForwarding=false`)
+- Signierte Demo-Uebergabe: optionaler interner Mock, default-off, keine NOLIS- oder externe Ticketuebermittlung
 
 ## Erforderliche Umgebungsvariablen
 
@@ -35,6 +36,16 @@ Die Werte muessen ueber die lokale Shell oder eine sichere Betriebsumgebung gese
 | `DEMO_ALLOWED_ORIGIN` | Erlaubter Demo-Origin ohne Pfad, Query oder Fragment |
 | `DEMO_PRIVACY_URL` | Datenschutz-URL ohne Credentials |
 | `DEMO_SUPPORT_CONTACT_LABEL` | Optionales Label fuer Demo-Support |
+
+Optionale Variablen fuer die interne signierte Mock-Uebergabe:
+
+| Variable | Zweck |
+| --- | --- |
+| `EVALUATION_MOCK_HANDOFF_ENABLED` | Nur bei `true` aktiv |
+| `EVALUATION_MOCK_RECEIVER_ORIGIN` | API-Origin ohne Pfad, Query, Fragment oder Credentials |
+| `EVALUATION_MOCK_HANDOFF_SECRET_B64` | Base64-Secret mit mindestens 32 Bytes |
+| `EVALUATION_MOCK_SIGNATURE_TOLERANCE_SECONDS` | Replay-Fenster, akzeptiert 30 bis 600 Sekunden |
+| `EVALUATION_MOCK_HANDOFF_TIMEOUT_MS` | Timeout fuer den internen Mock-Call |
 
 ## Dry-run
 
@@ -74,6 +85,7 @@ Der Verify-Befehl prueft ohne Secret-Ausgabe:
 - synthetische Quellen, Dokumente und Chunks sind vorhanden
 - Chunks sind durchsuchbar, also mit Embedding gespeichert
 - Szenarioanzahl ist erwartbar
+- optionaler Mock-Handoff ist entweder deaktiviert oder formal konfiguriert; Secrets werden nicht ausgegeben
 
 ## Reset
 
@@ -82,7 +94,7 @@ npm run demo:reset:evaluation
 npm run demo:reset:evaluation -- --execute --confirm=<DEMO_SITE_SLUG>
 ```
 
-Reset ist standardmaessig ein Dry-run. Execute benoetigt eine explizite Site-Bestaetigung. Reset entfernt nur Evaluation-Chat-Sessions, zugehoerige Evaluation-Conversations/Messages, Demo-Ticketvorschauen und bestaetigte synthetische Demo-Product-Supportfaelle fuer die bestaetigte Demo-Site. Normale Tickets, Tenant, Site, Viewer, Knowledge Sources, Dokumente und Chunks bleiben erhalten.
+Reset ist standardmaessig ein Dry-run. Execute benoetigt eine explizite Site-Bestaetigung. Reset entfernt nur Evaluation-Chat-Sessions, zugehoerige Evaluation-Conversations/Messages, Demo-Ticketvorschauen, interne Mock-Handoff-Events/Deliveries/Receipts und bestaetigte synthetische Demo-Product-Supportfaelle fuer die bestaetigte Demo-Site. Normale Tickets, Tenant, Site, Viewer, Knowledge Sources, Dokumente und Chunks bleiben erhalten.
 
 ## Sicherheitsgrenzen
 
@@ -92,4 +104,5 @@ Reset ist standardmaessig ein Dry-run. Execute benoetigt eine explizite Site-Bes
 - Keine produktiven Tenants oder Sites als Reset-Ziel verwenden.
 - Keine externe Uebermittlung aus dem Evaluation Workspace.
 - Keine E-Mail-, Webhook- oder externe Ticketuebermittlung fuer Demo-Supportfaelle.
+- Die signierte Demo-Uebergabe nutzt nur den internen Mock-Empfaenger und ist keine produktive Fachverfahrensintegration.
 - Keine Verwaltungsentscheidung oder Rechtsauskunft durch den Demonstrator behaupten.

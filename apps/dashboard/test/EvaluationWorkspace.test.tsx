@@ -105,6 +105,19 @@ describe("EvaluationWorkspace", () => {
           forwardingStatus: "not_configured",
           note: "Der Demo-Supportfall wurde im Demonstrator erfasst. Es erfolgte keine Übermittlung an ein externes Ticketsystem.",
         }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: "mock_delivered",
+          demoReference: "DEMO-12345678",
+          attemptCount: 1,
+          signatureVerified: true,
+          duplicateRecognized: false,
+          receivedAt: "2026-06-24T10:00:00.000Z",
+          message: "Die signierte Demo-Übergabe wurde vom internen Mock-Empfänger bestätigt.",
+          externalNotice: "Es erfolgte keine Übermittlung an NOLIS oder ein externes Ticketsystem.",
+        }),
       });
     vi.stubGlobal("fetch", fetchMock);
     render(<EvaluationWorkspace context={context} />);
@@ -129,5 +142,13 @@ describe("EvaluationWorkspace", () => {
         body: JSON.stringify({ conversationId: "evaluation-session-1", previewToken: "preview-token" }),
       }),
     );
+
+    expect(screen.getByText("Noch keine Demo-Übergabe ausgeführt.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Signierte Demo-Übergabe simulieren" }));
+    await waitFor(() => {
+      expect(screen.getByText("Die signierte Demo-Übergabe wurde vom internen Mock-Empfänger bestätigt.")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Es erfolgte keine Übermittlung an NOLIS oder ein externes Ticketsystem.")).toBeInTheDocument();
+    expect(screen.queryByText(/x-ssb-signature|evt_|del_/i)).not.toBeInTheDocument();
   });
 });

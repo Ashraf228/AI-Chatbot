@@ -50,6 +50,8 @@ Die Erfolgsmeldung lautet:
 
 Es wird kein Webhook, keine E-Mail und keine externe API angestoßen.
 
+Optional kann danach über `Signierte Demo-Übergabe simulieren` eine interne Mock-Übergabe ausgelöst werden. Diese verwendet HMAC-SHA256, einen festen internen Receiver-Pfad und synthetische, bereinigte Ticketdaten. Auch bei erfolgreicher Mock-Prüfung erfolgt keine Übermittlung an NOLIS oder ein externes Ticketsystem.
+
 ## Sicherheitshinweis im Chat
 
 Der Workspace zeigt sichtbar den Hinweis, keine Passwoerter, MFA-Codes, API-Schluessel oder echten personenbezogenen Falldaten einzugeben. Sensible Muster werden serverseitig maskiert.
