@@ -35,7 +35,11 @@ export function Composer({ placeholder, disabled, onSubmit }: ComposerProps) {
 
   return (
     <div className="ssb-composer">
+      <label className="ssb-sr-only" htmlFor="ssb-chat-message">
+        Nachricht an den Chat
+      </label>
       <textarea
+        id="ssb-chat-message"
         ref={inputRef}
         className="ssb-input ssb-composer__textarea"
         value={value}
@@ -44,6 +48,7 @@ export function Composer({ placeholder, disabled, onSubmit }: ComposerProps) {
         maxLength={MAX_MESSAGE_LENGTH}
         rows={1}
         autoFocus
+        aria-describedby="ssb-chat-message-help"
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey) {
@@ -62,10 +67,13 @@ export function Composer({ placeholder, disabled, onSubmit }: ComposerProps) {
         <span>Senden</span>
       </Button>
       {value.length > MAX_MESSAGE_LENGTH * 0.85 ? (
-        <div className="ssb-composer__limit" aria-live="polite">
+        <div className="ssb-composer__limit" aria-live="polite" aria-atomic="true">
           {value.length}/{MAX_MESSAGE_LENGTH}
         </div>
       ) : null}
+      <div id="ssb-chat-message-help" className="ssb-sr-only">
+        Drücken Sie Enter zum Senden. Mit Umschalt und Enter fügen Sie einen Zeilenumbruch ein.
+      </div>
     </div>
   );
 }

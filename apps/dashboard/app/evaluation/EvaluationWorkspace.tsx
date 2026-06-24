@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type EvaluationContext = {
   workspaceTitle: string;
@@ -67,6 +67,11 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
   const [ticketCreated, setTicketCreated] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [handoffStatus, setHandoffStatus] = useState<HandoffStatus | null>(null);
+  const [statusAnnouncement, setStatusAnnouncement] = useState("");
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const ticketResultRef = useRef<HTMLDivElement | null>(null);
+  const ticketPreviewRef = useRef<HTMLDivElement | null>(null);
+  const lastAnnouncedAssistantRef = useRef("");
 
   const userQuestionCount = messages.filter((entry) => entry.role === "user").length;
   const sourcedAnswers = messages.filter((entry) => entry.role === "assistant" && (entry.sources || []).length > 0).length;
@@ -117,19 +122,25 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
         throw new Error("Die Nachricht konnte nicht verarbeitet werden.");
       }
       const data = await response.json();
+      const assistantContent = safeText(data.answer || "");
       setMessages((current) => [
         ...current,
         {
           role: "assistant",
-          content: safeText(data.answer || ""),
+          content: assistantContent,
           sources: Array.isArray(data.sources) ? data.sources : [],
           handoffPreview: data.handoffPreview || null,
           ticketPreview: data.ticketPreview || null,
         },
       ]);
+      if (assistantContent && assistantContent !== lastAnnouncedAssistantRef.current) {
+        lastAnnouncedAssistantRef.current = assistantContent;
+        setStatusAnnouncement(`Antwort des Assistenten: ${assistantContent}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
       setRetryMessage(message);
+      setStatusAnnouncement("Fehler beim Verarbeiten der Nachricht.");
     } finally {
       setLoading(false);
     }
@@ -150,6 +161,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
       }
       const data = await response.json();
       setTicketResult(data.note || "Der Demo-Supportfall wurde im Demonstrator erfasst. Es erfolgte keine Übermittlung an ein externes Ticketsystem.");
+      setStatusAnnouncement(`Ticketstatus: ${data.note || "Der Demo-Supportfall wurde im Demonstrator erfasst. Es erfolgte keine externe Übermittlung."}`);
       setTicketCreated(true);
       setHandoffStatus({ status: "not_requested", message: "Noch keine Demo-Übergabe ausgeführt." });
       setMessages((current) => [
@@ -182,6 +194,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
         throw new Error(data.message || "Die signierte Demo-Übergabe konnte nicht ausgeführt werden.");
       }
       setHandoffStatus(data);
+      setStatusAnnouncement(`Handoffstatus: ${data.message || "Die signierte Demo-Übergabe wurde abgeschlossen."}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
     } finally {
@@ -208,9 +221,25 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
     }
   }
 
+  useEffect(() => {
+    if (ticketResult) {
+      ticketResultRef.current?.focus();
+    }
+  }, [ticketResult]);
+
+  useEffect(() => {
+    const latestTicketPreview = [...messages].reverse().find((message) => message.ticketPreview)?.ticketPreview;
+    if (latestTicketPreview) {
+      ticketPreviewRef.current?.focus();
+    }
+  }, [messages]);
+
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
       <div className="mx-auto max-w-6xl space-y-8">
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {statusAnnouncement}
+        </div>
         <header className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -227,7 +256,9 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
           <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold">
             <span className="rounded-full bg-emerald-400/20 px-3 py-1 text-emerald-100">Kooperationsdemonstrator</span>
             <span className="rounded-full bg-sky-400/20 px-3 py-1 text-sky-100">Nur-Lesezugang</span>
-            <span className="rounded-full bg-slate-700 px-3 py-1">Ablauf: {formatDate(context.accountExpiresAt)}</span>
+            <span className="rounded-full bg-slate-700 px-3 py-1">
+              Ablauf: <time dateTime={context.accountExpiresAt || undefined}>{formatDate(context.accountExpiresAt)}</time>
+            </span>
           </div>
           <p className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
             Bitte geben Sie keine Passwörter, MFA-Codes, API-Schlüssel oder echten personenbezogenen Falldaten ein.
@@ -239,19 +270,24 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
             <button
               key={scenario.key}
               type="button"
-              onClick={() => setInput(scenario.prompt)}
+              onClick={() => {
+                setInput(scenario.prompt);
+                setStatusAnnouncement(`Beispieltext übernommen: ${scenario.title}. Er wurde noch nicht gesendet.`);
+                window.setTimeout(() => inputRef.current?.focus(), 0);
+              }}
               className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 text-left transition hover:bg-white/10"
+              aria-describedby={`scenario-${scenario.key}-prompt`}
             >
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Synthetisches Szenario</p>
               <h2 className="mt-2 text-lg font-semibold">{scenario.title}</h2>
-              <p className="mt-3 text-sm text-slate-300">{scenario.prompt}</p>
+              <p id={`scenario-${scenario.key}-prompt`} className="mt-3 text-sm text-slate-300">{scenario.prompt}</p>
             </button>
           ))}
         </section>
 
         <section className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
           <div className="rounded-3xl border border-white/10 bg-white p-4 text-slate-950">
-            <div className="min-h-[360px] space-y-4 rounded-2xl bg-slate-50 p-4">
+            <div className="min-h-[360px] space-y-4 rounded-2xl bg-slate-50 p-4" aria-busy={loading}>
               {messages.length === 0 ? (
                 <p className="text-sm text-slate-500">Noch keine Daten. Starten Sie einen neuen Testdialog.</p>
               ) : (
@@ -282,8 +318,13 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                         </div>
                       )}
                       {message.ticketPreview && (
-                        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-left text-xs text-sky-950">
-                          <p className="font-semibold">Demo-Supportfall Vorschau</p>
+                        <div
+                          ref={ticketPreviewRef}
+                          tabIndex={-1}
+                          className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-left text-xs text-sky-950"
+                          aria-labelledby={`ticket-preview-${index}`}
+                        >
+                          <p id={`ticket-preview-${index}`} className="font-semibold">Demo-Supportfall Vorschau</p>
                           {message.ticketPreview.missingFields.length > 0 ? (
                             <p className="mt-2 text-amber-800">
                               Fehlende Angaben: {message.ticketPreview.missingFields.join(", ")}
@@ -328,7 +369,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
               )}
             </div>
             {ticketResult && (
-              <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+              <div ref={ticketResultRef} tabIndex={-1} className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800" role="status">
                 {ticketResult}
               </div>
             )}
@@ -362,7 +403,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
               </div>
             )}
             {error && (
-              <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">
+              <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">
                 <p>{error}</p>
                 {retryMessage && (
                   <button
@@ -376,12 +417,18 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
               </div>
             )}
             <div className="mt-4 flex gap-2">
+              <label className="sr-only" htmlFor="evaluation-message">
+                Testfrage
+              </label>
               <textarea
+                id="evaluation-message"
+                ref={inputRef}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 maxLength={2000}
                 className="min-h-20 flex-1 rounded-2xl border border-slate-200 p-3 text-sm"
                 placeholder="Testfrage eingeben..."
+                aria-describedby="evaluation-message-help"
               />
               <button
                 type="button"
@@ -392,6 +439,9 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                 {loading ? "Sendet..." : "Senden"}
               </button>
             </div>
+            <p id="evaluation-message-help" className="mt-2 text-xs text-slate-600">
+              Enter im Textfeld erzeugt Text. Nutzen Sie die Schaltfläche „Senden“, um die Testfrage zu übermitteln.
+            </p>
           </div>
 
           <aside className="space-y-4">

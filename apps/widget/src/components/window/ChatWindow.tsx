@@ -24,6 +24,7 @@ type ChatWindowProps = {
   onAcceptConsent: () => void;
   onSendMessage: (value: string) => void | Promise<void>;
   onClose: () => void;
+  windowId?: string;
 };
 
 export function ChatWindow({
@@ -43,11 +44,12 @@ export function ChatWindow({
   onAcceptConsent,
   onSendMessage,
   onClose,
+  windowId,
 }: ChatWindowProps) {
   const hasUserMessages = messages.some((message) => message.role === "user");
 
   return (
-    <div className="ssb-chat-window">
+    <section id={windowId} className="ssb-chat-window" role="region" aria-label={`${title || "Chat"} Chatfenster`}>
       <ChatHeader
         title={title}
         companyName={companyName}
@@ -83,6 +85,6 @@ export function ChatWindow({
           onSubmit={onSendMessage}
         />
       </div>
-    </div>
+    </section>
   );
 }

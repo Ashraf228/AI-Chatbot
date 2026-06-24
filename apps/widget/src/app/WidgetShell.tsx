@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatLauncher } from "../components/launcher/ChatLauncher";
 import { ChatWindow } from "../components/window/ChatWindow";
 import { useAnalytics } from "../hooks/useAnalytics";
@@ -13,6 +13,8 @@ export function WidgetShell() {
   const { messages, isSending, error, sendMessage } = useChat();
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const launcherRef = useRef<HTMLButtonElement | null>(null);
+  const chatWindowId = "ssb-chat-window";
   const path = typeof window !== "undefined" ? window.location.pathname : "/";
   const suggestedQuestions =
     config.suggestedQuestionsByPath?.[path] ||
@@ -37,6 +39,7 @@ export function WidgetShell() {
 
   async function closeWidget() {
     setIsOpen(false);
+    window.setTimeout(() => launcherRef.current?.focus(), 0);
     await track("close");
   }
 
@@ -72,12 +75,16 @@ export function WidgetShell() {
           onAcceptConsent={handleAcceptConsent}
           onSendMessage={sendMessage}
           onClose={closeWidget}
+          windowId={chatWindowId}
         />
       ) : null}
       {!isOpen ? (
         <ChatLauncher
+          ref={launcherRef}
           label={config.buttonText}
           unreadCount={unreadCount}
+          expanded={isOpen}
+          controlsId={chatWindowId}
           onClick={openWidget}
         />
       ) : null}

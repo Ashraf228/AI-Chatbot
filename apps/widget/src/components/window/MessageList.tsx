@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { ChatMessage } from "../../types/chat";
 import { MessageBubble } from "./MessageBubble";
 
@@ -8,6 +8,10 @@ type MessageListProps = {
 
 export function MessageList({ messages }: MessageListProps) {
   const listRef = useRef<HTMLDivElement | null>(null);
+  const latestAssistantText = useMemo(() => {
+    const latest = [...messages].reverse().find((message) => message.role === "assistant" && !message.pending && message.content.trim());
+    return latest ? `Antwort des Assistenten: ${latest.content}` : "";
+  }, [messages]);
 
   useEffect(() => {
     if (!listRef.current) {
@@ -18,13 +22,20 @@ export function MessageList({ messages }: MessageListProps) {
   }, [messages]);
 
   return (
-    <div ref={listRef} className="ssb-message-list">
-      {messages.map((message) => (
-        <MessageBubble
-          key={message.id}
-          message={message}
-        />
-      ))}
-    </div>
+    <>
+      <div className="ssb-sr-only" aria-live="polite" aria-atomic="true">
+        {latestAssistantText}
+      </div>
+      <div ref={listRef} className="ssb-message-list" role="log" aria-label="Chatverlauf" aria-live="off" aria-busy={messages.some((message) => message.pending)}>
+        <ul className="ssb-message-list__items">
+          {messages.map((message) => (
+            <MessageBubble
+              key={message.id}
+              message={message}
+            />
+          ))}
+        </ul>
+      </div>
+    </>
   );
 }

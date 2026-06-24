@@ -33,7 +33,7 @@ export function ChatHeader({
             {assistantLabel}
           </div>
           {privacyUrl ? (
-            <a className="ssb-chat-privacy-link" href={privacyUrl} target="_blank" rel="noreferrer">
+            <a className="ssb-chat-privacy-link" href={privacyUrl} target="_blank" rel="noopener noreferrer">
               Datenschutz
             </a>
           ) : null}

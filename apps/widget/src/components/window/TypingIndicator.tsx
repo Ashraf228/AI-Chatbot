@@ -6,7 +6,7 @@ export function TypingIndicator({ visible }: { visible: boolean }) {
   }
 
   return (
-    <div className="ssb-typing">
+    <div className="ssb-typing" role="status" aria-live="polite">
       <Spinner />
       <span>Der Assistent schreibt...</span>
     </div>

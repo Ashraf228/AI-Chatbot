@@ -22,10 +22,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     .join(" ");
 
   return (
-    <div className={messageClassName}>
+    <li className={messageClassName} aria-label={`${message.role === "user" ? "Besucher" : "Assistent"} Nachricht`}>
+      <span className="ssb-message-speaker">{message.role === "user" ? "Besucher" : "Assistent"}</span>
       <div className="ssb-message-bubble">
         <MessageRichContent parts={parts} />
       </div>
-    </div>
+    </li>
   );
 }

@@ -30,33 +30,46 @@ export function LeadCaptureForm({ state, privacyUrl, onSubmit }: LeadCaptureForm
       }}
     >
       <div>
-        <div className="ssb-lead-form__title">Kontakt aufnehmen</div>
-        <p className="ssb-lead-form__hint">
+        <h2 id="ssb-lead-modal-title" className="ssb-lead-form__title">Kontakt aufnehmen</h2>
+        <p id="ssb-lead-modal-description" className="ssb-lead-form__hint">
           Geben Sie nur die Kontaktdaten an, die für die Bearbeitung Ihrer Anfrage nötig sind.
         </p>
       </div>
+      <label className="ssb-label" htmlFor="ssb-lead-name">Name</label>
       <Input
+        id="ssb-lead-name"
         value={lead.name}
         placeholder="Name"
+        autoComplete="name"
         onChange={(event) => updateField("name", event.target.value)}
       />
+      <label className="ssb-label" htmlFor="ssb-lead-email">E-Mail</label>
       <Input
+        id="ssb-lead-email"
         value={lead.email}
+        type="email"
         placeholder="E-Mail"
+        autoComplete="email"
         onChange={(event) => updateField("email", event.target.value)}
       />
+      <label className="ssb-label" htmlFor="ssb-lead-phone">Telefon optional</label>
       <Input
+        id="ssb-lead-phone"
         value={lead.phone}
+        type="tel"
         placeholder="Telefon (optional)"
+        autoComplete="tel"
         onChange={(event) => updateField("phone", event.target.value)}
       />
+      <label className="ssb-label" htmlFor="ssb-lead-message">Anliegen oder Rückrufwunsch optional</label>
       <Input
+        id="ssb-lead-message"
         value={lead.message || ""}
         placeholder="Anliegen oder Rückrufwunsch (optional)"
         onChange={(event) => updateField("message", event.target.value)}
       />
       {state === "error" ? (
-        <div className="ssb-lead-form__error">Die Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.</div>
+        <div className="ssb-lead-form__error" role="alert">Die Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.</div>
       ) : null}
       <Button type="submit" disabled={state === "submitting"}>
         {state === "submitting" ? "Wird gesendet ..." : "Anfrage senden"}
@@ -66,7 +79,7 @@ export function LeadCaptureForm({ state, privacyUrl, onSubmit }: LeadCaptureForm
         {privacyUrl ? (
           <>
             {" "}
-            <a href={privacyUrl} target="_blank" rel="noreferrer">
+            <a href={privacyUrl} target="_blank" rel="noopener noreferrer">
               Datenschutzerklärung öffnen
             </a>
           </>

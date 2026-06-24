@@ -79,14 +79,17 @@ export default function LoginPage() {
         <p className="dashboard-eyebrow">Soulé Admin</p>
         <h1 className="dashboard-auth-title">Willkommen zurück</h1>
         <p className="dashboard-copy" style={{ marginTop: 0 }}>
-          Melde dich als Admin, Mitarbeiter oder Kunde an.
+          Melden Sie sich als Admin, Mitarbeiter oder Kunde an.
         </p>
 
-        <form onSubmit={onLogin} className="dashboard-stack">
-          <div className="dashboard-auth-mode-grid">
+        <form onSubmit={onLogin} className="dashboard-stack" aria-describedby={err ? "login-error" : undefined}>
+          <fieldset className="dashboard-auth-mode-fieldset">
+            <legend className="dashboard-label">Login-Typ</legend>
+            <div className="dashboard-auth-mode-grid">
             <Button
               type="button"
               variant={mode === "admin" ? "primary" : "secondary"}
+              aria-pressed={mode === "admin"}
               onClick={() => setMode("admin")}
               fullWidth
             >
@@ -95,6 +98,7 @@ export default function LoginPage() {
             <Button
               type="button"
               variant={mode === "operator" ? "primary" : "secondary"}
+              aria-pressed={mode === "operator"}
               onClick={() => setMode("operator")}
               fullWidth
             >
@@ -103,23 +107,33 @@ export default function LoginPage() {
             <Button
               type="button"
               variant={mode === "customer" ? "primary" : "secondary"}
+              aria-pressed={mode === "customer"}
               onClick={() => setMode("customer")}
               fullWidth
             >
               Kunde
             </Button>
-          </div>
+            </div>
+          </fieldset>
 
           {mode === "customer" ? (
             <>
+              <label className="dashboard-label" htmlFor="tenant-id">
+                Mandant / Tenant ID
+              </label>
               <Input
+                id="tenant-id"
                 type="text"
                 placeholder="Mandant / Tenant ID"
                 value={tenantId}
                 autoComplete="organization"
                 onChange={(e) => setTenantId(e.target.value)}
               />
+              <label className="dashboard-label" htmlFor="login-email">
+                E-Mail
+              </label>
               <Input
+                id="login-email"
                 type="email"
                 placeholder="E-Mail"
                 value={email}
@@ -129,15 +143,21 @@ export default function LoginPage() {
             </>
           ) : null}
 
+          <label className="dashboard-label" htmlFor="login-password">
+            Passwort
+          </label>
           <Input
+            id="login-password"
             type="password"
             placeholder="Passwort"
             value={password}
             autoComplete="current-password"
+            aria-invalid={Boolean(err)}
+            aria-describedby={err ? "login-error" : undefined}
             onChange={(e) => setPassword(e.target.value)}
           />
 
-          <Button type="submit" fullWidth disabled={isSubmitting}>
+          <Button type="submit" fullWidth disabled={isSubmitting} aria-busy={isSubmitting}>
             {isSubmitting
               ? "Einloggen..."
               : mode === "admin"
@@ -148,7 +168,7 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        {err && <ErrorState message={err} />}
+        {err && <div id="login-error"><ErrorState message={err} /></div>}
       </div>
     </div>
   );

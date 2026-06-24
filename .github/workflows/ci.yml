@@ -60,6 +60,9 @@ jobs:
       - name: Typecheck Reporter
         run: npm run check:reporter
 
+      - name: Accessibility baseline tests
+        run: npm run test:accessibility
+
       - name: Smoke tests
         run: npm run test:smoke
 
