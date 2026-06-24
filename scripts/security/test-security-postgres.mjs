@@ -104,10 +104,10 @@ try {
     ON CONFLICT (id) DO NOTHING
   `);
   await query(`
-    INSERT INTO sites(id, tenant_id, name, is_evaluation_demo)
+    INSERT INTO sites(id, tenant_id, name, site_key, is_evaluation_demo)
     VALUES
-      ('security_site_a', 'security_tenant_a', 'Security Site A', true),
-      ('security_site_b', 'security_tenant_b', 'Security Site B', true)
+      ('security_site_a', 'security_tenant_a', 'Security Site A', 'security-site-a', true),
+      ('security_site_b', 'security_tenant_b', 'Security Site B', 'security-site-b', true)
     ON CONFLICT (id) DO NOTHING
   `);
   await query(`
