@@ -149,6 +149,7 @@ test('demo reset requires site confirmation and deletes only evaluation chat dat
       return callback({
         async query(sql) {
           if (/^DELETE/i.test(sql.trim())) deletedSql.push(sql);
+          if (/SELECT id FROM evaluation_chat_sessions/i.test(sql)) return { rows: [{ id: 'eval-session-1' }] };
           if (/SELECT id FROM conversations/i.test(sql)) return { rows: [{ id: 'conversation-1' }] };
           return { rows: [] };
         },
@@ -160,5 +161,7 @@ test('demo reset requires site confirmation and deletes only evaluation chat dat
   const result = await resetEvaluationDemo(db, config, { execute: true, confirm: 'demo-site' });
   assert.equal(result.dryRun, false);
   assert.equal(deletedSql.some((sql) => /knowledge_sources|sites|tenant_users/i.test(sql)), false);
+  assert.equal(deletedSql.some((sql) => /agent_tickets/i.test(sql) && /demo = true/i.test(sql) && /synthetic = true/i.test(sql)), true);
+  assert.equal(deletedSql.some((sql) => /evaluation_ticket_previews/i.test(sql)), true);
   assert.equal(deletedSql.some((sql) => /evaluation_chat_sessions/i.test(sql)), true);
 });

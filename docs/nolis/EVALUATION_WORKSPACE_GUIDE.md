@@ -32,6 +32,28 @@ Wenn eine Antwort auf Demo-Wissen basiert, zeigt der Chat eine reduzierte Quelle
 
 Falls der Testdialog strukturierte Uebergabedaten erkennt, kann eine Vorschau angezeigt werden. Es erfolgt keine externe Uebermittlung an ein Produktivsystem oder Fachverfahren.
 
+## Product-Support-Demo-Tickets
+
+Fuer das Profil `public-sector-product-support-demo` kann der Workspace aus einem ungelösten Anliegen einen internen Demo-Supportfall vorbereiten.
+
+Der Ablauf ist:
+
+1. Der Assistent bietet zuerst quellenbasierte Hilfe an.
+2. Der Nutzer bestaetigt, ob das Problem geloest wurde.
+3. Bei ungelöstem Anliegen sammelt der Assistent die erforderlichen Angaben.
+4. Der Browser zeigt eine bereinigte Vorschau ohne Reporter-E-Mail, interne IDs oder Secret-Werte.
+5. Erst der Button `Demo-Ticket erstellen` erstellt einen internen Demo-Supportfall.
+
+Die Erfolgsmeldung lautet:
+
+`Der Demo-Supportfall wurde im Demonstrator erfasst. Es erfolgte keine Übermittlung an ein externes Ticketsystem.`
+
+Es wird kein Webhook, keine E-Mail und keine externe API angestoßen.
+
+## Sicherheitshinweis im Chat
+
+Der Workspace zeigt sichtbar den Hinweis, keine Passwoerter, MFA-Codes, API-Schluessel oder echten personenbezogenen Falldaten einzugeben. Sensible Muster werden serverseitig maskiert.
+
 ## Logout
 
 Zum Beenden der Sitzung den Logout-Button im Kopfbereich verwenden.

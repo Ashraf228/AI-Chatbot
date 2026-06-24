@@ -6,6 +6,25 @@ import { AuditLogService } from '../audit-logs/audit-log.service';
 import { PrismaService } from '../db/prisma.service';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { EvaluationAccessContext } from './evaluation-access.service';
+import {
+  buildPreviewSummary,
+  createPreviewToken,
+  extractProductFields,
+  isCancelRequest,
+  isSolvedAnswer,
+  isTicketRequest,
+  isUnresolvedAnswer,
+  isUrgentProductCase,
+  missingProductFields,
+  nextProductQuestion,
+  ProductTicketFields,
+  ProductTicketPreview,
+  publicPreviewFields,
+  redactEvaluationSensitiveText,
+  redactEvaluationSensitiveValue,
+  resolveProductSupportConfig,
+  sha256,
+} from './evaluation-product-support';
 
 const CHAT_SESSION_TTL_MS = 60 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 2000;
@@ -24,6 +43,11 @@ const FORBIDDEN_BODY_KEYS = new Set([
   'files',
   'upload',
   'agentId',
+  'ticket',
+  'ticketFields',
+  'forwardingStatus',
+  'demo',
+  'synthetic',
 ]);
 
 type EvaluationChatSessionRow = {
@@ -38,6 +62,23 @@ type EvaluationChatSessionRow = {
 
 type EvaluationSiteConfigRow = {
   config: Record<string, unknown> | null;
+};
+
+type EvaluationTicketPreviewRow = {
+  id: string;
+  preview_token_hash: string;
+  tenant_user_id: string;
+  tenant_id: string;
+  site_id: string;
+  evaluation_chat_session_id: string;
+  conversation_id: string;
+  content_hash: string;
+  preview: ProductTicketPreview;
+  status: string;
+  ticket_id: string | null;
+  demo_reference: string | null;
+  expires_at: string;
+  created_at?: string;
 };
 
 function assertNoForbiddenKeys(body: Record<string, unknown>) {
@@ -190,7 +231,7 @@ export class EvaluationService {
   async sendMessage(access: EvaluationAccessContext, body: Record<string, unknown>, clientIp = 'unknown') {
     assertNoForbiddenKeys(body);
     const conversationId = typeof body.conversationId === 'string' ? body.conversationId.trim() : '';
-    const message = typeof body.message === 'string' ? body.message.trim() : '';
+    const message = redactEvaluationSensitiveText(typeof body.message === 'string' ? body.message.trim() : '');
     if (!conversationId) {
       throw new BadRequestException('conversationId required');
     }
@@ -232,15 +273,177 @@ export class EvaluationService {
     );
     await this.audit('evaluation_message_submitted', access, { result: 'ok', conversationId });
 
+    const productSupport = await this.handleProductSupportMessage(access, session, result.conversationId, siteConfig, message);
+    const answer = productSupport?.answer || this.answerWithResolutionCheck(result.answer, siteConfig);
+
     return {
       conversationId,
       messageId: result.conversationId,
-      answer: result.answer,
-      answerStatus: resolveAnswerStatus(result.answer, result.sources || []),
+      answer,
+      answerStatus: productSupport?.answerStatus || resolveAnswerStatus(result.answer, result.sources || []),
       sources: projectSources(result.sources || []),
       handoffPreview: this.projectHandoff(result),
+      ticketPreview: productSupport?.ticketPreview || null,
       completedAt: new Date().toISOString(),
     };
+  }
+
+  async confirmTicket(access: EvaluationAccessContext, body: Record<string, unknown>) {
+    assertNoForbiddenKeys(body);
+    const conversationId = typeof body.conversationId === 'string' ? body.conversationId.trim() : '';
+    const previewToken = typeof body.previewToken === 'string' ? body.previewToken.trim() : '';
+    if (!conversationId) {
+      throw new BadRequestException('conversationId required');
+    }
+    if (!previewToken) {
+      throw new BadRequestException('previewToken required');
+    }
+    await this.audit('evaluation_ticket_confirmation_requested', access, {
+      result: 'requested',
+      conversationId,
+      at: new Date().toISOString(),
+    });
+
+    const tokenHash = sha256(previewToken);
+    const execute = async (db: Pick<PrismaService, 'query'>) => {
+      const res = await db.query<EvaluationTicketPreviewRow>(
+        `SELECT id, preview_token_hash, tenant_user_id, tenant_id, site_id, evaluation_chat_session_id,
+                conversation_id, content_hash, preview, status, ticket_id, demo_reference, expires_at, created_at
+         FROM evaluation_ticket_previews
+         WHERE preview_token_hash = $1
+         LIMIT 1`,
+        [tokenHash],
+      );
+      const preview = res.rows[0];
+      if (
+        !preview ||
+        preview.tenant_user_id !== access.tenantUserId ||
+        preview.tenant_id !== access.tenantId ||
+        preview.site_id !== access.siteId ||
+        preview.conversation_id !== conversationId ||
+        Date.parse(preview.expires_at) <= Date.now()
+      ) {
+        await this.audit('evaluation_ticket_confirmation_rejected', access, { result: 'rejected', reason: 'invalid_or_expired' });
+        throw new ForbiddenException('Ticket preview not available');
+      }
+      if (preview.status === 'confirmed' && preview.ticket_id && preview.demo_reference) {
+        return this.confirmationResult(preview.demo_reference, preview.created_at);
+      }
+      if (preview.status !== 'pending') {
+        await this.audit('evaluation_ticket_confirmation_rejected', access, { result: 'rejected', reason: preview.status });
+        throw new BadRequestException('Ticket preview is not confirmable');
+      }
+      const expectedHash = this.ticketContentHash(preview.preview.fields, preview.evaluation_chat_session_id, access);
+      if (expectedHash !== preview.content_hash) {
+        await this.audit('evaluation_ticket_confirmation_rejected', access, { result: 'rejected', reason: 'content_changed' });
+        throw new BadRequestException('Ticket preview changed');
+      }
+      const ticketId = randomUUID();
+      const demoReference = `DEMO-${preview.id.replace(/[^a-z0-9]/gi, '').slice(0, 8).toUpperCase()}`;
+      const now = new Date().toISOString();
+      const fields = redactEvaluationSensitiveValue({
+        ...preview.preview.fields,
+        supportProfile: 'product' as const,
+        reporterName: preview.preview.fields.reporterName || access.viewerDisplayName,
+        reporterEmail: access.viewerEmail,
+      });
+      await db.query(
+        `INSERT INTO agent_tickets(
+           id, tenant_id, site_id, agent_run_id, title, description, reporter_name, reporter_email,
+           priority, status, source, metadata, support_profile, product, module, customer_organization,
+           customer_reference, process_or_form_name, impact, device, operating_system, error_message,
+           already_tried, confirmation_status, forwarding_status, demo, synthetic,
+           evaluation_chat_session_id, demo_reference, confirmation_id, created_at
+         ) VALUES (
+           $1,$2,$3,$4,$5,$6,$7,$8,$9,'new','evaluation_demo',$10::jsonb,'product',$11,$12,$13,
+           $14,$15,$16,$17,$18,$19,$20,'confirmed','not_configured',true,true,$21,$22,$23,$24::timestamptz
+         )
+         ON CONFLICT (confirmation_id) WHERE confirmation_id IS NOT NULL DO NOTHING`,
+        [
+          ticketId,
+          access.tenantId,
+          access.siteId,
+          `evaluation:${preview.evaluation_chat_session_id}`,
+          `Demo-Supportfall ${demoReference}`,
+          fields.description || 'Demo-Supportfall',
+          fields.reporterName || access.viewerDisplayName,
+          fields.reporterEmail || access.viewerEmail,
+          fields.impact === 'critical' || fields.impact === 'high' ? 'high' : 'normal',
+          JSON.stringify({
+            demo: true,
+            synthetic: true,
+            forwardingStatus: 'not_configured',
+            summary: buildPreviewSummary(fields),
+            browser: fields.browser || null,
+          }),
+          fields.product,
+          fields.module,
+          fields.customerOrganization,
+          fields.customerReference || null,
+          fields.processOrFormName || null,
+          fields.impact,
+          fields.device || null,
+          fields.operatingSystem || null,
+          fields.errorMessage || null,
+          fields.alreadyTried || null,
+          preview.evaluation_chat_session_id,
+          demoReference,
+          preview.id,
+          now,
+        ],
+      );
+      const ticketRes = await db.query<{ id: string }>(
+        `SELECT id FROM agent_tickets WHERE confirmation_id = $1 LIMIT 1`,
+        [preview.id],
+      );
+      const confirmedTicketId = ticketRes.rows[0]?.id || ticketId;
+      await db.query(
+        `UPDATE evaluation_ticket_previews
+         SET status = 'confirmed',
+             ticket_id = $2,
+             demo_reference = $3,
+             confirmed_at = now(),
+             updated_at = now()
+         WHERE id = $1`,
+        [preview.id, confirmedTicketId, demoReference],
+      );
+      await this.audit('evaluation_ticket_created', access, {
+        result: 'created',
+        conversationId,
+        demoReference,
+        forwardingStatus: 'not_configured',
+        at: now,
+      });
+      return this.confirmationResult(demoReference, now);
+    };
+    const transaction = (this.db as PrismaService & { transaction?: (callback: (db: Pick<PrismaService, 'query'>) => Promise<unknown>) => Promise<unknown> }).transaction;
+    if (typeof transaction === 'function') {
+      return transaction.call(this.db, execute);
+    }
+    return execute(this.db);
+  }
+
+  async cancelTicketPreview(access: EvaluationAccessContext, body: Record<string, unknown>) {
+    assertNoForbiddenKeys(body);
+    const conversationId = typeof body.conversationId === 'string' ? body.conversationId.trim() : '';
+    const previewToken = typeof body.previewToken === 'string' ? body.previewToken.trim() : '';
+    if (!conversationId || !previewToken) {
+      throw new BadRequestException('conversationId and previewToken required');
+    }
+    const res = await this.db.query<EvaluationTicketPreviewRow>(
+      `UPDATE evaluation_ticket_previews
+       SET status = 'cancelled', cancelled_at = now(), updated_at = now()
+       WHERE preview_token_hash = $1
+         AND tenant_user_id = $2
+         AND tenant_id = $3
+         AND site_id = $4
+         AND conversation_id = $5
+         AND status = 'pending'
+       RETURNING id`,
+      [sha256(previewToken), access.tenantUserId, access.tenantId, access.siteId, conversationId],
+    );
+    await this.audit('evaluation_ticket_cancelled', access, { result: res.rows[0] ? 'cancelled' : 'not_found', conversationId });
+    return { status: res.rows[0] ? 'cancelled' : 'not_found' };
   }
 
   private async loadChatSession(access: EvaluationAccessContext, id: string) {
@@ -281,6 +484,202 @@ export class EvaluationService {
       status: 'Vorschau',
       summary: 'Der Dialog enthaelt strukturierte Uebergabedaten. Es wurde keine externe Uebermittlung ausgefuehrt.',
       demo: true,
+    };
+  }
+
+  private answerWithResolutionCheck(answer: string, siteConfig: Record<string, unknown>) {
+    const config = resolveProductSupportConfig(siteConfig);
+    if (config.supportProfile !== 'product') {
+      return redactEvaluationSensitiveText(answer);
+    }
+    const safeAnswer = redactEvaluationSensitiveText(answer);
+    if (/konnte das problem damit gel[oö]st werden\?/i.test(safeAnswer)) {
+      return safeAnswer;
+    }
+    return `${safeAnswer}\n\nKonnte das Problem damit gelöst werden?`;
+  }
+
+  private async handleProductSupportMessage(
+    access: EvaluationAccessContext,
+    session: EvaluationChatSessionRow,
+    realConversationId: string,
+    siteConfig: Record<string, unknown>,
+    message: string,
+  ): Promise<{ answer: string; answerStatus: string; ticketPreview?: ProductTicketPreview } | null> {
+    const config = resolveProductSupportConfig(siteConfig);
+    if (config.supportProfile !== 'product') {
+      return null;
+    }
+    const state = await this.loadLatestTicketPreview(access, session.id);
+    if (state?.status === 'pending' && !isTicketRequest(message) && !isCancelRequest(message)) {
+      return null;
+    }
+    if (isCancelRequest(message)) {
+      if (state) {
+        await this.db.query(
+          `UPDATE evaluation_ticket_previews
+           SET status = 'cancelled', cancelled_at = now(), updated_at = now()
+           WHERE id = $1 AND status IN ('collecting', 'pending')`,
+          [state.id],
+        );
+      }
+      await this.audit('evaluation_ticket_cancelled', access, { result: 'cancelled', conversationId: session.id });
+      return {
+        answer: 'Verstanden. Ich breche die Aufnahme des Demo-Supportfalls ab.',
+        answerStatus: 'cancelled',
+      };
+    }
+    if (state?.status === 'collecting' && isSolvedAnswer(message)) {
+      await this.db.query(
+        `UPDATE evaluation_ticket_previews
+         SET status = 'cancelled', cancelled_at = now(), updated_at = now()
+         WHERE id = $1 AND status = 'collecting'`,
+        [state.id],
+      );
+      return {
+        answer: 'Gut. Dann wird kein Demo-Supportfall erstellt.',
+        answerStatus: 'answered',
+      };
+    }
+
+    const shouldCollect = Boolean(state) || isUnresolvedAnswer(message) || isTicketRequest(message) || isUrgentProductCase(message, config);
+    if (!shouldCollect) {
+      return null;
+    }
+
+    const previousFields = state?.preview?.fields || { supportProfile: 'product' as const };
+    const fields = extractProductFields(message, previousFields, config, {
+      name: access.viewerDisplayName,
+      email: access.viewerEmail,
+    });
+    const missingFields = missingProductFields(fields, config);
+    const urgent = isUrgentProductCase(message, config) || fields.impact === 'critical';
+    if (urgent && !state && missingFields.length > 0) {
+      const preview = await this.saveTicketPreview(access, session, realConversationId, fields, missingFields, 'collecting');
+      return {
+        answer:
+          'Das klingt nach einem dringenden oder sicherheitsrelevanten Fall. Bitte geben Sie keine Passwörter, MFA-Codes, API-Schlüssel oder echten personenbezogenen Falldaten ein. Ich kann einen internen Demo-Supportfall vorbereiten.\n\n' +
+          nextProductQuestion(missingFields),
+        answerStatus: 'urgent_escalation',
+        ticketPreview: preview,
+      };
+    }
+    if (missingFields.length > 0) {
+      const preview = await this.saveTicketPreview(access, session, realConversationId, fields, missingFields, 'collecting');
+      return {
+        answer: nextProductQuestion(missingFields),
+        answerStatus: 'collecting_ticket_fields',
+        ticketPreview: preview,
+      };
+    }
+    const preview = await this.saveTicketPreview(access, session, realConversationId, fields, [], 'pending');
+    return {
+      answer:
+        'Ich habe eine Vorschau fuer den Demo-Supportfall vorbereitet. Bitte pruefen Sie die Angaben und bestaetigen Sie die Erstellung.',
+      answerStatus: 'ticket_preview',
+      ticketPreview: preview,
+    };
+  }
+
+  private async loadLatestTicketPreview(access: EvaluationAccessContext, evaluationChatSessionId: string) {
+    const res = await this.db.query<EvaluationTicketPreviewRow>(
+      `SELECT id, preview_token_hash, tenant_user_id, tenant_id, site_id, evaluation_chat_session_id,
+              conversation_id, content_hash, preview, status, ticket_id, demo_reference, expires_at, created_at
+       FROM evaluation_ticket_previews
+       WHERE tenant_user_id = $1
+         AND tenant_id = $2
+         AND site_id = $3
+         AND evaluation_chat_session_id = $4
+         AND status IN ('collecting', 'pending')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [access.tenantUserId, access.tenantId, access.siteId, evaluationChatSessionId],
+    );
+    return res.rows[0] || null;
+  }
+
+  private async saveTicketPreview(
+    access: EvaluationAccessContext,
+    session: EvaluationChatSessionRow,
+    _realConversationId: string,
+    fields: ProductTicketFields,
+    missingFields: string[],
+    status: 'collecting' | 'pending',
+  ): Promise<ProductTicketPreview> {
+    const token = createPreviewToken();
+    const id = randomUUID();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const publicFields = publicPreviewFields(redactEvaluationSensitiveValue(fields));
+    const preview: ProductTicketPreview = {
+      status: status === 'pending' ? 'ready' : 'collecting',
+      supportProfile: 'product',
+      fields: publicFields,
+      missingFields,
+      previewToken: status === 'pending' ? token : undefined,
+      expiresAt,
+      demo: true,
+      synthetic: true,
+    };
+    if (status === 'pending') {
+      await this.db.query(
+        `UPDATE evaluation_ticket_previews
+         SET status = 'superseded', updated_at = now()
+         WHERE tenant_user_id = $1
+           AND tenant_id = $2
+           AND site_id = $3
+           AND evaluation_chat_session_id = $4
+           AND status = 'pending'`,
+        [access.tenantUserId, access.tenantId, access.siteId, session.id],
+      );
+    }
+    await this.db.query(
+      `INSERT INTO evaluation_ticket_previews(
+         id, preview_token_hash, tenant_user_id, tenant_id, site_id, evaluation_chat_session_id,
+         conversation_id, content_hash, preview, status, expires_at, created_at, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11::timestamptz,now(),now())`,
+      [
+        id,
+        sha256(token),
+        access.tenantUserId,
+        access.tenantId,
+        access.siteId,
+        session.id,
+        session.id,
+        this.ticketContentHash(publicFields, session.id, access),
+        JSON.stringify(preview),
+        status,
+        expiresAt,
+      ],
+    );
+    await this.audit('evaluation_ticket_preview_created', access, {
+      result: status,
+      conversationId: session.id,
+      missingFields,
+      at: new Date().toISOString(),
+    });
+    return {
+      ...preview,
+      fields: preview.fields,
+    };
+  }
+
+  private ticketContentHash(fields: ProductTicketPreview['fields'], evaluationChatSessionId: string, access: EvaluationAccessContext) {
+    return sha256(JSON.stringify({
+      tenantUserId: access.tenantUserId,
+      tenantId: access.tenantId,
+      siteId: access.siteId,
+      evaluationChatSessionId,
+      fields: redactEvaluationSensitiveValue(fields),
+    }));
+  }
+
+  private confirmationResult(demoReference: string, createdAt?: string | null) {
+    return {
+      status: 'created',
+      demoReference,
+      createdAt: createdAt ? new Date(createdAt).toISOString() : new Date().toISOString(),
+      forwardingStatus: 'not_configured',
+      note: 'Der Demo-Supportfall wurde im Demonstrator erfasst. Es erfolgte keine Übermittlung an ein externes Ticketsystem.',
     };
   }
 

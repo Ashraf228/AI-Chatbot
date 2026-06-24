@@ -13,6 +13,8 @@ Das Provisioning erzeugt einen generischen Evaluation-Tenant, eine Demo-Site, ei
 - Site-Markierung: `is_evaluation_demo=true`
 - Retrieval-Scope: `tenant_id`, `site_id`, `demo=true`, `synthetic=true`, aktive/ready Quellen und durchsuchbare Chunks
 - Szenarien: quellenbasierte Hilfe, strukturierte Uebergabevorschau, sichere Nicht-Antwort
+- Supportprofil: `product` fuer interne Demo-Supportfaelle mit expliziter Bestaetigung
+- Externe Weiterleitung: deaktiviert (`allowExternalForwarding=false`)
 
 ## Erforderliche Umgebungsvariablen
 
@@ -80,7 +82,7 @@ npm run demo:reset:evaluation
 npm run demo:reset:evaluation -- --execute --confirm=<DEMO_SITE_SLUG>
 ```
 
-Reset ist standardmaessig ein Dry-run. Execute benoetigt eine explizite Site-Bestaetigung. Reset entfernt nur Evaluation-Chat-Sessions und zugehoerige Evaluation-Conversations/Messages fuer die bestaetigte Demo-Site. Tenant, Site, Viewer, Knowledge Sources, Dokumente und Chunks bleiben erhalten.
+Reset ist standardmaessig ein Dry-run. Execute benoetigt eine explizite Site-Bestaetigung. Reset entfernt nur Evaluation-Chat-Sessions, zugehoerige Evaluation-Conversations/Messages, Demo-Ticketvorschauen und bestaetigte synthetische Demo-Product-Supportfaelle fuer die bestaetigte Demo-Site. Normale Tickets, Tenant, Site, Viewer, Knowledge Sources, Dokumente und Chunks bleiben erhalten.
 
 ## Sicherheitsgrenzen
 
@@ -89,4 +91,5 @@ Reset ist standardmaessig ein Dry-run. Execute benoetigt eine explizite Site-Bes
 - Keine Viewer-Passwoerter ausgeben.
 - Keine produktiven Tenants oder Sites als Reset-Ziel verwenden.
 - Keine externe Uebermittlung aus dem Evaluation Workspace.
+- Keine E-Mail-, Webhook- oder externe Ticketuebermittlung fuer Demo-Supportfaelle.
 - Keine Verwaltungsentscheidung oder Rechtsauskunft durch den Demonstrator behaupten.

@@ -16,6 +16,17 @@ type ChatMessage = {
   content: string;
   sources?: Array<{ title: string; sourceType: string; publicUrl?: string; demo: true }>;
   handoffPreview?: { status: string; summary: string; demo: true } | null;
+  ticketPreview?: TicketPreview | null;
+};
+
+type TicketPreview = {
+  status: "collecting" | "ready" | "urgent_escalation";
+  fields: Record<string, string | undefined>;
+  missingFields: string[];
+  previewToken?: string;
+  expiresAt?: string;
+  demo: true;
+  synthetic: true;
 };
 
 function formatDate(value?: string | null) {
@@ -35,8 +46,10 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [ticketActionLoading, setTicketActionLoading] = useState(false);
   const [error, setError] = useState("");
   const [retryMessage, setRetryMessage] = useState("");
+  const [ticketResult, setTicketResult] = useState("");
 
   const userQuestionCount = messages.filter((entry) => entry.role === "user").length;
   const sourcedAnswers = messages.filter((entry) => entry.role === "assistant" && (entry.sources || []).length > 0).length;
@@ -94,6 +107,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
           content: safeText(data.answer || ""),
           sources: Array.isArray(data.sources) ? data.sources : [],
           handoffPreview: data.handoffPreview || null,
+          ticketPreview: data.ticketPreview || null,
         },
       ]);
     } catch (err) {
@@ -101,6 +115,54 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
       setRetryMessage(message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function confirmTicket(preview: TicketPreview) {
+    if (!conversationId || !preview.previewToken || ticketActionLoading) return;
+    setTicketActionLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/evaluation/chat/ticket/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, previewToken: preview.previewToken }),
+      });
+      if (!response.ok) {
+        throw new Error("Der Demo-Supportfall konnte nicht erstellt werden.");
+      }
+      const data = await response.json();
+      setTicketResult(data.note || "Der Demo-Supportfall wurde im Demonstrator erfasst. Es erfolgte keine Übermittlung an ein externes Ticketsystem.");
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content: data.note || "Der Demo-Supportfall wurde im Demonstrator erfasst. Es erfolgte keine Übermittlung an ein externes Ticketsystem.",
+        },
+      ]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
+    } finally {
+      setTicketActionLoading(false);
+    }
+  }
+
+  async function cancelTicket(preview: TicketPreview) {
+    if (!conversationId || !preview.previewToken || ticketActionLoading) return;
+    setTicketActionLoading(true);
+    setError("");
+    try {
+      await fetch("/api/evaluation/chat/ticket/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, previewToken: preview.previewToken }),
+      });
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", content: "Die Demo-Ticketvorschau wurde verworfen." },
+      ]);
+    } finally {
+      setTicketActionLoading(false);
     }
   }
 
@@ -125,6 +187,9 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
             <span className="rounded-full bg-sky-400/20 px-3 py-1 text-sky-100">Nur-Lesezugang</span>
             <span className="rounded-full bg-slate-700 px-3 py-1">Ablauf: {formatDate(context.accountExpiresAt)}</span>
           </div>
+          <p className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
+            Bitte geben Sie keine Passwörter, MFA-Codes, API-Schlüssel oder echten personenbezogenen Falldaten ein.
+          </p>
         </header>
 
         <section className="grid gap-4 md:grid-cols-3">
@@ -174,11 +239,57 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                           <strong>{message.handoffPreview.status}:</strong> {message.handoffPreview.summary}
                         </div>
                       )}
+                      {message.ticketPreview && (
+                        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-left text-xs text-sky-950">
+                          <p className="font-semibold">Demo-Supportfall Vorschau</p>
+                          {message.ticketPreview.missingFields.length > 0 ? (
+                            <p className="mt-2 text-amber-800">
+                              Fehlende Angaben: {message.ticketPreview.missingFields.join(", ")}
+                            </p>
+                          ) : (
+                            <dl className="mt-2 space-y-1">
+                              {Object.entries(message.ticketPreview.fields)
+                                .filter(([key, value]) => key !== "reporterEmail" && Boolean(value))
+                                .map(([key, value]) => (
+                                  <div key={key}>
+                                    <dt className="font-semibold">{key}</dt>
+                                    <dd className="whitespace-pre-wrap">{safeText(String(value))}</dd>
+                                  </div>
+                                ))}
+                            </dl>
+                          )}
+                          {message.ticketPreview.previewToken && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => confirmTicket(message.ticketPreview as TicketPreview)}
+                                disabled={ticketActionLoading}
+                                className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                              >
+                                Demo-Ticket erstellen
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => cancelTicket(message.ticketPreview as TicketPreview)}
+                                disabled={ticketActionLoading}
+                                className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                              >
+                                Abbrechen
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </article>
                 ))
               )}
             </div>
+            {ticketResult && (
+              <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+                {ticketResult}
+              </div>
+            )}
             {error && (
               <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">
                 <p>{error}</p>

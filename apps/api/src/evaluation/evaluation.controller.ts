@@ -43,4 +43,16 @@ export class EvaluationController {
     const access = await this.access.resolve(this.scope.getAuth(req));
     return this.evaluation.sendMessage(access, body || {}, resolveClientIp(req));
   }
+
+  @Post('chat/ticket/confirm')
+  async confirmTicket(@Req() req: { dashboardAuth?: unknown }, @Body() body: Record<string, unknown>) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.evaluation.confirmTicket(access, body || {});
+  }
+
+  @Post('chat/ticket/cancel')
+  async cancelTicket(@Req() req: { dashboardAuth?: unknown }, @Body() body: Record<string, unknown>) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.evaluation.cancelTicketPreview(access, body || {});
+  }
 }

@@ -126,6 +126,24 @@ function buildSiteConfig(config) {
     setupGoal: 'support',
     primaryGoal: 'support',
     botType: 'product-support-demo',
+    moduleConfigs: {
+      'it-support': {
+        supportProfile: 'product',
+        requiredFields: ['product', 'module', 'customerOrganization', 'description', 'impact'],
+        maximumTroubleshootingSteps: 2,
+        requireExplicitConfirmation: true,
+        allowExternalForwarding: false,
+        collectContactFromAuthenticatedAccount: true,
+        syntheticOrganizationLabel: 'Beispielkommune - Demonstrator',
+        urgentEscalationCategories: [
+          'datenverlust',
+          'sicherheitsvorfall',
+          'unberechtigter zugriff',
+          'ausfall',
+          'kritisch',
+        ],
+      },
+    },
     knowledgeMode: 'strict',
     fallbackBehavior: 'grounded_only',
     tone: 'professional',
@@ -147,6 +165,8 @@ function buildSiteConfig(config) {
       partnerDisplayName: config.partnerDisplayName,
       workspaceTitle: config.workspaceTitle,
       supportContactLabel: config.supportContactLabel,
+      supportProfile: 'product',
+      syntheticOrganizationLabel: 'Beispielkommune - Demonstrator',
       disclaimer:
         'Kooperationsdemonstrator mit synthetischen Inhalten. Keine Verbindung zu Produktivsystemen oder externen Fachverfahren.',
       scenarios: DEMO_SCENARIOS,
@@ -388,13 +408,40 @@ export async function resetEvaluationDemo(db, config, options = {}) {
     `SELECT
        (SELECT count(*)::int FROM evaluation_chat_sessions WHERE tenant_id = $1 AND site_id = $2) AS sessions,
        (SELECT count(*)::int FROM conversations c WHERE c.tenant_id = $1 AND c.site_id = $2 AND c.session_id LIKE 'evaluation:%') AS conversations,
-       (SELECT count(*)::int FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.tenant_id = $1 AND c.site_id = $2 AND c.session_id LIKE 'evaluation:%') AS messages`,
+       (SELECT count(*)::int FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.tenant_id = $1 AND c.site_id = $2 AND c.session_id LIKE 'evaluation:%') AS messages,
+       (SELECT count(*)::int FROM evaluation_ticket_previews WHERE tenant_id = $1 AND site_id = $2) AS ticket_previews,
+       (SELECT count(*)::int FROM agent_tickets WHERE tenant_id = $1 AND site_id = $2 AND demo = true AND synthetic = true AND support_profile = 'product') AS demo_tickets`,
     [config.tenantSlug, config.siteSlug],
   );
   const planned = counts.rows[0] || {};
   if (options.execute !== true) return { dryRun: true, counts: planned };
 
   await db.transaction(async (tx) => {
+    const sessions = await tx.query(
+      `SELECT id FROM evaluation_chat_sessions
+       WHERE tenant_id = $1 AND site_id = $2`,
+      [config.tenantSlug, config.siteSlug],
+    );
+    const sessionIds = sessions.rows.map((entry) => entry.id);
+    if (sessionIds.length > 0) {
+      await tx.query(
+        `DELETE FROM agent_tickets
+         WHERE tenant_id = $1
+           AND site_id = $2
+           AND demo = true
+           AND synthetic = true
+           AND support_profile = 'product'
+           AND evaluation_chat_session_id = ANY($3::text[])`,
+        [config.tenantSlug, config.siteSlug, sessionIds],
+      );
+      await tx.query(
+        `DELETE FROM evaluation_ticket_previews
+         WHERE tenant_id = $1
+           AND site_id = $2
+           AND evaluation_chat_session_id = ANY($3::text[])`,
+        [config.tenantSlug, config.siteSlug, sessionIds],
+      );
+    }
     const conversations = await tx.query(
       `SELECT id FROM conversations
        WHERE tenant_id = $1 AND site_id = $2 AND session_id LIKE 'evaluation:%'`,

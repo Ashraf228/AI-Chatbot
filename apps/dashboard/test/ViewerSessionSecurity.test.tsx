@@ -155,6 +155,8 @@ describe("viewer dashboard sessions", () => {
     expect(isViewerAllowedPath("/api/evaluation/context")).toBe(true);
     expect(isViewerAllowedPath("/api/evaluation/chat/session")).toBe(true);
     expect(isViewerAllowedPath("/api/evaluation/chat/message")).toBe(true);
+    expect(isViewerAllowedPath("/api/evaluation/chat/ticket/confirm")).toBe(true);
+    expect(isViewerAllowedPath("/api/evaluation/chat/ticket/cancel")).toBe(true);
     expect(isViewerAllowedPath("/sites")).toBe(false);
     expect(isViewerAllowedPath("/api/sites")).toBe(false);
     expect(isViewerAllowedPath("/api/auth/session/extra")).toBe(false);

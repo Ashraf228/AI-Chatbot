@@ -7,6 +7,8 @@ export type EvaluationAccessContext = {
   tenantUserId: string;
   tenantId: string;
   siteId: string;
+  viewerEmail: string;
+  viewerDisplayName: string;
   accountExpiresAt: string | null;
   sessionExpiresAt: string | null;
   siteDisplayName: string;
@@ -17,6 +19,8 @@ type EvaluationAccessRow = {
   tenant_user_id: string;
   tenant_id: string;
   role: string;
+  email: string;
+  display_name: string;
   is_active: boolean;
   expires_at: string | null;
   evaluation_site_id: string | null;
@@ -50,6 +54,8 @@ export class EvaluationAccessService {
          tu.id AS tenant_user_id,
          tu.tenant_id,
          tu.role,
+         tu.email,
+         tu.display_name,
          tu.is_active,
          tu.expires_at,
          tu.evaluation_site_id,
@@ -93,6 +99,8 @@ export class EvaluationAccessService {
       tenantUserId: row.tenant_user_id,
       tenantId: row.tenant_id,
       siteId,
+      viewerEmail: row.email,
+      viewerDisplayName: row.display_name,
       accountExpiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
       sessionExpiresAt: auth.sessionExpiresAt || null,
       siteDisplayName: row.site_name || 'Evaluation',

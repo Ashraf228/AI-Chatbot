@@ -41,14 +41,22 @@ export type PropertyTicketingModuleConfig = {
 };
 
 export type ItSupportModuleConfig = {
+  supportProfile: 'it' | 'product';
   intakeMode: 'knowledge_first' | 'ticket_first';
   ticketConfirmationRequired: boolean;
   maxTroubleshootingSteps: number;
+  maximumTroubleshootingSteps: number;
   urgencyStyle: 'brief' | 'structured';
   ctaLabel: string;
   ctaDescription: string;
+  requiredFields: string[];
   requiredTicketFields: string[];
   escalationKeywords: string[];
+  requireExplicitConfirmation: boolean;
+  allowExternalForwarding: boolean;
+  collectContactFromAuthenticatedAccount: boolean;
+  syntheticOrganizationLabel: string;
+  urgentEscalationCategories: string[];
   safeTroubleshootingInstruction: string;
   handoffInstruction: string;
 };
@@ -150,12 +158,20 @@ export const DEFAULT_PROPERTY_TICKETING_MODULE_CONFIG: PropertyTicketingModuleCo
 };
 
 export const DEFAULT_IT_SUPPORT_MODULE_CONFIG: ItSupportModuleConfig = {
+  supportProfile: 'it',
   intakeMode: 'knowledge_first',
   ticketConfirmationRequired: true,
   maxTroubleshootingSteps: 2,
+  maximumTroubleshootingSteps: 2,
   urgencyStyle: 'structured',
   ctaLabel: 'Support-Ticket öffnen',
   ctaDescription: 'Ich erfasse das Problem und leite es an den IT-Support weiter.',
+  requiredFields: [
+    'description',
+    'affectedSystem',
+    'impact',
+    'reporterEmail',
+  ],
   requiredTicketFields: [
     'description',
     'affectedSystem',
@@ -176,6 +192,17 @@ export const DEFAULT_IT_SUPPORT_MODULE_CONFIG: ItSupportModuleConfig = {
     'konto gesperrt',
     'login blockiert',
   ],
+  requireExplicitConfirmation: true,
+  allowExternalForwarding: true,
+  collectContactFromAuthenticatedAccount: false,
+  syntheticOrganizationLabel: '',
+  urgentEscalationCategories: [
+    'datenverlust',
+    'sicherheitsvorfall',
+    'unberechtigter zugriff',
+    'ausfall',
+    'kritisch',
+  ],
   safeTroubleshootingInstruction:
     'Gib nur sichere First-Level-Schritte aus. Frage niemals nach Passwörtern, MFA-Codes, API-Keys oder Admin-Zugangsdaten. Gib keine riskanten PowerShell-, Terminal-, Registry- oder Löschbefehle ohne verifizierte Wissensbasis.',
   handoffInstruction:
@@ -185,6 +212,11 @@ export const DEFAULT_IT_SUPPORT_MODULE_CONFIG: ItSupportModuleConfig = {
 export const IT_SUPPORT_ALLOWED_REQUIRED_TICKET_FIELDS = [
   'description',
   'affectedSystem',
+  'product',
+  'module',
+  'customerOrganization',
+  'customerReference',
+  'processOrFormName',
   'impact',
   'reporterEmail',
   'reporterPhone',
@@ -408,6 +440,7 @@ export function normalizeItSupportModuleConfig(
   config: Record<string, unknown> | null | undefined,
 ): ItSupportModuleConfig {
   const source = asObject(config);
+  const supportProfile = source.supportProfile === 'product' ? 'product' : DEFAULT_IT_SUPPORT_MODULE_CONFIG.supportProfile;
   const intakeMode =
     source.intakeMode === 'ticket_first'
       ? 'ticket_first'
@@ -417,7 +450,17 @@ export function normalizeItSupportModuleConfig(
       ? 'brief'
       : DEFAULT_IT_SUPPORT_MODULE_CONFIG.urgencyStyle;
 
+  const requiredTicketFields = normalizeItSupportRequiredTicketFields(source.requiredTicketFields || source.requiredFields);
+  const maxTroubleshootingSteps = asClampedInteger(
+    source.maxTroubleshootingSteps ?? source.maximumTroubleshootingSteps,
+    DEFAULT_IT_SUPPORT_MODULE_CONFIG.maxTroubleshootingSteps,
+    1,
+    5,
+  );
+  const escalationKeywords = normalizeEscalationKeywords(source.escalationKeywords);
+
   return {
+    supportProfile,
     intakeMode,
     ticketConfirmationRequired: source.ticketConfirmationRequired === false
       ? true
@@ -425,20 +468,36 @@ export function normalizeItSupportModuleConfig(
           source.ticketConfirmationRequired,
           DEFAULT_IT_SUPPORT_MODULE_CONFIG.ticketConfirmationRequired,
         ),
-    maxTroubleshootingSteps: asClampedInteger(
-      source.maxTroubleshootingSteps,
-      DEFAULT_IT_SUPPORT_MODULE_CONFIG.maxTroubleshootingSteps,
-      1,
-      5,
-    ),
+    maxTroubleshootingSteps,
+    maximumTroubleshootingSteps: maxTroubleshootingSteps,
     urgencyStyle,
     ctaLabel: asNonEmptyString(source.ctaLabel, DEFAULT_IT_SUPPORT_MODULE_CONFIG.ctaLabel),
     ctaDescription: asNonEmptyString(
       source.ctaDescription,
       DEFAULT_IT_SUPPORT_MODULE_CONFIG.ctaDescription,
     ),
-    requiredTicketFields: normalizeItSupportRequiredTicketFields(source.requiredTicketFields),
-    escalationKeywords: normalizeEscalationKeywords(source.escalationKeywords),
+    requiredFields: requiredTicketFields,
+    requiredTicketFields,
+    escalationKeywords,
+    requireExplicitConfirmation: source.requireExplicitConfirmation === false
+      ? false
+      : DEFAULT_IT_SUPPORT_MODULE_CONFIG.requireExplicitConfirmation,
+    allowExternalForwarding: asBoolean(
+      source.allowExternalForwarding,
+      DEFAULT_IT_SUPPORT_MODULE_CONFIG.allowExternalForwarding,
+    ),
+    collectContactFromAuthenticatedAccount: asBoolean(
+      source.collectContactFromAuthenticatedAccount,
+      DEFAULT_IT_SUPPORT_MODULE_CONFIG.collectContactFromAuthenticatedAccount,
+    ),
+    syntheticOrganizationLabel: asNonEmptyString(
+      source.syntheticOrganizationLabel,
+      DEFAULT_IT_SUPPORT_MODULE_CONFIG.syntheticOrganizationLabel,
+    ),
+    urgentEscalationCategories: dedupeStringArray(asStringArray(
+      source.urgentEscalationCategories,
+      DEFAULT_IT_SUPPORT_MODULE_CONFIG.urgentEscalationCategories,
+    )),
     safeTroubleshootingInstruction: asNonEmptyString(
       source.safeTroubleshootingInstruction,
       DEFAULT_IT_SUPPORT_MODULE_CONFIG.safeTroubleshootingInstruction,

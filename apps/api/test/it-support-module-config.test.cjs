@@ -54,3 +54,27 @@ test('normalizeItSupportModuleConfig deduplicates escalation keywords and falls 
     DEFAULT_IT_SUPPORT_MODULE_CONFIG.escalationKeywords,
   );
 });
+
+test('normalizeItSupportModuleConfig keeps IT default and accepts product support profile fields', () => {
+  assert.equal(normalizeItSupportModuleConfig({}).supportProfile, 'it');
+
+  const config = normalizeItSupportModuleConfig({
+    supportProfile: 'product',
+    requiredFields: ['product', 'module', 'customerOrganization', 'description', 'impact'],
+    maximumTroubleshootingSteps: 2,
+    requireExplicitConfirmation: true,
+    allowExternalForwarding: false,
+    collectContactFromAuthenticatedAccount: true,
+    syntheticOrganizationLabel: 'Beispielkommune - Demonstrator',
+    urgentEscalationCategories: ['Datenverlust', 'Datenverlust', 'Ausfall'],
+  });
+
+  assert.equal(config.supportProfile, 'product');
+  assert.deepEqual(config.requiredFields, ['product', 'module', 'customerOrganization', 'description', 'impact']);
+  assert.deepEqual(config.requiredTicketFields, ['product', 'module', 'customerOrganization', 'description', 'impact']);
+  assert.equal(config.maximumTroubleshootingSteps, 2);
+  assert.equal(config.allowExternalForwarding, false);
+  assert.equal(config.collectContactFromAuthenticatedAccount, true);
+  assert.equal(config.syntheticOrganizationLabel, 'Beispielkommune - Demonstrator');
+  assert.deepEqual(config.urgentEscalationCategories, ['Datenverlust', 'Ausfall']);
+});
