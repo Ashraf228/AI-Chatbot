@@ -1,0 +1,264 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+name: ${COMPOSE_PROJECT_NAME:-soule-demo}
+
+x-demo-app-env: &demo-app-env
+  APP_ENV: ${APP_ENV:-staging}
+  APP_COMMIT_SHA: ${APP_COMMIT_SHA:?APP_COMMIT_SHA is required}
+  APP_VERSION: ${APP_VERSION:-v0.9.0-nolis-demo}
+
+services:
+  proxy:
+    image: nginx:alpine
+    logging: *default-logging
+    restart: unless-stopped
+    environment:
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ADMIN_DOMAIN is required}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required}
+      WIDGET_DOMAIN: ${WIDGET_DOMAIN:?WIDGET_DOMAIN is required}
+    volumes:
+      - ./infra/nginx/nolis-demo-proxy.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      dashboard:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      widget:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 128m
+    cpus: "0.25"
+    pids_limit: 128
+    networks:
+      existing_edge:
+        aliases:
+          - soule-demo-proxy
+      demo_internal:
+
+  db:
+    image: pgvector/pgvector:pg16
+    logging: *default-logging
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-soule_demo}
+    volumes:
+      - soule_demo_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-soule_demo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 1g
+    cpus: "0.75"
+    pids_limit: 256
+    networks:
+      - demo_internal
+
+  redis:
+    image: redis:7-alpine
+    logging: *default-logging
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${REDIS_PASSWORD:?REDIS_PASSWORD is required}",
+        "--protected-mode",
+        "yes"
+      ]
+    volumes:
+      - soule_demo_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    mem_limit: 256m
+    cpus: "0.25"
+    pids_limit: 128
+    networks:
+      - demo_internal
+
+  api:
+    logging: *default-logging
+    build:
+      context: ./apps/api
+    init: true
+    restart: unless-stopped
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    environment:
+      <<: *demo-app-env
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-soule_demo}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      OPENAI_EMBED_MODEL: ${OPENAI_EMBED_MODEL:-text-embedding-3-small}
+      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY is required}
+      DASHBOARD_INTERNAL_TOKEN: ${DASHBOARD_INTERNAL_TOKEN:?DASHBOARD_INTERNAL_TOKEN is required}
+      INTEGRATION_SECRET_KEY: ${INTEGRATION_SECRET_KEY:?INTEGRATION_SECRET_KEY is required}
+      INTEGRATION_SECRET_KEY_PREVIOUS: ${INTEGRATION_SECRET_KEY_PREVIOUS:-}
+      INTEGRATION_SECRET_LEGACY_KEYS: ${INTEGRATION_SECRET_LEGACY_KEYS:-}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ADMIN_DOMAIN is required}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required}
+      WIDGET_DOMAIN: ${WIDGET_DOMAIN:?WIDGET_DOMAIN is required}
+      SITE_DOMAIN_ALLOWLIST_MODE: ${SITE_DOMAIN_ALLOWLIST_MODE:-strict}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?CORS_ALLOWED_ORIGINS is required}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?PUBLIC_API_BASE_URL is required}
+      PUBLIC_WIDGET_BUNDLE_URL: ${PUBLIC_WIDGET_BUNDLE_URL:?PUBLIC_WIDGET_BUNDLE_URL is required}
+      NEXT_PUBLIC_WIDGET_LOADER_URL: ${NEXT_PUBLIC_WIDGET_LOADER_URL:?NEXT_PUBLIC_WIDGET_LOADER_URL is required}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      REPORTS_FROM_EMAIL: ${REPORTS_FROM_EMAIL:-}
+      LEAD_NOTIFICATION_EMAIL: ${LEAD_NOTIFICATION_EMAIL:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      APP_URL: ${APP_URL:?APP_URL is required}
+      EVALUATION_MOCK_HANDOFF_ENABLED: ${EVALUATION_MOCK_HANDOFF_ENABLED:-false}
+      EVALUATION_MOCK_RECEIVER_ORIGIN: ${EVALUATION_MOCK_RECEIVER_ORIGIN:-}
+      EVALUATION_MOCK_HANDOFF_SECRET_B64: ${EVALUATION_MOCK_HANDOFF_SECRET_B64:-}
+      EVALUATION_MOCK_SIGNATURE_TOLERANCE_SECONDS: ${EVALUATION_MOCK_SIGNATURE_TOLERANCE_SECONDS:-300}
+      EVALUATION_MOCK_HANDOFF_TIMEOUT_MS: ${EVALUATION_MOCK_HANDOFF_TIMEOUT_MS:-5000}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 1g
+    cpus: "0.75"
+    pids_limit: 256
+    networks:
+      - demo_internal
+      - demo_egress
+
+  widget:
+    logging: *default-logging
+    build:
+      context: .
+      dockerfile: ./apps/widget/Dockerfile
+    restart: unless-stopped
+    environment:
+      <<: *demo-app-env
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    mem_limit: 256m
+    cpus: "0.25"
+    pids_limit: 128
+    networks:
+      - demo_internal
+
+  dashboard:
+    logging: *default-logging
+    build:
+      context: ./apps/dashboard
+    init: true
+    restart: unless-stopped
+    environment:
+      <<: *demo-app-env
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://api:5000}
+      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY is required}
+      DASHBOARD_INTERNAL_TOKEN: ${DASHBOARD_INTERNAL_TOKEN:?DASHBOARD_INTERNAL_TOKEN is required}
+      ADMIN_PANEL_PASSWORD_HASH: ${ADMIN_PANEL_PASSWORD_HASH:?ADMIN_PANEL_PASSWORD_HASH is required}
+      OPERATOR_PANEL_PASSWORD_HASH: ${OPERATOR_PANEL_PASSWORD_HASH:-}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:?ADMIN_SESSION_SECRET is required}
+      NEXT_PUBLIC_WIDGET_LOADER_URL: ${NEXT_PUBLIC_WIDGET_LOADER_URL:?NEXT_PUBLIC_WIDGET_LOADER_URL is required}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 768m
+    cpus: "0.50"
+    pids_limit: 256
+    networks:
+      - demo_internal
+
+  reporter:
+    logging: *default-logging
+    build:
+      context: ./apps/reporter
+    init: true
+    restart: "no"
+    profiles:
+      - reporter
+    environment:
+      <<: *demo-app-env
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-soule_demo}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+      BACKEND_BASE_URL: ${BACKEND_BASE_URL:-http://api:5000}
+      REPORTER_API_BASE_URL: ${REPORTER_API_BASE_URL:-http://api:5000}
+      ADMIN_KEY: ${ADMIN_KEY:?ADMIN_KEY is required}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      REPORTS_FROM_EMAIL: ${REPORTS_FROM_EMAIL:-}
+      REPORTER_JOB: ${REPORTER_JOB:-weekly}
+    command: ["node", "dist/main.js", "${REPORTER_JOB:-weekly}"]
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    mem_limit: 512m
+    cpus: "0.50"
+    pids_limit: 256
+    networks:
+      - demo_internal
+      - demo_egress
+
+volumes:
+  soule_demo_db_data:
+    name: soule_demo_db_data
+  soule_demo_redis_data:
+    name: soule_demo_redis_data
+
+networks:
+  existing_edge:
+    external: true
+    name: ${EXISTING_EDGE_NETWORK:?EXISTING_EDGE_NETWORK is required}
+  demo_egress:
+  demo_internal:
+    internal: true

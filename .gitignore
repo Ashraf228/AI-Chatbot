@@ -3,6 +3,7 @@
 .env.*
 *.env
 !.env.example
+!.env.nolis-demo.example
 
 # node
 node_modules/
