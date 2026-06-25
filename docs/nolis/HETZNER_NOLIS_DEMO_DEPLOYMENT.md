@@ -6,7 +6,7 @@ Dieses Runbook beschreibt die spaetere Bereitstellung eines isolierten NOLIS-Dem
 
 ## Ausgangslage
 
-- Release-Kandidat: `d8be0773c54e176e4e9fd63aae90766193ee526c`
+- Release-Kandidat: der vor Deployment freigegebene Git-Commit. Dieser muss serverseitig ausgecheckt sein und mit `APP_COMMIT_SHA` aus `.env.nolis-demo` uebereinstimmen.
 - Compose-Projektname: `soule-demo`
 - Geplante Hosts:
   - `demo.soulesmartbusiness.com`
@@ -108,7 +108,7 @@ Vorbereitung:
 
 ```sh
 git fetch origin
-git checkout d8be0773c54e176e4e9fd63aae90766193ee526c
+git checkout <freigegebener-commit>
 git status --short
 chmod 600 .env.nolis-demo
 docker compose --env-file .env.nolis-demo -f docker-compose.nolis-demo.yml -p soule-demo config

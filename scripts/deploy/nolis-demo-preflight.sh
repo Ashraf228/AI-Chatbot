@@ -3,7 +3,6 @@ set -euo pipefail
 
 PROJECT_NAME="soule-demo"
 COMPOSE_FILE="docker-compose.nolis-demo.yml"
-EXPECTED_COMMIT="d8be0773c54e176e4e9fd63aae90766193ee526c"
 
 if [[ $# -ne 1 ]]; then
   echo "Usage: $0 <env-file>" >&2
@@ -23,7 +22,13 @@ if [[ -n "$(git status --short)" ]]; then
 fi
 
 current_commit="$(git rev-parse HEAD)"
-if [[ "$current_commit" != "$EXPECTED_COMMIT" ]]; then
+if ! grep -Eq '^APP_COMMIT_SHA=.+' "$ENV_FILE"; then
+  echo "FAIL: APP_COMMIT_SHA is not set in env file" >&2
+  exit 78
+fi
+
+expected_commit="$(grep -E '^APP_COMMIT_SHA=' "$ENV_FILE" | tail -n 1 | cut -d= -f2-)"
+if [[ "$current_commit" != "$expected_commit" ]]; then
   echo "FAIL: unexpected commit $current_commit" >&2
   exit 70
 fi

@@ -100,9 +100,6 @@ services:
       context: ./apps/api
     init: true
     restart: unless-stopped
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
     environment:
       <<: *demo-app-env
       NODE_ENV: production
