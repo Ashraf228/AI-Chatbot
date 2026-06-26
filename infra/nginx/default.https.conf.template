@@ -15,7 +15,7 @@ server {
 
 server {
   listen 80;
-  server_name ${ADMIN_DOMAIN} ${API_DOMAIN} ${WIDGET_DOMAIN};
+  server_name ${ADMIN_DOMAIN} ${API_DOMAIN} ${WIDGET_DOMAIN} demo.soulesmartbusiness.com demo-api.soulesmartbusiness.com demo-widget.soulesmartbusiness.com;
 
   return 301 https://$host$request_uri;
 }
@@ -92,6 +92,50 @@ server {
   location / {
     proxy_pass http://widget:80;
     proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Host $host;
+  }
+}
+
+server {
+  listen 443 ssl http2;
+  server_name demo.soulesmartbusiness.com demo-api.soulesmartbusiness.com demo-widget.soulesmartbusiness.com;
+
+  ssl_certificate ${TLS_CERT_PATH};
+  ssl_certificate_key ${TLS_KEY_PATH};
+  ssl_session_timeout 1d;
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_tickets off;
+
+  client_max_body_size 20m;
+  server_tokens off;
+
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+  location = /healthz {
+    access_log off;
+    proxy_pass http://soule-demo-proxy:80/healthz;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Host $host;
+  }
+
+  location / {
+    proxy_pass http://soule-demo-proxy:80;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_request_buffering off;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

@@ -144,11 +144,22 @@ Vor Migration oder Provisionierung:
 ## Bestehenden Edge-Proxy vorbereiten
 
 Die bestehende Produktions-Proxy-Konfiguration darf nicht automatisch veraendert werden.
+Der aktuelle oeffentliche Proxy erzeugt seine aktive Nginx-Konfiguration beim Containerstart
+aus den versionierten Templates im Proxy-Image. Die Konfiguration ist nicht als live
+editierbarer Host-Mount eingebunden. Die oeffentliche Demo-Aktivierung erfordert deshalb
+einen kontrollierten Rebuild/Recreate des oeffentlichen Proxy-Containers. Kein Live-Patch
+innerhalb des laufenden Containers verwenden.
 
 Versionierte Vorlage:
 
 ```text
 infra/nginx/nolis-demo-edge-route.conf.template
+```
+
+Versionierte aktive Proxy-Template-Datei fuer den kontrollierten Rebuild:
+
+```text
+infra/nginx/default.https.conf.template
 ```
 
 Ziel:
@@ -159,33 +170,55 @@ demo-api.soulesmartbusiness.com   -> http://soule-demo-proxy:80
 demo-widget.soulesmartbusiness.com -> http://soule-demo-proxy:80
 ```
 
+Netzwerkannahmen:
+
+- Der oeffentliche `ai-chatbot-proxy` bleibt am Docker-Netzwerk `ai-chatbot_edge`.
+- Der Demo-Stack verbindet ausschliesslich `soule-demo-proxy` mit `ai-chatbot_edge`.
+- `soule-demo-proxy` muss im Edge-Netzwerk unter dem Alias `soule-demo-proxy` erreichbar sein.
+- Demo-API, Demo-Dashboard, Demo-Widget, Demo-DB und Demo-Redis duerfen nicht direkt am Edge-Netzwerk haengen.
+
 Patchplan:
 
-1. Bestehende Proxy-Konfiguration sichern.
-2. Demo-Server-Bloecke aus `infra/nginx/nolis-demo-edge-route.conf.template` in die aktive Proxy-Konfiguration uebernehmen.
-3. Sicherstellen, dass der bestehende Proxy das Netzwerk `ai-chatbot_edge` verwendet und `soule-demo-proxy` dort erreichbar ist.
-4. Sicherstellen, dass das Zertifikat die Demo-Hosts abdeckt.
-5. Syntax pruefen.
-6. Reload ausfuehren.
+1. Sicherstellen, dass der bestehende Proxy das Netzwerk `ai-chatbot_edge` verwendet und `soule-demo-proxy` dort erreichbar ist.
+2. Sicherstellen, dass das Zertifikat die Demo-Hosts abdeckt.
+3. Proxy-Image aus dem freigegebenen Commit neu bauen.
+4. Nginx-Konfiguration im neu gebauten Image beziehungsweise Zielcontainer mit `nginx -t` pruefen.
+5. Oeffentlichen Proxy kontrolliert recreaten.
+6. Production-, Staging- und Demo-Healthchecks ausfuehren.
 
-Beispielbefehle fuer spaeteren manuellen Einsatz:
+Der bisherige Zertifikatsstand deckte nur die bestehenden Hosts ab:
 
-```sh
-cp /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.backup.$(date +%Y%m%d-%H%M%S)
-nginx -t
-nginx -s reload
+```text
+app.soulesmartbusiness.com
+api.soulesmartbusiness.com
+widget.soulesmartbusiness.com
 ```
 
-Wenn der Proxy im Container laeuft, muessen Syntax-Test und Reload im Proxy-Container beziehungsweise ueber den bestehenden Entrypoint-Mechanismus erfolgen. Kein Produktionscontainer darf unnoetig neu erstellt werden.
+Vor der oeffentlichen Aktivierung muss ein Zertifikat bereitstehen, das die bestehenden
+Hosts und die drei Demo-Hosts enthaelt, oder ein gleichwertiger sicherer
+Zertifikatsmechanismus muss aktiv sein:
+
+```text
+app.soulesmartbusiness.com
+api.soulesmartbusiness.com
+widget.soulesmartbusiness.com
+demo.soulesmartbusiness.com
+demo-api.soulesmartbusiness.com
+demo-widget.soulesmartbusiness.com
+```
+
+Keine privaten Schluessel und keine Zertifikate ins Repository aufnehmen. Bestehende Hosts
+duerfen bei der Zertifikatserneuerung nicht aus dem Zertifikat fallen. Keine Demo-Aktivierung
+ohne gueltiges Zertifikat fuer die Demo-Hosts.
 
 ## Rollback
 
 Bei Fehler:
 
-1. Edge-Proxy-Konfiguration auf Backup zuruecksetzen.
+1. Vorheriges Proxy-Image beziehungsweise vorherigen freigegebenen Commit wieder starten.
 2. Nginx-Syntax pruefen.
-3. Reload ausfuehren.
-4. Demo-Stack stoppen:
+3. Production-, Staging- und Demo-Healthchecks erneut ausfuehren.
+4. Demo-Stack bei Bedarf stoppen:
 
 ```sh
 scripts/deploy/nolis-demo-down.sh .env.nolis-demo
