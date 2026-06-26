@@ -186,6 +186,8 @@ jobs:
           docker run --rm --entrypoint node ai-chatbot-api -v | grep '^v24.17.0$'
           docker run --rm --entrypoint node ai-chatbot-dashboard -v | grep '^v24.17.0$'
           docker run --rm --entrypoint node ai-chatbot-reporter -v | grep '^v24.17.0$'
+          test "$(docker image inspect ai-chatbot-dashboard --format '{{json .Config.Cmd}}')" = '["node","app/server.js"]'
+          docker run --rm --entrypoint test ai-chatbot-dashboard -f /app/app/server.js
           test "$(docker image inspect ai-chatbot-api --format '{{.Config.User}}')" = "node"
           test "$(docker image inspect ai-chatbot-dashboard --format '{{.Config.User}}')" = "node"
           test "$(docker image inspect ai-chatbot-reporter --format '{{.Config.User}}')" = "node"
