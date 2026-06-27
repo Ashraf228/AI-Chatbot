@@ -235,37 +235,37 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
   }, [messages]);
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100">
-      <div className="mx-auto max-w-6xl space-y-8">
+    <main className="evaluation-workspace">
+      <div className="evaluation-shell">
         <div className="sr-only" aria-live="polite" aria-atomic="true">
           {statusAnnouncement}
         </div>
-        <header className="rounded-3xl border border-white/10 bg-white/10 p-6 shadow-2xl">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <header className="evaluation-hero">
+          <div className="evaluation-hero__topline">
             <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-slate-300">Evaluation Workspace</p>
-              <h1 className="mt-3 text-3xl font-semibold">{context.workspaceTitle}</h1>
-              <p className="mt-3 max-w-3xl text-sm text-slate-300">{context.disclaimer}</p>
+              <p className="evaluation-eyebrow">Evaluation Workspace</p>
+              <h1>{context.workspaceTitle}</h1>
+              <p className="evaluation-hero__copy">{context.disclaimer}</p>
             </div>
             <form action="/api/auth/logout" method="post">
-              <button className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950" type="submit">
+              <button className="evaluation-secondary-button" type="submit">
                 Logout
               </button>
             </form>
           </div>
-          <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold">
-            <span className="rounded-full bg-emerald-400/20 px-3 py-1 text-emerald-100">Kooperationsdemonstrator</span>
-            <span className="rounded-full bg-sky-400/20 px-3 py-1 text-sky-100">Nur-Lesezugang</span>
-            <span className="rounded-full bg-slate-700 px-3 py-1">
+          <div className="evaluation-badges">
+            <span>Kooperationsdemonstrator</span>
+            <span>Nur-Lesezugang</span>
+            <span>
               Ablauf: <time dateTime={context.accountExpiresAt || undefined}>{formatDate(context.accountExpiresAt)}</time>
             </span>
           </div>
-          <p className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-amber-100">
+          <p className="evaluation-warning">
             Bitte geben Sie keine Passwörter, MFA-Codes, API-Schlüssel oder echten personenbezogenen Falldaten ein.
           </p>
         </header>
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="evaluation-scenarios" aria-label="Beispielszenarien">
           {context.scenarios.map((scenario) => (
             <button
               key={scenario.key}
@@ -275,33 +275,43 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                 setStatusAnnouncement(`Beispieltext übernommen: ${scenario.title}. Er wurde noch nicht gesendet.`);
                 window.setTimeout(() => inputRef.current?.focus(), 0);
               }}
-              className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 text-left transition hover:bg-white/10"
+              className="evaluation-scenario-card"
               aria-describedby={`scenario-${scenario.key}-prompt`}
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Synthetisches Szenario</p>
-              <h2 className="mt-2 text-lg font-semibold">{scenario.title}</h2>
-              <p id={`scenario-${scenario.key}-prompt`} className="mt-3 text-sm text-slate-300">{scenario.prompt}</p>
+              <p>Synthetisches Szenario</p>
+              <h2>{scenario.title}</h2>
+              <span id={`scenario-${scenario.key}-prompt`}>{scenario.prompt}</span>
             </button>
           ))}
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-          <div className="rounded-3xl border border-white/10 bg-white p-4 text-slate-950">
-            <div className="min-h-[360px] space-y-4 rounded-2xl bg-slate-50 p-4" aria-busy={loading}>
+        <section className="evaluation-layout">
+          <div className="evaluation-chat-card">
+            <div className="evaluation-section-heading">
+              <div>
+                <p className="evaluation-eyebrow">Testdialog</p>
+                <h2>Frage stellen und Antwort prüfen</h2>
+              </div>
+              {conversationId ? <span>Aktive Testsitzung</span> : <span>Noch nicht gestartet</span>}
+            </div>
+            <div className="evaluation-chat-log" aria-busy={loading}>
               {messages.length === 0 ? (
-                <p className="text-sm text-slate-500">Noch keine Daten. Starten Sie einen neuen Testdialog.</p>
+                <div className="evaluation-empty-state">
+                  <h3>Starten Sie mit einer Beispielkarte oder eigener Testfrage.</h3>
+                  <p>Die Antworten werden quellenbasiert geprüft. Ticketvorschauen bleiben im Demonstrator und werden nicht extern übermittelt.</p>
+                </div>
               ) : (
                 messages.map((message, index) => (
-                  <article key={index} className={message.role === "user" ? "text-right" : "text-left"}>
-                    <div className={`inline-block max-w-[85%] rounded-2xl px-4 py-3 text-sm ${message.role === "user" ? "bg-slate-950 text-white" : "bg-white shadow"}`}>
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                  <article key={index} className={`evaluation-message evaluation-message--${message.role}`}>
+                    <div className="evaluation-message__bubble">
+                      <p>{message.content}</p>
                       {(message.sources || []).length > 0 && (
-                        <div className="mt-3 border-t pt-2 text-xs text-slate-600">
-                          <p className="font-semibold">Quellen</p>
+                        <div className="evaluation-message__sources">
+                          <p>Quellen</p>
                           {message.sources?.map((source, sourceIndex) => (
                             <p key={sourceIndex}>
                               {source.publicUrl ? (
-                                <a href={source.publicUrl} target="_blank" rel="noreferrer noopener" className="underline">
+                                <a href={source.publicUrl} target="_blank" rel="noreferrer noopener">
                                   {source.title}
                                 </a>
                               ) : (
@@ -313,7 +323,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                         </div>
                       )}
                       {message.handoffPreview && (
-                        <div className="mt-3 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">
+                        <div className="evaluation-inline-note evaluation-inline-note--warning">
                           <strong>{message.handoffPreview.status}:</strong> {message.handoffPreview.summary}
                         </div>
                       )}
@@ -321,33 +331,33 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                         <div
                           ref={ticketPreviewRef}
                           tabIndex={-1}
-                          className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-left text-xs text-sky-950"
+                          className="evaluation-ticket-preview"
                           aria-labelledby={`ticket-preview-${index}`}
                         >
-                          <p id={`ticket-preview-${index}`} className="font-semibold">Demo-Supportfall Vorschau</p>
+                          <p id={`ticket-preview-${index}`}>Demo-Supportfall Vorschau</p>
                           {message.ticketPreview.missingFields.length > 0 ? (
-                            <p className="mt-2 text-amber-800">
+                            <p className="evaluation-ticket-preview__missing">
                               Fehlende Angaben: {message.ticketPreview.missingFields.join(", ")}
                             </p>
                           ) : (
-                            <dl className="mt-2 space-y-1">
+                            <dl>
                               {Object.entries(message.ticketPreview.fields)
                                 .filter(([key, value]) => key !== "reporterEmail" && Boolean(value))
                                 .map(([key, value]) => (
                                   <div key={key}>
-                                    <dt className="font-semibold">{key}</dt>
-                                    <dd className="whitespace-pre-wrap">{safeText(String(value))}</dd>
+                                    <dt>{key}</dt>
+                                    <dd>{safeText(String(value))}</dd>
                                   </div>
                                 ))}
                             </dl>
                           )}
                           {message.ticketPreview.previewToken && (
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="evaluation-actions">
                               <button
                                 type="button"
                                 onClick={() => confirmTicket(message.ticketPreview as TicketPreview)}
                                 disabled={ticketActionLoading}
-                                className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                                className="evaluation-primary-button"
                               >
                                 Demo-Ticket erstellen
                               </button>
@@ -355,7 +365,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                                 type="button"
                                 onClick={() => cancelTicket(message.ticketPreview as TicketPreview)}
                                 disabled={ticketActionLoading}
-                                className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 disabled:opacity-50"
+                                className="evaluation-secondary-button"
                               >
                                 Abbrechen
                               </button>
@@ -369,54 +379,54 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
               )}
             </div>
             {ticketResult && (
-              <div ref={ticketResultRef} tabIndex={-1} className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800" role="status">
+              <div ref={ticketResultRef} tabIndex={-1} className="evaluation-status evaluation-status--success" role="status">
                 {ticketResult}
               </div>
             )}
             {ticketCreated && (
-              <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="evaluation-handoff-card">
+                <div className="evaluation-handoff-card__header">
                   <div>
-                    <p className="font-semibold">Signierte Demo-Übergabe</p>
-                    <p className="mt-1">{handoffStatus?.message || "Noch keine Demo-Übergabe ausgeführt."}</p>
-                    {handoffStatus?.externalNotice && <p className="mt-1">{handoffStatus.externalNotice}</p>}
+                    <p>Signierte Demo-Übergabe</p>
+                    <span>{handoffStatus?.message || "Noch keine Demo-Übergabe ausgeführt."}</span>
+                    {handoffStatus?.externalNotice && <span>{handoffStatus.externalNotice}</span>}
                   </div>
                   <button
                     type="button"
                     onClick={runSignedHandoff}
                     disabled={handoffLoading}
-                    className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                    className="evaluation-primary-button"
                   >
                     {handoffLoading ? "Prüft..." : "Signierte Demo-Übergabe simulieren"}
                   </button>
                 </div>
                 {handoffStatus && handoffStatus.status !== "not_requested" && (
-                  <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                    <div><dt className="font-semibold">Demo-Referenz</dt><dd>{handoffStatus.demoReference || "Nicht verfügbar"}</dd></div>
-                    <div><dt className="font-semibold">Status</dt><dd>{handoffStatus.status}</dd></div>
-                    <div><dt className="font-semibold">Versuche</dt><dd>{handoffStatus.attemptCount ?? 0}</dd></div>
-                    <div><dt className="font-semibold">Signatur geprüft</dt><dd>{handoffStatus.signatureVerified ? "Ja" : "Nein"}</dd></div>
-                    <div><dt className="font-semibold">Duplikat sicher erkannt</dt><dd>{handoffStatus.duplicateRecognized ? "Ja" : "Nein"}</dd></div>
-                    <div><dt className="font-semibold">Empfangen</dt><dd>{formatDate(handoffStatus.receivedAt)}</dd></div>
+                  <dl className="evaluation-handoff-grid">
+                    <div><dt>Demo-Referenz</dt><dd>{handoffStatus.demoReference || "Nicht verfügbar"}</dd></div>
+                    <div><dt>Status</dt><dd>{handoffStatus.status}</dd></div>
+                    <div><dt>Versuche</dt><dd>{handoffStatus.attemptCount ?? 0}</dd></div>
+                    <div><dt>Signatur geprüft</dt><dd>{handoffStatus.signatureVerified ? "Ja" : "Nein"}</dd></div>
+                    <div><dt>Duplikat sicher erkannt</dt><dd>{handoffStatus.duplicateRecognized ? "Ja" : "Nein"}</dd></div>
+                    <div><dt>Empfangen</dt><dd>{formatDate(handoffStatus.receivedAt)}</dd></div>
                   </dl>
                 )}
               </div>
             )}
             {error && (
-              <div className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">
+              <div className="evaluation-status evaluation-status--error" role="alert">
                 <p>{error}</p>
                 {retryMessage && (
                   <button
                     type="button"
                     onClick={() => sendMessage(retryMessage)}
-                    className="mt-2 rounded-full bg-red-700 px-3 py-1 text-xs font-semibold text-white"
+                    className="evaluation-primary-button"
                   >
                     Erneut versuchen
                   </button>
                 )}
               </div>
             )}
-            <div className="mt-4 flex gap-2">
+            <div className="evaluation-composer">
               <label className="sr-only" htmlFor="evaluation-message">
                 Testfrage
               </label>
@@ -426,7 +436,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 maxLength={2000}
-                className="min-h-20 flex-1 rounded-2xl border border-slate-200 p-3 text-sm"
+                className="evaluation-composer__input"
                 placeholder="Testfrage eingeben..."
                 aria-describedby="evaluation-message-help"
               />
@@ -434,30 +444,32 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                 type="button"
                 onClick={() => sendMessage()}
                 disabled={loading || !input.trim()}
-                className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                className="evaluation-primary-button evaluation-composer__button"
               >
                 {loading ? "Sendet..." : "Senden"}
               </button>
             </div>
-            <p id="evaluation-message-help" className="mt-2 text-xs text-slate-600">
+            <p id="evaluation-message-help" className="evaluation-help-text">
               Enter im Textfeld erzeugt Text. Nutzen Sie die Schaltfläche „Senden“, um die Testfrage zu übermitteln.
             </p>
           </div>
 
-          <aside className="space-y-4">
-            <div className="rounded-3xl border border-white/10 bg-white/10 p-5">
-              <h2 className="font-semibold">Werte dieser Testsitzung</h2>
-              <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div><dt className="text-slate-400">Fragen</dt><dd className="text-xl font-semibold">{userQuestionCount || "Noch keine Daten"}</dd></div>
-                <div><dt className="text-slate-400">Mit Quellen</dt><dd className="text-xl font-semibold">{sourcedAnswers || "Noch keine Daten"}</dd></div>
-                <div><dt className="text-slate-400">Wissensluecken</dt><dd className="text-xl font-semibold">{knowledgeGaps || "Noch keine Daten"}</dd></div>
-                <div><dt className="text-slate-400">Uebergaben</dt><dd className="text-xl font-semibold">{handoffs || "Noch keine Daten"}</dd></div>
+          <aside className="evaluation-side-panel">
+            <div className="evaluation-card">
+              <p className="evaluation-eyebrow">Sitzung</p>
+              <h2>Werte dieser Testsitzung</h2>
+              <dl className="evaluation-metrics">
+                <div><dt>Fragen</dt><dd>{userQuestionCount}</dd></div>
+                <div><dt>Mit Quellen</dt><dd>{sourcedAnswers}</dd></div>
+                <div><dt>Wissenslücken</dt><dd>{knowledgeGaps}</dd></div>
+                <div><dt>Übergaben</dt><dd>{handoffs}</dd></div>
               </dl>
             </div>
-            <div className="rounded-3xl border border-white/10 bg-white/10 p-5">
-              <h2 className="font-semibold">Technische Uebersicht</h2>
-              <ul className="mt-4 space-y-2 text-sm text-slate-300">
-                {context.technicalFeatures.map((feature) => <li key={feature}>- {feature}</li>)}
+            <div className="evaluation-card">
+              <p className="evaluation-eyebrow">Sicherheit</p>
+              <h2>Technische Übersicht</h2>
+              <ul className="evaluation-feature-list">
+                {context.technicalFeatures.map((feature) => <li key={feature}>{feature}</li>)}
               </ul>
             </div>
           </aside>
