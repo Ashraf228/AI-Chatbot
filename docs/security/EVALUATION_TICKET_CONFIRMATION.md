@@ -13,6 +13,10 @@ Der Ablauf ist zweistufig:
 1. `POST /admin/evaluation/chat/message` kann eine bereinigte Ticketvorschau erzeugen.
 2. `POST /admin/evaluation/chat/ticket/confirm` erstellt den internen Demo-Supportfall erst nach expliziter Bestaetigung.
 
+Beim Erzeugen der Vorschau speichert der Server einen kanonischen Preview-Snapshot. Der Inhalts-Hash basiert auf diesem Snapshot und ist an Viewer, Tenant, Site, Evaluation-Session und Conversation gebunden. Nicht-fachliche Unterschiede wie JSON-Feldreihenfolge, optionale `null`-/`undefined`-Felder, Whitespace-Normalisierung oder UI-Anzeigetexte duerfen die Bestaetigung nicht brechen.
+
+Der Confirm-Schritt bestaetigt den gespeicherten Snapshot. Ticketfelder aus dem Browser werden nicht akzeptiert. Wenn sich fachlicher Inhalt der gespeicherten Vorschau aendert, ist eine neue Vorschau erforderlich.
+
 Der Confirm-Request akzeptiert nur:
 
 - `conversationId`
@@ -38,6 +42,7 @@ Der Server prueft vor Erstellung:
 - Preview ist nicht abgelaufen
 - Preview wurde nicht ersetzt oder abgebrochen
 - Inhalts-Hash ist unveraendert
+- gespeicherter kanonischer Snapshot passt zur Confirmation-ID
 
 ## Idempotenz
 

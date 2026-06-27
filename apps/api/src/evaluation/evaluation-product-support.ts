@@ -130,6 +130,62 @@ export function sha256(value: string) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+export type ProductTicketPreviewHashScope = {
+  tenantUserId: string;
+  tenantId: string;
+  siteId: string;
+  evaluationChatSessionId: string;
+  conversationId: string;
+};
+
+function normalizeCanonicalValue(value: unknown): unknown {
+  if (value === null || typeof value === 'undefined') return undefined;
+  if (typeof value === 'string') {
+    const normalized = redactEvaluationSensitiveText(value).replace(/\s+/g, ' ').trim();
+    return normalized || undefined;
+  }
+  if (Array.isArray(value)) {
+    const entries = value
+      .map((entry) => normalizeCanonicalValue(entry))
+      .filter((entry) => typeof entry !== 'undefined');
+    return entries.length > 0 ? entries : undefined;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .map(([key, entry]) => [key, normalizeCanonicalValue(entry)] as const)
+      .filter(([, entry]) => typeof entry !== 'undefined')
+      .sort(([left], [right]) => left.localeCompare(right));
+    return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+  }
+  return value;
+}
+
+export function canonicalProductTicketPreviewSnapshot(
+  fields: ProductTicketPreview['fields'],
+  scope: ProductTicketPreviewHashScope,
+) {
+  return normalizeCanonicalValue({
+    scope: {
+      tenantUserId: scope.tenantUserId,
+      tenantId: scope.tenantId,
+      siteId: scope.siteId,
+      evaluationChatSessionId: scope.evaluationChatSessionId,
+      conversationId: scope.conversationId,
+    },
+    fields: publicPreviewFields(redactEvaluationSensitiveValue({
+      ...fields,
+      supportProfile: 'product' as const,
+    })),
+  });
+}
+
+export function productTicketPreviewContentHash(
+  fields: ProductTicketPreview['fields'],
+  scope: ProductTicketPreviewHashScope,
+) {
+  return sha256(JSON.stringify(canonicalProductTicketPreviewSnapshot(fields, scope)));
+}
+
 export function createPreviewToken() {
   return randomBytes(32).toString('base64url');
 }

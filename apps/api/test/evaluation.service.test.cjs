@@ -148,6 +148,21 @@ function createProductService(overrides = {}) {
       });
       return { rows: [] };
     }
+    if (/UPDATE evaluation_ticket_previews/i.test(sql) && /status = 'cancelled'/i.test(sql)) {
+      const preview = state.previews.find((entry) =>
+        entry.preview_token_hash === params[0] &&
+        entry.tenant_user_id === params[1] &&
+        entry.tenant_id === params[2] &&
+        entry.site_id === params[3] &&
+        entry.conversation_id === params[4] &&
+        entry.status === 'pending'
+      );
+      if (preview) {
+        preview.status = 'cancelled';
+        return { rows: [{ id: preview.id }] };
+      }
+      return { rows: [] };
+    }
     if (/FROM evaluation_ticket_previews/i.test(sql) && /preview_token_hash = \$1/i.test(sql)) {
       return { rows: state.previews.filter((preview) => preview.preview_token_hash === params[0]) };
     }
@@ -355,6 +370,112 @@ test('EvaluationService confirms product preview idempotently and never queues e
   assert.equal(auditRecords.some((entry) => entry.action === 'evaluation_ticket_created'), true);
 });
 
+test('EvaluationService confirms stored product preview when JSONB changes field order', async () => {
+  const { service, state } = createProductService();
+  const previewResult = await service.sendMessage(access, {
+    conversationId: 'eval-session-1',
+    message: 'Bitte Ticket melden: Formular Upload blockiert bei hoher Auswirkung.',
+  });
+
+  const storedPreview = state.previews.at(-1);
+  storedPreview.preview.fields = Object.fromEntries(
+    Object.entries(storedPreview.preview.fields).sort(([left], [right]) => right.localeCompare(left)),
+  );
+
+  const result = await service.confirmTicket(access, {
+    conversationId: 'eval-session-1',
+    previewToken: previewResult.ticketPreview.previewToken,
+  });
+
+  assert.equal(result.status, 'created');
+  assert.equal(state.tickets.length, 1);
+});
+
+test('EvaluationService confirmation ignores optional null fields in stored preview snapshot', async () => {
+  const { service, state } = createProductService();
+  const previewResult = await service.sendMessage(access, {
+    conversationId: 'eval-session-1',
+    message: 'Bitte Ticket melden: Formular Upload blockiert bei hoher Auswirkung.',
+  });
+
+  const storedPreview = state.previews.at(-1);
+  storedPreview.preview.fields.browser = null;
+  storedPreview.preview.fields.device = undefined;
+
+  const result = await service.confirmTicket(access, {
+    conversationId: 'eval-session-1',
+    previewToken: previewResult.ticketPreview.previewToken,
+  });
+
+  assert.equal(result.status, 'created');
+  assert.equal(state.tickets.length, 1);
+});
+
+test('EvaluationService rejects confirmation when stored preview business content changed', async () => {
+  const { service, state } = createProductService();
+  const previewResult = await service.sendMessage(access, {
+    conversationId: 'eval-session-1',
+    message: 'Bitte Ticket melden: Formular Upload blockiert bei hoher Auswirkung.',
+  });
+
+  state.previews.at(-1).preview.fields.description = 'Fachlich veraenderte Beschreibung';
+
+  await assert.rejects(
+    () => service.confirmTicket(access, {
+      conversationId: 'eval-session-1',
+      previewToken: previewResult.ticketPreview.previewToken,
+    }),
+    /Ticket preview changed/,
+  );
+  assert.equal(state.tickets.length, 0);
+});
+
+test('EvaluationService rejects confirmation for other viewer, other site, expired or cancelled preview', async () => {
+  const { service, state } = createProductService();
+  const previewResult = await service.sendMessage(access, {
+    conversationId: 'eval-session-1',
+    message: 'Bitte Ticket melden: Formular Upload blockiert bei hoher Auswirkung.',
+  });
+
+  await assert.rejects(
+    () => service.confirmTicket({ ...access, tenantUserId: 'viewer-2' }, {
+      conversationId: 'eval-session-1',
+      previewToken: previewResult.ticketPreview.previewToken,
+    }),
+    ForbiddenException,
+  );
+  await assert.rejects(
+    () => service.confirmTicket({ ...access, siteId: 'site-other' }, {
+      conversationId: 'eval-session-1',
+      previewToken: previewResult.ticketPreview.previewToken,
+    }),
+    ForbiddenException,
+  );
+
+  state.previews.at(-1).expires_at = '2000-01-01T00:00:00.000Z';
+  await assert.rejects(
+    () => service.confirmTicket(access, {
+      conversationId: 'eval-session-1',
+      previewToken: previewResult.ticketPreview.previewToken,
+    }),
+    ForbiddenException,
+  );
+
+  state.previews.at(-1).expires_at = '2099-01-01T00:00:00.000Z';
+  const cancel = await service.cancelTicketPreview(access, {
+    conversationId: 'eval-session-1',
+    previewToken: previewResult.ticketPreview.previewToken,
+  });
+  assert.equal(cancel.status, 'cancelled');
+  await assert.rejects(
+    () => service.confirmTicket(access, {
+      conversationId: 'eval-session-1',
+      previewToken: previewResult.ticketPreview.previewToken,
+    }),
+    /Ticket preview is not confirmable/,
+  );
+});
+
 test('EvaluationService rejects forbidden confirmation body fields', async () => {
   const { service } = createProductService();
   await assert.rejects(
@@ -362,6 +483,14 @@ test('EvaluationService rejects forbidden confirmation body fields', async () =>
       conversationId: 'conversation-1',
       previewToken: 'token',
       tenantId: 'other-tenant',
+    }),
+    BadRequestException,
+  );
+  await assert.rejects(
+    () => service.confirmTicket(access, {
+      conversationId: 'conversation-1',
+      previewToken: 'token',
+      ticketFields: { description: 'browser override' },
     }),
     BadRequestException,
   );

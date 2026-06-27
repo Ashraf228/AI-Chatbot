@@ -17,6 +17,7 @@ import {
   isUrgentProductCase,
   missingProductFields,
   nextProductQuestion,
+  productTicketPreviewContentHash,
   ProductTicketFields,
   ProductTicketPreview,
   publicPreviewFields,
@@ -333,7 +334,7 @@ export class EvaluationService {
         await this.audit('evaluation_ticket_confirmation_rejected', access, { result: 'rejected', reason: preview.status });
         throw new BadRequestException('Ticket preview is not confirmable');
       }
-      const expectedHash = this.ticketContentHash(preview.preview.fields, preview.evaluation_chat_session_id, access);
+      const expectedHash = this.ticketContentHash(preview.preview.fields, preview.evaluation_chat_session_id, preview.conversation_id, access);
       if (expectedHash !== preview.content_hash) {
         await this.audit('evaluation_ticket_confirmation_rejected', access, { result: 'rejected', reason: 'content_changed' });
         throw new BadRequestException('Ticket preview changed');
@@ -645,7 +646,7 @@ export class EvaluationService {
         access.siteId,
         session.id,
         session.id,
-        this.ticketContentHash(publicFields, session.id, access),
+        this.ticketContentHash(publicFields, session.id, session.id, access),
         JSON.stringify(preview),
         status,
         expiresAt,
@@ -663,14 +664,19 @@ export class EvaluationService {
     };
   }
 
-  private ticketContentHash(fields: ProductTicketPreview['fields'], evaluationChatSessionId: string, access: EvaluationAccessContext) {
-    return sha256(JSON.stringify({
+  private ticketContentHash(
+    fields: ProductTicketPreview['fields'],
+    evaluationChatSessionId: string,
+    conversationId: string,
+    access: EvaluationAccessContext,
+  ) {
+    return productTicketPreviewContentHash(fields, {
       tenantUserId: access.tenantUserId,
       tenantId: access.tenantId,
       siteId: access.siteId,
       evaluationChatSessionId,
-      fields: redactEvaluationSensitiveValue(fields),
-    }));
+      conversationId,
+    });
   }
 
   private confirmationResult(demoReference: string, createdAt?: string | null) {
