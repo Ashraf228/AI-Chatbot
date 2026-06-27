@@ -47,6 +47,8 @@ Alle bestehenden Admin-, Customer- und Dashboard-API-Routen bleiben fuer Viewer 
 
 Die Browseroberflaeche nutzt ausschliesslich `/api/evaluation/*`. Diese Dashboard-Routen leiten serverseitig mit `DASHBOARD_INTERNAL_TOKEN` an die isolierten Backend-Endpunkte unter `/admin/evaluation/*` weiter. Browserwerte fuer Tenant, Site, Rolle, Modell, Agent, Systemprompt, Tools oder Knowledge-Dokumente werden nicht akzeptiert.
 
+Die signierte Dashboard-Session enthaelt die fuer diese serverseitige Revalidierung benoetigte Tenant- und Tenant-User-Bindung. Diese Werte werden fuer Viewer nicht in die oeffentliche Antwort von `GET /api/auth/session` projiziert; der Browser kann Tenant, Site oder Viewer nicht selbst auswaehlen.
+
 ## Rueckgabeprojektionen
 
 `GET /api/evaluation/context` liefert nur:

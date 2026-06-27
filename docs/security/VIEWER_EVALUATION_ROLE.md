@@ -13,7 +13,8 @@ Die Rolle `viewer` ist fuer zeitlich begrenzte externe Evaluationen vorgesehen. 
 - `tenant_users.role = viewer` wird zu `DashboardSession.role = viewer`.
 - Bekannte Tenant-Rollen `owner`, `admin`, `manager` und `editor` behalten die bisherige Customer-Semantik.
 - Unbekannte Rollen werden beim Login abgelehnt und nicht auf `customer` heruntergestuft.
-- Viewer-Sessions benoetigen immer eine `tenantId`.
+- Viewer-Sessions benoetigen serverseitig immer eine `tenantId`.
+- Die oeffentliche Projektion von `GET /api/auth/session` gibt fuer Viewer keine Tenant-, Site- oder Tenant-User-IDs an den Browser aus.
 - Bestehende Dashboard-API- und Backend-Admin-Routen sind fuer Viewer deny-by-default.
 - Erlaubt sind nur Login, Logout, `GET /api/auth/session` und die minimale Seite `/evaluation`.
 

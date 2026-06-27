@@ -112,25 +112,58 @@ describe("viewer dashboard sessions", () => {
     await expect(verifySessionToken(expiredToken)).resolves.toBeNull();
   });
 
-  test("public session response exposes only safe metadata", async () => {
+  test("public viewer session response exposes only safe metadata", async () => {
     vi.stubEnv("ADMIN_SESSION_SECRET", SESSION_SECRET);
+    const accountExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const token = await createViewerSessionToken({
       tenantId: "tenant-demo",
+      tenantUserId: "tenant-user-1",
       email: "viewer@example.test",
       displayName: "Demo Viewer",
+      accountExpiresAt,
     });
     const session = await verifySessionToken(token);
 
     expect(session).not.toBeNull();
+    expect(session?.tenantId).toBe("tenant-demo");
+    expect(session?.tenantUserId).toBe("tenant-user-1");
     expect(toPublicSession(session!)).toEqual({
       role: "viewer",
       displayName: "Demo Viewer",
-      tenantId: "tenant-demo",
       sessionExpiresAt: session!.sessionExpiresAt,
-      accountExpiresAt: null,
+      accountExpiresAt,
     });
-    expect(Object.keys(toPublicSession(session!))).not.toContain("email");
-    expect(Object.keys(toPublicSession(session!))).not.toContain("sub");
+
+    const publicSession = toPublicSession(session!);
+    expect(Object.keys(publicSession)).not.toContain("tenantId");
+    expect(Object.keys(publicSession)).not.toContain("email");
+    expect(Object.keys(publicSession)).not.toContain("sub");
+    expect(Object.keys(publicSession)).not.toContain("tenantUserId");
+    expect(Object.keys(publicSession)).not.toContain("siteId");
+    expect(Object.keys(publicSession)).not.toContain("evaluationSiteId");
+    expect(Object.keys(publicSession)).not.toContain("token");
+    expect(Object.keys(publicSession)).not.toContain("secret");
+    expect(Object.keys(publicSession)).not.toContain("metadata");
+  });
+
+  test("public customer session keeps tenantId for existing dashboard scoping", async () => {
+    vi.stubEnv("ADMIN_SESSION_SECRET", SESSION_SECRET);
+    const token = await createTenantSessionToken({
+      role: "customer",
+      tenantId: "tenant-customer",
+      tenantUserId: "tenant-user-customer",
+      email: "customer@example.test",
+      displayName: "Customer User",
+    });
+    const session = await verifySessionToken(token);
+
+    expect(session).not.toBeNull();
+    expect(toPublicSession(session!)).toMatchObject({
+      role: "customer",
+      displayName: "Customer User",
+      tenantId: "tenant-customer",
+    });
+    expect(Object.keys(toPublicSession(session!))).not.toContain("tenantUserId");
   });
 
   test("session cookie remains httpOnly and secure in production", () => {
