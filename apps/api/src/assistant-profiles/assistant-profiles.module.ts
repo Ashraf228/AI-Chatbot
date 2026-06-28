@@ -19,6 +19,6 @@ import { AssistantProfileResolverService } from './assistant-profile-resolver.se
     AssistantProfileMigrationService,
     PrismaService,
   ],
-  exports: [AssistantProfileResolverService],
+  exports: [AssistantProfileResolverService, AssistantProfileDiagnosticsService],
 })
 export class AssistantProfilesModule {}
