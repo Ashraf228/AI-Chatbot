@@ -110,6 +110,7 @@ Status: PASS
 
 Status: PASS
 
+- Zugangsstrategie: Ein gemeinsamer, zeitlich begrenzter NOLIS-Team-Viewer fuer die Erstbewertung. Keine individuellen personenbezogenen Evaluationskonten in dieser Phase.
 - Viewer-Login erfolgreich: ja
 - Rolle: Viewer
 - `/api/auth/session`: 200
