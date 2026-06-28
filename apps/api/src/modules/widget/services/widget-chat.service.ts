@@ -3,7 +3,10 @@ import { Request, Response } from 'express';
 
 import { ChatPipelineService } from '../../../ai/chat-pipeline/chat-pipeline.service';
 import { ChatPipelineEvent } from '../../../ai/chat-pipeline/chat-pipeline-events';
+import { AssistantProfileResolverService } from '../../../assistant-profiles';
 import { PrismaService } from '../../../db/prisma.service';
+import { SiteModulesService } from '../../../site-modules/site-modules.service';
+import { logEvent } from '../../../utils/logger';
 import { SendMessageDto } from '../dto/send-message.dto';
 import {
   ConversationMessageEntity,
@@ -31,6 +34,8 @@ export class WidgetChatService {
     private readonly db: PrismaService,
     private readonly widgetSecurityService: WidgetSecurityService,
     private readonly chatPipeline: ChatPipelineService,
+    private readonly siteModules: SiteModulesService,
+    private readonly assistantProfiles: AssistantProfileResolverService,
   ) {}
 
   async sendMessage(dto: SendMessageDto, origin?: string, req?: Request) {
@@ -42,6 +47,7 @@ export class WidgetChatService {
     if (!tenantId) {
       throw new Error('Site misconfigured (tenant missing)');
     }
+    await this.observeAssistantProfile(site);
 
     const reply = await this.chatPipeline.process({
       tenantId,
@@ -104,6 +110,7 @@ export class WidgetChatService {
     if (!tenantId) {
       throw new Error('Site misconfigured (tenant missing)');
     }
+    await this.observeAssistantProfile(site);
 
     res.status(200);
     res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -135,6 +142,52 @@ export class WidgetChatService {
       });
     } finally {
       res.end();
+    }
+  }
+
+  private async observeAssistantProfile(site: {
+    id: string;
+    config?: Record<string, unknown>;
+    conversationFlow?: unknown;
+    leadCaptureEnabled?: boolean;
+    leadNotificationEmail?: string;
+    industry?: string;
+  }) {
+    try {
+      const modules = await this.siteModules.listForSite(site.id);
+      const moduleConfigs = Object.fromEntries(
+        modules.map((module) => [module.key, module.config || {}]),
+      );
+      const siteConfig = {
+        ...(site.config || {}),
+        conversationFlow: site.conversationFlow ?? site.config?.conversationFlow,
+        leadCaptureEnabled: site.leadCaptureEnabled,
+        leadNotificationEmail: site.leadNotificationEmail,
+        industry: site.industry ?? site.config?.industry,
+      };
+      const profile = this.assistantProfiles.resolve({
+        siteConfig,
+        moduleConfigs,
+      });
+      const deliveryChannelTypes = Object.entries(profile.deliveryChannels)
+        .filter(([, channel]) => Boolean(channel?.enabled))
+        .map(([key]) => key);
+
+      logEvent('assistant_profile_resolved', {
+        siteId: site.id,
+        profileKey: profile.profileKey,
+        profileVersion: profile.profileVersion,
+        legacySource: profile.legacySource,
+        enabledTasks: profile.enabledTasks,
+        enabledAgents: profile.enabledAgents,
+        requiredFieldKeys: profile.requiredFields.map((field) => field.key),
+        deliveryChannelTypes,
+      });
+    } catch (error) {
+      logEvent('assistant_profile_resolution_failed', {
+        siteId: site.id,
+        reason: error instanceof Error ? error.message : 'unknown_error',
+      });
     }
   }
 

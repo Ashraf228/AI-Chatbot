@@ -33,6 +33,8 @@ import { BusinessAnalyticsModule } from './business-analytics/business-analytics
 import { BillingModule } from './billing/billing.module';
 import { ItSupportModule } from './modules/it-support/it-support.module';
 import { EvaluationModule } from './evaluation/evaluation.module';
+import { AssistantProfilesModule } from './assistant-profiles';
+import { ConversationEngineModule } from './conversation-engine';
 
 @Module({
   imports: [
@@ -60,6 +62,8 @@ import { EvaluationModule } from './evaluation/evaluation.module';
     BillingModule,
     ItSupportModule,
     EvaluationModule,
+    AssistantProfilesModule,
+    ConversationEngineModule,
   ],
   controllers: [HealthController],
   providers: [

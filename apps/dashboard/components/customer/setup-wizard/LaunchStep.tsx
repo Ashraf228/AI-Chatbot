@@ -1,3 +1,9 @@
+import { AssistantProfileDiagnosticsCard } from "./AssistantProfileDiagnosticsCard";
+import { ConversationEngineCompareCard } from "./ConversationEngineCompareCard";
+import { ConversationEnginePreviewCard } from "./ConversationEnginePreviewCard";
+import { ConversationEngineResponsePreviewCard } from "./ConversationEngineResponsePreviewCard";
+import { ConversationEngineTestCasesCard } from "./ConversationEngineTestCasesCard";
+import type { DashboardSessionRole } from "../../../lib/auth";
 import type { CustomerApiStatus, CustomerOverallStatus, CustomerStatusTone } from "../customer-status";
 import { EmbedCodePanel } from "./EmbedCodePanel";
 import { GoLivePanel } from "./GoLivePanel";
@@ -25,6 +31,7 @@ type LaunchStepProps = {
   onCopyEmbedCode: () => void;
   onGoLive: () => void;
   onJumpToStatusStep: (stepKey?: string) => void;
+  dashboardRole?: DashboardSessionRole | null;
 };
 
 export function LaunchStep({
@@ -46,7 +53,10 @@ export function LaunchStep({
   onCopyEmbedCode,
   onGoLive,
   onJumpToStatusStep,
+  dashboardRole,
 }: LaunchStepProps) {
+  const canUseAdminTestTools = dashboardRole === "admin" || dashboardRole === "operator";
+
   return (
     <section className="dashboard-card dashboard-stack launch-step" id="setup-step-live">
       <SetupStepHeader
@@ -81,6 +91,16 @@ export function LaunchStep({
           onCopy={onCopyEmbedCode}
         />
       </div>
+
+      {canUseAdminTestTools ? (
+        <>
+          <AssistantProfileDiagnosticsCard siteId={site.id} />
+          <ConversationEngineTestCasesCard siteId={site.id} />
+          <ConversationEnginePreviewCard siteId={site.id} />
+          <ConversationEngineCompareCard siteId={site.id} />
+          <ConversationEngineResponsePreviewCard siteId={site.id} />
+        </>
+      ) : null}
 
       <GoLivePanel canGoLive={canGoLive} isLive={isLive} isLoading={savingKey === "live"} onGoLive={onGoLive} />
     </section>

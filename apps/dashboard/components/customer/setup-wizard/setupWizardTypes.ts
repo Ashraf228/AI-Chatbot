@@ -1,5 +1,8 @@
+import type { DashboardSessionRole } from "../../../lib/auth";
+
 export type CustomerSetupWizardProps = {
   siteId: string;
+  dashboardRole?: DashboardSessionRole | null;
 };
 
 export type KnowledgeMode = "flexible" | "grounded" | "strict";

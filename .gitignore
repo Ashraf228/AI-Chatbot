@@ -34,4 +34,5 @@ __MACOSX/
 
 # app outputs
 apps/*/dist/
+apps/api/reports/
 packages/*/dist/

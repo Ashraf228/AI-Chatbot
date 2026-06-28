@@ -61,6 +61,7 @@
     "eval:nolis-demo": "npm run build:api && node scripts/evaluation/run-golden-evaluation.mjs",
     "eval:nolis-demo:case": "npm run build:api && node scripts/evaluation/run-golden-evaluation.mjs",
     "eval:nolis-demo:live": "node scripts/evaluation/run-live-golden-evaluation.mjs",
+    "conversation:evaluate": "npm run build:api && node scripts/evaluation/conversation-engine-evaluation.mjs",
     "build:all": "npm run build:api && npm run build:dashboard && npm run build:widget && npm run build:reporter",
     "db:migrate": "npm run migrate --workspace=apps/api",
     "docker:config": "docker compose --env-file .env.example config",
