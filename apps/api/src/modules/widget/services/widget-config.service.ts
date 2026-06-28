@@ -6,6 +6,7 @@ type WidgetConfigRow = {
   id: string;
   site_key: string;
   tenant_id: string | null;
+  config: Record<string, unknown> | null;
   name: string;
   domain: string;
   brand_color: string;
@@ -87,12 +88,13 @@ export class WidgetConfigService {
       leadNotificationEmail?: string;
       suggestedQuestionsByPath?: Record<string, string[]>;
       conversationFlow?: unknown;
+      config?: Record<string, unknown>;
       systemPrompt?: string;
       industry?: string;
     }
   > {
     const res = await this.db.query<WidgetConfigRow>(
-      `SELECT id, tenant_id, name, domain, brand_color, accent_color, font_family, welcome_message,
+      `SELECT id, tenant_id, config, name, domain, brand_color, accent_color, font_family, welcome_message,
               site_key,
               privacy_url, is_active, company_name, bot_name, logo_url, public_key,
               widget_bundle_url, consent_required, lead_capture_enabled, suggested_questions_by_path,
@@ -102,6 +104,7 @@ export class WidgetConfigService {
            s.id,
            s.site_key,
            s.tenant_id,
+           s.config,
            s.name,
            COALESCE(s.config->>'domain', s.allowed_domains[1], '') AS domain,
            COALESCE(s.config->>'brandColor', '#b55400') AS brand_color,
@@ -154,6 +157,7 @@ export class WidgetConfigService {
       isActive: row.is_active,
       publicKey: row.public_key ?? undefined,
       tenantId: row.tenant_id ?? undefined,
+      config: row.config && typeof row.config === 'object' ? row.config : {},
       widgetBundleUrl: row.widget_bundle_url,
       consentRequired: row.consent_required,
       leadCaptureEnabled: row.lead_capture_enabled,

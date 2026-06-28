@@ -29,12 +29,16 @@ import { PrismaService } from '../../db/prisma.service';
 import { RateLimitService } from '../../utils/rate-limit.service';
 import { AuditLogsModule } from '../../audit-logs/audit-logs.module';
 import { BillingModule } from '../../billing/billing.module';
+import { SiteModulesModule } from '../../site-modules/site-modules.module';
+import { AssistantProfilesModule } from '../../assistant-profiles';
 
 @Module({
   imports: [
     ChatPipelineModule,
     AuditLogsModule,
     BillingModule,
+    SiteModulesModule,
+    AssistantProfilesModule,
   ],
   controllers: [
     WidgetConfigController,

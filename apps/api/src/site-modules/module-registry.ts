@@ -28,6 +28,23 @@ export const SITE_MODULE_REGISTRY: SiteModuleDefinition[] = [
     optionalFields: ['assistantProfile', 'migration'],
   },
   {
+    key: 'conversation-engine-tests',
+    label: 'Gesprächslogik Tests',
+    description: 'Speichert site-spezifische Admin-Testflags und Testfälle fuer die Conversation-Engine-Vorschau.',
+    category: 'operations',
+    defaultEnabled: false,
+    defaultConfig: {
+      conversationEngine: {
+        previewEnabled: false,
+        compareEnabled: false,
+        adminTestOnly: true,
+      },
+      testCases: [],
+    },
+    requiredFields: [],
+    optionalFields: ['conversationEngine', 'testCases', 'lastMetrics'],
+  },
+  {
     key: 'lead-sales',
     label: 'Lead- & Sales-Agent',
     description: 'Qualifiziert Interessenten, fuehrt Richtung Kontakt und unterstuetzt bei Beratungsgespraechen.',

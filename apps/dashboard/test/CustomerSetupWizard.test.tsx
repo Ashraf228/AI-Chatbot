@@ -216,11 +216,15 @@ describe("LaunchStep admin test tools", () => {
     render(<LaunchStep {...launchProps(role)} />);
 
     expect(screen.getByText("KI-Mitarbeiter Profil")).toBeInTheDocument();
+    expect(screen.getByText("Gesprächslogik Testfälle")).toBeInTheDocument();
+    expect(screen.getByText("Gesprächslogik Vorschau")).toBeInTheDocument();
   });
 
   test.each(["customer", null] as const)("%s does not render assistant profile test card", (role) => {
     render(<LaunchStep {...launchProps(role)} />);
 
     expect(screen.queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gesprächslogik Testfälle")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gesprächslogik Vorschau")).not.toBeInTheDocument();
   });
 });
