@@ -45,7 +45,9 @@ export class ChatPipelineService {
     const normalized = this.normalizeInput(input);
     await this.usageLimits.assertWithinLimit(normalized.tenantId, 'monthlyMessages');
     const conversation = await this.prepareConversation(normalized);
-    const agentResult = await this.tryAgent(normalized, conversation);
+    const agentResult = normalized.evaluationMode
+      ? null
+      : await this.tryAgent(normalized, conversation);
 
     if (agentResult) {
       return agentResult;
@@ -150,7 +152,9 @@ export class ChatPipelineService {
       conversationId: conversation.id,
     });
 
-    const agentResult = await this.tryAgent(normalized, conversation);
+    const agentResult = normalized.evaluationMode
+      ? null
+      : await this.tryAgent(normalized, conversation);
     if (agentResult) {
       if (agentResult.decision?.suggestedTools.length) {
         for (const toolResult of agentResult.toolResults || []) {

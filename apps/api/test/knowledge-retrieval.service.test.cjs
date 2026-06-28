@@ -116,6 +116,99 @@ test('ChatPipeline strict knowledgeMode returns safe answer without LLM when ret
   assert.match(result.answer, /keine passende Information/i);
 });
 
+test('ChatPipeline evaluation mode bypasses general agent orchestrator and keeps retrieval sources', async () => {
+  const calls = { agent: 0, llm: 0 };
+  const db = {
+    async query() {
+      return { rows: [] };
+    },
+  };
+  const conversationState = {
+    async ensureConversation() {
+      return { id: 'conversation-1', sessionId: 'session-1' };
+    },
+    async touchWidgetSession() {},
+    async appendMessage() {},
+    async loadHistory() {
+      return [];
+    },
+    async touchConversation() {},
+  };
+  const pipeline = new ChatPipelineService(
+    db,
+    { async embed() { return [0.1]; } },
+    {
+      async search(_tenantId, _siteId, _embedding, _k, _minScore, options) {
+        assert.equal(options.demoOnly, true);
+        return [
+          {
+            id: 'chunk-1',
+            document_id: 'doc-1',
+            source_id: 'source-1',
+            source_type: 'demo',
+            source_label: 'Reisepass beantragen',
+            content: 'Synthetischer Demo-Kontext zum Reisepass.',
+            metadata: { demo: true, synthetic: true },
+            title: 'Reisepass beantragen',
+            source_url: null,
+            score: 0.91,
+          },
+        ];
+      },
+    },
+    {
+      async answer() {
+        calls.llm += 1;
+        return {
+          text: 'Antwort aus Demo-Wissen.',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          model: 'm',
+          latencyMs: 1,
+        };
+      },
+    },
+    { async resolveForSite() { return { route: 'faq', reason: 'test', guide: '' }; } },
+    { async buildRecommendationContextForSite() { return { products: [], collections: [], state: 'ready_to_recommend', stateGuide: '' }; } },
+    {
+      async decide() {
+        calls.agent += 1;
+        return {
+          action: 'warn_sensitive_data',
+          handled: true,
+          answer: 'Agent-Antwort ohne Quellen.',
+          decision: {
+            type: 'answer_question',
+            confidence: 1,
+            suggestedTools: [],
+            requiredFields: [],
+            collectedFields: {},
+            metadata: {},
+          },
+        };
+      },
+    },
+    conversationState,
+    new ResponseComposerService(),
+    { async executeTool() { return { toolName: 'noop', status: 'skipped', message: 'noop' }; } },
+    { async assertWithinLimit() {} },
+  );
+
+  const result = await pipeline.process({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    sessionId: 'session-1',
+    source: 'dashboard',
+    message: 'Ich brauche einen neuen Reisepass.',
+    siteConfig: { knowledgeMode: 'flexible' },
+    evaluationMode: true,
+  });
+
+  assert.equal(calls.agent, 0);
+  assert.equal(calls.llm, 1);
+  assert.equal(result.sources.length, 1);
+  assert.equal(result.sources[0].title, 'Reisepass beantragen');
+});
+
 test('ChatPipeline adds IT support answer guidance to routed prompt', async () => {
   const calls = { systemPrompt: '' };
   const db = {
