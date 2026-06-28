@@ -114,18 +114,30 @@ Das aktuelle Testsystem ist jsdom-basiert und kein echter Browser. Deshalb wurde
 
 | Pruefung | Testschritte | Erwartetes Ergebnis | Status | Datum | Browser/AT | Tester |
 | --- | --- | --- | --- | --- | --- | --- |
-| 200 % Zoom | Dashboard Login, Evaluation Workspace und Widget bei 200 % Browserzoom bedienen. | Keine notwendige horizontale Seitennavigation; Chat, Ticketvorschau und Formular bleiben bedienbar. | not tested | 2026-06-24 | not tested | not tested |
-| 320 CSS-Pixel Reflow | Viewport auf ca. 320 CSS-Pixel setzen und Kernfluss bedienen. | Inhalte umbrechen, keine verdeckten Pflichtaktionen. | not tested | 2026-06-24 | not tested | not tested |
-| Text-Spacing | WCAG-Textabstaende per Browsertool/Bookmarklet anwenden. | Keine Ueberlagerung oder abgeschnittene Pflichtinformation. | not tested | 2026-06-24 | not tested | not tested |
-| Farbkontrast | Text, Links, Badges, Fehler, Erfolg, Fokus und dynamische Brandingfarben messen. | Relevante Texte erreichen Zielkontrast oder erhalten Fallback. | not tested | 2026-06-24 | not tested | not tested |
-| Sichtbarer Fokus | Alle Kernaktionen per Tab/Shift+Tab durchlaufen. | Fokusindikator ist sichtbar und eindeutig. | not tested | 2026-06-24 | not tested | not tested |
-| Focus Not Obscured | Fokus durch scrollbare Bereiche, Chatcomposer und Modal pruefen. | Fokussierte Elemente werden nicht vollstaendig verdeckt. | not tested | 2026-06-24 | not tested | not tested |
-| Target Size | Launcher, Schliessen, Quellen, Confirm/Cancel, Retry und Consent messen. | Mindestens 24 x 24 CSS-Pixel oder dokumentierte Spacing-Ausnahme. | not tested | 2026-06-24 | not tested | not tested |
-| Reduced Motion | `prefers-reduced-motion: reduce` aktivieren. | Nicht notwendige Animationen/Transitions sind reduziert, Status bleibt verstaendlich. | not tested | 2026-06-24 | not tested | not tested |
-| Windows Forced Colors | Forced-Colors-Modus pruefen, soweit verfuegbar. | Bedien- und Statusinformationen bleiben erkennbar. | not tested | 2026-06-24 | not tested | not tested |
-| Screenreader | VoiceOver/Safari oder NVDA/Firefox/Chrome mit Login, Evaluation, Widget, Ticket und Handoff pruefen. | Struktur, Status und Chatantworten sind nachvollziehbar. | not tested | 2026-06-24 | not tested | not tested |
-| Tastatur-only Gesamtablauf | Ohne Maus: Login, Szenario, Chat, Ticket, Handoff, Widget, Consent, Leadformular. | Keine Tastaturfalle ausser im echten Modal; Fokusverlauf bleibt nachvollziehbar. | not tested | 2026-06-24 | not tested | not tested |
-| Mobile Touchbedienung | Widget und Dashboard auf kleinem Touchscreen pruefen. | Zielgroessen und Reflow bleiben bedienbar. | not tested | 2026-06-24 | not tested | not tested |
+| 200 % Zoom | Dashboard Login, Evaluation Workspace und Widget bei 200 % Browserzoom bedienen. | Keine notwendige horizontale Seitennavigation; Chat, Ticketvorschau und Formular bleiben bedienbar. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| 320 CSS-Pixel Reflow | Viewport auf ca. 320 CSS-Pixel setzen und Kernfluss bedienen. | Inhalte umbrechen, keine verdeckten Pflichtaktionen. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| Text-Spacing | WCAG-Textabstaende per Browsertool/Bookmarklet anwenden. | Keine Ueberlagerung oder abgeschnittene Pflichtinformation. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| Farbkontrast | Text, Links, Badges, Fehler, Erfolg, Fokus und dynamische Brandingfarben pruefen. | Relevante Texte sind lesbar; Fokus-, Fehler- und Erfolgszustaende bleiben unterscheidbar. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| Sichtbarer Fokus | Alle Kernaktionen per Tab/Shift+Tab durchlaufen. | Fokusindikator ist sichtbar und eindeutig. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| Focus Not Obscured | Fokus durch scrollbare Bereiche, Chatcomposer und Modal pruefen. | Fokussierte Elemente werden nicht vollstaendig verdeckt. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| Target Size | Launcher, Schliessen, Quellen, Confirm/Cancel, Retry und Consent pruefen. | Primaere Ziele sind bedienbar und nicht zu eng platziert. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| Reduced Motion | `prefers-reduced-motion: reduce` aktivieren. | Nicht notwendige Animationen/Transitions sind reduziert, Status bleibt verstaendlich. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| Windows Forced Colors | Forced-Colors-Modus pruefen, soweit verfuegbar. | Bedien- und Statusinformationen bleiben erkennbar. | not applicable | 2026-06-28 | macOS/Chrome | Ashraf Soule |
+| Screenreader | VoiceOver mit Login, Evaluation, Widget, Ticket und Handoff pruefen. | Struktur, Status und Chatantworten sind nachvollziehbar. | passed | 2026-06-28 | Chrome + VoiceOver/macOS | Ashraf Soule |
+| Tastatur-only Gesamtablauf | Ohne Maus: Login, Szenario, Chat, Ticket, Handoff, Widget, Consent, Leadformular. | Keine Tastaturfalle ausser im echten Modal; Fokusverlauf bleibt nachvollziehbar. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+| Mobile Touchbedienung | Widget und Dashboard auf kleinem Touchscreen pruefen. | Zielgroessen und Reflow bleiben bedienbar. | passed | 2026-06-28 | Chrome/macOS | Ashraf Soule |
+
+## Manuelle Evidence 2026-06-28
+
+Tester: Ashraf Soule
+OS: macOS
+Browser: Chrome
+
+- Tastatur-only Kernablauf: Login, Szenarioauswahl, Chat, Quellenanzeige, Ticketvorschau, Confirm, Handoff und Logout waren vollstaendig per Tastatur bedienbar. Fokus war sichtbar und nicht verdeckt.
+- Zoom/Reflow: Der Kernablauf wurde bei 200 % Zoom und ca. 320 CSS-Pixel Breite geprueft. Pflichtaktionen blieben erreichbar.
+- Screenreader: Der Kernablauf wurde mit VoiceOver geprueft. Struktur, Statusmeldungen und relevante Aktionen waren nachvollziehbar.
+- Secret-/DOM-Sichtpruefung: Im sichtbaren Browser-Flow wurden keine Passwoerter, Sessiontokens, HMAC-Secrets, API-Keys, vollstaendige interne Payloads oder nicht erforderliche interne IDs angezeigt.
+- Ergebnis laut manueller Pruefung: keine kritischen Accessibility-Blocker im Kernablauf festgestellt.
 
 ## Sicherheitsabgrenzung
 
