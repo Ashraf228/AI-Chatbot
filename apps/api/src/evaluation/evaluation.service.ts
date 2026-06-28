@@ -137,19 +137,51 @@ function asStringArray(value: unknown, fallback: string[]) {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? value : fallback;
 }
 
+function asString(value: unknown, fallback: string) {
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+function asBenefitList(value: unknown) {
+  if (!Array.isArray(value)) return null;
+  const benefits = value
+    .map((entry) => asRecord(entry))
+    .map((entry) => ({
+      title: typeof entry.title === 'string' ? entry.title : '',
+      text: typeof entry.text === 'string' ? entry.text : '',
+    }))
+    .filter((entry) => entry.title && entry.text);
+  return benefits.length > 0 && benefits.length <= 6 ? benefits : null;
+}
+
+function asExpansionStages(value: unknown) {
+  if (!Array.isArray(value)) return null;
+  const stages = value
+    .map((entry) => asRecord(entry))
+    .map((entry) => ({
+      title: typeof entry.title === 'string' ? entry.title : '',
+      items: asStringArray(entry.items, []),
+    }))
+    .filter((entry) => entry.title && entry.items.length > 0);
+  return stages.length > 0 && stages.length <= 4 ? stages : null;
+}
+
 function asScenarioList(value: unknown) {
   if (!Array.isArray(value)) return null;
   const scenarios = value
     .map((entry) => asRecord(entry))
     .map((entry) => ({
       key: typeof entry.key === 'string' ? entry.key : '',
+      category: typeof entry.category === 'string' ? entry.category : undefined,
+      persona: typeof entry.persona === 'string' ? entry.persona : undefined,
       title: typeof entry.title === 'string' ? entry.title : '',
       prompt: typeof entry.prompt === 'string' ? entry.prompt : '',
+      goal: typeof entry.goal === 'string' ? entry.goal : undefined,
+      observe: typeof entry.observe === 'string' ? entry.observe : undefined,
       expected: typeof entry.expected === 'string' ? entry.expected : undefined,
       demo: true,
     }))
     .filter((entry) => entry.key && entry.title && entry.prompt);
-  return scenarios.length === 3 ? scenarios : null;
+  return scenarios.length >= 3 && scenarios.length <= 12 ? scenarios : null;
 }
 
 @Injectable()
@@ -187,6 +219,10 @@ export class EvaluationService {
     await this.audit('evaluation_workspace_opened', access, { result: 'ok' });
     return {
       workspaceTitle: typeof workspace.workspaceTitle === 'string' ? workspace.workspaceTitle : `${access.siteDisplayName} Evaluation`,
+      workspaceSubtitle: asString(
+        workspace.workspaceSubtitle,
+        'Diese Demo zeigt, wie ein KI-Zusatzmodul kommunale Fragen und Supportfälle quellenbasiert unterstützen könnte.',
+      ),
       siteDisplayName: access.siteDisplayName,
       readOnly: true,
       demo: true,
@@ -202,6 +238,28 @@ export class EvaluationService {
         'Sichere Nicht-Antwort bei fehlendem Wissen pruefen',
       ],
       scenarios,
+      benefits: asBenefitList(workspace.benefits) || [
+        {
+          title: 'Für Kommunen',
+          text: 'Bürgerinnen, Bürger und Mitarbeitende erhalten schnellere Orientierung.',
+        },
+      ],
+      demoAreas: asStringArray(workspace.demoAreas, [
+        'Bürgerservice',
+        'Online-Anträge',
+        'Support & Handoff',
+      ]),
+      proofPoints: asStringArray(workspace.proofPoints, [
+        'Quellenbasierte Antwortlogik',
+        'Sichere Nicht-Antwort',
+        'Keine externe Übermittlung',
+      ]),
+      expansionStages: asExpansionStages(workspace.expansionStages) || [
+        {
+          title: 'Standard',
+          items: ['Quellenantworten', 'Ticketvorschau', 'Mock-Handoff'],
+        },
+      ],
       technicalFeatures: asStringArray(workspace.technicalFeatures, [
         'Mandanten- und Site-Trennung',
         'Zeitlich begrenzter Evaluationszugang',

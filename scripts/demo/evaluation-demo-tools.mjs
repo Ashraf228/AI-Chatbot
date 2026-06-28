@@ -125,7 +125,7 @@ function buildSiteConfig(config) {
     industry: config.profileKey,
     setupGoal: 'support',
     primaryGoal: 'support',
-    botType: 'product-support-demo',
+    botType: 'municipal-ai-assistance-demo',
     moduleConfigs: {
       'it-support': {
         supportProfile: 'product',
@@ -147,11 +147,11 @@ function buildSiteConfig(config) {
     knowledgeMode: 'strict',
     fallbackBehavior: 'grounded_only',
     tone: 'professional',
-    ctaText: 'Demo testen',
-    launcherLabel: 'Demo testen',
-    welcomeMessage: 'Guten Tag. Welche Frage zum Demonstrator darf ich beantworten?',
+    ctaText: 'Kommunale KI-Demo testen',
+    launcherLabel: 'Kommunale KI-Demo testen',
+    welcomeMessage: 'Guten Tag. Welche kommunale Frage zum Demonstrator darf ich beantworten?',
     systemPrompt:
-      'Sie sind ein Produktsupport-Assistent fuer einen synthetischen Kooperationsdemonstrator. Antworten Sie nur auf Grundlage freigegebener Demonstrationsinhalte. Treffen Sie keine Verwaltungsentscheidung, geben Sie keine Rechtsauskunft und behaupten Sie keine Produktivintegration. Wenn keine belastbare Quelle vorliegt, sagen Sie: Diese Frage kann ich auf Grundlage der freigegebenen Demonstrationsinhalte nicht zuverlaessig beantworten.',
+      'Sie sind eine KI-Assistenz fuer einen synthetischen kommunalen Kooperationsdemonstrator fuer NOLIS-Kunden. Antworten Sie nur auf Grundlage freigegebener Demonstrationsinhalte. Treffen Sie keine Verwaltungsentscheidung, geben Sie keine Rechtsauskunft und behaupten Sie keine Produktivintegration oder externe Uebermittlung. Wenn keine belastbare Quelle vorliegt, sagen Sie: Diese Frage kann ich auf Grundlage der freigegebenen Demonstrationsinhalte nicht zuverlaessig beantworten.',
     templateId: config.profileKey,
     templateVersion: 1,
     templateAppliedAt: new Date().toISOString(),
@@ -163,18 +163,78 @@ function buildSiteConfig(config) {
     reportKpis: ['evaluationQuestions', 'sourcedAnswers', 'knowledgeGaps'],
     evaluationWorkspace: {
       partnerDisplayName: config.partnerDisplayName,
-      workspaceTitle: config.workspaceTitle,
+      workspaceTitle: 'KI-Assistenz für kommunale NOLIS-Kunden',
+      workspaceSubtitle:
+        'Diese Demo zeigt, wie ein NOLIS-gebrandetes KI-Zusatzmodul Bürgerfragen, Online-Anträge und Supportfälle quellenbasiert unterstützen könnte.',
       supportContactLabel: config.supportContactLabel,
-      supportProfile: 'product',
+      supportProfile: 'municipal-service',
       syntheticOrganizationLabel: 'Beispielkommune - Demonstrator',
       disclaimer:
         'Kooperationsdemonstrator mit synthetischen Inhalten. Keine Verbindung zu Produktivsystemen oder externen Fachverfahren.',
+      benefits: [
+        {
+          title: 'Für NOLIS',
+          text: 'Wiederkehrend vermarktbares KI-Zusatzmodul für kommunale Bestandskunden.',
+        },
+        {
+          title: 'Für Kommunen',
+          text: 'Bürgerinnen, Bürger und Mitarbeitende erhalten schnellere Orientierung.',
+        },
+        {
+          title: 'Für Support und Fachbereiche',
+          text: 'Anfragen werden vorbereitet, Wissenslücken sichtbar und Übergaben strukturiert.',
+        },
+      ],
+      demoAreas: [
+        'Bürgerservice',
+        'Online-Anträge',
+        'CMS/CityApp',
+        'Rathausintern',
+        'Sportstätten',
+        'Support & Handoff',
+      ],
+      proofPoints: [
+        'Quellenbasierte Antwortlogik',
+        'Synthetische kommunale Wissensbasis',
+        'Sichere Nicht-Antwort',
+        'Strukturierte Ticketvorschau',
+        'Bestätigung vor Ticketanlage',
+        'Signierter Mock-Handoff',
+        'Keine externe Übermittlung',
+        'Mandanten- und Site-Trennung',
+      ],
+      expansionStages: [
+        {
+          title: 'Standard',
+          items: ['ein kommunaler Bereich', 'Quellenantworten', 'Ticketvorschau', 'Mock-Handoff'],
+        },
+        {
+          title: 'Plus',
+          items: [
+            'mehrere Produktbereiche',
+            'echte freigegebene NOLIS-Inhalte',
+            'produktive Ticket-/Webhook-Anbindung',
+            'erweiterte Auswertung',
+          ],
+        },
+        {
+          title: 'Premium/OEM',
+          items: [
+            'NOLIS-White-Label-Modul',
+            'kommunale Mandanten',
+            'Provisionierung',
+            'Betrieb und Supportmodell',
+            'wiederkehrendes Lizenz-/Umsatzmodell',
+          ],
+        },
+      ],
       scenarios: DEMO_SCENARIOS,
       technicalFeatures: [
         'Mandanten- und Site-Trennung',
         'Quellenbasierte Antworten',
         'Kontrollierte Nicht-Antwort',
         'Strukturierte Uebergabe als Vorschau',
+        'Signierter Mock-Handoff ohne externe Uebermittlung',
         'Zeitlich begrenzter Evaluationszugang',
         'Keine Verwaltungsentscheidung durch die KI',
       ],

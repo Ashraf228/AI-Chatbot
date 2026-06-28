@@ -10,19 +10,35 @@ Diese Anleitung beschreibt die generische Nutzung des Kooperationsdemonstrators.
 
 ## Szenarien
 
-Der Workspace bietet drei synthetische Szenarien:
+Der Workspace ist sichtbar als `KI-Assistenz fuer kommunale NOLIS-Kunden` positioniert. Er zeigt, wie ein moegliches NOLIS-gebrandetes KI-Zusatzmodul kommunale Fragen, Online-Antraege und Supportfaelle quellenbasiert unterstuetzen koennte.
 
-- Quellenbasierte Soforthilfe
-- Strukturierte Uebergabe
-- Sichere Nicht-Antwort bei fehlendem Wissen
+Der Workspace bietet zwoelf synthetische Szenarien:
+
+- Reisepass vorbereiten
+- Unterlagen fuer Wohnsitzummeldung
+- Hund anmelden
+- Kita-Platz vormerken
+- Veranstaltung in der CityApp veroeffentlichen
+- Formular mit Pflichtfeldern anlegen
+- Formularversand-Problem eingrenzen
+- internen Urlaubsantrag stellen
+- Sporthalle reservieren
+- sichere Nicht-Antwort bei verbindlicher Genehmigung
+- Prompt-Injection-Abwehr
+- keine falsche externe NOLIS-Uebermittlung behaupten
 
 Eine Szenariokarte uebernimmt nur einen Beispieltext in das Eingabefeld. Die Nachricht wird erst gesendet, wenn der Nutzer bewusst auf Senden klickt.
 
-Die Szenarien werden serverseitig aus der Demo-Site-Konfiguration geliefert. Fuer das Profil `public-sector-product-support-demo` sind genau drei Szenarien vorgesehen:
+Die Szenarien werden serverseitig aus der Demo-Site-Konfiguration geliefert. Fuer das Profil `public-sector-product-support-demo` sind 10 bis 12 Szenarien vorgesehen. Jede Karte zeigt Kategorie, Persona, Testfrage, Szenarioziel und Beobachtungspunkt fuer NOLIS.
 
-1. quellenbasierte Hilfe,
-2. strukturierte Uebergabevorschau,
-3. sichere Nicht-Antwort bei fehlender Grundlage.
+## Nutzen- und Nachweisbereiche
+
+Der Workspace zeigt zusaetzlich:
+
+- Nutzen fuer NOLIS, Kommunen, Support und Fachbereiche.
+- Demo-Bereiche wie Buergerservice, Online-Antraege, CMS/CityApp, Rathausintern, Sportstaetten sowie Support & Handoff.
+- Nachweise wie quellenbasierte Antwortlogik, synthetische kommunale Wissensbasis, sichere Nicht-Antwort, Ticketvorschau, Bestaetigung vor Ticketanlage, signierter Mock-Handoff, keine externe Uebermittlung und Mandanten-/Site-Trennung.
+- Moegliche Ausbaustufen Standard, Plus und Premium/OEM ohne Preisangaben.
 
 ## Quellenanzeige
 
@@ -34,7 +50,7 @@ Falls der Testdialog strukturierte Uebergabedaten erkennt, kann eine Vorschau an
 
 ## Product-Support-Demo-Tickets
 
-Fuer das Profil `public-sector-product-support-demo` kann der Workspace aus einem ungelösten Anliegen einen internen Demo-Supportfall vorbereiten.
+Fuer das Profil `public-sector-product-support-demo` kann der Workspace aus einem ungeloesten Anliegen einen internen Demo-Supportfall vorbereiten.
 
 Der Ablauf ist:
 

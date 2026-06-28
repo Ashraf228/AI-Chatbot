@@ -251,7 +251,7 @@ Danach:
 
 - Zweiten idempotenten Execute-Lauf durchfuehren.
 - `npm run demo:verify:evaluation`
-- Erwartung: 28 synthetische Demoartikel, 3 Szenarien, Chunks vorhanden, keine fremden Quellen.
+- Erwartung: 84 synthetische Demoartikel, 12 Szenarien, Chunks vorhanden, keine fremden Quellen.
 
 ## Freigabe
 

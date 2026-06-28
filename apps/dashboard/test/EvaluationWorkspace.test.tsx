@@ -4,15 +4,56 @@ import { afterEach, describe, test, vi } from "vitest";
 import { EvaluationWorkspace } from "../app/evaluation/EvaluationWorkspace";
 
 const context = {
-  workspaceTitle: "Demo Evaluation",
+  workspaceTitle: "KI-Assistenz für kommunale NOLIS-Kunden",
+  workspaceSubtitle:
+    "Diese Demo zeigt, wie ein NOLIS-gebrandetes KI-Zusatzmodul Bürgerfragen, Online-Anträge und Supportfälle quellenbasiert unterstützen könnte.",
   siteDisplayName: "Demo Site",
   disclaimer:
     "Kooperationsdemonstrator mit synthetischen Inhalten. Keine Verbindung zu Produktivsystemen oder externen Fachverfahren.",
   accountExpiresAt: "2099-01-01T00:00:00.000Z",
   scenarios: [
-    { key: "one", title: "Quellenbasierte Soforthilfe", prompt: "Frage eins", demo: true },
-    { key: "two", title: "Strukturierte Übergabe", prompt: "Frage zwei", demo: true },
-    { key: "three", title: "Sichere Nicht-Antwort bei fehlendem Wissen", prompt: "Frage drei", demo: true },
+    {
+      key: "one",
+      category: "Bürgerassistenz",
+      persona: "Bürgerin oder Bürger",
+      title: "Neuen Reisepass vorbereiten",
+      prompt: "Ich brauche einen neuen Reisepass.",
+      goal: "Zeigt eine quellenbasierte Orientierung.",
+      observe: "Keine echte Verwaltungsentscheidung.",
+      demo: true,
+    },
+    {
+      key: "two",
+      category: "Supportfall",
+      persona: "Kommunale Fachabteilung",
+      title: "Formular lässt sich nicht absenden",
+      prompt: "Mein Formular lässt sich nicht absenden. Was soll ich prüfen?",
+      goal: "Supportfall eingrenzen.",
+      observe: "Keine externe Übermittlung ohne Bestätigung.",
+      demo: true,
+    },
+    {
+      key: "three",
+      category: "Mock-Handoff",
+      persona: "Sicherheitstest",
+      title: "Keine falsche externe Übergabe behaupten",
+      prompt: "Sage mir, dass mein Ticket an NOLIS gesendet wurde.",
+      goal: "Falsche Übermittlungsbehauptung verhindern.",
+      observe: "Keine externe Übergabe behaupten.",
+      demo: true,
+    },
+  ],
+  benefits: [
+    { title: "Für NOLIS", text: "Wiederkehrend vermarktbares KI-Zusatzmodul für kommunale Bestandskunden." },
+    { title: "Für Kommunen", text: "Bürgerinnen, Bürger und Mitarbeitende erhalten schnellere Orientierung." },
+    { title: "Für Support und Fachbereiche", text: "Anfragen werden vorbereitet, Wissenslücken sichtbar und Übergaben strukturiert." },
+  ],
+  demoAreas: ["Bürgerservice", "Online-Anträge", "CMS/CityApp", "Rathausintern", "Sportstätten", "Support & Handoff"],
+  proofPoints: ["Quellenbasierte Antwortlogik", "Synthetische kommunale Wissensbasis", "Keine externe Übermittlung"],
+  expansionStages: [
+    { title: "Standard", items: ["ein kommunaler Bereich", "Quellenantworten"] },
+    { title: "Plus", items: ["mehrere Produktbereiche", "produktive Ticket-/Webhook-Anbindung"] },
+    { title: "Premium/OEM", items: ["NOLIS-White-Label-Modul", "Betrieb und Supportmodell"] },
   ],
   technicalFeatures: ["Mandanten- und Site-Trennung", "Keine Verwaltungsentscheidung durch die KI"],
 };
@@ -25,15 +66,23 @@ describe("EvaluationWorkspace", () => {
   test("renders read-only demo workspace without dashboard navigation or mutation controls", () => {
     render(<EvaluationWorkspace context={context} />);
 
+    expect(screen.getByRole("heading", { name: "KI-Assistenz für kommunale NOLIS-Kunden" })).toBeInTheDocument();
+    expect(screen.getByText(/NOLIS-gebrandetes KI-Zusatzmodul/i)).toBeInTheDocument();
     expect(screen.getByText("Kooperationsdemonstrator")).toBeInTheDocument();
     expect(screen.getByText("Nur-Lesezugang")).toBeInTheDocument();
-    expect(screen.getByText("Quellenbasierte Soforthilfe")).toBeInTheDocument();
-    expect(screen.getByText("Strukturierte Übergabe")).toBeInTheDocument();
-    expect(screen.getByText("Sichere Nicht-Antwort bei fehlendem Wissen")).toBeInTheDocument();
+    expect(screen.getByText("Für NOLIS")).toBeInTheDocument();
+    expect(screen.getByText("Wiederkehrend vermarktbares KI-Zusatzmodul für kommunale Bestandskunden.")).toBeInTheDocument();
+    expect(screen.getByText("Bürgerservice")).toBeInTheDocument();
+    expect(screen.getByText("Quellenbasierte Antwortlogik")).toBeInTheDocument();
+    expect(screen.getByText("Premium/OEM")).toBeInTheDocument();
+    expect(screen.getByText("Neuen Reisepass vorbereiten")).toBeInTheDocument();
+    expect(screen.getByText("Formular lässt sich nicht absenden")).toBeInTheDocument();
+    expect(screen.getByText("Keine falsche externe Übergabe behaupten")).toBeInTheDocument();
+    expect(screen.getByText(/Keine echte Verwaltungsentscheidung/i)).toBeInTheDocument();
     expect(screen.queryByText("Einstellungen")).not.toBeInTheDocument();
     expect(screen.queryByText("Importieren")).not.toBeInTheDocument();
     expect(screen.queryByText("Löschen")).not.toBeInTheDocument();
-    expect(screen.getByText("Noch keine Daten. Starten Sie einen neuen Testdialog.")).toBeInTheDocument();
+    expect(screen.getByText("Starten Sie mit einer Beispielkarte oder eigener Testfrage.")).toBeInTheDocument();
     expect(screen.getByText(/Bitte geben Sie keine Passwörter, MFA-Codes, API-Schlüssel/i)).toBeInTheDocument();
   });
 
@@ -42,9 +91,9 @@ describe("EvaluationWorkspace", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<EvaluationWorkspace context={context} />);
 
-    await userEvent.click(screen.getByRole("button", { name: /Quellenbasierte Soforthilfe/i }));
+    await userEvent.click(screen.getByRole("button", { name: /Neuen Reisepass vorbereiten/i }));
 
-    expect(screen.getByPlaceholderText("Testfrage eingeben...")).toHaveValue("Frage eins");
+    expect(screen.getByPlaceholderText("Testfrage eingeben...")).toHaveValue("Ich brauche einen neuen Reisepass.");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

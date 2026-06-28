@@ -4,16 +4,16 @@ Diese Anleitung beschreibt die technische Bereitstellung eines isolierten Kooper
 
 ## Zweck
 
-Das Provisioning erzeugt einen generischen Evaluation-Tenant, eine Demo-Site, einen zeitlich begrenzten Viewer-Zugang und synthetische Wissensinhalte fuer einen Produkt-Support-Demonstrator. Der Demonstrator ist kein Produktivsystem und keine produktive Fachverfahrensintegration.
+Das Provisioning erzeugt einen generischen Evaluation-Tenant, eine Demo-Site, einen zeitlich begrenzten Viewer-Zugang und synthetische Wissensinhalte fuer eine kommunale KI-Assistenz-Demo. Der Demonstrator ist kein Produktivsystem und keine produktive Fachverfahrensintegration.
 
 ## Demo-Profil
 
 - Profil-Key: `public-sector-product-support-demo`
-- Inhalte: synthetische deutschsprachige Produkt-Support-Artikel
+- Inhalte: 84 synthetische deutschsprachige Artikel fuer kommunale Anwendungsfaelle
 - Site-Markierung: `is_evaluation_demo=true`
 - Retrieval-Scope: `tenant_id`, `site_id`, `demo=true`, `synthetic=true`, aktive/ready Quellen und durchsuchbare Chunks
-- Szenarien: quellenbasierte Hilfe, strukturierte Uebergabevorschau, sichere Nicht-Antwort
-- Supportprofil: `product` fuer interne Demo-Supportfaelle mit expliziter Bestaetigung
+- Szenarien: 12 gefuehrte Szenarien fuer Buergerservice, Online-Antraege, Serviceportal, CMS/CityApp, Rathausintern, Sportstaetten, Support, sichere Nicht-Antwort, Prompt-Injection-Abwehr und Mock-Handoff
+- Supportprofil: `municipal-service` in der sichtbaren Demo-Konfiguration; intern bleiben Demo-Supportfaelle bestaetigungspflichtig
 - Externe Weiterleitung: deaktiviert (`allowExternalForwarding=false`)
 - Signierte Demo-Uebergabe: optionaler interner Mock, default-off, keine NOLIS- oder externe Ticketuebermittlung
 
@@ -84,7 +84,7 @@ Der Verify-Befehl prueft ohne Secret-Ausgabe:
 - aktiver Viewer ist der Demo-Site zugeordnet
 - synthetische Quellen, Dokumente und Chunks sind vorhanden
 - Chunks sind durchsuchbar, also mit Embedding gespeichert
-- Szenarioanzahl ist erwartbar
+- Szenarioanzahl ist erwartbar (10 bis 12, derzeit 12)
 - optionaler Mock-Handoff ist entweder deaktiviert oder formal konfiguriert; Secrets werden nicht ausgegeben
 
 ## Reset

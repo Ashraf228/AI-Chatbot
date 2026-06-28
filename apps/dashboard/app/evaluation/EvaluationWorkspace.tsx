@@ -4,10 +4,24 @@ import { useEffect, useRef, useState } from "react";
 
 type EvaluationContext = {
   workspaceTitle: string;
+  workspaceSubtitle?: string;
   siteDisplayName: string;
   disclaimer: string;
   accountExpiresAt: string | null;
-  scenarios: Array<{ key: string; title: string; prompt: string; demo: boolean }>;
+  scenarios: Array<{
+    key: string;
+    category?: string;
+    persona?: string;
+    title: string;
+    prompt: string;
+    goal?: string;
+    observe?: string;
+    demo: boolean;
+  }>;
+  benefits?: Array<{ title: string; text: string }>;
+  demoAreas?: string[];
+  proofPoints?: string[];
+  expansionStages?: Array<{ title: string; items: string[] }>;
   technicalFeatures: string[];
 };
 
@@ -77,6 +91,21 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
   const sourcedAnswers = messages.filter((entry) => entry.role === "assistant" && (entry.sources || []).length > 0).length;
   const knowledgeGaps = messages.filter((entry) => /keine passende information|keine verifizierten/i.test(entry.content)).length;
   const handoffs = messages.filter((entry) => entry.handoffPreview).length;
+  const benefits = context.benefits?.length ? context.benefits : [
+    {
+      title: "Für Kommunen",
+      text: "Bürgerinnen, Bürger und Mitarbeitende erhalten schnellere Orientierung.",
+    },
+  ];
+  const demoAreas = context.demoAreas?.length ? context.demoAreas : ["Bürgerservice", "Online-Anträge", "Support & Handoff"];
+  const proofPoints = context.proofPoints?.length ? context.proofPoints : [
+    "Quellenbasierte Antwortlogik",
+    "Sichere Nicht-Antwort",
+    "Keine externe Übermittlung",
+  ];
+  const expansionStages = context.expansionStages?.length ? context.expansionStages : [
+    { title: "Standard", items: ["Quellenantworten", "Ticketvorschau", "Mock-Handoff"] },
+  ];
 
   async function ensureConversation() {
     if (conversationId) return conversationId;
@@ -245,6 +274,10 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
             <div>
               <p className="evaluation-eyebrow">Evaluation Workspace</p>
               <h1>{context.workspaceTitle}</h1>
+              <p className="evaluation-hero__subtitle">
+                {context.workspaceSubtitle ||
+                  "Diese Demo zeigt, wie ein KI-Zusatzmodul kommunale Fragen und Supportfälle quellenbasiert unterstützen könnte."}
+              </p>
               <p className="evaluation-hero__copy">{context.disclaimer}</p>
             </div>
             <form action="/api/auth/logout" method="post">
@@ -265,6 +298,46 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
           </p>
         </header>
 
+        <section className="evaluation-benefits" aria-label="Nutzen der Demo">
+          {benefits.map((benefit) => (
+            <article key={benefit.title} className="evaluation-benefit-card">
+              <p>{benefit.title}</p>
+              <h2>{benefit.text}</h2>
+            </article>
+          ))}
+        </section>
+
+        <section className="evaluation-overview-grid" aria-label="Demo-Übersicht">
+          <article className="evaluation-card">
+            <p className="evaluation-eyebrow">Was könnte NOLIS anbieten?</p>
+            <h2>Kommunale KI-Assistenz als Zusatzmodul</h2>
+            <p className="evaluation-card-copy">
+              Der Demonstrator verbindet synthetische kommunale Wissensbereiche mit einem kontrollierten Testdialog,
+              einer Ticketvorschau und einem signierten Mock-Handoff. Er behauptet keine Produktivintegration.
+            </p>
+            <div className="evaluation-area-chips">
+              {demoAreas.map((area) => <span key={area}>{area}</span>)}
+            </div>
+          </article>
+          <article className="evaluation-card">
+            <p className="evaluation-eyebrow">Was diese Demo zeigt</p>
+            <ul className="evaluation-proof-list">
+              {proofPoints.map((point) => <li key={point}>{point}</li>)}
+            </ul>
+          </article>
+        </section>
+
+        <section className="evaluation-section-intro" aria-labelledby="evaluation-scenarios-heading">
+          <div>
+            <p className="evaluation-eyebrow">Geführte Testszenarien</p>
+            <h2 id="evaluation-scenarios-heading">Klicken übernimmt nur die Testfrage</h2>
+          </div>
+          <p>
+            Jede Karte zeigt Persona, Ziel und Beobachtungspunkt. Gesendet wird erst, wenn Sie im Testdialog auf
+            „Senden“ klicken.
+          </p>
+        </section>
+
         <section className="evaluation-scenarios" aria-label="Beispielszenarien">
           {context.scenarios.map((scenario) => (
             <button
@@ -278,9 +351,14 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
               className="evaluation-scenario-card"
               aria-describedby={`scenario-${scenario.key}-prompt`}
             >
-              <p>Synthetisches Szenario</p>
+              <p>{scenario.category || "Synthetisches Szenario"}</p>
               <h2>{scenario.title}</h2>
-              <span id={`scenario-${scenario.key}-prompt`}>{scenario.prompt}</span>
+              <span className="evaluation-scenario-card__persona">{scenario.persona || "Demo-Rolle"}</span>
+              <span id={`scenario-${scenario.key}-prompt`}>
+                <strong>Testfrage:</strong> {scenario.prompt}
+              </span>
+              {scenario.goal && <span><strong>Ziel:</strong> {scenario.goal}</span>}
+              {scenario.observe && <span><strong>Worauf achten:</strong> {scenario.observe}</span>}
             </button>
           ))}
         </section>
@@ -471,6 +549,20 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
               <ul className="evaluation-feature-list">
                 {context.technicalFeatures.map((feature) => <li key={feature}>{feature}</li>)}
               </ul>
+            </div>
+            <div className="evaluation-card">
+              <p className="evaluation-eyebrow">Mögliche Ausbaustufen</p>
+              <h2>Vom Standard-Modul bis OEM</h2>
+              <div className="evaluation-stage-list">
+                {expansionStages.map((stage) => (
+                  <section key={stage.title} className="evaluation-stage">
+                    <h3>{stage.title}</h3>
+                    <ul>
+                      {stage.items.map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </section>
+                ))}
+              </div>
             </div>
           </aside>
         </section>

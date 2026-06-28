@@ -141,6 +141,6 @@ describe("Dashboard accessibility baseline", () => {
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent(/Evaluationssitzung ist nicht mehr gueltig/i);
     });
-    expect(screen.getByText("Noch keine Daten. Starten Sie einen neuen Testdialog.")).toBeInTheDocument();
+    expect(screen.getByText("Starten Sie mit einer Beispielkarte oder eigener Testfrage.")).toBeInTheDocument();
   });
 });

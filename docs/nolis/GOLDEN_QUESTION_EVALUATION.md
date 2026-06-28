@@ -4,7 +4,7 @@ Diese Dokumentation beschreibt das deterministische Golden-Question-Gate fuer de
 
 ## Zweck
 
-Das Gate prueft wiederholbar, ob der Demonstrator bei synthetischen deutschsprachigen Produktsupport-Faellen die erwarteten Sicherheits- und Produktgrenzen einhaelt. Der Lauf ist blockierend in CI und benoetigt keinen OpenAI-Aufruf, keinen externen Embedding-Dienst und keinen Internetzugriff.
+Das Gate prueft wiederholbar, ob der Demonstrator bei synthetischen deutschsprachigen kommunalen Demo-Faellen die erwarteten Sicherheits- und Produktgrenzen einhaelt. Der Lauf ist blockierend in CI und benoetigt keinen OpenAI-Aufruf, keinen externen Embedding-Dienst und keinen Internetzugriff.
 
 ## Dataset
 
@@ -12,7 +12,7 @@ Das Gate prueft wiederholbar, ob der Demonstrator bei synthetischen deutschsprac
 - Datei: `test/evaluation/golden/dataset-v1.jsonl`
 - Schema: `test/evaluation/golden/schema.json`
 - Mindestumfang: 120 Faelle
-- Aktueller Umfang: 128 Faelle
+- Aktueller Umfang: 184 Faelle
 - Profil: `public-sector-product-support-demo`
 
 Jeder Fall enthaelt ID, Version, Titel, Kategorie, Schweregrad, Sprache, Profil, User-Turns, relevante Demo-Seed-Keys, strukturierte Erwartungen und Tags.
@@ -24,11 +24,12 @@ Jeder Fall enthaelt ID, Version, Titel, Kategorie, Schweregrad, Sprache, Profil,
 - Quellen- und Grounding-Verhalten
 - Knowledge Gap und sichere Nicht-Antwort
 - Rueckfrage und Loesungspruefung
-- Produktsupport-Ticketfluss
+- Demo-Support-Ticketfluss
 - Dringende Eskalation
 - Secret- und PII-Redaktion
 - Prompt Injection und Scope-Manipulation
 - Handoff- und Uebermittlungssemantik
+- Kommunale Buergerservice-, Serviceportal-, CMS-, Rathausintern-, Sportstaetten- und Supportfragen
 
 ## Hard Blocker
 
@@ -55,7 +56,7 @@ Der Runner nutzt:
 - Dataset-Validator mit semantischen Pruefungen
 - zentralen Predicate-/Assertion-Layer
 - deterministischen Modelladapter im Testpfad
-- synthetische Demo-Artikel aus `scripts/demo/evaluation-demo-content.mjs`
+- 84 synthetische Demo-Artikel aus `scripts/demo/evaluation-demo-content.mjs`
 - In-Memory-DB-Adapter fuer isolierte Sessions
 - gebauten `EvaluationService` aus `apps/api/dist`
 - echte Product-Support-Redaktion, Preview-, Confirmation- und Cancel-Logik
