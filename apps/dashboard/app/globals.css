@@ -3422,6 +3422,16 @@ body {
   line-height: 1.55;
 }
 
+.evaluation-demo-note {
+  margin: 12px 0 0;
+  border: 1px solid rgba(26, 83, 92, 0.16);
+  border-radius: 18px;
+  background: #eef9f7;
+  color: #17464d;
+  padding: 13px 16px;
+  line-height: 1.55;
+}
+
 .evaluation-benefits,
 .evaluation-overview-grid {
   display: grid;

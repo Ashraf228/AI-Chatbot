@@ -78,12 +78,13 @@ describe("EvaluationWorkspace", () => {
     expect(screen.getByText("Neuen Reisepass vorbereiten")).toBeInTheDocument();
     expect(screen.getByText("Formular lässt sich nicht absenden")).toBeInTheDocument();
     expect(screen.getByText("Keine falsche externe Übergabe behaupten")).toBeInTheDocument();
-    expect(screen.getByText(/Keine echte Verwaltungsentscheidung/i)).toBeInTheDocument();
     expect(screen.queryByText("Einstellungen")).not.toBeInTheDocument();
     expect(screen.queryByText("Importieren")).not.toBeInTheDocument();
     expect(screen.queryByText("Löschen")).not.toBeInTheDocument();
     expect(screen.getByText("Starten Sie mit einer Beispielkarte oder eigener Testfrage.")).toBeInTheDocument();
     expect(screen.getByText(/Bitte geben Sie keine Passwörter, MFA-Codes, API-Schlüssel/i)).toBeInTheDocument();
+    expect(screen.getByText(/Diese Ansicht ist ein Demonstrator/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ablauf, Inhalte, Fragen und Übergaben können für Kundenprojekte angepasst werden/i)).toBeInTheDocument();
   });
 
   test("scenario card only copies prompt and does not send automatically", async () => {
@@ -177,6 +178,14 @@ describe("EvaluationWorkspace", () => {
     await waitFor(() => {
       expect(screen.getByText("Demo-Supportfall Vorschau")).toBeInTheDocument();
     });
+    expect(screen.getByText("Support-Art")).toBeInTheDocument();
+    expect(screen.getByText("Produktsupport")).toBeInTheDocument();
+    expect(screen.getByText("Bereich / Modul")).toBeInTheDocument();
+    expect(screen.getByText("Organisation")).toBeInTheDocument();
+    expect(screen.getByText("Auswirkung")).toBeInTheDocument();
+    expect(screen.getByText("Hoch")).toBeInTheDocument();
+    expect(screen.queryByText("supportProfile")).not.toBeInTheDocument();
+    expect(screen.queryByText("customerOrganization")).not.toBeInTheDocument();
     expect(screen.queryByText(/viewer@example/i)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Demo-Ticket erstellen" }));

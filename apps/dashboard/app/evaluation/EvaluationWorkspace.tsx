@@ -69,6 +69,44 @@ function safeText(value: string) {
   return value.replace(/\[(DATEN BEREINIGT|REDACTED)]/gi, "[Inhalt entfernt]");
 }
 
+const ticketFieldLabels: Record<string, string> = {
+  supportProfile: "Support-Art",
+  product: "Produkt",
+  module: "Bereich / Modul",
+  customerOrganization: "Organisation",
+  customerReference: "Kundennummer / Referenz",
+  processOrFormName: "Prozess oder Formular",
+  description: "Beschreibung",
+  impact: "Auswirkung",
+  browser: "Browser",
+  device: "Gerät",
+  operatingSystem: "Betriebssystem",
+  errorMessage: "Fehlermeldung",
+  alreadyTried: "Bereits versucht",
+  reporterName: "Ansprechperson",
+};
+
+const ticketValueLabels: Record<string, Record<string, string>> = {
+  supportProfile: {
+    product: "Produktsupport",
+    it: "IT-Support",
+  },
+  impact: {
+    low: "Niedrig",
+    medium: "Mittel",
+    high: "Hoch",
+    critical: "Kritisch",
+  },
+};
+
+function ticketFieldLabel(key: string) {
+  return ticketFieldLabels[key] || key;
+}
+
+function ticketFieldValue(key: string, value: string) {
+  return ticketValueLabels[key]?.[value] || safeText(value);
+}
+
 export function EvaluationWorkspace({ context }: { context: EvaluationContext }) {
   const [conversationId, setConversationId] = useState("");
   const [input, setInput] = useState("");
@@ -296,6 +334,10 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
           <p className="evaluation-warning">
             Bitte geben Sie keine Passwörter, MFA-Codes, API-Schlüssel oder echten personenbezogenen Falldaten ein.
           </p>
+          <p className="evaluation-demo-note">
+            Hinweis: Diese Ansicht ist ein Demonstrator. Ablauf, Inhalte, Fragen und Übergaben können für Kundenprojekte
+            angepasst werden.
+          </p>
         </header>
 
         <section className="evaluation-benefits" aria-label="Nutzen der Demo">
@@ -333,8 +375,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
             <h2 id="evaluation-scenarios-heading">Klicken übernimmt nur die Testfrage</h2>
           </div>
           <p>
-            Jede Karte zeigt Persona, Ziel und Beobachtungspunkt. Gesendet wird erst, wenn Sie im Testdialog auf
-            „Senden“ klicken.
+            Jede Karte zeigt Persona und Ziel. Gesendet wird erst, wenn Sie im Testdialog auf „Senden“ klicken.
           </p>
         </section>
 
@@ -358,7 +399,6 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                 <strong>Testfrage:</strong> {scenario.prompt}
               </span>
               {scenario.goal && <span><strong>Ziel:</strong> {scenario.goal}</span>}
-              {scenario.observe && <span><strong>Worauf achten:</strong> {scenario.observe}</span>}
             </button>
           ))}
         </section>
@@ -415,7 +455,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                           <p id={`ticket-preview-${index}`}>Demo-Supportfall Vorschau</p>
                           {message.ticketPreview.missingFields.length > 0 ? (
                             <p className="evaluation-ticket-preview__missing">
-                              Fehlende Angaben: {message.ticketPreview.missingFields.join(", ")}
+                              Fehlende Angaben: {message.ticketPreview.missingFields.map(ticketFieldLabel).join(", ")}
                             </p>
                           ) : (
                             <dl>
@@ -423,8 +463,8 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
                                 .filter(([key, value]) => key !== "reporterEmail" && Boolean(value))
                                 .map(([key, value]) => (
                                   <div key={key}>
-                                    <dt>{key}</dt>
-                                    <dd>{safeText(String(value))}</dd>
+                                    <dt>{ticketFieldLabel(key)}</dt>
+                                    <dd>{ticketFieldValue(key, String(value))}</dd>
                                   </div>
                                 ))}
                             </dl>
