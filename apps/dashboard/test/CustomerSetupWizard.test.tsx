@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { CustomerSetupWizard } from "../components/customer/CustomerSetupWizard";
+import { LaunchStep } from "../components/customer/setup-wizard/LaunchStep";
 import { updateSiteSettings } from "../lib/setup-wizard-api";
 
 vi.mock("../lib/setup-wizard-api", () => ({
@@ -145,5 +146,81 @@ describe("CustomerSetupWizard", () => {
         leadNotificationEmail: "info@unternehmen.de",
       }),
     );
+  });
+});
+
+function launchProps(role?: "admin" | "operator" | "customer" | "viewer" | null) {
+  return {
+    site: {
+      id: "site-1",
+      name: "Muster Handwerk",
+      siteKey: "muster-handwerk",
+      allowedDomains: ["kunde.de"],
+      companyName: "Muster Handwerk",
+      websiteUrl: "https://kunde.de",
+      supportEmail: "",
+      phone: "",
+      language: "de" as const,
+      botName: "Service-Assistent",
+      logoUrl: "",
+      brandColor: "#b55400",
+      accentColor: "#fff0d9",
+      welcomeMessage: "Guten Tag.",
+      placeholderText: "Nachricht schreiben...",
+      widgetPosition: "bottom_right" as const,
+      launcherLabel: "Soforthilfe",
+      privacyUrl: "https://kunde.de/datenschutz",
+      privacyNoticeText: "",
+      fontFamily: "system",
+      systemPrompt: "",
+      industry: "local-service-first-contact",
+      botType: "handwerker-first-contact",
+      setupGoal: "lead_capture",
+      primaryGoal: "lead_generation" as const,
+      tone: "professional" as const,
+      knowledgeMode: "flexible" as const,
+      fallbackBehavior: "ask_followup" as const,
+      ctaText: "Soforthilfe",
+      leadCaptureEnabled: true,
+      leadNotificationEmail: "",
+      consentRequired: true,
+      templateId: "local-service-first-contact",
+      templateVersion: 1,
+      templateAppliedAt: "",
+      lastTestedAt: "",
+      lastTestQuestion: "",
+      lastTestAnswer: "",
+      goLiveAt: "",
+    },
+    serverStatus: null,
+    overallStatus: "Setup unvollständig",
+    embedCode: "<script></script>",
+    copiedEmbedCode: false,
+    testQuestion: "",
+    testMessages: [],
+    savingKey: null,
+    canGoLive: false,
+    isLive: false,
+    status: "warning" as const,
+    onChangeTestQuestion: vi.fn(),
+    onSendTestMessage: vi.fn(),
+    onCopyEmbedCode: vi.fn(),
+    onGoLive: vi.fn(),
+    onJumpToStatusStep: vi.fn(),
+    dashboardRole: role,
+  };
+}
+
+describe("LaunchStep admin test tools", () => {
+  test.each(["admin", "operator"] as const)("%s sees assistant profile test card", (role) => {
+    render(<LaunchStep {...launchProps(role)} />);
+
+    expect(screen.getByText("KI-Mitarbeiter Profil")).toBeInTheDocument();
+  });
+
+  test.each(["customer", null] as const)("%s does not render assistant profile test card", (role) => {
+    render(<LaunchStep {...launchProps(role)} />);
+
+    expect(screen.queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();
   });
 });

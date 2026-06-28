@@ -57,7 +57,7 @@ import {
   type TestChatMessage,
 } from "./setup-wizard";
 
-export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
+export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSetupWizardProps) {
   const siteSlug = encodeSiteId(siteId);
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [templates, setTemplates] = useState<IndustryTemplate[]>([]);
@@ -720,6 +720,7 @@ export function CustomerSetupWizard({ siteId }: CustomerSetupWizardProps) {
             onCopyEmbedCode={copyEmbedCode}
             onGoLive={goLive}
             onJumpToStatusStep={jumpToStatusStep}
+            dashboardRole={dashboardRole}
           />
         );
     }

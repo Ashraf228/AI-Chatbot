@@ -18,6 +18,16 @@ export type SiteModuleDefinition = {
 
 export const SITE_MODULE_REGISTRY: SiteModuleDefinition[] = [
   {
+    key: 'assistant-profile',
+    label: 'KI-Mitarbeiter Profil',
+    description: 'Speichert die neutrale AssistantProfile-Konfiguration fuer kuenftige Conversation-Engines.',
+    category: 'operations',
+    defaultEnabled: false,
+    defaultConfig: {},
+    requiredFields: [],
+    optionalFields: ['assistantProfile', 'migration'],
+  },
+  {
     key: 'lead-sales',
     label: 'Lead- & Sales-Agent',
     description: 'Qualifiziert Interessenten, fuehrt Richtung Kontakt und unterstuetzt bei Beratungsgespraechen.',

@@ -1,3 +1,4 @@
+export * from "./AssistantProfileDiagnosticsCard";
 export * from "./CustomerDataStep";
 export * from "./ConversationFlowStep";
 export * from "./DesignPrivacyStep";
