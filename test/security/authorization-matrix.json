@@ -4604,6 +4604,526 @@
       "expectedScopeCheck": "AdminScopeService.assertSiteAccess or resource-scoped equivalent",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
+    },
+    {
+      "id": "API-106",
+      "layer": "api",
+      "method": "GET",
+      "path": "/admin/sites/:siteId/assistant-profile/diagnostics",
+      "source": "apps/api/src/assistant-profiles/assistant-profile-diagnostics.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-107",
+      "layer": "api",
+      "method": "GET",
+      "path": "/admin/sites/:siteId/assistant-profile/migration-preview",
+      "source": "apps/api/src/assistant-profiles/assistant-profile-diagnostics.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-108",
+      "layer": "api",
+      "method": "POST",
+      "path": "/admin/sites/:siteId/assistant-profile/migrate",
+      "source": "apps/api/src/assistant-profiles/assistant-profile-diagnostics.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-109",
+      "layer": "api",
+      "method": "POST",
+      "path": "/admin/sites/:siteId/conversation-engine/compare",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-110",
+      "layer": "api",
+      "method": "POST",
+      "path": "/admin/sites/:siteId/conversation-engine/preview",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-111",
+      "layer": "api",
+      "method": "POST",
+      "path": "/admin/sites/:siteId/conversation-engine/response-preview",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-112",
+      "layer": "api",
+      "method": "GET",
+      "path": "/admin/sites/:siteId/conversation-engine/settings",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-113",
+      "layer": "api",
+      "method": "PUT",
+      "path": "/admin/sites/:siteId/conversation-engine/settings",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-114",
+      "layer": "api",
+      "method": "GET",
+      "path": "/admin/sites/:siteId/conversation-engine/test-cases",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-115",
+      "layer": "api",
+      "method": "POST",
+      "path": "/admin/sites/:siteId/conversation-engine/test-cases",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-116",
+      "layer": "api",
+      "method": "PUT",
+      "path": "/admin/sites/:siteId/conversation-engine/test-cases/:caseId",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-117",
+      "layer": "api",
+      "method": "DELETE",
+      "path": "/admin/sites/:siteId/conversation-engine/test-cases/:caseId",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-118",
+      "layer": "api",
+      "method": "POST",
+      "path": "/admin/sites/:siteId/conversation-engine/test-cases/run",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-228",
+      "layer": "dashboard",
+      "method": "GET",
+      "path": "/api/sites/:siteId/assistant-profile/diagnostics",
+      "source": "apps/dashboard/app/api/sites/[siteId]/assistant-profile/diagnostics/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-229",
+      "layer": "dashboard",
+      "method": "GET",
+      "path": "/api/sites/:siteId/assistant-profile/migration-preview",
+      "source": "apps/dashboard/app/api/sites/[siteId]/assistant-profile/migration-preview/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-230",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/sites/:siteId/assistant-profile/migrate",
+      "source": "apps/dashboard/app/api/sites/[siteId]/assistant-profile/migrate/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-231",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/sites/:siteId/conversation-engine/compare",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/compare/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-232",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/sites/:siteId/conversation-engine/preview",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/preview/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-233",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/sites/:siteId/conversation-engine/response-preview",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/response-preview/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-234",
+      "layer": "dashboard",
+      "method": "GET",
+      "path": "/api/sites/:siteId/conversation-engine/settings",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/settings/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-235",
+      "layer": "dashboard",
+      "method": "PUT",
+      "path": "/api/sites/:siteId/conversation-engine/settings",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/settings/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-236",
+      "layer": "dashboard",
+      "method": "GET",
+      "path": "/api/sites/:siteId/conversation-engine/test-cases",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/test-cases/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-237",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/sites/:siteId/conversation-engine/test-cases",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/test-cases/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-238",
+      "layer": "dashboard",
+      "method": "PUT",
+      "path": "/api/sites/:siteId/conversation-engine/test-cases/:caseId",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/test-cases/[caseId]/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-239",
+      "layer": "dashboard",
+      "method": "DELETE",
+      "path": "/api/sites/:siteId/conversation-engine/test-cases/:caseId",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/test-cases/[caseId]/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-240",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/sites/:siteId/conversation-engine/test-cases/run",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/test-cases/run/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
     }
   ]
 }
