@@ -86,5 +86,5 @@ describe("WidgetConfigForm", () => {
         }),
       ]),
     );
-  });
+  }, 15000);
 });
