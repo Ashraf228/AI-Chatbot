@@ -9,6 +9,7 @@ import { ConversationEngineCompareService } from './conversation-engine-compare.
 import { ConversationEngineService } from './conversation-engine.service';
 import { ConversationEngineTestCasesService } from './conversation-engine-test-cases.service';
 import { ConversationHistoryEntry } from './conversation-engine.types';
+import { KnowledgePreviewRetrievalService } from './knowledge-preview-retrieval.service';
 import { ResponseDraftService } from './response-draft.service';
 
 type SiteModulePreview = {
@@ -51,6 +52,19 @@ function responsePreviewEnabled(siteConfig: Record<string, unknown>, moduleConfi
       testsEngine.responsePreviewEnabled === true);
 }
 
+function knowledgePreviewEnabled(siteConfig: Record<string, unknown>, moduleConfigs: Record<string, Record<string, unknown>>) {
+  const siteEngine = asRecord(siteConfig.conversationEngine);
+  const assistantModule = asRecord(moduleConfigs['assistant-profile']);
+  const moduleEngine = asRecord(assistantModule.conversationEngine);
+  const testsModule = asRecord(moduleConfigs['conversation-engine-tests']);
+  const testsEngine = asRecord(testsModule.conversationEngine);
+  return responsePreviewEnabled(siteConfig, moduleConfigs) &&
+    (siteEngine.knowledgePreviewEnabled === true ||
+      moduleEngine.knowledgePreviewEnabled === true ||
+      testsEngine.knowledgePreviewEnabled === true) &&
+    (siteEngine.adminTestOnly === true || moduleEngine.adminTestOnly === true || testsEngine.adminTestOnly === true);
+}
+
 function sanitizeHistory(value: unknown): ConversationHistoryEntry[] {
   if (!Array.isArray(value)) {
     return [];
@@ -86,6 +100,7 @@ export class ConversationEngineController {
     private readonly engine: ConversationEngineService,
     private readonly compareService: ConversationEngineCompareService,
     private readonly testCases: ConversationEngineTestCasesService,
+    private readonly knowledgePreview: KnowledgePreviewRetrievalService,
     private readonly responseDrafts: ResponseDraftService,
   ) {}
 
@@ -267,6 +282,14 @@ export class ConversationEngineController {
     if (!responsePreviewEnabled(siteConfig, moduleConfigs)) {
       return {
         responsePreviewEnabled: false,
+        knowledgeRetrieval: {
+          enabled: false,
+          attempted: false,
+          status: 'disabled',
+          snippets: [],
+          warnings: [],
+          reasons: ['Antwortvorschau ist deaktiviert.'],
+        },
         engineResponsePreview: null,
         conversationEnginePreview: null,
         assistantProfileDebug,
@@ -285,12 +308,26 @@ export class ConversationEngineController {
       knowledgeAvailable,
       testMode: true,
     });
+    const includeKnowledge = body.includeKnowledge === true;
+    const allowKnowledgePreview = includeKnowledge && knowledgePreviewEnabled(siteConfig, moduleConfigs);
+    const knowledgeRetrieval = await this.knowledgePreview.retrieve({
+      tenantId: site?.tenant_id || '',
+      siteId,
+      assistantProfile,
+      conversationDecision: decision,
+      latestUserMessage: message,
+      history,
+      selectedAgentKey: decision.selectedAgentKey,
+      knowledgeMode: assistantProfile.knowledgeMode,
+      enabled: allowKnowledgePreview,
+    });
     const engineResponsePreview = this.responseDrafts.preview({
       assistantProfile,
       decision,
       latestUserMessage: message,
       history,
       knowledgeAvailable,
+      knowledgeRetrievalResult: knowledgeRetrieval,
       testMode: true,
     });
     const includeLegacyCompare = body.includeLegacyCompare === true;
@@ -307,8 +344,10 @@ export class ConversationEngineController {
 
     return {
       responsePreviewEnabled: true,
+      knowledgePreviewEnabled: knowledgePreviewEnabled(siteConfig, moduleConfigs),
       assistantProfileDebug,
       conversationEnginePreview: decision,
+      knowledgeRetrieval,
       engineResponsePreview,
       legacy: comparison?.legacy || null,
       comparison: comparison?.comparison || null,

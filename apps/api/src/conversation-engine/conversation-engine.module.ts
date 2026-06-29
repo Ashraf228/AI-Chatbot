@@ -13,8 +13,11 @@ import { ConversationQualityService } from './conversation-quality.service';
 import { GoalDetectorService } from './goal-detector.service';
 import { HandoffReadinessService } from './handoff-readiness.service';
 import { IntentClassifierService } from './intent-classifier.service';
+import { KnowledgePreviewRetrievalService } from './knowledge-preview-retrieval.service';
 import { NextActionService } from './next-action.service';
 import { ResponseDraftService } from './response-draft.service';
+import { EmbeddingService } from '../vector/embedding.service';
+import { VectorService } from '../vector/vector.service';
 
 @Module({
   imports: [AssistantProfilesModule, SitesModule, SiteModulesModule],
@@ -28,9 +31,12 @@ import { ResponseDraftService } from './response-draft.service';
     GoalDetectorService,
     AgentSelectorService,
     NextActionService,
+    KnowledgePreviewRetrievalService,
     ResponseDraftService,
     HandoffReadinessService,
     ConversationQualityService,
+    EmbeddingService,
+    VectorService,
     PrismaService,
   ],
   exports: [ConversationEngineService],

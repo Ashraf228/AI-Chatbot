@@ -58,6 +58,30 @@ export type ConversationDecision = {
   reasons: string[];
 };
 
+export type EngineKnowledgeSnippet = {
+  id: string;
+  sourceId?: string | null;
+  documentId: string;
+  chunkId: string;
+  title: string;
+  sourceType: string;
+  score: number;
+  excerpt: string;
+  url?: string;
+  scope?: string;
+  agentKeys?: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type EngineKnowledgeRetrievalResult = {
+  enabled: boolean;
+  attempted: boolean;
+  status: 'available' | 'empty' | 'disabled' | 'error';
+  snippets: EngineKnowledgeSnippet[];
+  warnings: string[];
+  reasons: string[];
+};
+
 export type EngineResponseDraft = {
   text: string;
   mode:
@@ -69,7 +93,9 @@ export type EngineResponseDraft = {
     | 'product_advice'
     | 'complaint_escalation';
   usedKnowledge: boolean;
-  usedKnowledgeSources: Array<{ id?: string; title?: string; type?: string }>;
+  usedKnowledgeSources: EngineKnowledgeSnippet[];
+  groundingStatus: 'grounded' | 'partially_grounded' | 'ungrounded' | 'not_required';
+  groundingWarnings: string[];
   askedQuestion?: string;
   nextActionLabel: string;
   shouldShowSources: boolean;
@@ -98,6 +124,7 @@ export type ConversationEngineResponsePreview = {
   enabled: boolean;
   decision: ConversationDecision;
   draft: EngineResponseDraft | null;
+  knowledgeRetrieval?: EngineKnowledgeRetrievalResult;
   quality: EngineResponseQuality | null;
   safety: EngineResponseSafety;
   warnings: string[];

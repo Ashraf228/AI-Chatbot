@@ -78,6 +78,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
     dryRun: argv.includes('--dry-run'),
     allowInternalEvaluation: argv.includes('--allow-internal-evaluation'),
     includeResponsePreview: argv.includes('--include-response-preview'),
+    includeKnowledgePreview: argv.includes('--include-knowledge-preview'),
   };
 }
 
@@ -136,6 +137,7 @@ function normalizeConfig(config = {}) {
       previewEnabled: engine.previewEnabled === true,
       compareEnabled: engine.compareEnabled === true,
       responsePreviewEnabled: engine.responsePreviewEnabled === true,
+      knowledgePreviewEnabled: engine.knowledgePreviewEnabled === true,
       adminTestOnly: true,
     },
     testCases: asArray(source.testCases).map((entry) => ({
@@ -174,13 +176,14 @@ export function seedStarterCases(config) {
   return next;
 }
 
-function enableFlags(config, includeResponsePreview = false) {
+function enableFlags(config, includeResponsePreview = false, includeKnowledgePreview = false) {
   return {
     ...normalizeConfig(config),
     conversationEngine: {
       previewEnabled: true,
       compareEnabled: true,
       responsePreviewEnabled: includeResponsePreview === true || config.conversationEngine?.responsePreviewEnabled === true,
+      knowledgePreviewEnabled: includeKnowledgePreview === true || config.conversationEngine?.knowledgePreviewEnabled === true,
       adminTestOnly: true,
     },
   };
@@ -308,6 +311,43 @@ export function calculateResponseQualitySummary(results) {
   return summary;
 }
 
+export function calculateKnowledgeGroundingSummary(results) {
+  const summary = {
+    totalAttempted: 0,
+    groundedCount: 0,
+    partiallyGroundedCount: 0,
+    ungroundedCount: 0,
+    notRequiredCount: 0,
+    emptyKnowledgeCount: 0,
+    retrievalErrorCount: 0,
+    snippetsUsedCount: 0,
+    commonGroundingWarnings: [],
+  };
+  const warningCounts = new Map();
+  for (const result of results) {
+    const preview = asRecord(result.responsePreview);
+    if (Object.keys(preview).length === 0) continue;
+    if (preview.knowledgeAttempted === true) summary.totalAttempted += 1;
+    if (preview.groundingStatus === 'grounded') summary.groundedCount += 1;
+    else if (preview.groundingStatus === 'partially_grounded') summary.partiallyGroundedCount += 1;
+    else if (preview.groundingStatus === 'ungrounded') summary.ungroundedCount += 1;
+    else if (preview.groundingStatus === 'not_required') summary.notRequiredCount += 1;
+    if (preview.knowledgeStatus === 'empty') summary.emptyKnowledgeCount += 1;
+    if (preview.knowledgeStatus === 'error') summary.retrievalErrorCount += 1;
+    if (asArray(preview.usedKnowledgeSources).length > 0) summary.snippetsUsedCount += 1;
+    for (const warning of asArray(preview.groundingWarnings)) {
+      if (typeof warning === 'string' && warning.trim()) {
+        warningCounts.set(warning, (warningCounts.get(warning) || 0) + 1);
+      }
+    }
+  }
+  summary.commonGroundingWarnings = Array.from(warningCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, count]) => ({ label, count }));
+  return summary;
+}
+
 function summarizePatterns(results) {
   const count = (items) => {
     const map = new Map();
@@ -339,6 +379,9 @@ async function loadDistServices() {
     { HandoffReadinessService },
     { ConversationQualityService },
     { ResponseDraftService },
+    { KnowledgePreviewRetrievalService },
+    { EmbeddingService },
+    { VectorService },
   ] = await Promise.all([
     import(pathToFileURL(path.join(dist, 'assistant-profiles/assistant-profile-resolver.service.js')).href),
     import(pathToFileURL(path.join(dist, 'conversation-engine/conversation-engine.service.js')).href),
@@ -351,6 +394,9 @@ async function loadDistServices() {
     import(pathToFileURL(path.join(dist, 'conversation-engine/handoff-readiness.service.js')).href),
     import(pathToFileURL(path.join(dist, 'conversation-engine/conversation-quality.service.js')).href),
     import(pathToFileURL(path.join(dist, 'conversation-engine/response-draft.service.js')).href),
+    import(pathToFileURL(path.join(dist, 'conversation-engine/knowledge-preview-retrieval.service.js')).href),
+    import(pathToFileURL(path.join(dist, 'vector/embedding.service.js')).href),
+    import(pathToFileURL(path.join(dist, 'vector/vector.service.js')).href),
   ]);
   const qualityService = new ConversationQualityService();
   const engine = new ConversationEngineService(
@@ -366,6 +412,10 @@ async function loadDistServices() {
     resolver: new AssistantProfileResolverService(),
     compareService: new ConversationEngineCompareService(engine),
     responseDrafts: new ResponseDraftService(qualityService),
+    createKnowledgePreview: (db) => new KnowledgePreviewRetrievalService(
+      new EmbeddingService(),
+      new VectorService({ query: (sql, params) => db.query(sql, params) }),
+    ),
   };
 }
 
@@ -421,6 +471,17 @@ function compactResponsePreview(preview) {
     shouldAskQuestion: preview.draft?.shouldAskQuestion === true,
     shouldHandoff: preview.draft?.shouldHandoff === true,
     missingFields: asArray(preview.draft?.missingFields).map((entry) => redactText(entry)),
+    groundingStatus: preview.draft?.groundingStatus || 'not_required',
+    groundingWarnings: asArray(preview.draft?.groundingWarnings).map((entry) => redactText(entry)),
+    usedKnowledgeSources: asArray(preview.draft?.usedKnowledgeSources).slice(0, 4).map((source) => ({
+      id: source.id,
+      title: redactText(source.title || 'Wissensquelle'),
+      sourceType: redactText(source.sourceType || 'knowledge'),
+      score: typeof source.score === 'number' ? source.score : undefined,
+      excerpt: redactText(source.excerpt || '').slice(0, 260),
+    })),
+    knowledgeAttempted: preview.knowledgeRetrieval?.attempted === true,
+    knowledgeStatus: preview.knowledgeRetrieval?.status || 'disabled',
     confidence: preview.draft?.confidence || 0,
     qualityStatus: preview.quality?.status || 'unknown',
     qualityScore: preview.quality?.score || 0,
@@ -431,7 +492,7 @@ function compactResponsePreview(preview) {
   });
 }
 
-async function runComparisons({ db, site, modules, config, resolver, compareService, responseDrafts, includeResponsePreview }) {
+async function runComparisons({ db, site, modules, config, resolver, compareService, responseDrafts, knowledgePreview, includeResponsePreview, includeKnowledgePreview }) {
   const moduleConfigs = { ...modules, [MODULE_KEY]: config };
   const assistantProfile = resolver.resolve({ siteConfig: asRecord(site.config), moduleConfigs });
   const knowledgeAvailable = await hasKnowledge(db, site.id);
@@ -449,6 +510,20 @@ async function runComparisons({ db, site, modules, config, resolver, compareServ
       testMode: true,
     });
     const decision = comparison.engine.conversationDecision;
+    let knowledgeRetrieval;
+    if (includeResponsePreview && includeKnowledgePreview && config.conversationEngine.knowledgePreviewEnabled && knowledgePreview) {
+      knowledgeRetrieval = await knowledgePreview.retrieve({
+        tenantId: site.tenant_id,
+        siteId: site.id,
+        assistantProfile,
+        conversationDecision: decision,
+        latestUserMessage: testCase.message,
+        history: [],
+        selectedAgentKey: decision.selectedAgentKey,
+        knowledgeMode: assistantProfile.knowledgeMode,
+        enabled: true,
+      });
+    }
     const responsePreview = includeResponsePreview && config.conversationEngine.responsePreviewEnabled && responseDrafts
       ? compactResponsePreview(responseDrafts.preview({
           assistantProfile,
@@ -456,6 +531,7 @@ async function runComparisons({ db, site, modules, config, resolver, compareServ
           latestUserMessage: testCase.message,
           history: [],
           knowledgeAvailable,
+          knowledgeRetrievalResult: knowledgeRetrieval,
           testMode: true,
         }))
       : undefined;
@@ -481,6 +557,8 @@ async function runComparisons({ db, site, modules, config, resolver, compareServ
       responsePreview,
       responsePreviewSkippedReason: includeResponsePreview && !config.conversationEngine.responsePreviewEnabled
         ? 'responsePreviewEnabled=false'
+        : includeKnowledgePreview && !config.conversationEngine.knowledgePreviewEnabled
+          ? 'knowledgePreviewEnabled=false'
         : undefined,
       profileKey: assistantProfile.profileKey,
       profileVersion: assistantProfile.profileVersion,
@@ -494,6 +572,7 @@ async function runComparisons({ db, site, modules, config, resolver, compareServ
 function buildReport({ args, site, previousConfig, finalConfig, assistantProfile, results }) {
   const metrics = calculateEvaluationMetrics(results);
   const responseQualitySummary = calculateResponseQualitySummary(results);
+  const knowledgeGroundingSummary = calculateKnowledgeGroundingSummary(results);
   return sanitizeValue({
     generatedAt: new Date().toISOString(),
     dryRun: args.dryRun,
@@ -509,6 +588,7 @@ function buildReport({ args, site, previousConfig, finalConfig, assistantProfile
     previousFeatureFlags: previousConfig.conversationEngine,
     summary: metrics,
     responseQualitySummary,
+    knowledgeGroundingSummary,
     patterns: summarizePatterns(results),
     criticalConflicts: results
       .filter((result) => result.comparisonStatus === 'conflict')
@@ -547,6 +627,7 @@ function buildReport({ args, site, previousConfig, finalConfig, assistantProfile
 function renderMarkdown(report) {
   const s = report.summary;
   const q = report.responseQualitySummary || {};
+  const k = report.knowledgeGroundingSummary || {};
   const conflictRows = report.criticalConflicts.length
     ? report.criticalConflicts.map((item) =>
         `- ${item.testCase}: Legacy=${item.legacyRoute}, Engine=${item.engineIntent}/${item.engineGoal}. Risiko: ${item.risk} Empfehlung: ${item.recommendation}`,
@@ -576,6 +657,7 @@ function renderMarkdown(report) {
 - compareEnabled: ${report.featureFlags.compareEnabled}
 - adminTestOnly: ${report.featureFlags.adminTestOnly}
 - responsePreviewEnabled: ${report.featureFlags.responsePreviewEnabled}
+- knowledgePreviewEnabled: ${report.featureFlags.knowledgePreviewEnabled}
 
 ## Zusammenfassung
 - totalCases: ${s.totalCases}
@@ -597,6 +679,16 @@ function renderMarkdown(report) {
 - averageQualityScore: ${q.averageQualityScore || 0}
 - lowestQualityScore: ${q.lowestQualityScore ?? 'n/a'}
 - highestQualityScore: ${q.highestQualityScore ?? 'n/a'}
+
+## Wissensbasis-Grounding
+- totalAttempted: ${k.totalAttempted || 0}
+- grounded: ${k.groundedCount || 0}
+- partiallyGrounded: ${k.partiallyGroundedCount || 0}
+- ungrounded: ${k.ungroundedCount || 0}
+- notRequired: ${k.notRequiredCount || 0}
+- emptyKnowledge: ${k.emptyKnowledgeCount || 0}
+- retrievalError: ${k.retrievalErrorCount || 0}
+- snippetsUsed: ${k.snippetsUsedCount || 0}
 
 ## Kritische Konflikte
 ${conflictRows}
@@ -669,7 +761,7 @@ export async function runEvaluation(args, { db, services, writeReports = true } 
 
     let nextConfig = normalizeConfig(state.config);
     const previousConfig = normalizeConfig(state.config);
-    if (args.enableFlags) nextConfig = enableFlags(nextConfig, args.includeResponsePreview);
+    if (args.enableFlags) nextConfig = enableFlags(nextConfig, args.includeResponsePreview, args.includeKnowledgePreview);
     if (args.seedStarterCases) nextConfig = seedStarterCases(nextConfig);
 
     if (!args.dryRun && (args.enableFlags || args.seedStarterCases)) {
@@ -681,6 +773,9 @@ export async function runEvaluation(args, { db, services, writeReports = true } 
     let results = [];
     if (args.run) {
       const loadedServices = services || await loadDistServices();
+      const knowledgePreview = args.includeKnowledgePreview && loadedServices.createKnowledgePreview
+        ? loadedServices.createKnowledgePreview(queryable)
+        : loadedServices.knowledgePreview;
       const comparison = await runComparisons({
         db: queryable,
         site: state.site,
@@ -689,7 +784,9 @@ export async function runEvaluation(args, { db, services, writeReports = true } 
         resolver: loadedServices.resolver,
         compareService: loadedServices.compareService,
         responseDrafts: loadedServices.responseDrafts,
+        knowledgePreview,
         includeResponsePreview: args.includeResponsePreview,
+        includeKnowledgePreview: args.includeKnowledgePreview,
       });
       assistantProfile = comparison.assistantProfile;
       results = comparison.results;

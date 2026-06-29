@@ -93,10 +93,54 @@ export class ConversationQualityService {
       recommendations.push('Ohne Wissensbasis transparent bleiben oder Rückfrage stellen.');
     }
 
+    if (profile.knowledgeMode === 'strict' && draft.usedKnowledgeSources.length === 0 && draft.groundingStatus === 'ungrounded') {
+      if (!/(keine sichere Grundlage|keine passende Wissensbasis|nicht gefunden|transparent)/i.test(draft.text)) {
+        score -= 35;
+        risks.push('Strict Mode formuliert ohne Quellen keine ausreichend transparente Nicht-Antwort.');
+        recommendations.push('Im Strict Mode ohne Treffer keine inhaltliche Antwort simulieren.');
+      }
+    }
+
     if (draft.shouldShowSources && draft.usedKnowledgeSources.length === 0) {
       score -= 25;
       risks.push('Antwort behauptet Quellen, obwohl keine konkreten Quellen vorhanden sind.');
       recommendations.push('Quellen nur anzeigen, wenn konkrete Quellen vorhanden sind.');
+    }
+
+    const transparentNoKnowledge = /(keine sichere Grundlage|keine passende Wissensbasis|keine Wissensgrundlage|nicht gefunden|transparent|keine Quelle zu behaupten)/i.test(draft.text);
+    const claimsConcreteSource = /quelle|laut|freigegebenen informationen/i.test(draft.text)
+      || (/wissensbasis/i.test(draft.text) && !transparentNoKnowledge);
+    if (claimsConcreteSource && draft.usedKnowledgeSources.length === 0) {
+      score -= 25;
+      risks.push('Antwort verweist auf Quellen oder Wissensbasis ohne konkrete Snippets.');
+      recommendations.push('Quellenbezug nur bei vorhandenen usedKnowledgeSources formulieren.');
+    }
+
+    if (draft.usedKnowledgeSources.length > 0 && draft.usedKnowledge === false) {
+      score -= 15;
+      risks.push('Snippets vorhanden, aber Antwort nutzt sie nicht.');
+      recommendations.push('Relevante Wissensbasis-Snippets in die Antwortsimulation einbeziehen.');
+    }
+
+    if (/(preis|kosten|verfügbarkeit|verfuegbarkeit|garantie|garantiert|lieferbar)/i.test(draft.text) && draft.usedKnowledgeSources.length === 0) {
+      score -= 20;
+      risks.push('Preis-, Verfügbarkeits- oder Garantieaussage ohne Wissensquelle.');
+      recommendations.push('Solche Aussagen nur mit konkreter Wissensquelle simulieren.');
+    }
+
+    const longSnippetCopy = draft.usedKnowledgeSources.some((source) => {
+      const excerpt = source.excerpt?.slice(0, 180).trim();
+      return excerpt && excerpt.length > 120 && draft.text.includes(excerpt);
+    });
+    if (longSnippetCopy) {
+      score -= 15;
+      risks.push('Antwort übernimmt einen langen Snippet-Ausschnitt direkt.');
+      recommendations.push('Snippets zusammenfassen statt lange Passagen zu kopieren.');
+    }
+
+    if (draft.usedKnowledgeSources.length > 0 && draft.usedKnowledge && draft.groundingStatus === 'grounded') {
+      score += 5;
+      findings.push('Antwort nutzt konkrete Wissensbasis-Snippets.');
     }
 
     if (/(garantiert|auf jeden fall|verbindlicher preis|100 ?%|garantie|sicher gelöst|sicher geloest)/i.test(draft.text)) {

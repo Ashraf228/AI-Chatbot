@@ -263,6 +263,7 @@ test('conversation engine preview reports missing required fields and skips know
 function createController({ previewEnabled = true, siteConfig = {}, moduleConfig = {}, knowledgeCount = 1 } = {}) {
   const calls = [];
   const dbQueries = [];
+  const knowledgePreviewCalls = [];
   const moduleStore = {
     'assistant-profile': moduleConfig,
     'conversation-engine-tests': {
@@ -270,6 +271,7 @@ function createController({ previewEnabled = true, siteConfig = {}, moduleConfig
         previewEnabled: false,
         compareEnabled: false,
         responsePreviewEnabled: false,
+        knowledgePreviewEnabled: false,
         adminTestOnly: true,
       },
       testCases: [],
@@ -279,6 +281,7 @@ function createController({ previewEnabled = true, siteConfig = {}, moduleConfig
     async getSite(siteId) {
       return {
         id: siteId,
+        tenant_id: 'tenant-1',
         config: {
           conversationEngine: { previewEnabled },
           ...siteConfig,
@@ -304,6 +307,39 @@ function createController({ previewEnabled = true, siteConfig = {}, moduleConfig
   const resolver = new AssistantProfileResolverService();
   const compareService = createCompareService();
   const responseDrafts = new ResponseDraftService(new ConversationQualityService());
+  const knowledgePreview = {
+    async retrieve(input) {
+      knowledgePreviewCalls.push(input);
+      if (!input.enabled) {
+        return {
+          enabled: false,
+          attempted: false,
+          status: 'disabled',
+          snippets: [],
+          warnings: [],
+          reasons: ['disabled'],
+        };
+      }
+      return {
+        enabled: true,
+        attempted: true,
+        status: 'available',
+        snippets: [{
+          id: 'snippet-1',
+          chunkId: 'chunk-1',
+          documentId: 'doc-1',
+          sourceId: 'source-1',
+          title: 'VPN Hilfe',
+          sourceType: 'faq',
+          score: 0.92,
+          excerpt: 'VPN-Verbindungen sollen zuerst anhand der Fehlermeldung eingegrenzt werden.',
+          scope: 'site',
+        }],
+        warnings: [],
+        reasons: ['Test-Snippet'],
+      };
+    },
+  };
   const db = {
     async query(sql) {
       dbQueries.push(String(sql));
@@ -331,10 +367,11 @@ function createController({ previewEnabled = true, siteConfig = {}, moduleConfig
     },
     createEngine(),
     compareService,
-    new ConversationEngineTestCasesService(db, sitesService, siteModulesService, resolver, compareService, responseDrafts),
+    new ConversationEngineTestCasesService(db, sitesService, siteModulesService, resolver, compareService, knowledgePreview, responseDrafts),
+    knowledgePreview,
     responseDrafts,
   );
-  return { controller, calls, dbQueries, moduleStore };
+  return { controller, calls, dbQueries, moduleStore, knowledgePreviewCalls };
 }
 
 test('conversation engine admin preview returns no decision when feature flag is disabled', async () => {
@@ -457,6 +494,7 @@ test('conversation engine test flags default to false and can be enabled per sit
   assert.equal(initial.settings.previewEnabled, false);
   assert.equal(initial.settings.compareEnabled, false);
   assert.equal(initial.settings.responsePreviewEnabled, false);
+  assert.equal(initial.settings.knowledgePreviewEnabled, false);
   assert.equal(initial.settings.adminTestOnly, true);
 
   const updated = await controller.updateSettings(
@@ -467,6 +505,7 @@ test('conversation engine test flags default to false and can be enabled per sit
 
   assert.equal(updated.settings.previewEnabled, true);
   assert.equal(updated.settings.compareEnabled, true);
+  assert.equal(updated.settings.knowledgePreviewEnabled, false);
   assert.equal(updated.settings.adminTestOnly, true);
 });
 
@@ -506,6 +545,34 @@ test('conversation engine response preview returns support draft when enabled', 
   assert.equal(result.engineResponsePreview.quality.status, 'good');
   assert.ok(result.legacy);
   assert.equal(dbQueries.some((sql) => /\b(insert|update|delete)\b/i.test(sql)), false);
+});
+
+test('conversation engine response preview uses knowledge snippets only when knowledge preview is enabled', async () => {
+  const { controller, knowledgePreviewCalls } = createController({
+    siteConfig: {
+      conversationEngine: {
+        previewEnabled: true,
+        responsePreviewEnabled: true,
+        knowledgePreviewEnabled: true,
+        adminTestOnly: true,
+      },
+    },
+  });
+
+  const result = await controller.responsePreview(
+    'site-1',
+    { message: 'Ich brauche Hilfe, mein VPN funktioniert nicht.', includeKnowledge: true },
+    { dashboardAuth: {} },
+  );
+
+  assert.equal(result.responsePreviewEnabled, true);
+  assert.equal(result.knowledgePreviewEnabled, true);
+  assert.equal(result.knowledgeRetrieval.status, 'available');
+  assert.equal(knowledgePreviewCalls.length, 1);
+  assert.equal(result.engineResponsePreview.draft.usedKnowledgeSources.length, 1);
+  assert.equal(result.engineResponsePreview.draft.groundingStatus, 'grounded');
+  assert.match(result.engineResponsePreview.draft.text, /VPN Hilfe/);
+  assert.doesNotMatch(JSON.stringify(result), /test@example\.com|017600000000|sk-/i);
 });
 
 test('conversation engine response preview drafts product advice without immediate handoff', async () => {
@@ -713,6 +780,34 @@ test('conversation engine test case run stores response preview and quality summ
   assert.equal(result.responseQualitySummary.averageQualityScore > 0, true);
   assert.doesNotMatch(JSON.stringify(result), /test@example\.com|017600000000|sk-/i);
   assert.doesNotMatch(dbQueries.join('\n'), /\b(widget_leads|email_jobs|webhook_jobs|tickets|conversations)\b/i);
+});
+
+test('conversation engine test case run stores knowledge grounding summary when enabled', async () => {
+  const { controller, knowledgePreviewCalls } = createController();
+
+  await controller.updateSettings(
+    'site-1',
+    { previewEnabled: true, compareEnabled: true, responsePreviewEnabled: true, knowledgePreviewEnabled: true },
+    { dashboardAuth: {} },
+  );
+  await controller.createTestCase(
+    'site-1',
+    { name: 'Support', message: 'Mein VPN funktioniert nicht', expectedIntent: 'support' },
+    { dashboardAuth: {} },
+  );
+
+  const result = await controller.runTestCases(
+    'site-1',
+    { includeResponsePreview: true, includeKnowledge: true },
+    { dashboardAuth: {} },
+  );
+
+  assert.equal(knowledgePreviewCalls.length, 1);
+  assert.equal(result.testCases[0].responsePreview.groundingStatus, 'grounded');
+  assert.equal(result.testCases[0].responsePreview.usedKnowledgeSources.length, 1);
+  assert.equal(result.knowledgeSummary.totalAttempted, 1);
+  assert.equal(result.knowledgeSummary.groundedCount, 1);
+  assert.doesNotMatch(JSON.stringify(result), /test@example\.com|017600000000|sk-/i);
 });
 
 test('conversation engine test case run is blocked when compare flags are disabled', async () => {

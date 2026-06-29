@@ -4,6 +4,8 @@ import { PrismaService } from '../db/prisma.service';
 import { SiteModulesService } from '../site-modules/site-modules.service';
 import { SitesService } from '../sites/sites.service';
 import { ConversationEngineCompareService } from './conversation-engine-compare.service';
+import { EngineKnowledgeRetrievalResult } from './conversation-engine.types';
+import { KnowledgePreviewRetrievalService } from './knowledge-preview-retrieval.service';
 import { ResponseDraftService } from './response-draft.service';
 
 type SiteModulePreview = {
@@ -33,6 +35,7 @@ type TestModuleConfig = {
     previewEnabled: boolean;
     compareEnabled: boolean;
     responsePreviewEnabled: boolean;
+    knowledgePreviewEnabled: boolean;
     adminTestOnly: true;
   };
   testCases: TestCase[];
@@ -105,6 +108,7 @@ function normalizeConfig(config: Record<string, unknown> | null | undefined): Te
       previewEnabled: asBoolean(engine.previewEnabled, false),
       compareEnabled: asBoolean(engine.compareEnabled, false),
       responsePreviewEnabled: asBoolean(engine.responsePreviewEnabled, false),
+      knowledgePreviewEnabled: asBoolean(engine.knowledgePreviewEnabled, false),
       adminTestOnly: true,
     },
     testCases: Array.isArray(source.testCases)
@@ -228,6 +232,44 @@ function responseQualitySummaryFor(results: TestCase[]) {
   return summary;
 }
 
+function knowledgeSummaryFor(results: TestCase[]) {
+  const summary = {
+    totalAttempted: 0,
+    groundedCount: 0,
+    partiallyGroundedCount: 0,
+    ungroundedCount: 0,
+    noKnowledgeNeededCount: 0,
+    emptyKnowledgeCount: 0,
+    retrievalErrorCount: 0,
+    commonGroundingWarnings: [] as Array<{ label: string; count: number }>,
+  };
+  const warnings = new Map<string, number>();
+
+  for (const testCase of results) {
+    const preview = asRecord(testCase.responsePreview);
+    const groundingStatus = asString(preview.groundingStatus);
+    if (preview.knowledgeAttempted === true) summary.totalAttempted += 1;
+    if (groundingStatus === 'grounded') summary.groundedCount += 1;
+    else if (groundingStatus === 'partially_grounded') summary.partiallyGroundedCount += 1;
+    else if (groundingStatus === 'ungrounded') summary.ungroundedCount += 1;
+    else if (groundingStatus === 'not_required') summary.noKnowledgeNeededCount += 1;
+    if (preview.knowledgeStatus === 'empty') summary.emptyKnowledgeCount += 1;
+    if (preview.knowledgeStatus === 'error') summary.retrievalErrorCount += 1;
+    const groundingWarnings = Array.isArray(preview.groundingWarnings) ? preview.groundingWarnings : [];
+    for (const warning of groundingWarnings) {
+      if (typeof warning === 'string' && warning.trim()) {
+        warnings.set(warning, (warnings.get(warning) || 0) + 1);
+      }
+    }
+  }
+
+  summary.commonGroundingWarnings = Array.from(warnings.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([label, count]) => ({ label, count }));
+  return summary;
+}
+
 @Injectable()
 export class ConversationEngineTestCasesService {
   constructor(
@@ -236,6 +278,7 @@ export class ConversationEngineTestCasesService {
     private readonly siteModules: SiteModulesService,
     private readonly resolver: AssistantProfileResolverService,
     private readonly compareService: ConversationEngineCompareService,
+    private readonly knowledgePreview: KnowledgePreviewRetrievalService,
     private readonly responseDrafts: ResponseDraftService,
   ) {}
 
@@ -248,6 +291,7 @@ export class ConversationEngineTestCasesService {
         ? config.lastMetrics
         : metricsFor(config.testCases),
       responseQualitySummary: responseQualitySummaryFor(config.testCases),
+      knowledgeSummary: knowledgeSummaryFor(config.testCases),
       starterTestCases: this.starterTestCases(),
     };
   }
@@ -258,6 +302,7 @@ export class ConversationEngineTestCasesService {
       previewEnabled: asBoolean(input.previewEnabled, config.conversationEngine.previewEnabled),
       compareEnabled: asBoolean(input.compareEnabled, config.conversationEngine.compareEnabled),
       responsePreviewEnabled: asBoolean(input.responsePreviewEnabled, config.conversationEngine.responsePreviewEnabled),
+      knowledgePreviewEnabled: asBoolean(input.knowledgePreviewEnabled, config.conversationEngine.knowledgePreviewEnabled),
       adminTestOnly: true,
     };
     await this.saveConfig(siteId, config);
@@ -322,6 +367,7 @@ export class ConversationEngineTestCasesService {
       ? new Set(input.caseIds.filter((entry): entry is string => typeof entry === 'string'))
       : null;
     const includeResponsePreview = input.includeResponsePreview === true;
+    const includeKnowledge = input.includeKnowledge === true;
     const site = await this.sites.getSite(siteId);
     const modules = await this.siteModules.listForSite(siteId) as SiteModulePreview[];
     const moduleConfigs = Object.fromEntries(modules.map((module) => [module.key, module.config || {}]));
@@ -329,9 +375,11 @@ export class ConversationEngineTestCasesService {
     const knowledgeAvailable = await this.hasKnowledge(siteId);
     const now = new Date().toISOString();
 
-    config.testCases = config.testCases.map((testCase) => {
+    const nextCases: TestCase[] = [];
+    for (const testCase of config.testCases) {
       if (selectedIds && !selectedIds.has(testCase.id)) {
-        return testCase;
+        nextCases.push(testCase);
+        continue;
       }
       const comparison = this.compareService.compare({
         assistantProfile,
@@ -344,26 +392,50 @@ export class ConversationEngineTestCasesService {
         expectedAgentKey: testCase.expectedAgentKey,
         testMode: true,
       });
+      const knowledgeRetrieval = includeKnowledge && config.conversationEngine.knowledgePreviewEnabled
+        ? await this.knowledgePreview.retrieve({
+            tenantId: site?.tenant_id || '',
+            siteId,
+            assistantProfile,
+            conversationDecision: comparison.engine.conversationDecision,
+            latestUserMessage: testCase.message,
+            history: [],
+            selectedAgentKey: comparison.engine.conversationDecision.selectedAgentKey,
+            knowledgeMode: assistantProfile.knowledgeMode,
+            enabled: true,
+          })
+        : {
+            enabled: false,
+            attempted: false,
+            status: 'disabled',
+            snippets: [],
+            warnings: [],
+            reasons: ['Wissensbasis-Vorschau ist deaktiviert.'],
+          } satisfies EngineKnowledgeRetrievalResult;
       const responsePreview = includeResponsePreview && config.conversationEngine.responsePreviewEnabled
         ? this.buildResponsePreview({
             assistantProfile,
             decision: comparison.engine.conversationDecision,
             message: testCase.message,
             knowledgeAvailable,
+            knowledgeRetrieval,
           })
         : undefined;
-      return {
+      nextCases.push({
         ...testCase,
         resultStatus: comparison.comparison.status,
         lastComparison: comparison,
         responsePreview,
         responsePreviewSkippedReason: includeResponsePreview && !config.conversationEngine.responsePreviewEnabled
           ? 'responsePreviewEnabled=false'
+          : includeKnowledge && !config.conversationEngine.knowledgePreviewEnabled
+            ? 'knowledgePreviewEnabled=false'
           : undefined,
         lastRunAt: now,
         updatedAt: now,
-      };
-    });
+      });
+    }
+    config.testCases = nextCases;
     config.lastMetrics = metricsFor(config.testCases);
     await this.saveConfig(siteId, config);
     return this.getState(siteId);
@@ -374,6 +446,7 @@ export class ConversationEngineTestCasesService {
     decision: ReturnType<ConversationEngineCompareService['compare']>['engine']['conversationDecision'];
     message: string;
     knowledgeAvailable: boolean;
+    knowledgeRetrieval: EngineKnowledgeRetrievalResult;
   }) {
     const preview = this.responseDrafts.preview({
       assistantProfile: input.assistantProfile,
@@ -381,6 +454,7 @@ export class ConversationEngineTestCasesService {
       latestUserMessage: input.message,
       history: [],
       knowledgeAvailable: input.knowledgeAvailable,
+      knowledgeRetrievalResult: input.knowledgeRetrieval,
       testMode: true,
     });
     return {
@@ -397,6 +471,17 @@ export class ConversationEngineTestCasesService {
       qualityFindings: (preview.quality?.findings || []).map((entry) => sanitizePreviewText(entry)),
       qualityRisks: (preview.quality?.risks || []).map((entry) => sanitizePreviewText(entry)),
       qualityRecommendations: (preview.quality?.recommendations || []).map((entry) => sanitizePreviewText(entry)),
+      groundingStatus: preview.draft?.groundingStatus || 'not_required',
+      groundingWarnings: (preview.draft?.groundingWarnings || []).map((entry) => sanitizePreviewText(entry)),
+      usedKnowledgeSources: (preview.draft?.usedKnowledgeSources || []).map((source) => ({
+        id: sanitizePreviewText(source.id || ''),
+        title: sanitizePreviewText(source.title || ''),
+        sourceType: sanitizePreviewText(source.sourceType || ''),
+        score: source.score,
+        excerpt: sanitizePreviewText(source.excerpt || ''),
+      })),
+      knowledgeAttempted: input.knowledgeRetrieval.attempted,
+      knowledgeStatus: input.knowledgeRetrieval.status,
       warnings: preview.warnings.map((entry) => sanitizePreviewText(entry)),
     };
   }
