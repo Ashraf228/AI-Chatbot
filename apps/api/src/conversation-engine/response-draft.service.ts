@@ -4,6 +4,8 @@ import {
   ConversationDecision,
   ConversationEngineResponsePreview,
   ConversationHistoryEntry,
+  EngineKnowledgeRetrievalResult,
+  EngineKnowledgeSnippet,
   EngineResponseDraft,
 } from './conversation-engine.types';
 import { ConversationQualityService } from './conversation-quality.service';
@@ -14,6 +16,7 @@ type ResponseDraftInput = {
   latestUserMessage: string;
   history?: ConversationHistoryEntry[];
   knowledgeAvailable: boolean;
+  knowledgeRetrievalResult?: EngineKnowledgeRetrievalResult;
   testMode: true;
 };
 
@@ -43,23 +46,48 @@ function buildDraft(input: ResponseDraftInput): EngineResponseDraft {
   const decision = input.decision;
   const missing = firstMissingLabel(decision.missingFields);
   const confidence = decision.confidence;
+  const snippets = input.knowledgeRetrievalResult?.snippets || [];
+  const knowledgeStatus = input.knowledgeRetrievalResult?.status || (input.knowledgeAvailable ? 'available' : 'empty');
+  const hasSnippets = snippets.length > 0;
+  const knowledgeMode = input.assistantProfile.knowledgeMode;
   const base = {
-    usedKnowledgeSources: [],
+    usedKnowledgeSources: [] as EngineKnowledgeSnippet[],
+    groundingStatus: 'not_required' as EngineResponseDraft['groundingStatus'],
+    groundingWarnings: [] as string[],
     missingFields: decision.missingFields,
     confidence,
   };
 
+  const knowledgeBase = {
+    ...base,
+    usedKnowledgeSources: snippets,
+    groundingStatus: hasSnippets ? 'grounded' as const : 'ungrounded' as const,
+    groundingWarnings: hasSnippets ? [] : ['Keine passende Wissensbasis gefunden.'],
+  };
+
+  const sourceTitle = snippets[0]?.title || 'der Wissensbasis';
+  const sourceExcerpt = snippets[0]?.excerpt || '';
+  const sourceSentence = sourceExcerpt
+    ? `Aus ${sourceTitle} geht hervor: ${sourceExcerpt.slice(0, 110)}${sourceExcerpt.length > 110 ? '…' : ''}`
+    : `Ich würde die Antwort aus ${sourceTitle} ableiten.`;
+
+  const noKnowledgeText = knowledgeMode === 'strict'
+    ? 'Dazu wurde in der freigegebenen Wissensbasis keine sichere Grundlage gefunden. Ich würde das transparent machen und eine Rückfrage oder Übergabe vorbereiten.'
+    : 'Dazu wurde keine passende Wissensbasis gefunden. Ich kann allgemein einordnen und eine passende Rückfrage stellen, ohne eine Quelle zu behaupten.';
+
   if (decision.intent === 'support' || decision.goal === 'solve_problem') {
     const askedQuestion = 'Welche Fehlermeldung sehen Sie?';
+    const text = hasSnippets
+      ? `${sourceSentence}\n\nAls nächsten Schritt würde ich eingrenzen, ob der Fehler beim Start, beim Login oder nur in einem bestimmten System auftritt. Welche Fehlermeldung sehen Sie?`
+      : 'Verstanden, das klingt nach einem Supportfall. Ich würde zuerst eingrenzen, ob der Zugriff gar nicht startet, ein Login-Fehler erscheint oder nur bestimmte Systeme betroffen sind. Welche Fehlermeldung sehen Sie?';
     return {
-      ...base,
+      ...(hasSnippets ? knowledgeBase : base),
       mode: 'support_guidance',
-      text:
-        'Verstanden, das klingt nach einem Supportfall. Ich würde zuerst eingrenzen, ob der Zugriff gar nicht startet, ein Login-Fehler erscheint oder nur bestimmte Systeme betroffen sind. Welche Fehlermeldung sehen Sie?',
-      usedKnowledge: input.knowledgeAvailable,
+      text,
+      usedKnowledge: hasSnippets,
       askedQuestion,
       nextActionLabel: 'Supportproblem eingrenzen',
-      shouldShowSources: false,
+      shouldShowSources: hasSnippets,
       shouldAskQuestion: true,
       shouldHandoff: false,
     };
@@ -67,15 +95,17 @@ function buildDraft(input: ResponseDraftInput): EngineResponseDraft {
 
   if (decision.intent === 'product_advice' || decision.goal === 'recommend_product') {
     const askedQuestion = 'Wofür soll die Lösung hauptsächlich eingesetzt werden?';
+    const text = hasSnippets
+      ? `${sourceSentence}\n\nDarauf aufbauend würde ich die passende Lösung nur aus den freigegebenen Informationen ableiten. Wofür soll die Lösung hauptsächlich eingesetzt werden?`
+      : 'Das lässt sich eingrenzen. Sinnvoll wäre zuerst zu klären, ob Sie eher Unterstützung für Kundenanfragen, interne Supportprozesse oder Produkt- und Leistungsberatung benötigen. Wofür soll die Lösung hauptsächlich eingesetzt werden?';
     return {
-      ...base,
+      ...(hasSnippets ? knowledgeBase : base),
       mode: 'product_advice',
-      text:
-        'Das lässt sich eingrenzen. Sinnvoll wäre zuerst zu klären, ob Sie eher Unterstützung für Kundenanfragen, interne Supportprozesse oder Produkt- und Leistungsberatung benötigen. Wofür soll die Lösung hauptsächlich eingesetzt werden?',
-      usedKnowledge: input.knowledgeAvailable,
+      text,
+      usedKnowledge: hasSnippets,
       askedQuestion,
       nextActionLabel: 'Beratungsbedarf eingrenzen',
-      shouldShowSources: false,
+      shouldShowSources: hasSnippets,
       shouldAskQuestion: true,
       shouldHandoff: false,
     };
@@ -131,17 +161,20 @@ function buildDraft(input: ResponseDraftInput): EngineResponseDraft {
   }
 
   if (decision.goal === 'answer_from_knowledge') {
-    const hasKnowledge = input.knowledgeAvailable;
     return {
-      ...base,
+      ...(hasSnippets ? knowledgeBase : {
+        ...base,
+        groundingStatus: knowledgeStatus === 'disabled' ? 'not_required' as const : 'ungrounded' as const,
+        groundingWarnings: knowledgeStatus === 'disabled' ? [] : ['Keine passende Wissensbasis gefunden.'],
+      }),
       mode: 'knowledge_answer',
-      text: hasKnowledge
-        ? 'Ich würde die Antwort aus der freigegebenen Wissensbasis ableiten und die wichtigsten Punkte kurz zusammenfassen.'
-        : 'Dazu liegt mir im Testmodus keine sichere Wissensgrundlage vor. Ich würde transparent nach weiteren Informationen fragen oder eine Übergabe vorbereiten.',
-      usedKnowledge: hasKnowledge,
-      nextActionLabel: hasKnowledge ? 'Wissensantwort formulieren' : 'Wissenslücke klären',
-      shouldShowSources: false,
-      shouldAskQuestion: !hasKnowledge,
+      text: hasSnippets
+        ? `${sourceSentence}\n\nIch würde daraus eine kurze Antwort formulieren und die Quelle als Hinweis anzeigen.`
+        : noKnowledgeText,
+      usedKnowledge: hasSnippets,
+      nextActionLabel: hasSnippets ? 'Wissensantwort formulieren' : 'Wissenslücke klären',
+      shouldShowSources: hasSnippets,
+      shouldAskQuestion: !hasSnippets,
       shouldHandoff: false,
     };
   }
@@ -154,7 +187,7 @@ function buildDraft(input: ResponseDraftInput): EngineResponseDraft {
       text: missing
         ? `Ich bereite die Anfrage strukturiert vor. Dafür fehlt noch: ${missing}.`
         : 'Ich würde die Angaben kurz zusammenfassen und die Übergabe an das zuständige Team vorbereiten.',
-      usedKnowledge: input.knowledgeAvailable && decision.intent === 'sales',
+      usedKnowledge: hasSnippets && decision.intent === 'sales',
       askedQuestion,
       nextActionLabel: missing ? `${missing} erfragen` : 'Übergabe vorbereiten',
       shouldShowSources: false,
@@ -199,6 +232,7 @@ export class ResponseDraftService {
       enabled: true,
       decision: input.decision,
       draft,
+      knowledgeRetrieval: input.knowledgeRetrievalResult,
       quality: this.quality.evaluateDraft(input.assistantProfile, input.decision, draft),
       safety: {
         noSideEffects: true,

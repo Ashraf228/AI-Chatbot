@@ -28,6 +28,11 @@ type ConversationEngineTestCase = {
     qualityFindings?: string[];
     qualityRisks?: string[];
     qualityRecommendations?: string[];
+    groundingStatus?: "grounded" | "partially_grounded" | "ungrounded" | "not_required";
+    groundingWarnings?: string[];
+    usedKnowledgeSources?: Array<{ id?: string; title?: string; sourceType?: string; score?: number; excerpt?: string }>;
+    knowledgeAttempted?: boolean;
+    knowledgeStatus?: string;
     warnings?: string[];
   };
   responsePreviewSkippedReason?: string;
@@ -51,6 +56,7 @@ type TestCaseState = {
     previewEnabled: boolean;
     compareEnabled: boolean;
     responsePreviewEnabled: boolean;
+    knowledgePreviewEnabled: boolean;
     adminTestOnly: true;
   };
   testCases: ConversationEngineTestCase[];
@@ -67,6 +73,16 @@ type TestCaseState = {
     riskyTestCaseNames: string[];
     commonRisks?: Array<{ label: string; count: number }>;
     commonRecommendations?: Array<{ label: string; count: number }>;
+  };
+  knowledgeSummary: {
+    totalAttempted: number;
+    groundedCount: number;
+    partiallyGroundedCount: number;
+    ungroundedCount: number;
+    noKnowledgeNeededCount: number;
+    emptyKnowledgeCount: number;
+    retrievalErrorCount: number;
+    commonGroundingWarnings?: Array<{ label: string; count: number }>;
   };
   starterTestCases: Array<{ name: string; message: string }>;
 };
@@ -103,9 +119,26 @@ const QUALITY_TONE: Record<string, string> = {
   unknown: "pending",
 };
 
+const GROUNDING_LABELS: Record<string, string> = {
+  grounded: "Quellenbasiert",
+  partially_grounded: "Teilweise belegt",
+  ungrounded: "Keine passende Wissensbasis gefunden",
+  not_required: "Nicht erforderlich",
+};
+
+function groundingLabel(value: string) {
+  return GROUNDING_LABELS[value] || value;
+}
+
 function emptyState(): TestCaseState {
   return {
-    settings: { previewEnabled: false, compareEnabled: false, responsePreviewEnabled: false, adminTestOnly: true },
+    settings: {
+      previewEnabled: false,
+      compareEnabled: false,
+      responsePreviewEnabled: false,
+      knowledgePreviewEnabled: false,
+      adminTestOnly: true,
+    },
     testCases: [],
     metrics: { total: 0, aligned: 0, partial: 0, conflict: 0, unknown: 0 },
     responseQualitySummary: {
@@ -118,6 +151,15 @@ function emptyState(): TestCaseState {
       lowestQualityScore: null,
       highestQualityScore: null,
       riskyTestCaseNames: [],
+    },
+    knowledgeSummary: {
+      totalAttempted: 0,
+      groundedCount: 0,
+      partiallyGroundedCount: 0,
+      ungroundedCount: 0,
+      noKnowledgeNeededCount: 0,
+      emptyKnowledgeCount: 0,
+      retrievalErrorCount: 0,
     },
     starterTestCases: [],
   };
@@ -133,6 +175,7 @@ export function ConversationEngineTestCasesCard({ siteId }: ConversationEngineTe
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [includeResponsePreview, setIncludeResponsePreview] = useState(false);
+  const [includeKnowledge, setIncludeKnowledge] = useState(false);
 
   async function loadState() {
     setError(null);
@@ -238,7 +281,7 @@ export function ConversationEngineTestCasesCard({ siteId }: ConversationEngineTe
       const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/conversation-engine/test-cases/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ includeResponsePreview }),
+        body: JSON.stringify({ includeResponsePreview, includeKnowledge }),
       });
       const data = (await response.json().catch(() => ({}))) as TestCaseState & { message?: string };
       if (!response.ok) {
@@ -254,8 +297,10 @@ export function ConversationEngineTestCasesCard({ siteId }: ConversationEngineTe
 
   const metrics = state.metrics || emptyState().metrics;
   const responseQualitySummary = state.responseQualitySummary || emptyState().responseQualitySummary;
+  const knowledgeSummary = state.knowledgeSummary || emptyState().knowledgeSummary;
   const canIncludeResponsePreview =
     state.settings.previewEnabled && state.settings.compareEnabled && state.settings.responsePreviewEnabled;
+  const canIncludeKnowledge = canIncludeResponsePreview && state.settings.knowledgePreviewEnabled;
 
   return (
     <div className="setup-module-card dashboard-stack dashboard-stack--sm">
@@ -287,10 +332,22 @@ export function ConversationEngineTestCasesCard({ siteId }: ConversationEngineTe
           onChange={(checked) => updateSettings({ responsePreviewEnabled: checked })}
         />
         <ToggleField
+          label="Wissensbasis-Vorschau aktivieren"
+          checked={state.settings.knowledgePreviewEnabled}
+          disabled={loading || !state.settings.previewEnabled || !state.settings.responsePreviewEnabled}
+          onChange={(checked) => updateSettings({ knowledgePreviewEnabled: checked })}
+        />
+        <ToggleField
           label="Antwortqualität mitprüfen"
           checked={includeResponsePreview}
           disabled={loading || !canIncludeResponsePreview}
           onChange={(checked) => setIncludeResponsePreview(checked)}
+        />
+        <ToggleField
+          label="Antwort mit Wissensbasis prüfen"
+          checked={includeKnowledge}
+          disabled={loading || !canIncludeKnowledge}
+          onChange={(checked) => setIncludeKnowledge(checked)}
         />
       </div>
 
@@ -327,6 +384,29 @@ export function ConversationEngineTestCasesCard({ siteId }: ConversationEngineTe
       ) : includeResponsePreview && !canIncludeResponsePreview ? (
         <div className="dashboard-status dashboard-status--warning">
           Antwortqualität wird erst geprüft, wenn Vorschau, Vergleich und Antwortvorschau aktiv sind.
+        </div>
+      ) : null}
+
+      {includeKnowledge && !canIncludeKnowledge ? (
+        <div className="dashboard-status dashboard-status--pending">
+          Wissensbasis-Vorschau ist noch nicht aktiviert.
+        </div>
+      ) : null}
+
+      {knowledgeSummary.totalAttempted > 0 ? (
+        <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+          <strong>Wissensbasis-Prüfung</strong>
+          <div className="dashboard-grid dashboard-grid--metrics-4">
+            <Metric label="Versucht" value={knowledgeSummary.totalAttempted} />
+            <Metric label="Quellenbasiert" value={knowledgeSummary.groundedCount} tone="success" />
+            <Metric label="Teilweise" value={knowledgeSummary.partiallyGroundedCount} tone="warning" />
+            <Metric label="Ohne Treffer" value={knowledgeSummary.ungroundedCount + knowledgeSummary.emptyKnowledgeCount} tone="pending" />
+          </div>
+          {knowledgeSummary.retrievalErrorCount > 0 ? (
+            <div className="dashboard-status dashboard-status--error">
+              Retrieval-Fehler: {knowledgeSummary.retrievalErrorCount}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -460,6 +540,22 @@ export function ConversationEngineTestCasesCard({ siteId }: ConversationEngineTe
                     {testCase.responsePreview.shouldHandoff ? " · Übergabe vorgesehen" : ""}
                     {testCase.responsePreview.shouldAskQuestion ? " · Rückfrage vorgesehen" : ""}
                   </p>
+                  {testCase.responsePreview.groundingStatus ? (
+                    <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                      Wissensbasis: {groundingLabel(testCase.responsePreview.groundingStatus)}
+                      {testCase.responsePreview.knowledgeStatus ? ` · Status ${testCase.responsePreview.knowledgeStatus}` : ""}
+                    </p>
+                  ) : null}
+                  {(testCase.responsePreview.usedKnowledgeSources || []).length > 0 ? (
+                    <ul className="dashboard-list dashboard-no-margin-bottom">
+                      {(testCase.responsePreview.usedKnowledgeSources || []).slice(0, 3).map((source) => (
+                        <li key={source.id || source.title}>
+                          {source.title || "Wissensquelle"}
+                          {typeof source.score === "number" ? ` · Score ${source.score}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {(testCase.responsePreview.qualityRisks || []).length > 0 ? (
                     <ul className="dashboard-list dashboard-no-margin-bottom">
                       {(testCase.responsePreview.qualityRisks || []).slice(0, 3).map((risk) => (

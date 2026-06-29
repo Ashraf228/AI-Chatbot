@@ -107,19 +107,26 @@ function createServices() {
     responseDrafts: {
       preview(input) {
         const support = /VPN/i.test(input.latestUserMessage);
+        const snippets = input.knowledgeRetrievalResult?.snippets || [];
         return {
           enabled: true,
           draft: {
             text: support
-              ? 'Verstanden, das klingt nach einem Supportfall. Welche Fehlermeldung sehen Sie?'
+              ? snippets.length > 0
+                ? `Aus ${snippets[0].title} geht hervor: ${snippets[0].excerpt}`
+                : 'Verstanden, das klingt nach einem Supportfall. Welche Fehlermeldung sehen Sie?'
               : 'Ich würde die Antwort aus der freigegebenen Wissensbasis ableiten.',
             mode: support ? 'support_guidance' : 'knowledge_answer',
             nextActionLabel: support ? 'Supportproblem eingrenzen' : 'Wissensantwort formulieren',
             shouldAskQuestion: support,
             shouldHandoff: false,
             missingFields: [],
+            usedKnowledgeSources: snippets,
+            groundingStatus: snippets.length > 0 ? 'grounded' : 'not_required',
+            groundingWarnings: [],
             confidence: 0.8,
           },
+          knowledgeRetrieval: input.knowledgeRetrievalResult,
           quality: {
             status: 'good',
             score: support ? 90 : 85,
@@ -128,6 +135,28 @@ function createServices() {
             recommendations: [],
           },
           warnings: [],
+        };
+      },
+    },
+    knowledgePreview: {
+      async retrieve(input) {
+        return {
+          enabled: true,
+          attempted: true,
+          status: 'available',
+          snippets: [{
+            id: 'snippet-1',
+            chunkId: 'chunk-1',
+            documentId: 'doc-1',
+            sourceId: 'source-1',
+            title: 'VPN Hilfe',
+            sourceType: 'faq',
+            score: 0.91,
+            excerpt: 'VPN-Probleme sollen zuerst anhand der Fehlermeldung eingegrenzt werden.',
+            scope: 'site',
+          }],
+          warnings: [],
+          reasons: [`read-only ${input.siteId}`],
         };
       },
     },
@@ -229,6 +258,33 @@ test('conversation evaluation runner includes response previews when requested',
   assert.equal(result.report.responseQualitySummary.averageQualityScore > 0, true);
   assert.ok(result.report.results.every((entry) => entry.responsePreview?.draftTextPreview));
   assert.doesNotMatch(JSON.stringify(result.report), /test@example\.com|017600000000|sk-/i);
+});
+
+test('conversation evaluation runner includes knowledge grounding when requested', async () => {
+  const { parseArgs, runEvaluation } = await loadRunner();
+  const db = createDb();
+  const args = {
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    enableFlags: true,
+    seedStarterCases: true,
+    includeResponsePreview: true,
+    includeKnowledgePreview: true,
+    run: true,
+    dryRun: true,
+    output: 'markdown',
+  };
+
+  assert.equal(parseArgs(['--include-knowledge-preview']).includeKnowledgePreview, true);
+  const result = await runEvaluation(args, { db, services: createServices(), writeReports: false });
+
+  assert.notEqual(db.state.config.conversationEngine.knowledgePreviewEnabled, true);
+  assert.equal(result.report.featureFlags.knowledgePreviewEnabled, true);
+  assert.equal(result.report.knowledgeGroundingSummary.totalAttempted, 8);
+  assert.equal(result.report.knowledgeGroundingSummary.groundedCount, 8);
+  assert.ok(result.report.results.every((entry) => entry.responsePreview?.usedKnowledgeSources?.length === 1));
+  assert.doesNotMatch(JSON.stringify(result.report), /test@example\.com|017600000000|sk-/i);
+  assert.equal(db.state.writes.length, 0);
 });
 
 test('conversation evaluation metrics count local-service bias', async () => {

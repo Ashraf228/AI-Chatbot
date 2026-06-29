@@ -19,7 +19,9 @@ type EngineResponsePreview = {
     text: string;
     mode: string;
     usedKnowledge: boolean;
-    usedKnowledgeSources: Array<{ id?: string; title?: string; type?: string }>;
+    usedKnowledgeSources: Array<{ id?: string; title?: string; sourceType?: string; score?: number; excerpt?: string }>;
+    groundingStatus: "grounded" | "partially_grounded" | "ungrounded" | "not_required";
+    groundingWarnings: string[];
     askedQuestion?: string;
     nextActionLabel: string;
     shouldShowSources: boolean;
@@ -47,6 +49,15 @@ type EngineResponsePreview = {
 
 type ResponsePreviewResponse = {
   responsePreviewEnabled?: boolean;
+  knowledgePreviewEnabled?: boolean;
+  knowledgeRetrieval?: {
+    enabled: boolean;
+    attempted: boolean;
+    status: "available" | "empty" | "disabled" | "error";
+    snippets: Array<{ id: string; title: string; sourceType: string; score: number; excerpt: string; url?: string }>;
+    warnings: string[];
+    reasons: string[];
+  };
   conversationEnginePreview: ConversationDecision | null;
   engineResponsePreview: EngineResponsePreview | null;
   legacy?: null | {
@@ -80,6 +91,13 @@ const QUALITY_TONE: Record<string, string> = {
   unknown: "pending",
 };
 
+const GROUNDING_LABELS: Record<string, string> = {
+  grounded: "Quellenbasiert",
+  partially_grounded: "Teilweise belegt",
+  ungrounded: "Keine passende Wissensbasis gefunden",
+  not_required: "Nicht erforderlich",
+};
+
 function compactJson(value: ResponsePreviewResponse) {
   return JSON.stringify(value, null, 2);
 }
@@ -87,6 +105,7 @@ function compactJson(value: ResponsePreviewResponse) {
 export function ConversationEngineResponsePreviewCard({ siteId }: ConversationEngineResponsePreviewCardProps) {
   const [message, setMessage] = useState("");
   const [includeLegacyCompare, setIncludeLegacyCompare] = useState(true);
+  const [includeKnowledge, setIncludeKnowledge] = useState(false);
   const [result, setResult] = useState<ResponsePreviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,7 +118,7 @@ export function ConversationEngineResponsePreviewCard({ siteId }: ConversationEn
       const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/conversation-engine/response-preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, includeLegacyCompare }),
+        body: JSON.stringify({ message, includeLegacyCompare, includeKnowledge }),
       });
       const data = (await response.json().catch(() => ({}))) as ResponsePreviewResponse & { message?: string };
       if (!response.ok) {
@@ -146,6 +165,15 @@ export function ConversationEngineResponsePreviewCard({ siteId }: ConversationEn
         <span>Legacy-Vergleich zusätzlich anzeigen</span>
       </label>
 
+      <label className="dashboard-toggle-row">
+        <input
+          type="checkbox"
+          checked={includeKnowledge}
+          onChange={(event) => setIncludeKnowledge(event.target.checked)}
+        />
+        <span>Antwort mit Wissensbasis prüfen</span>
+      </label>
+
       <Button type="button" variant="secondary" onClick={runPreview} disabled={loading || !message.trim()}>
         {loading ? "Simulation läuft..." : "Antwort simulieren"}
       </Button>
@@ -155,6 +183,12 @@ export function ConversationEngineResponsePreviewCard({ siteId }: ConversationEn
       {result?.responsePreviewEnabled === false ? (
         <div className="dashboard-status dashboard-status--pending">
           Antwortvorschau ist deaktiviert. Aktivieren Sie responsePreviewEnabled im Admin-Testmodus.
+        </div>
+      ) : null}
+
+      {includeKnowledge && result?.knowledgePreviewEnabled === false ? (
+        <div className="dashboard-status dashboard-status--pending">
+          Wissensbasis-Vorschau ist noch nicht aktiviert.
         </div>
       ) : null}
 
@@ -173,7 +207,34 @@ export function ConversationEngineResponsePreviewCard({ siteId }: ConversationEn
               Quellenhinweis: {draft.shouldShowSources ? "anzeigen" : "nicht anzeigen"} · Übergabe:{" "}
               {draft.shouldHandoff ? "ja" : "nein"}
             </p>
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              Grounding: {GROUNDING_LABELS[draft.groundingStatus] || draft.groundingStatus}
+            </p>
           </div>
+
+          {result.knowledgeRetrieval ? (
+            <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+              <strong>Wissensbasis</strong>
+              <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                Status: {result.knowledgeRetrieval.status} · Treffer: {result.knowledgeRetrieval.snippets.length}
+              </p>
+              {result.knowledgeRetrieval.warnings.length ? (
+                <InfoList title="Warnungen" items={result.knowledgeRetrieval.warnings} />
+              ) : null}
+              {result.knowledgeRetrieval.snippets.length > 0 ? (
+                <div className="dashboard-stack dashboard-stack--xs">
+                  {result.knowledgeRetrieval.snippets.slice(0, 4).map((snippet) => (
+                    <details className="dashboard-card dashboard-card--compact" key={snippet.id}>
+                      <summary className="dashboard-accordion__summary">
+                        {snippet.title} {snippet.score ? `· Score ${snippet.score}` : ""}
+                      </summary>
+                      <p className="dashboard-copy dashboard-copy--muted dashboard-mt-14">{snippet.excerpt}</p>
+                    </details>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="dashboard-grid dashboard-grid--metrics-3">
             <Metric label="Absicht" value={result.conversationEnginePreview.intent} />
