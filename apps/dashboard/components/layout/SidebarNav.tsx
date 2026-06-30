@@ -55,7 +55,9 @@ export function SidebarNav({ groups }: { groups: SidebarNavGroup[] }) {
           >
             <summary className="dashboard-nav-group__summary">
               <span>{group.label}</span>
-              <span aria-hidden="true">v</span>
+              <span className="dashboard-nav-group__chevron" aria-hidden="true">
+                ›
+              </span>
             </summary>
             <div className="dashboard-nav-group__items">
               {group.items.map((item) => (

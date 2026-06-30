@@ -20,28 +20,20 @@ export const dashboardNav = DASHBOARD_NAV_ITEMS;
 
 const DASHBOARD_NAV_GROUPS = [
   {
-    label: "Arbeitsbereich",
-    items: [
-      { href: "/", label: "Heute" },
-      { href: "/inbox", label: "Inbox" },
-      { href: "/analytics", label: "Auswertung" },
-    ],
-  },
-  {
-    label: "Kunden-Setup",
+    label: "Navigation",
     defaultOpen: true,
     items: [
+      { href: "/", label: "Heute" },
       { href: "/sites", label: "Kunden" },
-      { href: "/sites", label: "Chatbot einrichten" },
-      { href: "/inbox", label: "Anfragen & Chats" },
+      { href: "/inbox", label: "Inbox" },
+      { href: "/analytics", label: "Auswertung" },
     ],
   },
   {
     label: "Einstellungen",
     adminOnly: true,
     items: [
-      { href: "/settings", label: "Allgemein" },
-      { href: "/billing", label: "Plan & Nutzung" },
+      { href: "/settings", label: "Einstellungen" },
     ],
   },
 ];
