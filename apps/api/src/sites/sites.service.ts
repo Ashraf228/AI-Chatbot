@@ -213,4 +213,122 @@ export class SitesService {
 
     return this.getSite(siteId);
   }
+
+  async deleteSite(
+    siteId: string,
+    actor: { confirmation?: string; actorId?: string | null; actorRole?: string | null } = {},
+  ) {
+    if (actor.confirmation !== 'löschen') {
+      throw new BadRequestException('Zum Löschen muss exakt "löschen" bestätigt werden.');
+    }
+
+    const site = await this.getSite(siteId);
+    if (!site) {
+      throw new BadRequestException('site not found');
+    }
+
+    const deleted = await this.db.transaction(async (tx) => {
+      const counts: Record<string, number> = {};
+
+      counts.emailJobs = await this.deleteRows(
+        tx,
+        `DELETE FROM email_jobs
+         WHERE metadata->>'siteId' = $1
+            OR metadata->>'site_id' = $1
+            OR metadata->>'leadId' IN (
+              SELECT id FROM widget_leads WHERE site_id = $1
+            )
+            OR metadata->>'ticketId' IN (
+              SELECT id FROM agent_tickets WHERE site_id = $1
+            )`,
+        [siteId],
+      );
+      counts.usageEvents = await this.deleteRows(tx, `DELETE FROM usage_events WHERE site_id = $1`, [siteId]);
+      counts.usageDaily = await this.deleteRows(tx, `DELETE FROM usage_daily WHERE site_id = $1`, [siteId]);
+      counts.evaluationMockHandoffReceipts = await this.deleteRows(
+        tx,
+        `DELETE FROM evaluation_mock_handoff_receipts WHERE site_id = $1`,
+        [siteId],
+      );
+      counts.evaluationHandoffEvents = await this.deleteRows(
+        tx,
+        `DELETE FROM evaluation_handoff_events WHERE site_id = $1`,
+        [siteId],
+      );
+      counts.evaluationTicketPreviews = await this.deleteRows(
+        tx,
+        `DELETE FROM evaluation_ticket_previews WHERE site_id = $1`,
+        [siteId],
+      );
+      counts.evaluationChatSessions = await this.deleteRows(
+        tx,
+        `DELETE FROM evaluation_chat_sessions WHERE site_id = $1`,
+        [siteId],
+      );
+      counts.agentTickets = await this.deleteRows(tx, `DELETE FROM agent_tickets WHERE site_id = $1`, [siteId]);
+      counts.webhookJobs = await this.deleteRows(tx, `DELETE FROM webhook_jobs WHERE site_id = $1`, [siteId]);
+      counts.agentContactRequests = await this.deleteRows(
+        tx,
+        `DELETE FROM agent_contact_requests WHERE site_id = $1`,
+        [siteId],
+      );
+      counts.toolInvocations = await this.deleteRows(tx, `DELETE FROM tool_invocations WHERE site_id = $1`, [siteId]);
+      counts.agentRuns = await this.deleteRows(tx, `DELETE FROM agent_runs WHERE site_id = $1`, [siteId]);
+      counts.reportRuns = await this.deleteRows(tx, `DELETE FROM report_runs WHERE site_id = $1`, [siteId]);
+      counts.reportSubscriptions = await this.deleteRows(
+        tx,
+        `DELETE FROM report_subscriptions WHERE site_id = $1`,
+        [siteId],
+      );
+      counts.widgetLeads = await this.deleteRows(tx, `DELETE FROM widget_leads WHERE site_id = $1`, [siteId]);
+      counts.widgetEvents = await this.deleteRows(tx, `DELETE FROM widget_events WHERE site_id = $1`, [siteId]);
+      counts.widgetSessions = await this.deleteRows(tx, `DELETE FROM widget_sessions WHERE site_id = $1`, [siteId]);
+      counts.chunks = await this.deleteRows(tx, `DELETE FROM chunks WHERE site_id = $1`, [siteId]);
+      counts.documents = await this.deleteRows(tx, `DELETE FROM documents WHERE site_id = $1`, [siteId]);
+      counts.knowledgeSources = await this.deleteRows(tx, `DELETE FROM knowledge_sources WHERE site_id = $1`, [siteId]);
+      counts.integrationConnections = await this.deleteRows(
+        tx,
+        `DELETE FROM integration_connections WHERE site_id = $1`,
+        [siteId],
+      );
+      counts.siteModules = await this.deleteRows(tx, `DELETE FROM site_modules WHERE site_id = $1`, [siteId]);
+
+      await tx.query(
+        `INSERT INTO audit_logs(id, site_id, tenant_id, actor_id, actor_role, action, resource_type, resource_id, metadata)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [
+          randomUUID(),
+          siteId,
+          site.tenant_id,
+          actor.actorId || null,
+          actor.actorRole || null,
+          'site.deleted',
+          'site',
+          siteId,
+          JSON.stringify({
+            siteKey: site.site_key,
+            counts,
+          }),
+        ],
+      );
+
+      counts.sites = await this.deleteRows(tx, `DELETE FROM sites WHERE id = $1`, [siteId]);
+      return counts;
+    });
+
+    return {
+      ok: true,
+      deletedSiteId: siteId,
+      deleted,
+    };
+  }
+
+  private async deleteRows(db: Queryable, sql: string, params: unknown[]) {
+    const result = await db.query<{ count: string }>(
+      `WITH deleted AS (${sql} RETURNING 1)
+       SELECT COUNT(*)::text AS count FROM deleted`,
+      params,
+    );
+    return Number(result.rows[0]?.count || 0);
+  }
 }

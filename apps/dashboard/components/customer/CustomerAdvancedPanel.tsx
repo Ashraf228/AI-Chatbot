@@ -4,6 +4,7 @@ import { SiteIntegrationsForm } from "../integrations/SiteIntegrationsForm";
 import { SiteModulesForm } from "../modules/SiteModulesForm";
 import { CustomerAgentActivityTable } from "./CustomerAgentActivityTable";
 import { CustomerAuditLogTable } from "./CustomerAuditLogTable";
+import { CustomerDangerZone } from "./CustomerDangerZone";
 import { CustomerDataPrivacyActions } from "./CustomerDataPrivacyActions";
 import { CustomerRetentionSettings } from "./CustomerRetentionSettings";
 import type { DashboardSessionRole } from "../../lib/auth";
@@ -64,8 +65,8 @@ export function CustomerAdvancedPanel({
             {role === "admin" ? (
               <AdvancedLink
                 href={`/sites/${siteSlug}/advanced?section=privacy`}
-                title="Datenschutz"
-                description="Datenaufbewahrung für Chats, Anfragen und Berichte festlegen."
+                title="Datenschutz & Löschen"
+                description="Datenaufbewahrung, Datenlöschung und Kundenentfernung verwalten."
                 isActive={activeSection === "privacy"}
               />
             ) : null}
@@ -120,6 +121,7 @@ export function CustomerAdvancedPanel({
             {section === "privacy" && role === "admin" ? (
               <>
                 <CustomerDataPrivacyActions siteId={siteId} role={role} />
+                <CustomerDangerZone siteId={siteId} />
                 <CustomerRetentionSettings siteId={siteId} />
                 {role === "admin" ? <CustomerAuditLogTable siteId={siteId} /> : null}
               </>
@@ -162,7 +164,7 @@ function getSectionTitle(section: CustomerAdvancedSection) {
     case "automations":
       return "Automationen";
     case "privacy":
-      return "Datenschutz";
+      return "Datenschutz & Löschen";
     default:
       return "Übersicht";
   }

@@ -5,6 +5,44 @@
   "viewerAllowlistPolicy": "exact-match-only",
   "routes": [
     {
+      "id": "API-SITE-DELETE",
+      "layer": "api",
+      "method": "DELETE",
+      "path": "/admin/sites/:siteId",
+      "source": "apps/api/src/sites/sites.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess admin-only plus exact confirmation",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-SITE-DELETE",
+      "layer": "dashboard",
+      "method": "DELETE",
+      "path": "/api/sites/:siteId",
+      "source": "apps/dashboard/app/api/sites/[siteId]/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "requireSession adminOnly plus backend AdminScopeService.assertSiteAccess",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
       "id": "API-001",
       "layer": "api",
       "method": "DELETE",

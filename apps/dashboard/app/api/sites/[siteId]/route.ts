@@ -33,3 +33,31 @@ export async function PATCH(
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export async function DELETE(
+  req: Request,
+  context: { params: Promise<{ siteId: string }> }
+) {
+  const auth = await requireSession({ adminOnly: true });
+  if (auth.response) return auth.response;
+
+  const body = await req.json().catch(() => ({}));
+  const { siteId } = await context.params;
+
+  const response = await fetchDashboardBackend(`/admin/sites/${siteId}`, {
+    method: "DELETE",
+    session: auth.session,
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      confirmation: typeof body?.confirmation === "string" ? body.confirmation : "",
+    }),
+  });
+
+  const text = await response.text();
+  return new NextResponse(text || "{}", {
+    status: response.status,
+    headers: { "Content-Type": "application/json" },
+  });
+}

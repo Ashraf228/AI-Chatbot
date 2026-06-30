@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { SitesService } from './sites.service';
 import { CreateSiteDto, UpdateSiteDto } from './dto';
 import { AdminKeyGuard } from '../utils/admin.guard';
@@ -135,5 +135,22 @@ export class SitesController {
       allowedRoles: ['admin', 'operator'],
     });
     return this.sites.updateSite(siteId, dto);
+  }
+
+  @Delete(':siteId')
+  async delete(
+    @Param('siteId') siteId: string,
+    @Body() body: { confirmation?: string },
+    @Req() req: { dashboardAuth?: unknown },
+  ) {
+    const auth = this.scope.getAuth(req);
+    await this.scope.assertSiteAccess(auth, siteId, {
+      allowedRoles: ['admin'],
+    });
+    return this.sites.deleteSite(siteId, {
+      confirmation: body.confirmation,
+      actorId: auth.actorId,
+      actorRole: auth.role,
+    });
   }
 }
