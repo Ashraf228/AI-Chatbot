@@ -120,26 +120,31 @@ export function SiteForm({
       </div>
 
       {selectedTemplate ? (
-        <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-          <strong>Vorlage wird direkt angewendet</strong>
-          <div className="dashboard-info-row">
-            <span>Startziel</span>
-            <span>{formatGoal(selectedTemplate.setupGoal)}</span>
+        <div className="site-template-preview dashboard-stack dashboard-stack--sm">
+          <div>
+            <strong className="site-template-preview__title">Diese Vorlage wird vorbereitet</strong>
+            <p className="dashboard-field-hint dashboard-no-margin-bottom">
+              Nach dem Anlegen sind Ziel, Begrüßung, Testfragen und Funktionen bereits vorbelegt.
+            </p>
           </div>
-          <div className="dashboard-info-row">
-            <span>Begrüßung</span>
-            <span>{selectedTemplate.welcomeMessage}</span>
+          <div className="site-template-preview__item">
+            <span className="site-template-preview__label">Ziel</span>
+            <span className="site-template-preview__value">{formatGoal(selectedTemplate.setupGoal)}</span>
+          </div>
+          <div className="site-template-preview__item">
+            <span className="site-template-preview__label">Begrüßung</span>
+            <span className="site-template-preview__value">{selectedTemplate.welcomeMessage}</span>
           </div>
           {recommendedQuestions.length > 0 ? (
-            <div className="dashboard-info-row">
-              <span>Typische Fragen</span>
-              <span>{recommendedQuestions.slice(0, 2).join(" · ")}</span>
+            <div className="site-template-preview__item">
+              <span className="site-template-preview__label">Typische Fragen</span>
+              <span className="site-template-preview__value">{recommendedQuestions.slice(0, 2).join(" · ")}</span>
             </div>
           ) : null}
           {enabledModules.length > 0 ? (
-            <div className="dashboard-info-row">
-              <span>Aktive Funktionen</span>
-              <span>{enabledModules.map(formatModule).join(", ")}</span>
+            <div className="site-template-preview__item">
+              <span className="site-template-preview__label">Funktionen</span>
+              <span className="site-template-preview__value">{enabledModules.map(formatModule).join(", ")}</span>
             </div>
           ) : null}
         </div>

@@ -1867,6 +1867,41 @@ body {
   align-items: center;
 }
 
+.site-template-preview {
+  padding: 18px;
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), var(--dash-card-muted));
+}
+
+.site-template-preview__title {
+  display: block;
+  color: var(--dash-text-strong);
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.site-template-preview__item {
+  display: grid;
+  gap: 5px;
+  padding-top: 12px;
+  border-top: 1px solid var(--dash-border);
+}
+
+.site-template-preview__label {
+  color: var(--dash-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.site-template-preview__value {
+  color: var(--dash-text);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
 .dashboard-link-card {
   display: block;
   text-decoration: none;
