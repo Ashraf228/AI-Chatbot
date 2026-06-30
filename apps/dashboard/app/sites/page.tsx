@@ -11,6 +11,7 @@ import { Select } from "../../components/shared/Select";
 import { SiteForm } from "../../components/sites/SiteForm";
 import { type IndustryTemplate, templatesByKey } from "../../lib/industry-templates";
 import { encodeSiteId } from "../../lib/site-id";
+import { buildUniversalSiteConfig } from "../../lib/site-create-config";
 import type { BusinessSiteMetric } from "../../lib/business-analytics";
 import { formatNumber, formatPercent } from "../../lib/business-analytics";
 import {
@@ -71,8 +72,13 @@ export default function SitesPage() {
     tenantId: "",
     name: "",
     domain: "localhost",
-    industry: "local-service-first-contact",
-    botType: "handwerker-first-contact",
+    businessDescription: "",
+    targetUsers: "",
+    assistantRole: "customer_service",
+    assistantRoleCustom: "",
+    enabledTasks: ["answer_questions"],
+    industry: "",
+    botType: "universal-assistant",
     leadNotificationEmail: "",
   });
   const [tenantForm, setTenantForm] = useState({
@@ -205,34 +211,35 @@ export default function SitesPage() {
       return;
     }
 
-    const templateMap = templatesByKey(templates);
-
-    if (!form.industry || !templateMap[form.industry]) {
-      setErr("Bitte eine Branche auswählen. Die passende Vorlage wird beim Anlegen automatisch angewendet.");
-      return;
-    }
-
     const tenantId = await ensureTenantForCustomerCreate();
     if (!tenantId) {
       return;
     }
 
     const leadNotificationEmail = form.leadNotificationEmail.trim();
-    if (!isValidEmail(leadNotificationEmail)) {
-      setErr("Bitte eine gültige Lead-Empfänger-E-Mail eintragen.");
+    if (leadNotificationEmail && !isValidEmail(leadNotificationEmail)) {
+      setErr("Bitte eine gültige Übergabe-E-Mail eintragen.");
       return;
     }
 
+    const templateMap = templatesByKey(templates);
+    const selectedLegacyTemplate = form.industry ? templateMap[form.industry] : null;
     const body = {
       siteKey: form.siteKey.trim(),
       tenantId,
       name: form.name.trim(),
       allowedDomains: [form.domain.trim()].filter(Boolean),
-      config: {
+      config: buildUniversalSiteConfig({
+        customerName: form.name,
+        businessDescription: form.businessDescription,
+        targetUsers: form.targetUsers,
+        assistantRole: form.assistantRole,
+        assistantRoleCustom: form.assistantRoleCustom,
+        enabledTasks: form.enabledTasks,
+        industry: form.industry,
         botType: form.botType,
-        leadCaptureEnabled: true,
         leadNotificationEmail,
-      },
+      }),
     };
 
     const r = await fetch("/api/sites", {
@@ -251,7 +258,13 @@ export default function SitesPage() {
     }
 
     if (data?.id) {
-      const template = templateMap[form.industry];
+      const template = selectedLegacyTemplate;
+      if (!template) {
+        setMsg("Kunde erfolgreich angelegt. Das universelle KI-Mitarbeiter-Profil wurde vorbereitet.");
+        window.location.href = `/sites/${encodeSiteId(data.id)}/setup`;
+        return;
+      }
+
       const response = await fetch(`/api/sites/${data.id}/apply-template`, {
         method: "POST",
         headers: {
@@ -261,9 +274,9 @@ export default function SitesPage() {
       });
 
       if (!response.ok) {
-        setErr("Kunde wurde angelegt, aber die Branchenvorlage konnte nicht vollständig angewendet werden.");
+        setErr("Kunde wurde angelegt, aber die Legacy-Vorlage konnte nicht vollständig angewendet werden.");
       } else {
-        setMsg(`Kunde erfolgreich angelegt. Vorlage „${template.label}“ wurde angewendet.`);
+        setMsg(`Kunde erfolgreich angelegt. Legacy-Vorlage „${template.label}“ wurde angewendet.`);
         window.location.href = `/sites/${encodeSiteId(data.id)}/setup`;
         return;
       }
@@ -274,8 +287,13 @@ export default function SitesPage() {
       tenantId,
       name: "",
       domain: "localhost",
-      industry: "local-service-first-contact",
-      botType: "handwerker-first-contact",
+      businessDescription: "",
+      targetUsers: "",
+      assistantRole: "customer_service",
+      assistantRoleCustom: "",
+      enabledTasks: ["answer_questions"],
+      industry: "",
+      botType: "universal-assistant",
       leadNotificationEmail: "",
     });
 
@@ -379,7 +397,7 @@ export default function SitesPage() {
           <div>
             <h2 className="dashboard-section-title">Neuen Kunden anlegen</h2>
             <p className="dashboard-copy dashboard-copy--muted">
-              Starte mit Kundenname, Domain und Branche. Interne Technikangaben bleiben bewusst im Hintergrund.
+              Starte mit Kundenname, Website und einer kurzen Beschreibung. Die KI erkennt Kontext und Aufgaben später aus Wissen, Konfiguration und Gesprächsverlauf.
             </p>
             {tenants.length === 0 ? (
               <p className="dashboard-status dashboard-status--neutral">
@@ -467,7 +485,7 @@ export default function SitesPage() {
                         />
                       </div>
                       {status?.industry ? (
-                        <InfoRow label="Branche" value={templateLabels[status.industry]?.label || status.industry} />
+                        <InfoRow label="Legacy-Profil" value={templateLabels[status.industry]?.label || status.industry} />
                       ) : null}
                       {status?.setupGoal ? <InfoRow label="Bot-Ziel" value={formatGoal(status.setupGoal)} /> : null}
                       <div className="dashboard-grid dashboard-grid--metrics-4 dashboard-grid--compact">

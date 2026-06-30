@@ -76,7 +76,7 @@ export function normalizeSite(data: Record<string, unknown>): SiteDetails {
     fontFamily: firstString(data.fontFamily, "system"),
     systemPrompt: firstString(data.systemPrompt),
     industry: firstString(data.industry),
-    botType: firstString(data.botType, "handwerker-first-contact"),
+    botType: firstString(data.botType, "universal-assistant"),
     setupGoal: firstString(data.setupGoal),
     primaryGoal,
     tone: firstString(data.tone) as SiteDetails["tone"],
