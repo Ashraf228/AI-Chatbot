@@ -48,72 +48,45 @@ export function UseCaseStep({
   return (
     <section className="dashboard-card dashboard-stack" id="setup-step-industry">
       <SetupStepHeader
-        title="Anwendungsfall"
-        description="Wähle das Branchenpaket und den Anwendungsfall für den ersten Einsatz."
+        title="KI-Mitarbeiter & Aufgaben"
+        description="Lege Ziel, Rolle und Antwortverhalten des KI-Mitarbeiters fest. Legacy-Branchenprofile bleiben im erweiterten Bereich."
         explanation={explanation}
         status={status}
         statusLabel={statusLabel}
       />
       <div className="dashboard-grid dashboard-grid--two">
         <label className="dashboard-field">
-          <span className="dashboard-field-label">Branche (Pflicht)</span>
-          <Select value={profileValue.industry} onChange={(event) => onProfileChange({ ...profileValue, industry: event.target.value })}>
-            <option value="">Bitte wählen</option>
-            {templates.map((template) => (
-              <option key={template.key} value={template.key}>
-                {template.label}
+          <span className="dashboard-field-label">Ziel des Chatfensters</span>
+          <Select
+            value={goalValue.primaryGoal}
+            onChange={(event) => onGoalChange({ ...goalValue, primaryGoal: event.target.value as SiteDetails["primaryGoal"] })}
+          >
+            {GOAL_OPTIONS.map((option) => (
+              <option key={option.value || "empty"} value={option.value}>
+                {option.label}
               </option>
             ))}
           </Select>
         </label>
         <label className="dashboard-field">
-          <span className="dashboard-field-label">Anwendungsfall</span>
-          <Select value={goalValue.botType} onChange={(event) => onGoalChange({ ...goalValue, botType: event.target.value })}>
-            <option value="handwerker-first-contact">Handwerker-Erstkontakt</option>
+          <span className="dashboard-field-label">Tonalität</span>
+          <Select value={goalValue.tone} onChange={(event) => onGoalChange({ ...goalValue, tone: event.target.value as SiteDetails["tone"] })}>
+            {TONE_OPTIONS.map((option) => (
+              <option key={option.value || "empty"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </Select>
-          <span className="dashboard-field-hint">
-            Erfasst Problem, Einsatzadresse, Dringlichkeit und Kontaktdaten und sendet die Anfrage per E-Mail.
-          </span>
         </label>
       </div>
       <div className="setup-template-panel">
-        <strong>{selectedTemplate?.label || "Noch keine Vorlage ausgewählt"}</strong>
+        <strong>Universeller KI-Mitarbeiter</strong>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          {selectedTemplate?.description ||
-            (hasTemplateApplied
-              ? `Vorlage angewendet am ${formatDate(templateAppliedAt)}`
-              : "Die Vorlage setzt formelle Texte, den Standardablauf und passende Funktionen.")}
+          Die Einrichtung ist nicht mehr an eine Branche gebunden. Kontext, Aufgaben und Übergaben werden über Wissen,
+          Profil und Gesprächsregeln gesteuert.
         </p>
-        <Button type="button" variant="secondary" onClick={onApplyTemplate} disabled={isApplyingTemplate || !profileValue.industry}>
-          {isApplyingTemplate ? "Wendet an..." : "Vorlage anwenden"}
-        </Button>
       </div>
-      <SetupAdvancedDetails title="Erweitert: Ziel und Ton">
-        <div className="dashboard-grid dashboard-grid--two">
-          <label className="dashboard-field">
-            <span className="dashboard-field-label">Ziel des Chatfensters</span>
-            <Select
-              value={goalValue.primaryGoal}
-              onChange={(event) => onGoalChange({ ...goalValue, primaryGoal: event.target.value as SiteDetails["primaryGoal"] })}
-            >
-              {GOAL_OPTIONS.map((option) => (
-                <option key={option.value || "empty"} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <label className="dashboard-field">
-            <span className="dashboard-field-label">Tonalität</span>
-            <Select value={goalValue.tone} onChange={(event) => onGoalChange({ ...goalValue, tone: event.target.value as SiteDetails["tone"] })}>
-              {TONE_OPTIONS.map((option) => (
-                <option key={option.value || "empty"} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </label>
-        </div>
+      <SetupAdvancedDetails title="Erweitert: Antwortverhalten und Legacy">
         <div className="dashboard-grid dashboard-grid--two">
           <label className="dashboard-field">
             <span className="dashboard-field-label">Antwortverhalten mit Wissen</span>
@@ -142,6 +115,46 @@ export function UseCaseStep({
             </Select>
           </label>
         </div>
+        <details className="dashboard-card dashboard-card--soft">
+          <summary className="dashboard-accordion__summary">Legacy-Branchenprofil</summary>
+          <div className="dashboard-stack dashboard-stack--sm dashboard-mt-14">
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              Legacy-Branchenprofile nur für bestehende Vorlagen oder Alt-Konfigurationen verwenden.
+            </p>
+            <div className="dashboard-grid dashboard-grid--two">
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Legacy-Branchenprofil</span>
+                <Select value={profileValue.industry} onChange={(event) => onProfileChange({ ...profileValue, industry: event.target.value })}>
+                  <option value="">Keine Legacy-Vorlage</option>
+                  {templates.map((template) => (
+                    <option key={template.key} value={template.key}>
+                      {template.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="dashboard-field">
+                <span className="dashboard-field-label">Legacy Bot-Typ</span>
+                <Select value={goalValue.botType} onChange={(event) => onGoalChange({ ...goalValue, botType: event.target.value })}>
+                  <option value="universal-assistant">Universal Assistant</option>
+                  <option value="handwerker-first-contact">Handwerker-Erstkontakt</option>
+                </Select>
+              </label>
+            </div>
+            <div className="setup-template-panel">
+              <strong>{selectedTemplate?.label || "Keine Legacy-Vorlage ausgewählt"}</strong>
+              <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                {selectedTemplate?.description ||
+                  (hasTemplateApplied
+                    ? `Vorlage angewendet am ${formatDate(templateAppliedAt)}`
+                    : "Eine Legacy-Vorlage kann alte Branchenabläufe weiterhin gezielt vorbereiten.")}
+              </p>
+              <Button type="button" variant="secondary" onClick={onApplyTemplate} disabled={isApplyingTemplate || !profileValue.industry}>
+                {isApplyingTemplate ? "Wendet an..." : "Legacy-Vorlage anwenden"}
+              </Button>
+            </div>
+          </div>
+        </details>
         <label className="dashboard-field">
           <span className="dashboard-field-label">Nächster Schritt für Besucher</span>
           <Input value={goalValue.ctaText} onChange={(event) => onGoalChange({ ...goalValue, ctaText: event.target.value })} placeholder="Anfrage aufnehmen" />

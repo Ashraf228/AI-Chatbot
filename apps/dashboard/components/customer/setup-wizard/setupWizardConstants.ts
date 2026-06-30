@@ -2,7 +2,7 @@ import type { FallbackBehavior, KnowledgeMode, PrimaryGoal, Tone, WizardStep, Wi
 
 export const WIZARD_STEPS: WizardStep[] = [
   { key: "customer", label: "Kundendaten", description: "Firma, Website, erlaubte Website und Sprache" },
-  { key: "bot", label: "Anwendungsfall", description: "Handwerker-Erstkontakt auswählen" },
+  { key: "bot", label: "KI-Mitarbeiter", description: "Ziel, Rolle und Antwortverhalten festlegen" },
   { key: "delivery", label: "Anfrage-Zustellung", description: "Anfrage-Erfassung und Empfänger-E-Mail" },
   { key: "flow", label: "Gesprächsablauf", description: "Problem, Adresse, Dringlichkeit und Kontakt" },
   { key: "knowledge", label: "Wissen", description: "PDF, Website, FAQ oder eigene Texte" },
@@ -55,7 +55,7 @@ export const STATUS_STEP_GROUPS: Record<WizardStepKey, string[]> = {
 
 export const STEP_EXPLANATIONS: Record<WizardStepKey, string> = {
   customer: "Diese Angaben reichen, um den Kunden eindeutig anzulegen und die Website freizugeben.",
-  bot: "Für den ersten produktiven Anwendungsfall ist der Handwerker-Erstkontakt der Standard.",
+  bot: "Der Standard ist ein universeller KI-Mitarbeiter. Legacy-Branchenprofile bleiben nur für Alt-Konfigurationen verfügbar.",
   delivery: "Anfragen werden zuerst gespeichert und danach per E-Mail an das Unternehmen zugestellt.",
   flow: "Der Standardablauf bleibt bewusst fachlich und blendet technische Regeln im normalen Setup aus.",
   knowledge: "Die Wissensbasis sorgt dafür, dass Antworten verlässlich und kundenspezifisch bleiben.",

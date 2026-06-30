@@ -85,7 +85,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   });
   const [goalForm, setGoalForm] = useState({
     primaryGoal: "" as SiteDetails["primaryGoal"],
-    botType: "handwerker-first-contact",
+    botType: "universal-assistant",
     tone: "" as SiteDetails["tone"],
     knowledgeMode: "flexible" as KnowledgeMode,
     fallbackBehavior: "ask_followup" as FallbackBehavior,
@@ -179,7 +179,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       });
       setGoalForm({
         primaryGoal: nextSite.primaryGoal,
-        botType: nextSite.botType || "handwerker-first-contact",
+        botType: nextSite.botType || "universal-assistant",
         tone: nextSite.tone,
         knowledgeMode: nextSite.knowledgeMode,
         fallbackBehavior: nextSite.fallbackBehavior,
@@ -269,13 +269,13 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
 
   async function applyIndustryTemplate() {
     if (!profileForm.industry) {
-      setError("Bitte zuerst eine Branche auswählen.");
+      setError("Bitte zuerst ein Legacy-Branchenprofil auswählen.");
       return false;
     }
 
     const template = templateMap[profileForm.industry];
     if (!template) {
-      setError("Für diese Branche ist noch keine Vorlage hinterlegt.");
+      setError("Für dieses Legacy-Branchenprofil ist noch keine Vorlage hinterlegt.");
       return false;
     }
 
