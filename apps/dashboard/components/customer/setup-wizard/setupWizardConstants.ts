@@ -1,10 +1,15 @@
 import type { FallbackBehavior, KnowledgeMode, PrimaryGoal, Tone, WizardStep, WizardStepKey } from "./setupWizardTypes";
 
+export const DEFAULT_PRIMARY_GOAL: PrimaryGoal = "lead_generation";
+export const DEFAULT_TONE: Tone = "professional";
+export const DEFAULT_BOT_TYPE = "universal-assistant";
+export const DEFAULT_ENABLED_TASKS = ["answer_questions", "collect_requests", "support", "prepare_handoff"];
+
 export const WIZARD_STEPS: WizardStep[] = [
   { key: "customer", label: "Kundendaten", description: "Firma, Website, erlaubte Website und Sprache" },
   { key: "bot", label: "KI-Mitarbeiter", description: "Ziel, Rolle und Antwortverhalten festlegen" },
   { key: "delivery", label: "Anfrage-Zustellung", description: "Anfrage-Erfassung und Empfänger-E-Mail" },
-  { key: "flow", label: "Gesprächsablauf", description: "Problem, Adresse, Dringlichkeit und Kontakt" },
+  { key: "flow", label: "Gesprächslogik", description: "Antworten, Rückfragen, Übergabe und Pflichtinformationen" },
   { key: "knowledge", label: "Wissen", description: "PDF, Website, FAQ oder eigene Texte" },
   { key: "design", label: "Design & Datenschutz", description: "Button, Begrüßung, Farbe und Datenschutzhinweis" },
   { key: "launch", label: "Test & Livegang", description: "Testfragen, Einbau-Code und Freigabe" },

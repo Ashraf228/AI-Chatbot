@@ -227,8 +227,8 @@ export class UpdateWidgetConfigDto {
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))
-  @IsIn(['handwerker-first-contact'])
-  botType?: 'handwerker-first-contact';
+  @IsIn(['universal-assistant', 'handwerker-first-contact'])
+  botType?: 'universal-assistant' | 'handwerker-first-contact';
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))
@@ -244,6 +244,22 @@ export class UpdateWidgetConfigDto {
   @Transform(({ value }) => normalizeOptionalString(value))
   @IsIn(['ask_followup', 'collect_contact', 'handoff'])
   fallbackBehavior?: 'ask_followup' | 'collect_contact' | 'handoff';
+
+  @IsOptional()
+  @IsObject()
+  assistantProfile?: Record<string, unknown>;
+
+  @IsOptional()
+  @Transform(({ value }) => normalizeStringArray(value))
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  enabledTasks?: string[];
+
+  @IsOptional()
+  @IsObject()
+  conversationEngine?: Record<string, unknown>;
 
   @IsOptional()
   @Transform(({ value }) => normalizeOptionalString(value))

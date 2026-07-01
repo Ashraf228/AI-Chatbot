@@ -28,6 +28,9 @@ type SiteConfig = {
   tone?: string;
   knowledgeMode?: 'flexible' | 'grounded' | 'strict';
   fallbackBehavior?: string;
+  assistantProfile?: Record<string, unknown>;
+  enabledTasks?: string[];
+  conversationEngine?: Record<string, unknown>;
   ctaText?: string;
   supportEmail?: string;
   phone?: string;
@@ -152,6 +155,9 @@ export class WidgetAdminSiteService {
       tone: config.tone || '',
       knowledgeMode: config.knowledgeMode || 'flexible',
       fallbackBehavior: config.fallbackBehavior || 'ask_followup',
+      assistantProfile: config.assistantProfile || null,
+      enabledTasks: Array.isArray(config.enabledTasks) ? config.enabledTasks : [],
+      conversationEngine: config.conversationEngine || null,
       ctaText: config.ctaText || '',
       supportEmail: config.supportEmail || '',
       phone: config.phone || '',
@@ -235,6 +241,9 @@ export class WidgetAdminSiteService {
       tone?: string;
       knowledgeMode?: 'flexible' | 'grounded' | 'strict';
       fallbackBehavior?: string;
+      assistantProfile?: Record<string, unknown>;
+      enabledTasks?: string[];
+      conversationEngine?: Record<string, unknown>;
       ctaText?: string;
       supportEmail?: string;
       phone?: string;
@@ -290,6 +299,9 @@ export class WidgetAdminSiteService {
       tone: payload.tone ?? site.tone,
       knowledgeMode: payload.knowledgeMode ?? site.knowledgeMode,
       fallbackBehavior: payload.fallbackBehavior ?? site.fallbackBehavior,
+      assistantProfile: payload.assistantProfile ?? site.assistantProfile,
+      enabledTasks: payload.enabledTasks ?? site.enabledTasks,
+      conversationEngine: payload.conversationEngine ?? site.conversationEngine,
       ctaText: payload.ctaText ?? site.ctaText,
       supportEmail: payload.supportEmail ?? site.supportEmail,
       phone: payload.phone ?? site.phone,

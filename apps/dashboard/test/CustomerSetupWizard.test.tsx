@@ -4,7 +4,7 @@ import { vi } from "vitest";
 
 import { CustomerSetupWizard } from "../components/customer/CustomerSetupWizard";
 import { LaunchStep } from "../components/customer/setup-wizard/LaunchStep";
-import { updateSiteSettings } from "../lib/setup-wizard-api";
+import { getSite, updateSiteSettings } from "../lib/setup-wizard-api";
 
 vi.mock("../lib/setup-wizard-api", () => ({
   createManualKnowledgeSource: vi.fn(),
@@ -63,6 +63,7 @@ vi.mock("../lib/setup-wizard-api", () => ({
 
 describe("CustomerSetupWizard", () => {
   beforeEach(() => {
+    vi.mocked(getSite).mockClear();
     vi.mocked(updateSiteSettings).mockClear();
     vi.stubGlobal(
       "fetch",
@@ -146,6 +147,95 @@ describe("CustomerSetupWizard", () => {
         leadNotificationEmail: "info@unternehmen.de",
       }),
     );
+  });
+
+  test("saves the KI-Mitarbeiter step with neutral defaults for a site without legacy industry", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1",
+      name: "Musterkunde",
+      siteKey: "musterkunde",
+      allowedDomains: ["kunde.de"],
+      companyName: "Musterkunde",
+      websiteUrl: "https://kunde.de",
+      supportEmail: "",
+      phone: "",
+      language: "de",
+      botName: "Service-Assistent",
+      logoUrl: "",
+      brandColor: "#b55400",
+      accentColor: "#fff0d9",
+      welcomeMessage: "",
+      placeholderText: "Nachricht schreiben...",
+      widgetPosition: "bottom_right",
+      launcherLabel: "Chat",
+      privacyUrl: "",
+      privacyNoticeText: "",
+      fontFamily: "system",
+      systemPrompt: "",
+      industry: "",
+      botType: "universal-assistant",
+      setupGoal: "",
+      primaryGoal: "",
+      tone: "",
+      knowledgeMode: "flexible",
+      fallbackBehavior: "ask_followup",
+      ctaText: "",
+      leadCaptureEnabled: true,
+      leadNotificationEmail: "",
+      consentRequired: true,
+      templateId: "",
+      templateVersion: null,
+      templateAppliedAt: "",
+      lastTestedAt: "",
+      lastTestQuestion: "",
+      lastTestAnswer: "",
+      goLiveAt: "",
+    });
+
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+
+    expect(screen.getByLabelText("Ziel des Chatfensters")).toHaveValue("lead_generation");
+    expect(screen.getByLabelText("Tonalität")).toHaveValue("professional");
+
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern & weiter$/ }));
+
+    await waitFor(() =>
+      expect(updateSiteSettings).toHaveBeenCalledWith(
+        "site-1",
+        expect.objectContaining({
+          primaryGoal: "lead_generation",
+          setupGoal: "lead_generation",
+          industry: "",
+          botType: "universal-assistant",
+          tone: "professional",
+          ctaText: "Anfrage aufnehmen",
+          enabledTasks: ["answer_questions", "collect_requests", "support", "prepare_handoff"],
+          conversationEngine: {
+            previewEnabled: false,
+            compareEnabled: false,
+            responsePreviewEnabled: false,
+            knowledgePreviewEnabled: false,
+            adminTestOnly: true,
+          },
+        }),
+      ),
+    );
+    expect(screen.queryByText("Aktion konnte nicht ausgeführt werden.")).not.toBeInTheDocument();
+  });
+
+  test("skips the KI-Mitarbeiter step without sending an incomplete settings payload", async () => {
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Später erledigen" }));
+
+    expect(screen.getByText(/Schritt 3 von 7: Anfrage-Zustellung/i)).toBeInTheDocument();
+    expect(updateSiteSettings).not.toHaveBeenCalled();
+    expect(screen.queryByText("Aktion konnte nicht ausgeführt werden.")).not.toBeInTheDocument();
   });
 });
 
