@@ -6,6 +6,8 @@ This plan defines a controlled rollout for Conversation Engine admin-test featur
 
 No runtime behavior changes are part of this plan. The public widget remains on the legacy chat pipeline. Feature flags must remain inactive until a separate execution step explicitly enables them for the approved demo site.
 
+The 24h+ demo monitoring was completed successfully. See [Conversation Engine Demo Monitoring](./conversation-engine-demo-monitoring.md).
+
 ## Scope
 
 The rollout scope is limited to admin/operator test features:
