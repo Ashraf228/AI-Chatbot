@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { CustomerSetupWizard } from "../components/customer/CustomerSetupWizard";
 import { LaunchStep } from "../components/customer/setup-wizard/LaunchStep";
+import { SetupReadinessChecklist } from "../components/sites/SetupReadinessChecklist";
 import { getSite, updateSiteSettings } from "../lib/setup-wizard-api";
 
 vi.mock("../lib/setup-wizard-api", () => ({
@@ -236,6 +237,73 @@ describe("CustomerSetupWizard", () => {
     expect(screen.getByText(/Schritt 3 von 7: Anfrage-Zustellung/i)).toBeInTheDocument();
     expect(updateSiteSettings).not.toHaveBeenCalled();
     expect(screen.queryByText("Aktion konnte nicht ausgeführt werden.")).not.toBeInTheDocument();
+  });
+
+  test("shows a universal conversation logic step without local-service defaults", async () => {
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /Gesprächslogik/i }));
+
+    expect(screen.getByRole("heading", { name: "Gesprächslogik" })).toBeInTheDocument();
+    expect(screen.getByText("Universeller Ablauf")).toBeInTheDocument();
+    expect(screen.getByText(/Anliegen verstehen → Antwort aus Wissen prüfen/i)).toBeInTheDocument();
+    expect(screen.getByText("Wissensantwort prüfen")).toBeInTheDocument();
+    expect(screen.getByText("Pflichtinformationen sammeln")).toBeInTheDocument();
+    expect(screen.getByText("Übergabe vorbereiten")).toBeInTheDocument();
+    expect(screen.getByText("Produkt / Thema")).toBeInTheDocument();
+    expect(screen.getByText("Ticket vorbereiten")).toBeInTheDocument();
+
+    expect(screen.queryByText("Handwerker-Erstkontakt")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Standardflow für Handwerker/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/vollständige Einsatzadresse/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Vor- und Nachname/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Telefonnummer/i)).not.toBeInTheDocument();
+  });
+
+  test("keeps legacy conversation flows behind the advanced area", async () => {
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /Gesprächslogik/i }));
+
+    expect(screen.getByText("Erweitert: Legacy-Gesprächsabläufe")).toBeInTheDocument();
+    expect(screen.getByText(/Neue KI-Mitarbeiter nutzen die universelle Gesprächslogik/i)).toBeInTheDocument();
+  });
+});
+
+describe("SetupReadinessChecklist", () => {
+  test("does not show design missing status on the conversation logic item", () => {
+    render(
+      <SetupReadinessChecklist
+        siteId="site-1"
+        status={{
+          siteId: "site-1",
+          code: "setup_incomplete",
+          label: "Setup unvollständig",
+          status: "Setup unvollständig",
+          severity: "warning",
+          progress: 70,
+          lifecycleStatus: "setup_incomplete",
+          isLiveReady: false,
+          missingSteps: ["design"],
+          nextAction: { key: "design", label: "Design prüfen" },
+          steps: [
+            { key: "behavior", label: "KI-Mitarbeiter Profil", status: "complete" },
+            { key: "design", label: "Design & Datenschutz", status: "warning", missingReason: "Design fehlt." },
+          ],
+          knowledgeCount: 0,
+          industry: "",
+          setupGoal: "lead_generation",
+          lastTestedAt: "",
+          goLiveAt: "",
+        }}
+      />,
+    );
+
+    const conversationItem = screen.getByRole("link", { name: /Gesprächslogik/i });
+    expect(within(conversationItem).queryByText(/Design fehlt/i)).not.toBeInTheDocument();
+    expect(within(conversationItem).getByText(/Antworten, Rückfragen, Pflichtinformationen/i)).toBeInTheDocument();
   });
 });
 

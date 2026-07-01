@@ -857,7 +857,7 @@ export function WidgetConfigForm({ siteId }: WidgetConfigFormProps) {
       <div className="dashboard-stack">
         <SectionTitle
           title="Standard-Einstellungen"
-          text="Diese Felder reichen für den normalen Handwerker-Erstkontakt."
+          text="Diese Felder reichen für ein universelles Chatfenster mit Anfrage-Erfassung und Übergabe."
         />
         <label className="dashboard-checkbox">
           <input
