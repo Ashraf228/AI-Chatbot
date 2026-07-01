@@ -62,8 +62,8 @@ export function SetupReadinessChecklist({
     },
     {
       key: "template",
-      label: "Branche & Bot-Typ",
-      hint: "Branchenpaket und Bot-Ziel sind gesetzt.",
+      label: "KI-Mitarbeiter Profil",
+      hint: "Ziel, Rolle und Antwortverhalten sind gesetzt.",
       href: `/sites/${siteSlug}/setup#setup-step-industry`,
       stepKeys: ["template", "behavior"],
     },
@@ -76,10 +76,10 @@ export function SetupReadinessChecklist({
     },
     {
       key: "flow",
-      label: "Gesprächsablauf",
-      hint: "Der Erstkontakt-Flow ist vorbereitet.",
+      label: "Gesprächslogik",
+      hint: "Antworten, Rückfragen, Pflichtinformationen und Übergabe sind vorbereitet.",
       href: `/sites/${siteSlug}/setup#setup-step-flow`,
-      stepKeys: ["behavior"],
+      stepKeys: ["flow", "conversation_flow", "conversation_logic"],
     },
     {
       key: "knowledge",
