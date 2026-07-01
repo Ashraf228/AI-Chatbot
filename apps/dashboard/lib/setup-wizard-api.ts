@@ -3,9 +3,33 @@ export type SetupSitePayload = Record<string, unknown>;
 async function readJson(response: Response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(typeof data?.message === "string" ? data.message : "Aktion konnte nicht ausgeführt werden.");
+    throw new Error(formatSetupApiError(data, "Aktion konnte nicht ausgeführt werden."));
   }
   return data;
+}
+
+function formatSetupApiError(data: unknown, fallback: string) {
+  if (!data || typeof data !== "object") {
+    return fallback;
+  }
+
+  const record = data as { message?: unknown; error?: unknown };
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message;
+  }
+
+  if (Array.isArray(record.message)) {
+    const messages = record.message.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    if (messages.length > 0) {
+      return messages.join(" ");
+    }
+  }
+
+  if (typeof record.error === "string" && record.error.trim()) {
+    return record.error;
+  }
+
+  return fallback;
 }
 
 export async function getSite(siteId: string) {

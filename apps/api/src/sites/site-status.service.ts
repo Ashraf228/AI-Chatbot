@@ -42,6 +42,7 @@ type SiteConfig = {
   industry?: string;
   setupGoal?: string;
   primaryGoal?: string;
+  botType?: string;
   knowledgeMode?: 'flexible' | 'grounded' | 'strict';
   systemPrompt?: string;
   ctaText?: string;
@@ -49,6 +50,7 @@ type SiteConfig = {
   leadNotificationEmail?: string;
   templateId?: string;
   templateAppliedAt?: string;
+  assistantProfile?: unknown;
   isActive?: boolean;
   privacyUrl?: string;
   lastTestedAt?: string;
@@ -158,7 +160,11 @@ export class SiteStatusService {
     const domainDone = input.allowedDomains.length > 0;
     const basicsDone = Boolean(input.name.trim() && domainDone);
     const templateDone = Boolean(
-      input.config.templateId || input.config.templateAppliedAt || input.config.industry,
+      input.config.templateId ||
+        input.config.templateAppliedAt ||
+        input.config.industry ||
+        input.config.assistantProfile ||
+        input.config.botType,
     );
     const knowledgeMode = input.config.knowledgeMode || 'flexible';
     const knowledgeDone = input.knowledgeCount > 0 || knowledgeMode !== 'strict';
@@ -387,11 +393,11 @@ export class SiteStatusService {
       }),
       this.buildStep({
         key: 'template',
-        label: 'Branche & Vorlage',
+        label: 'KI-Mitarbeiter Profil',
         status: checks.templateDone ? 'complete' : 'incomplete',
-        missingReason: checks.templateDone ? undefined : 'Branche oder angewendete Vorlage fehlt.',
+        missingReason: checks.templateDone ? undefined : 'KI-Mitarbeiter-Profil oder Legacy-Vorlage fehlt.',
         nextAction: {
-          label: 'Branche auswählen',
+          label: 'KI-Mitarbeiter prüfen',
           href: `/sites/${siteId}/setup#setup-step-industry`,
         },
       }),
@@ -407,11 +413,11 @@ export class SiteStatusService {
       }),
       this.buildStep({
         key: 'behavior',
-        label: 'Gesprächsablauf',
+        label: 'Gesprächslogik',
         status: checks.behaviorDone ? 'complete' : 'incomplete',
-        missingReason: checks.behaviorDone ? undefined : 'Bot-Ziel oder Gesprächsablauf fehlt.',
+        missingReason: checks.behaviorDone ? undefined : 'Ziel oder Gesprächslogik fehlt.',
         nextAction: {
-          label: 'Gesprächsablauf prüfen',
+          label: 'Gesprächslogik prüfen',
           href: `/sites/${siteId}/setup#setup-step-flow`,
         },
       }),
@@ -498,9 +504,9 @@ export class SiteStatusService {
     const firstMissing = missingSteps[0] || '';
     const actions: Record<string, CustomerStatusAction> = {
       basics: { key: 'basics', label: 'Firma & Domain ergänzen', href: `/sites/${siteId}/setup#setup-step-basics` },
-      template: { key: 'template', label: 'Branche auswählen', href: `/sites/${siteId}/setup#setup-step-industry` },
+      template: { key: 'template', label: 'KI-Mitarbeiter prüfen', href: `/sites/${siteId}/setup#setup-step-industry` },
       knowledge: { key: 'knowledge', label: 'Wissen hinzufügen', href: `/sites/${siteId}/setup#setup-step-knowledge` },
-      behavior: { key: 'behavior', label: 'Gesprächsablauf prüfen', href: `/sites/${siteId}/setup#setup-step-flow` },
+      behavior: { key: 'behavior', label: 'Gesprächslogik prüfen', href: `/sites/${siteId}/setup#setup-step-flow` },
       lead_delivery: { key: 'lead_delivery', label: 'Lead-Empfänger-E-Mail setzen', href: `/sites/${siteId}/setup#setup-step-delivery` },
       design: { key: 'design', label: 'Design und Datenschutz prüfen', href: `/sites/${siteId}/setup#setup-step-design` },
       embed: { key: 'embed', label: 'Einbindung vorbereiten', href: `/sites/${siteId}/embedding` },

@@ -28,6 +28,10 @@ import {
   type CustomerOverallStatus,
 } from "./customer-status";
 import {
+  DEFAULT_BOT_TYPE,
+  DEFAULT_ENABLED_TASKS,
+  DEFAULT_PRIMARY_GOAL,
+  DEFAULT_TONE,
   CustomerDataStep,
   ConversationFlowStep,
   DesignPrivacyStep,
@@ -84,9 +88,9 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     language: "de" as "de" | "en",
   });
   const [goalForm, setGoalForm] = useState({
-    primaryGoal: "" as SiteDetails["primaryGoal"],
-    botType: "universal-assistant",
-    tone: "" as SiteDetails["tone"],
+    primaryGoal: DEFAULT_PRIMARY_GOAL as SiteDetails["primaryGoal"],
+    botType: DEFAULT_BOT_TYPE,
+    tone: DEFAULT_TONE as SiteDetails["tone"],
     knowledgeMode: "flexible" as KnowledgeMode,
     fallbackBehavior: "ask_followup" as FallbackBehavior,
     ctaText: "",
@@ -222,7 +226,12 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       setMessage(successMessage);
       return result;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Aktion konnte nicht ausgeführt werden.");
+      const fallback =
+        key === "goal"
+          ? "KI-Mitarbeiter-Einstellungen konnten nicht gespeichert werden."
+          : "Aktion konnte nicht ausgeführt werden.";
+      const message = err instanceof Error ? err.message : "";
+      setError(message && message !== "Aktion konnte nicht ausgeführt werden." ? message : fallback);
       return null;
     } finally {
       setSavingKey(null);
@@ -304,19 +313,47 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   }
 
   async function saveGoal() {
+    const primaryGoal = goalForm.primaryGoal || DEFAULT_PRIMARY_GOAL;
+    const tone = goalForm.tone || DEFAULT_TONE;
+    const botType = goalForm.botType || DEFAULT_BOT_TYPE;
+    const ctaText = goalForm.ctaText.trim() || "Anfrage aufnehmen";
+    const isUniversalProfile = botType === DEFAULT_BOT_TYPE && !profileForm.industry;
     const saved = await runAction(
       "goal",
       () =>
         updateSiteSettings(siteId, {
-          primaryGoal: goalForm.primaryGoal,
-          setupGoal: goalForm.primaryGoal,
+          primaryGoal,
+          setupGoal: primaryGoal,
           industry: profileForm.industry,
-          botType: goalForm.botType,
-          tone: goalForm.tone,
+          botType,
+          tone,
           knowledgeMode: goalForm.knowledgeMode,
           fallbackBehavior: goalForm.fallbackBehavior,
-          ctaText: goalForm.ctaText.trim(),
+          ctaText,
           systemPrompt: goalForm.systemPrompt.trim(),
+          ...(isUniversalProfile
+            ? {
+                assistantProfile: {
+                  profileKey: "universal-assistant",
+                  profileVersion: 1,
+                  assistantName: `${(profileForm.companyName || site?.name || "KI").trim()} Assistent`,
+                  role: "Kundenservice-Mitarbeiter",
+                  businessDescription: "",
+                  targetUsers: [],
+                  tone,
+                  answerStyle: "concise",
+                  knowledgeMode: goalForm.knowledgeMode,
+                },
+                enabledTasks: DEFAULT_ENABLED_TASKS,
+                conversationEngine: {
+                  previewEnabled: false,
+                  compareEnabled: false,
+                  responsePreviewEnabled: false,
+                  knowledgePreviewEnabled: false,
+                  adminTestOnly: true,
+                },
+              }
+            : {}),
         }),
       "KI-Ziel gespeichert.",
     );
@@ -327,13 +364,13 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       current
         ? {
             ...current,
-            primaryGoal: goalForm.primaryGoal,
-            setupGoal: goalForm.primaryGoal,
-            botType: goalForm.botType,
-            tone: goalForm.tone,
+            primaryGoal,
+            setupGoal: primaryGoal,
+            botType,
+            tone,
             knowledgeMode: goalForm.knowledgeMode,
             fallbackBehavior: goalForm.fallbackBehavior,
-            ctaText: goalForm.ctaText,
+            ctaText,
             systemPrompt: goalForm.systemPrompt,
           }
         : current,

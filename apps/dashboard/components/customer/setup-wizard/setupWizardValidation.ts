@@ -1,5 +1,5 @@
 import type { CustomerApiStatus, CustomerStatusStep, CustomerStatusTone } from "../customer-status";
-import { PRIMARY_GOAL_VALUES, STATUS_STEP_GROUPS } from "./setupWizardConstants";
+import { DEFAULT_BOT_TYPE, DEFAULT_PRIMARY_GOAL, DEFAULT_TONE, PRIMARY_GOAL_VALUES, STATUS_STEP_GROUPS } from "./setupWizardConstants";
 import type { FallbackBehavior, KnowledgeMode, KnowledgeSource, PrimaryGoal, SiteDetails, WizardStepKey } from "./setupWizardTypes";
 
 export function normalizeDomains(value: string) {
@@ -40,7 +40,7 @@ export function normalizePrimaryGoal(primaryGoal: unknown, setupGoal: unknown): 
     appointments: "appointment_requests",
   };
 
-  return mappedSetupGoals[rawSetupGoal] || "";
+  return mappedSetupGoals[rawSetupGoal] || DEFAULT_PRIMARY_GOAL;
 }
 
 export function isValidEmail(value: string) {
@@ -76,10 +76,10 @@ export function normalizeSite(data: Record<string, unknown>): SiteDetails {
     fontFamily: firstString(data.fontFamily, "system"),
     systemPrompt: firstString(data.systemPrompt),
     industry: firstString(data.industry),
-    botType: firstString(data.botType, "universal-assistant"),
+    botType: firstString(data.botType, DEFAULT_BOT_TYPE),
     setupGoal: firstString(data.setupGoal),
     primaryGoal,
-    tone: firstString(data.tone) as SiteDetails["tone"],
+    tone: (firstString(data.tone) || DEFAULT_TONE) as SiteDetails["tone"],
     knowledgeMode: ["flexible", "grounded", "strict"].includes(firstString(data.knowledgeMode))
       ? (data.knowledgeMode as KnowledgeMode)
       : "flexible",
