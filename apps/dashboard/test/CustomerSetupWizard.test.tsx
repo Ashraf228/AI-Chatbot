@@ -40,6 +40,9 @@ vi.mock("../lib/setup-wizard-api", () => ({
     tone: "professional",
     knowledgeMode: "flexible",
     fallbackBehavior: "ask_followup",
+    conversationFlow: {},
+    enabledTasks: [],
+    assistantProfile: null,
     ctaText: "Soforthilfe",
     leadCaptureEnabled: true,
     leadNotificationEmail: "",
@@ -180,6 +183,9 @@ describe("CustomerSetupWizard", () => {
       tone: "",
       knowledgeMode: "flexible",
       fallbackBehavior: "ask_followup",
+      conversationFlow: {},
+      enabledTasks: [],
+      assistantProfile: null,
       ctaText: "",
       leadCaptureEnabled: true,
       leadNotificationEmail: "",
@@ -213,7 +219,7 @@ describe("CustomerSetupWizard", () => {
           botType: "universal-assistant",
           tone: "professional",
           ctaText: "Anfrage aufnehmen",
-          enabledTasks: ["answer_questions", "collect_requests", "support", "prepare_handoff"],
+          enabledTasks: ["answer_questions", "collect_requests", "prepare_handoff"],
           conversationEngine: {
             previewEnabled: false,
             compareEnabled: false,
@@ -259,6 +265,110 @@ describe("CustomerSetupWizard", () => {
     expect(screen.queryByText(/vollständige Einsatzadresse/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Vor- und Nachname/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Telefonnummer/i)).not.toBeInTheDocument();
+  });
+
+  test("toggles and saves universal conversation logic chips", async () => {
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /Gesprächslogik/i }));
+
+    const emailChip = screen.getByRole("button", { name: "E-Mail" });
+    const supportChip = screen.getByRole("button", { name: "Supportfall vorbereiten" });
+
+    expect(emailChip).toHaveAttribute("aria-pressed", "true");
+    expect(supportChip).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(emailChip);
+    await userEvent.click(supportChip);
+
+    expect(emailChip).toHaveAttribute("aria-pressed", "false");
+    expect(supportChip).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+
+    await waitFor(() =>
+      expect(updateSiteSettings).toHaveBeenCalledWith(
+        "site-1",
+        expect.objectContaining({
+          conversationFlow: expect.objectContaining({
+            requiredFields: ["name", "request"],
+          }),
+          enabledTasks: ["answer_questions", "collect_requests", "prepare_handoff", "support"],
+        }),
+      ),
+    );
+  });
+
+  test("saves and reloads stored universal conversation logic selections", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1",
+      name: "Musterkunde",
+      siteKey: "musterkunde",
+      allowedDomains: ["kunde.de"],
+      companyName: "Musterkunde",
+      websiteUrl: "https://kunde.de",
+      supportEmail: "",
+      phone: "",
+      language: "de",
+      botName: "Service-Assistent",
+      logoUrl: "",
+      brandColor: "#b55400",
+      accentColor: "#fff0d9",
+      welcomeMessage: "",
+      placeholderText: "Nachricht schreiben...",
+      widgetPosition: "bottom_right",
+      launcherLabel: "Chat",
+      privacyUrl: "",
+      privacyNoticeText: "",
+      fontFamily: "system",
+      systemPrompt: "",
+      industry: "",
+      botType: "universal-assistant",
+      setupGoal: "",
+      primaryGoal: "",
+      tone: "",
+      knowledgeMode: "flexible",
+      fallbackBehavior: "ask_followup",
+      conversationFlow: { requiredFields: ["phone", "product_or_topic"] },
+      enabledTasks: ["support", "create_ticket"],
+      assistantProfile: null,
+      ctaText: "",
+      leadCaptureEnabled: true,
+      leadNotificationEmail: "",
+      consentRequired: true,
+      templateId: "",
+      templateVersion: null,
+      templateAppliedAt: "",
+      lastTestedAt: "",
+      lastTestQuestion: "",
+      lastTestAnswer: "",
+      goLiveAt: "",
+    });
+
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /Gesprächslogik/i }));
+
+    expect(screen.getByRole("button", { name: "Telefon" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Produkt / Thema" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "E-Mail" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Supportfall vorbereiten" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Ticket vorbereiten" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByText(/vollständige Einsatzadresse/i)).not.toBeInTheDocument();
+  });
+
+  test("does not send a broken flow payload when skipping conversation logic", async () => {
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /Gesprächslogik/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Später erledigen" }));
+
+    expect(screen.getByText(/Schritt 5 von 7: Wissen/i)).toBeInTheDocument();
+    expect(updateSiteSettings).not.toHaveBeenCalled();
+    expect(screen.queryByText("Aktion konnte nicht ausgeführt werden.")).not.toBeInTheDocument();
   });
 
   test("keeps legacy conversation flows behind the advanced area", async () => {
@@ -338,6 +448,9 @@ function launchProps(role?: "admin" | "operator" | "customer" | "viewer" | null)
       tone: "professional" as const,
       knowledgeMode: "flexible" as const,
       fallbackBehavior: "ask_followup" as const,
+      conversationFlow: {},
+      enabledTasks: [],
+      assistantProfile: null,
       ctaText: "Soforthilfe",
       leadCaptureEnabled: true,
       leadNotificationEmail: "",

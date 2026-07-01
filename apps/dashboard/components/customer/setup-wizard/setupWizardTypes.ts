@@ -45,6 +45,9 @@ export type SiteDetails = {
   tone: Tone | "";
   knowledgeMode: KnowledgeMode;
   fallbackBehavior: FallbackBehavior;
+  conversationFlow: Record<string, unknown>;
+  enabledTasks: string[];
+  assistantProfile: Record<string, unknown> | null;
   ctaText: string;
   leadCaptureEnabled: boolean;
   leadNotificationEmail: string;
@@ -82,6 +85,11 @@ export type SetupGoalForm = {
 export type LeadDeliveryForm = {
   leadCaptureEnabled: boolean;
   leadNotificationEmail: string;
+};
+
+export type ConversationFlowForm = {
+  requiredFields: string[];
+  enabledTasks: string[];
 };
 
 export type DesignPrivacyForm = {

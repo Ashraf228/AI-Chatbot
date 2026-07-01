@@ -31,6 +31,7 @@ import {
   DEFAULT_BOT_TYPE,
   DEFAULT_ENABLED_TASKS,
   DEFAULT_PRIMARY_GOAL,
+  DEFAULT_REQUIRED_FIELDS,
   DEFAULT_TONE,
   CustomerDataStep,
   ConversationFlowStep,
@@ -49,11 +50,14 @@ import {
   domainFromUrl,
   isValidEmail,
   normalizeDomains,
+  normalizeEnabledTasks,
+  normalizeRequiredFields,
   normalizeSite,
   statusForWizardStep,
   wizardStepStatusLabel,
   type CustomerSetupWizardProps,
   type FallbackBehavior,
+  type ConversationFlowForm,
   type KnowledgeMethod,
   type KnowledgeMode,
   type KnowledgeSource,
@@ -99,6 +103,10 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   const [deliveryForm, setDeliveryForm] = useState({
     leadCaptureEnabled: true,
     leadNotificationEmail: "",
+  });
+  const [flowForm, setFlowForm] = useState<ConversationFlowForm>({
+    requiredFields: [...DEFAULT_REQUIRED_FIELDS],
+    enabledTasks: [...DEFAULT_ENABLED_TASKS],
   });
   const [knowledgeForm, setKnowledgeForm] = useState({
     title: "FAQ",
@@ -193,6 +201,10 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       setDeliveryForm({
         leadCaptureEnabled: nextSite.leadCaptureEnabled,
         leadNotificationEmail: nextSite.leadNotificationEmail,
+      });
+      setFlowForm({
+        requiredFields: normalizeRequiredFields(nextSite.conversationFlow.requiredFields),
+        enabledTasks: normalizeEnabledTasks(nextSite.enabledTasks),
       });
       setDesignForm({
         brandColor: nextSite.brandColor,
@@ -410,6 +422,52 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     return true;
   }
 
+  async function saveFlow() {
+    if (flowForm.enabledTasks.length === 0) {
+      setError("Wähle mindestens ein Gesprächsziel oder erledige den Schritt später.");
+      return false;
+    }
+
+    const conversationFlow = {
+      ...(site?.conversationFlow || {}),
+      requiredFields: flowForm.requiredFields,
+    };
+    const assistantProfile =
+      site?.assistantProfile && typeof site.assistantProfile === "object"
+        ? {
+            ...site.assistantProfile,
+            requiredFields: flowForm.requiredFields.map((key) => ({ key, required: true, source: "setup-wizard" })),
+            enabledTasks: flowForm.enabledTasks,
+          }
+        : site?.assistantProfile;
+
+    const saved = await runAction(
+      "flow",
+      () =>
+        updateSiteSettings(siteId, {
+          conversationFlow,
+          enabledTasks: flowForm.enabledTasks,
+          ...(assistantProfile ? { assistantProfile } : {}),
+        }),
+      "Gesprächslogik gespeichert.",
+    );
+    if (!saved) {
+      return false;
+    }
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            conversationFlow,
+            enabledTasks: flowForm.enabledTasks,
+            assistantProfile: assistantProfile || current.assistantProfile,
+          }
+        : current,
+    );
+    await refreshStatus();
+    return true;
+  }
+
   async function saveDesign() {
     const saved = await runAction(
       "design",
@@ -617,6 +675,8 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
         return saveGoal();
       case "delivery":
         return saveDelivery();
+      case "flow":
+        return saveFlow();
       case "design":
         return saveDesign();
       default:
@@ -690,6 +750,8 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
         return (
           <ConversationFlowStep
             siteSlug={siteSlug}
+            value={flowForm}
+            onChange={setFlowForm}
             explanation={STEP_EXPLANATIONS.flow}
             status={statusForWizardStep(serverStatus, "flow")}
             statusLabel={wizardStepStatusLabel(serverStatus, "flow")}

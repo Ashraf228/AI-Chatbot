@@ -3,7 +3,31 @@ import type { FallbackBehavior, KnowledgeMode, PrimaryGoal, Tone, WizardStep, Wi
 export const DEFAULT_PRIMARY_GOAL: PrimaryGoal = "lead_generation";
 export const DEFAULT_TONE: Tone = "professional";
 export const DEFAULT_BOT_TYPE = "universal-assistant";
-export const DEFAULT_ENABLED_TASKS = ["answer_questions", "collect_requests", "support", "prepare_handoff"];
+export const DEFAULT_REQUIRED_FIELDS = ["name", "email", "request"];
+export const DEFAULT_ENABLED_TASKS = ["answer_questions", "collect_requests", "prepare_handoff"];
+
+export const REQUIRED_FIELD_OPTIONS = [
+  { key: "name", label: "Name" },
+  { key: "email", label: "E-Mail" },
+  { key: "phone", label: "Telefon" },
+  { key: "request", label: "Anliegen" },
+  { key: "product_or_topic", label: "Produkt / Thema" },
+  { key: "customer_number", label: "Kundennummer" },
+  { key: "priority", label: "Priorität" },
+  { key: "callback_or_appointment", label: "gewünschter Rückruf oder Termin" },
+  { key: "custom", label: "individuelle Pflichtinformation" },
+] as const;
+
+export const ENABLED_TASK_OPTIONS = [
+  { key: "answer_questions", label: "Fragen beantworten" },
+  { key: "support", label: "Supportfall vorbereiten" },
+  { key: "collect_requests", label: "Kundenanfrage aufnehmen" },
+  { key: "product_advice", label: "Produkt-/Leistungsberatung" },
+  { key: "appointment", label: "Termin oder Rückruf vorbereiten" },
+  { key: "prepare_handoff", label: "Übergabe an Team" },
+  { key: "create_ticket", label: "Ticket vorbereiten" },
+  { key: "trigger_integration", label: "Daten an angebundene Systeme übergeben" },
+] as const;
 
 export const WIZARD_STEPS: WizardStep[] = [
   { key: "customer", label: "Kundendaten", description: "Firma, Website, erlaubte Website und Sprache" },
