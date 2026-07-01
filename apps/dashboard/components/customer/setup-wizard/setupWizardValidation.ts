@@ -1,5 +1,15 @@
 import type { CustomerApiStatus, CustomerStatusStep, CustomerStatusTone } from "../customer-status";
-import { DEFAULT_BOT_TYPE, DEFAULT_PRIMARY_GOAL, DEFAULT_TONE, PRIMARY_GOAL_VALUES, STATUS_STEP_GROUPS } from "./setupWizardConstants";
+import {
+  DEFAULT_BOT_TYPE,
+  DEFAULT_ENABLED_TASKS,
+  DEFAULT_PRIMARY_GOAL,
+  DEFAULT_REQUIRED_FIELDS,
+  DEFAULT_TONE,
+  ENABLED_TASK_OPTIONS,
+  PRIMARY_GOAL_VALUES,
+  REQUIRED_FIELD_OPTIONS,
+  STATUS_STEP_GROUPS,
+} from "./setupWizardConstants";
 import type { FallbackBehavior, KnowledgeMode, KnowledgeSource, PrimaryGoal, SiteDetails, WizardStepKey } from "./setupWizardTypes";
 
 export function normalizeDomains(value: string) {
@@ -24,6 +34,27 @@ export function domainFromUrl(value: string) {
 
 function firstString(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
+}
+
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+const REQUIRED_FIELD_KEYS = new Set<string>(REQUIRED_FIELD_OPTIONS.map((option) => option.key));
+const ENABLED_TASK_KEYS = new Set<string>(ENABLED_TASK_OPTIONS.map((option) => option.key));
+
+export function normalizeRequiredFields(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [...DEFAULT_REQUIRED_FIELDS];
+  }
+
+  const keys = stringArray(value).filter((entry) => REQUIRED_FIELD_KEYS.has(entry));
+  return keys;
+}
+
+export function normalizeEnabledTasks(value: unknown) {
+  const keys = stringArray(value).filter((entry) => ENABLED_TASK_KEYS.has(entry));
+  return keys.length > 0 ? keys : [...DEFAULT_ENABLED_TASKS];
 }
 
 export function normalizePrimaryGoal(primaryGoal: unknown, setupGoal: unknown): PrimaryGoal | "" {
@@ -52,6 +83,10 @@ export function normalizeSite(data: Record<string, unknown>): SiteDetails {
     ? data.allowedDomains.filter((entry): entry is string => typeof entry === "string")
     : [];
   const primaryGoal = normalizePrimaryGoal(data.primaryGoal, data.setupGoal);
+  const conversationFlow =
+    data.conversationFlow && typeof data.conversationFlow === "object" && !Array.isArray(data.conversationFlow)
+      ? (data.conversationFlow as Record<string, unknown>)
+      : {};
 
   return {
     id: firstString(data.id),
@@ -86,6 +121,12 @@ export function normalizeSite(data: Record<string, unknown>): SiteDetails {
     fallbackBehavior: ["ask_followup", "collect_contact", "handoff"].includes(firstString(data.fallbackBehavior))
       ? (data.fallbackBehavior as FallbackBehavior)
       : "ask_followup",
+    conversationFlow,
+    enabledTasks: normalizeEnabledTasks(data.enabledTasks),
+    assistantProfile:
+      data.assistantProfile && typeof data.assistantProfile === "object" && !Array.isArray(data.assistantProfile)
+        ? (data.assistantProfile as Record<string, unknown>)
+        : null,
     ctaText: firstString(data.ctaText),
     leadCaptureEnabled: data.leadCaptureEnabled !== false,
     leadNotificationEmail: firstString(data.leadNotificationEmail),
