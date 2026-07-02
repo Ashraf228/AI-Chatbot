@@ -46,6 +46,15 @@ export async function updateSiteSettings(siteId: string, payload: SetupSitePaylo
   return readJson(response);
 }
 
+export async function updateAssistantProfileConfig(siteId: string, payload: SetupSitePayload) {
+  const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/assistant-profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return readJson(response);
+}
+
 export async function updateSiteBranding(siteId: string, payload: SetupSitePayload) {
   const response = await fetch(`/api/widget/branding/${encodeURIComponent(siteId)}`, {
     method: "PATCH",

@@ -11,6 +11,7 @@ import {
   resyncKnowledgeSource,
   setKnowledgeSourceActive,
   setSiteGoLive,
+  updateAssistantProfileConfig,
   updateSiteBasics,
   updateSiteBranding,
   updateSiteSettings,
@@ -33,6 +34,7 @@ import {
   DEFAULT_PRIMARY_GOAL,
   DEFAULT_REQUIRED_FIELDS,
   DEFAULT_TONE,
+  REQUIRED_FIELD_OPTIONS,
   CustomerDataStep,
   ConversationFlowStep,
   DesignPrivacyStep,
@@ -64,6 +66,27 @@ import {
   type SiteDetails,
   type TestChatMessage,
 } from "./setup-wizard";
+
+const PRIMARY_GOAL_ROLES: Record<string, string> = {
+  support_automation: "Support und Kundenhilfe",
+  lead_generation: "Anfragen aufnehmen und qualifizieren",
+  customer_advice: "Kunden beraten",
+  product_questions: "Produkt- und Leistungsfragen beantworten",
+  appointment_requests: "Termine und Rückrufe vorbereiten",
+  internal_knowledge: "Wissen strukturiert bereitstellen",
+};
+
+const ASSISTANT_TONE_BY_UI_TONE: Record<string, string> = {
+  professional: "professional",
+  friendly: "friendly",
+  premium: "professional",
+  direct: "neutral",
+  consultative: "consultative",
+};
+
+function requiredFieldLabel(key: string) {
+  return REQUIRED_FIELD_OPTIONS.find((option) => option.key === key)?.label || key;
+}
 
 export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSetupWizardProps) {
   const siteSlug = encodeSiteId(siteId);
@@ -241,6 +264,8 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       const fallback =
         key === "goal"
           ? "KI-Mitarbeiter-Einstellungen konnten nicht gespeichert werden."
+          : key === "flow"
+            ? "Gesprächslogik konnte nicht gespeichert werden."
           : "Aktion konnte nicht ausgeführt werden.";
       const message = err instanceof Error ? err.message : "";
       setError(message && message !== "Aktion konnte nicht ausgeführt werden." ? message : fallback);
@@ -324,49 +349,92 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     return true;
   }
 
+  function buildAssistantProfilePayload(nextFlow: ConversationFlowForm = flowForm) {
+    const primaryGoal = goalForm.primaryGoal || DEFAULT_PRIMARY_GOAL;
+    const tone = goalForm.tone || DEFAULT_TONE;
+    const companyName = (profileForm.companyName || site?.companyName || site?.name || "").trim();
+    const businessDescription = [
+      companyName ? `Unternehmen: ${companyName}` : "",
+      profileForm.websiteUrl.trim() ? `Website: ${profileForm.websiteUrl.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      assistantProfile: {
+        profileKey: "universal-assistant",
+        profileVersion: 1,
+        assistantName: `${companyName || "KI"} Assistent`,
+        role: PRIMARY_GOAL_ROLES[primaryGoal] || PRIMARY_GOAL_ROLES[DEFAULT_PRIMARY_GOAL],
+        businessDescription,
+        targetUsers: ["website_visitors"],
+        tone: ASSISTANT_TONE_BY_UI_TONE[tone] || "professional",
+        answerStyle: "concise",
+        knowledgeMode: goalForm.knowledgeMode,
+        enabledTasks: nextFlow.enabledTasks.length > 0 ? nextFlow.enabledTasks : [...DEFAULT_ENABLED_TASKS],
+        requiredFields: nextFlow.requiredFields.map((key) => ({
+          key,
+          label: requiredFieldLabel(key),
+          required: true,
+        })),
+        handoffRules: {
+          enabled: deliveryForm.leadCaptureEnabled || nextFlow.enabledTasks.includes("prepare_handoff"),
+          requiredBeforeHandoff: nextFlow.requiredFields.length > 0,
+          summaryBeforeHandoff: true,
+          handoffWhenUncertain: goalForm.fallbackBehavior === "handoff",
+          fallbackBehavior: goalForm.fallbackBehavior,
+        },
+        deliveryChannels: {
+          email: {
+            enabled: deliveryForm.leadCaptureEnabled && Boolean(deliveryForm.leadNotificationEmail.trim()),
+            recipientEmail: deliveryForm.leadNotificationEmail.trim() || undefined,
+          },
+          webhook: { enabled: false },
+          system: {
+            enabled: nextFlow.enabledTasks.includes("create_ticket") || nextFlow.enabledTasks.includes("trigger_integration"),
+          },
+        },
+      },
+      updatedFrom: "dashboard-wizard",
+    };
+  }
+
+  function isLegacyAssistantMode(botType = goalForm.botType) {
+    return Boolean(profileForm.industry) || botType !== DEFAULT_BOT_TYPE;
+  }
+
   async function saveGoal() {
     const primaryGoal = goalForm.primaryGoal || DEFAULT_PRIMARY_GOAL;
     const tone = goalForm.tone || DEFAULT_TONE;
     const botType = goalForm.botType || DEFAULT_BOT_TYPE;
     const ctaText = goalForm.ctaText.trim() || "Anfrage aufnehmen";
-    const isUniversalProfile = botType === DEFAULT_BOT_TYPE && !profileForm.industry;
+    const legacyMode = isLegacyAssistantMode(botType);
     const saved = await runAction(
       "goal",
-      () =>
-        updateSiteSettings(siteId, {
-          primaryGoal,
-          setupGoal: primaryGoal,
-          industry: profileForm.industry,
-          botType,
-          tone,
-          knowledgeMode: goalForm.knowledgeMode,
-          fallbackBehavior: goalForm.fallbackBehavior,
-          ctaText,
-          systemPrompt: goalForm.systemPrompt.trim(),
-          ...(isUniversalProfile
-            ? {
-                assistantProfile: {
-                  profileKey: "universal-assistant",
-                  profileVersion: 1,
-                  assistantName: `${(profileForm.companyName || site?.name || "KI").trim()} Assistent`,
-                  role: "Kundenservice-Mitarbeiter",
-                  businessDescription: "",
-                  targetUsers: [],
-                  tone,
-                  answerStyle: "concise",
-                  knowledgeMode: goalForm.knowledgeMode,
-                },
-                enabledTasks: DEFAULT_ENABLED_TASKS,
-                conversationEngine: {
-                  previewEnabled: false,
-                  compareEnabled: false,
-                  responsePreviewEnabled: false,
-                  knowledgePreviewEnabled: false,
-                  adminTestOnly: true,
-                },
-              }
-            : {}),
-        }),
+      async () => {
+        if (legacyMode) {
+          return updateSiteSettings(siteId, {
+            primaryGoal,
+            setupGoal: primaryGoal,
+            industry: profileForm.industry,
+            botType,
+            tone,
+            knowledgeMode: goalForm.knowledgeMode,
+            fallbackBehavior: goalForm.fallbackBehavior,
+            ctaText,
+            systemPrompt: goalForm.systemPrompt.trim(),
+          });
+        }
+
+        const [assistantProfileResult, widgetConfigResult] = await Promise.all([
+          updateAssistantProfileConfig(siteId, buildAssistantProfilePayload()),
+          updateSiteSettings(siteId, {
+            ctaText,
+            ...(goalForm.systemPrompt.trim() ? { systemPrompt: goalForm.systemPrompt.trim() } : {}),
+          }),
+        ]);
+        return { assistantProfileResult, widgetConfigResult };
+      },
       "KI-Ziel gespeichert.",
     );
     if (!saved) {
@@ -384,6 +452,15 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
             fallbackBehavior: goalForm.fallbackBehavior,
             ctaText,
             systemPrompt: goalForm.systemPrompt,
+            ...(legacyMode
+              ? {}
+              : {
+                  enabledTasks: flowForm.enabledTasks,
+                  assistantProfile: {
+                    ...(current.assistantProfile || {}),
+                    ...buildAssistantProfilePayload().assistantProfile,
+                  },
+                }),
           }
         : current,
     );
@@ -428,27 +505,22 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       return false;
     }
 
-    const conversationFlow = {
-      ...(site?.conversationFlow || {}),
-      requiredFields: flowForm.requiredFields,
-    };
-    const assistantProfile =
-      site?.assistantProfile && typeof site.assistantProfile === "object"
-        ? {
-            ...site.assistantProfile,
-            requiredFields: flowForm.requiredFields.map((key) => ({ key, required: true, source: "setup-wizard" })),
-            enabledTasks: flowForm.enabledTasks,
-          }
-        : site?.assistantProfile;
-
+    const legacyMode = isLegacyAssistantMode();
     const saved = await runAction(
       "flow",
-      () =>
-        updateSiteSettings(siteId, {
-          conversationFlow,
-          enabledTasks: flowForm.enabledTasks,
-          ...(assistantProfile ? { assistantProfile } : {}),
-        }),
+      () => {
+        if (legacyMode) {
+          return updateSiteSettings(siteId, {
+            conversationFlow: {
+              ...(site?.conversationFlow || {}),
+              requiredFields: flowForm.requiredFields,
+            },
+            enabledTasks: flowForm.enabledTasks,
+          });
+        }
+
+        return updateAssistantProfileConfig(siteId, buildAssistantProfilePayload(flowForm));
+      },
       "Gesprächslogik gespeichert.",
     );
     if (!saved) {
@@ -458,9 +530,19 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       current
         ? {
             ...current,
-            conversationFlow,
+            conversationFlow: {
+              ...(current.conversationFlow || {}),
+              requiredFields: flowForm.requiredFields,
+            },
             enabledTasks: flowForm.enabledTasks,
-            assistantProfile: assistantProfile || current.assistantProfile,
+            ...(legacyMode
+              ? {}
+              : {
+                  assistantProfile: {
+                    ...(current.assistantProfile || {}),
+                    ...buildAssistantProfilePayload(flowForm).assistantProfile,
+                  },
+                }),
           }
         : current,
     );
