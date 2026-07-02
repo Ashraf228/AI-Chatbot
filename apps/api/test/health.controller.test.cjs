@@ -74,6 +74,7 @@ test('HealthController returns safe build commit metadata from APP_COMMIT_SHA', 
   assert.equal(result.service, 'api');
   assert.equal(result.version, 'v-test');
   assert.equal(result.commit, commit);
+  assert.equal(result.apiCommit, commit);
   assert.equal(result.database, 'ok');
   assert.equal(result.redis, 'ok');
   assert.equal(JSON.stringify(result).includes('secret-value-that-must-not-leak'), false);
@@ -95,6 +96,7 @@ test('HealthController falls back to unknown commit when build env is missing', 
 
   assert.equal(response.statusCode, 200);
   assert.equal(result.commit, 'unknown');
+  assert.equal(result.apiCommit, 'unknown');
   assert.equal(result.redis, 'skipped');
 });
 
@@ -116,6 +118,7 @@ test('HealthController keeps existing unhealthy response semantics', async () =>
   assert.equal(result.database, 'error');
   assert.equal(result.redis, 'ok');
   assert.equal(result.commit, commit);
+  assert.equal(result.apiCommit, commit);
 });
 
 test('HealthController does not echo non-sha commit env values', async () => {
@@ -134,5 +137,6 @@ test('HealthController does not echo non-sha commit env values', async () => {
 
   assert.equal(response.statusCode, 200);
   assert.equal(result.commit, 'unknown');
+  assert.equal(result.apiCommit, 'unknown');
   assert.equal(JSON.stringify(result).includes('not-a-commit-value'), false);
 });

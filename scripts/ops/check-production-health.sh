@@ -6,8 +6,10 @@ PROJECT_DIR="${PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 ENV_FILE="${ENV_FILE:-$PROJECT_DIR/.env}"
 
 API_HEALTH_URL="${API_HEALTH_URL:-https://api.soulesmartbusiness.com/healthz}"
+DASHBOARD_HEALTH_URL="${DASHBOARD_HEALTH_URL:-https://app.soulesmartbusiness.com/healthz}"
 DASHBOARD_URL="${DASHBOARD_URL:-https://app.soulesmartbusiness.com/login}"
 WIDGET_LOADER_URL="${WIDGET_LOADER_URL:-https://widget.soulesmartbusiness.com/loader.js}"
+WIDGET_VERSION_URL="${WIDGET_VERSION_URL:-https://widget.soulesmartbusiness.com/version.json}"
 WIDGET_CONFIG_URL="${WIDGET_CONFIG_URL:-https://widget.soulesmartbusiness.com/widget/config?siteKey=rohrreinigung-ffm24}"
 PRIVACY_URL="${PRIVACY_URL:-https://www.rohrreinigung-ffm24.de/datenschutz}"
 EXPECTED_WIDGET_SITE_KEY="${EXPECTED_WIDGET_SITE_KEY:-rohrreinigung-ffm24}"
@@ -105,12 +107,51 @@ if [[ -z "$api_commit" ]]; then
 elif [[ "$api_commit" == "unknown" ]]; then
   warn "api health commit=unknown"
 else
-  ok "api health commit=$api_commit"
+  ok "apiRuntimeCommit=$api_commit"
 fi
 rm -f "$api_body_file"
 
+server_repo_commit="$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
+if [[ -n "$server_repo_commit" ]]; then
+  ok "serverRepoCommit=$server_repo_commit"
+else
+  warn "serverRepoCommit unavailable"
+fi
+
+dashboard_health_body_file="$(mktemp)"
+dashboard_health_code="$(http_body "$DASHBOARD_HEALTH_URL" "$dashboard_health_body_file")"
+dashboard_commit="$(
+  node -e "const fs = require('fs'); try { const data = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); if (typeof data.commit === 'string') process.stdout.write(data.commit); } catch {}" "$dashboard_health_body_file"
+)"
+if [[ "$dashboard_health_code" != "200" ]]; then
+  fail "dashboard health http=${dashboard_health_code:-request_failed}"
+elif [[ -z "$dashboard_commit" ]]; then
+  warn "dashboardBuildCommit missing"
+elif [[ "$dashboard_commit" == "unknown" ]]; then
+  warn "dashboardBuildCommit=unknown"
+else
+  ok "dashboardBuildCommit=$dashboard_commit"
+fi
+rm -f "$dashboard_health_body_file"
+
 check_http_status "dashboard login" "$DASHBOARD_URL"
 check_http_status "widget loader" "$WIDGET_LOADER_URL"
+
+widget_version_body_file="$(mktemp)"
+widget_version_code="$(http_body "$WIDGET_VERSION_URL" "$widget_version_body_file")"
+widget_commit="$(
+  node -e "const fs = require('fs'); try { const data = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); if (typeof data.commit === 'string') process.stdout.write(data.commit); } catch {}" "$widget_version_body_file"
+)"
+if [[ "$widget_version_code" != "200" ]]; then
+  warn "widget version http=${widget_version_code:-request_failed}"
+elif [[ -z "$widget_commit" ]]; then
+  warn "widgetBuildCommit missing"
+elif [[ "$widget_commit" == "unknown" ]]; then
+  warn "widgetBuildCommit=unknown"
+else
+  ok "widgetBuildCommit=$widget_commit"
+fi
+rm -f "$widget_version_body_file"
 
 config_body_file="$(mktemp)"
 config_code="$(http_body "$WIDGET_CONFIG_URL" "$config_body_file")"

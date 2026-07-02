@@ -49,6 +49,18 @@ test('WidgetConfigService.getPublicConfig maps runtime-safe widget config', asyn
   assert.equal(config.consentRequired, true);
   assert.equal(config.privacyUrl, 'https://soulesmartbusiness.com/privacy');
   assert.deepEqual(config.suggestedQuestionsByPath['/'], ['Was kostet der Service?']);
+  for (const key of [
+    'assistantProfileDebug',
+    'conversationEnginePreview',
+    'compare',
+    'engineResponsePreview',
+    'responseQuality',
+    'knowledgeRetrieval',
+    'usedKnowledgeSources',
+    'groundingStatus',
+  ]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(config, key), false);
+  }
 });
 
 test('WidgetConfigService.getPublicConfig normalizes local-service greeting to formal wording', async () => {

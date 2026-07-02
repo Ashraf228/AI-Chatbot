@@ -234,7 +234,7 @@ export APP_COMMIT_SHA="$(git rev-parse HEAD)"
 docker compose --project-directory /root/AI-Chatbot --env-file /root/AI-Chatbot/.env up --build -d api
 ```
 
-Der Production-Healthcheck warnt, wenn der API-Commit fehlt oder `unknown` ist, und gibt weiterhin den lokalen Server-Repo-Commit aus. Bei einem korrekt gesetzten `APP_COMMIT_SHA` sollten beide Werte identisch sein.
+Der Production-Healthcheck warnt, wenn der API-Commit fehlt oder `unknown` ist, und gibt weiterhin den lokalen Server-Repo-Commit aus. Dashboard und Widget haben eigene Build-Metadaten (`/healthz` beziehungsweise `/version.json`). Bei einem Dashboard-only oder Widget-only Deploy duerfen diese Werte vom API-Commit abweichen; entscheidend ist, dass der jeweils deployte Service den erwarteten Zielcommit ausweist.
 
 ## Offene Punkte vor zahlenden Kunden
 

@@ -7,6 +7,8 @@ x-logging: &default-logging
 x-staging-app-env: &staging-app-env
   APP_ENV: staging
   APP_COMMIT_SHA: ${APP_COMMIT_SHA:-staging-local}
+  BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+  BUILD_DATE: ${BUILD_DATE:-unknown}
 
 services:
   proxy:
@@ -92,6 +94,10 @@ services:
     logging: *default-logging
     build:
       context: ./apps/api
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-staging-local}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     init: true
     restart: unless-stopped
     dns:
@@ -150,6 +156,10 @@ services:
     build:
       context: .
       dockerfile: ./apps/widget/Dockerfile
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-staging-local}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     restart: unless-stopped
     environment:
       <<: *staging-app-env
@@ -172,6 +182,10 @@ services:
     logging: *default-logging
     build:
       context: ./apps/dashboard
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-staging-local}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     init: true
     restart: unless-stopped
     environment:

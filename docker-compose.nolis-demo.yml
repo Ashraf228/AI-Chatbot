@@ -9,6 +9,8 @@ name: ${COMPOSE_PROJECT_NAME:-soule-demo}
 x-demo-app-env: &demo-app-env
   APP_ENV: ${APP_ENV:-staging}
   APP_COMMIT_SHA: ${APP_COMMIT_SHA:?APP_COMMIT_SHA is required}
+  BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+  BUILD_DATE: ${BUILD_DATE:-unknown}
   APP_VERSION: ${APP_VERSION:-v0.9.0-nolis-demo}
 
 services:
@@ -98,6 +100,10 @@ services:
     logging: *default-logging
     build:
       context: ./apps/api
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:?APP_COMMIT_SHA is required}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     init: true
     restart: unless-stopped
     environment:
@@ -159,6 +165,10 @@ services:
     build:
       context: .
       dockerfile: ./apps/widget/Dockerfile
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:?APP_COMMIT_SHA is required}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     restart: unless-stopped
     environment:
       <<: *demo-app-env
@@ -181,6 +191,10 @@ services:
     logging: *default-logging
     build:
       context: ./apps/dashboard
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:?APP_COMMIT_SHA is required}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     init: true
     restart: unless-stopped
     environment:

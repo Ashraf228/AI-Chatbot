@@ -4,6 +4,11 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
+x-app-env: &app-env
+  APP_COMMIT_SHA: ${APP_COMMIT_SHA:-unknown}
+  BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+  BUILD_DATE: ${BUILD_DATE:-unknown}
+
 services:
   proxy:
     logging: *default-logging
@@ -86,15 +91,19 @@ services:
     logging: *default-logging
     build:
       context: ./apps/api
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-unknown}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     init: true
     restart: unless-stopped
     dns:
       - 1.1.1.1
       - 8.8.8.8
     environment:
+      <<: *app-env
       NODE_ENV: production
       APP_VERSION: ${APP_VERSION:-v0.9.0-production-candidate}
-      APP_COMMIT_SHA: ${APP_COMMIT_SHA:-unknown}
       PORT: 5000
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-chatbot}
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
@@ -142,7 +151,13 @@ services:
     build:
       context: .
       dockerfile: ./apps/widget/Dockerfile
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-unknown}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     restart: unless-stopped
+    environment:
+      <<: *app-env
     depends_on:
       api:
         condition: service_healthy
@@ -159,9 +174,14 @@ services:
     logging: *default-logging
     build:
       context: ./apps/dashboard
+      args:
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-unknown}
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     init: true
     restart: unless-stopped
     environment:
+      <<: *app-env
       NODE_ENV: production
       APP_VERSION: ${APP_VERSION:-v0.9.0-production-candidate}
       HOSTNAME: 0.0.0.0
@@ -194,6 +214,7 @@ services:
     init: true
     restart: "no"
     environment:
+      <<: *app-env
       NODE_ENV: production
       APP_VERSION: ${APP_VERSION:-v0.9.0-production-candidate}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:-chatbot}

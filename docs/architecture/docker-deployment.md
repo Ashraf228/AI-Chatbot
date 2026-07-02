@@ -14,7 +14,7 @@ Dieses Projekt ist als Monorepo aufgebaut und verwendet Docker Compose fuer die 
 
 - Docker
 - Docker Compose
-- eine `.env` Datei im Projektroot auf Basis von [.env.example](/Users/ash/Documents/New%20project/AI-Chatbot/.env.example)
+- eine `.env` Datei im Projektroot auf Basis von `.env.example`
 
 ## Wichtige Umgebungsvariablen
 
@@ -143,3 +143,18 @@ Moegliche Werte:
 - Fuer produktive Umgebungen sollte vor dem Go-Live ein echter End-to-End-Compose-Test durchgefuehrt werden.
 - Wenn `TLS_ENABLED=true` gesetzt ist, lauscht der interne Nginx-Proxy auch auf `443` und verwendet die unter `TLS_CERTS_DIR` gemounteten Zertifikate.
 - Fuer Hetzner ist die empfohlene Variante, dein Let's-Encrypt-Verzeichnis read-only nach `TLS_CERTS_DIR` zu mounten und `443` direkt ueber den Proxy zu terminieren.
+
+## Deployment-Metadaten
+
+API, Dashboard und Widget weisen kuenftig eigene Commit-Metadaten aus. Der
+Server-Repo-Commit ist nicht automatisch identisch mit jedem laufenden Service.
+
+- API: `/healthz` liefert `commit` und `apiCommit`.
+- Dashboard: `/healthz` liefert `service=dashboard` und `commit`.
+- Widget: `/version.json` liefert `service=widget` und `commit`.
+- Images tragen `org.opencontainers.image.revision`.
+
+Bei Dashboard-only Deploys darf der API-Commit unveraendert bleiben. Bei
+API-only Deploys darf der Dashboard-Commit unveraendert bleiben. Monitoring
+muss deshalb service-spezifisch pruefen. Details stehen in
+[deployment-metadata.md](../deployment/deployment-metadata.md).
