@@ -204,8 +204,12 @@ describe("CustomerSetupWizard", () => {
     await screen.findByText("Setup-Assistent");
     await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
 
-    expect(screen.getByLabelText("Ziel des Chatfensters")).toHaveValue("lead_generation");
-    expect(screen.getByLabelText("Tonalität")).toHaveValue("professional");
+    expect(screen.getByLabelText("Aufgabe des KI-Mitarbeiters")).toHaveValue("lead_generation");
+    expect(screen.getByText("Lege fest, was der KI-Mitarbeiter hauptsächlich übernehmen soll.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kommunikationsstil")).toHaveValue("professional");
+    expect(screen.getByText("Bestimmt, wie der KI-Mitarbeiter formuliert.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Ziel des Chatfensters")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tonalität")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /^Speichern & weiter$/ }));
 

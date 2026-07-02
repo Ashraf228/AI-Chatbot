@@ -17,7 +17,7 @@ export function CustomerDataStep({ value, onChange, explanation, status, statusL
     <section className="dashboard-card dashboard-stack" id="setup-step-basics">
       <SetupStepHeader
         title="Kundendaten"
-        description="Lege Firma, Website, erlaubte Websites und Basissprache fest."
+        description="Lege Kundenname, Hauptdomain und Standardsprache fest."
         explanation={explanation}
         status={status}
         statusLabel={statusLabel}
@@ -51,18 +51,20 @@ export function CustomerDataStep({ value, onChange, explanation, status, statusL
           onChange={(event) => onChange({ ...value, allowedDomains: event.target.value })}
           placeholder="kunde.de&#10;www.kunde.de"
         />
-        <span className="dashboard-field-hint">Nur diese Websites dürfen das Chatfenster anzeigen.</span>
+        <span className="dashboard-field-hint">Domains, auf denen dieses Widget eingebunden werden darf.</span>
       </label>
       <div className="dashboard-grid dashboard-grid--two">
         <label className="dashboard-field">
-          <span className="dashboard-field-label">Sprache (Pflicht)</span>
+          <span className="dashboard-field-label">Sprache des KI-Mitarbeiters (Pflicht)</span>
           <Select
+            aria-label="Sprache des KI-Mitarbeiters"
             value={value.language}
             onChange={(event) => onChange({ ...value, language: event.target.value === "en" ? "en" : "de" })}
           >
             <option value="de">Deutsch</option>
             <option value="en">Englisch</option>
           </Select>
+          <span className="dashboard-field-hint">Die Sprache, in der der KI-Mitarbeiter standardmäßig antwortet.</span>
         </label>
         <label className="dashboard-field">
           <span className="dashboard-field-label">Telefonnummer des Unternehmens (optional)</span>
