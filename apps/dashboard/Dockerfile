@@ -11,9 +11,17 @@ RUN npm run build
 
 FROM node:24.17.0-alpine
 WORKDIR /app
+ARG APP_COMMIT_SHA=unknown
+ARG BUILD_COMMIT=unknown
+ARG BUILD_DATE=unknown
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV APP_COMMIT_SHA=${APP_COMMIT_SHA}
+ENV BUILD_COMMIT=${BUILD_COMMIT}
+ENV BUILD_DATE=${BUILD_DATE}
+LABEL org.opencontainers.image.revision=${APP_COMMIT_SHA}
+LABEL org.opencontainers.image.created=${BUILD_DATE}
 
 RUN mkdir -p /app/.next/cache && chown -R node:node /app
 

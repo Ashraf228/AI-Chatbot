@@ -192,6 +192,10 @@ jobs:
           docker run --rm --entrypoint test ai-chatbot-dashboard -d /app/app/public
           docker run --rm --entrypoint sh ai-chatbot-dashboard -c 'find /app/app/.next/static -type f \( -name "*.css" -o -name "*.js" \) | grep -q .'
           docker run --rm --entrypoint sh ai-chatbot-dashboard -c '! find /app -name ".env" -o -name ".env.*" | grep -q .'
+          test "$(docker image inspect ai-chatbot-api --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "unknown"
+          test "$(docker image inspect ai-chatbot-dashboard --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "unknown"
+          test "$(docker image inspect ai-chatbot-widget --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "unknown"
+          docker run --rm --entrypoint sh ai-chatbot-widget -c 'test -f /usr/share/nginx/html/version.json && grep -q "\"service\":\"widget\"" /usr/share/nginx/html/version.json && grep -q "\"commit\":\"unknown\"" /usr/share/nginx/html/version.json'
           test "$(docker image inspect ai-chatbot-api --format '{{.Config.User}}')" = "node"
           test "$(docker image inspect ai-chatbot-dashboard --format '{{.Config.User}}')" = "node"
           test "$(docker image inspect ai-chatbot-reporter --format '{{.Config.User}}')" = "node"

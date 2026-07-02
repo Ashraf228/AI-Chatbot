@@ -19,11 +19,14 @@ export class HealthController {
 
     response.status(ok ? 200 : 503);
 
+    const commit = this.getCommitSha();
+
     return {
       status: ok ? 'ok' : 'error',
       service: 'api',
       version: process.env.APP_VERSION || process.env.npm_package_version || 'unknown',
-      commit: this.getCommitSha(),
+      commit,
+      apiCommit: commit,
       uptimeSeconds: Math.round(process.uptime()),
       database: database.status,
       redis: redis.status,

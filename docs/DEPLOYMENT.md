@@ -79,9 +79,13 @@ Optionale, aber empfohlene Werte:
 - API: `https://api.example.com/healthz`
 - Dashboard: `https://admin.example.com/healthz`
 - Widget Loader: `https://widget.example.com/loader.js`
+- Widget Version: `https://widget.example.com/version.json`
 - Proxy: `http://localhost/healthz` im Container/Host-Kontext
 
-API Health liefert `status`, `database`, `redis`, `uptimeSeconds` und `version`, aber keine Secrets.
+API Health liefert `status`, `database`, `redis`, `uptimeSeconds`, `version`,
+`commit` und `apiCommit`, aber keine Secrets. Dashboard Health liefert
+`service=dashboard` und `commit`. Widget Version liefert `service=widget` und
+`commit`.
 
 ## Typische Fehler
 
