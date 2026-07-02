@@ -28,6 +28,18 @@ test('WidgetConfigService.getPublicConfig maps runtime-safe widget config', asyn
             lead_capture_enabled: true,
             lead_notification_email: 'hello@soulesmartbusiness.com',
             suggested_questions_by_path: { '/': ['Was kostet der Service?'] },
+            config: {
+              assistantProfile: {
+                profileKey: 'universal-assistant',
+                enabledTasks: ['create_ticket'],
+              },
+              conversationEngine: {
+                previewEnabled: true,
+                compareEnabled: true,
+                responsePreviewEnabled: true,
+                knowledgePreviewEnabled: true,
+              },
+            },
             system_prompt: 'Custom prompt',
           },
         ],
@@ -50,6 +62,7 @@ test('WidgetConfigService.getPublicConfig maps runtime-safe widget config', asyn
   assert.equal(config.privacyUrl, 'https://soulesmartbusiness.com/privacy');
   assert.deepEqual(config.suggestedQuestionsByPath['/'], ['Was kostet der Service?']);
   for (const key of [
+    'assistantProfile',
     'assistantProfileDebug',
     'conversationEnginePreview',
     'compare',
@@ -58,6 +71,11 @@ test('WidgetConfigService.getPublicConfig maps runtime-safe widget config', asyn
     'knowledgeRetrieval',
     'usedKnowledgeSources',
     'groundingStatus',
+    'adminTestOnly',
+    'previewEnabled',
+    'compareEnabled',
+    'responsePreviewEnabled',
+    'knowledgePreviewEnabled',
   ]) {
     assert.equal(Object.prototype.hasOwnProperty.call(config, key), false);
   }
