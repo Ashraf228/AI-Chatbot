@@ -1655,6 +1655,7 @@ test('ChatAgentOrchestratorService treats post-completion drain keywords as new 
     siteName: 'Demo Kunde',
     siteKey: 'rohrreinigung-ffm24',
     domain: 'rohrreinigung-ffm24.de',
+    industry: 'local-services',
   });
 
   await completeLocalLead(decide);
@@ -1676,9 +1677,10 @@ test('ChatAgentOrchestratorService treats post-completion drain keywords as new 
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
 });
 
-test('ChatAgentOrchestratorService uses default local intake for completed lead state without stored flow config', async () => {
+test('ChatAgentOrchestratorService uses default local intake for explicit legacy completed lead state without stored flow config', async () => {
   const { decide, conversations, leads } = createHarness({
     siteName: 'Rohrreinigung-ffm24',
+    industry: 'local-services',
   });
   conversations.get('conversation-1').metadata = {
     pendingLead: {
@@ -1703,11 +1705,12 @@ test('ChatAgentOrchestratorService uses default local intake for completed lead 
   assert.equal(conversations.get('conversation-1').metadata.pendingLead.name, undefined);
 });
 
-test('ChatAgentOrchestratorService treats drain-cleaning site names as local service without stored flow config', async () => {
+test('ChatAgentOrchestratorService treats explicit drain-cleaning legacy config as local service without stored flow config', async () => {
   const { decide, conversations, leads } = createHarness({
     siteName: 'Demo Kunde',
     siteKey: 'rohrreinigung-ffm24',
     domain: 'rohrreinigung-ffm24.de',
+    industry: 'local-services',
   });
 
   const first = await decide('mein Klo ist verstopft');
@@ -1734,6 +1737,7 @@ test('ChatAgentOrchestratorService keeps default local keywords when stored flow
   const { decide, conversations, leads } = createHarness({
     siteName: 'Rohrreinigung-ffm24',
     intakeFlow: {
+      templateKey: 'local-service-first-contact',
       genericLocalServiceKeywords: [],
       problemKeywords: [],
       pricingKeywords: [],
@@ -2154,6 +2158,30 @@ test('ChatAgentOrchestratorService captures a lead over multiple messages', asyn
     auditLogs.some((entry) => JSON.stringify(entry.metadata).includes('KI für Kundenanfragen')),
     false,
   );
+});
+
+test('ChatAgentOrchestratorService keeps universal required fields out of local service intake', async () => {
+  const { decide, leads } = createHarness({
+    intakeFlow: {
+      requiredFields: ['name', 'email', 'phone', 'request'],
+      questionOrder: ['request', 'name', 'email', 'phone'],
+      questionTexts: {
+        request: 'Worum geht es?',
+        phone: 'Wie können wir Sie erreichen?',
+      },
+    },
+    industry: 'universal-assistant',
+  });
+
+  const result = await decide('Hallo, ich brauche Hilfe.');
+
+  assert.equal(result.handled, true);
+  assert.doesNotMatch(
+    result.answer,
+    /Branche|Handwerker|lokaler Dienstleister|Einsatzadresse|vollständige Adresse|Dringlichkeit|vor Ort/i,
+  );
+  assert.match(result.answer, /wie heißt|E-Mail|Telefon|erreichen|Worum|Fragen|helfen|Website|KI|Support|Beratung/i);
+  assert.equal(leads.length, 0);
 });
 
 test('ChatAgentOrchestratorService pauses pending lead on confusion instead of repeating contact prompt', async () => {

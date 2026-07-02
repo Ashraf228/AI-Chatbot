@@ -1376,6 +1376,7 @@ export class ChatAgentOrchestratorService {
       ['lead-sales', 'lead_sales'].includes(module.key),
     );
     const leadConfig = asObject(leadSales?.config);
+    const rawIntakeFlow = asObject(leadConfig.intakeFlow);
     const itSupport = modules.find((module) =>
       ['it-support', 'it_support'].includes(module.key),
     );
@@ -1386,7 +1387,7 @@ export class ChatAgentOrchestratorService {
       primaryGoal: asString(leadConfig.primaryGoal),
       ctaLabel: asString(leadConfig.ctaLabel),
       ctaDescription: asString(leadConfig.ctaDescription),
-      intakeFlow: leadConfig.intakeFlow
+      intakeFlow: isExplicitLocalServiceIntakeFlow(rawIntakeFlow)
         ? normalizeLocalServiceIntakeFlowConfig(leadConfig.intakeFlow)
         : undefined,
       itSupportEnabled: Boolean(itSupport?.isEnabled),
@@ -1428,7 +1429,8 @@ export class ChatAgentOrchestratorService {
 
     const industry = asString(config.industry) || asString(config.industryTemplate);
     const hasConversationFlow = Object.keys(conversationFlow).length > 0;
-    const isLocalService = isLocalServiceIndustry(industry) || hasLocalServiceSiteSignal(siteSignalText);
+    const isLocalService = isExplicitLocalServiceSiteConfig(config);
+    const hasLocalServiceConversationFlow = isExplicitLocalServiceIntakeFlow(conversationFlow);
 
     return {
       siteName,
@@ -1440,7 +1442,7 @@ export class ChatAgentOrchestratorService {
         asString(config.notificationEmail) ||
         asString(config.contactEmail),
       ctaText: asString(config.ctaText) || asString(conversationFlow.ctaText),
-      intakeFlow: hasConversationFlow
+      intakeFlow: hasConversationFlow && hasLocalServiceConversationFlow
         ? normalizeLocalServiceIntakeFlowConfig(conversationFlow)
         : isLocalService
           ? DEFAULT_LOCAL_SERVICE_INTAKE_FLOW
@@ -1996,6 +1998,12 @@ function asString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function asStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+    : [];
+}
+
 function extractLimitExceeded(error: unknown): { message: string } | null {
   if (!error || typeof error !== 'object') {
     return null;
@@ -2126,10 +2134,7 @@ function isLocalServiceFlow(params: {
   conversationState: ConversationState | null;
   intakeFlow?: LocalServiceIntakeFlowConfig;
 }) {
-  const configuredLocalContext = Boolean(
-    params.intakeFlow ||
-      hasLocalServiceSiteSignal(params.siteName || '', params.intakeFlow),
-  );
+  const configuredLocalContext = Boolean(params.intakeFlow);
   return Boolean(
     configuredLocalContext ||
       (configuredLocalContext &&
@@ -2139,8 +2144,7 @@ function isLocalServiceFlow(params: {
           params.contact.urgency ||
           params.conversationState?.collectedFields?.location ||
           params.conversationState?.collectedFields?.urgency)) ||
-      hasLocalServiceSignal(params.text, params.intakeFlow) ||
-      hasLocalServiceSiteSignal(params.siteName || '', params.intakeFlow),
+      (configuredLocalContext && hasLocalServiceSignal(params.text, params.intakeFlow)),
   );
 }
 
@@ -2204,6 +2208,53 @@ function shouldRestartCompletedLocalServiceIntake(params: {
 
 function isLocalServiceIndustry(value: string) {
   return ['local-service-first-contact', 'local-services', 'local_service', 'local-service', 'local_services'].includes(value);
+}
+
+function isLocalServiceKey(value: unknown) {
+  return isLocalServiceIndustry(asString(value).toLowerCase().replace(/_/g, '-'));
+}
+
+function isExplicitLocalServiceSiteConfig(config: Record<string, unknown>) {
+  const assistantProfile = asObject(config.assistantProfile);
+  return Boolean(
+    asString(config.botType).toLowerCase() === 'handwerker-first-contact' ||
+      isLocalServiceKey(config.industry) ||
+      isLocalServiceKey(config.industryTemplate) ||
+      isLocalServiceKey(config.templateId) ||
+      isLocalServiceKey(config.profileKey) ||
+      isLocalServiceKey(assistantProfile.profileKey)
+  );
+}
+
+function isExplicitLocalServiceIntakeFlow(flow: Record<string, unknown>) {
+  if (Object.keys(flow).length === 0) {
+    return false;
+  }
+
+  if (
+    isLocalServiceKey(flow.templateKey) ||
+    isLocalServiceKey(flow.templateId) ||
+    isLocalServiceKey(flow.profileKey)
+  ) {
+    return true;
+  }
+
+  const questionTexts = asObject(flow.questionTexts);
+  const requiredFields = asStringArray(flow.requiredFields);
+  const questionOrder = asStringArray(flow.questionOrder);
+  const hasAddressQuestion = Boolean(asString(questionTexts.fullAddress) || asString(questionTexts.location));
+  const hasLocalField =
+    requiredFields.includes('fullAddress') ||
+    requiredFields.includes('location') ||
+    requiredFields.includes('urgency') ||
+    requiredFields.includes('problem');
+  const hasLocalOrder =
+    questionOrder.includes('fullAddress') ||
+    questionOrder.includes('location') ||
+    questionOrder.includes('urgency') ||
+    questionOrder.includes('problem');
+
+  return Boolean(hasAddressQuestion && hasLocalField && hasLocalOrder);
 }
 
 function hasLocalServiceSiteSignal(value: string, intakeFlow?: LocalServiceIntakeFlowConfig) {

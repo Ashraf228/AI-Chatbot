@@ -546,6 +546,7 @@ export class ChatPipelineService {
     const conversationGuide = this.responseComposer.buildConversationGuide(
       history,
       input.conversationFlow,
+      input.siteConfig,
     );
 
     logEvent('chat_route_resolved', {
