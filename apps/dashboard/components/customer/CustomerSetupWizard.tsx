@@ -400,7 +400,23 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   }
 
   function isLegacyAssistantMode(botType = goalForm.botType) {
-    return Boolean(profileForm.industry) || botType !== DEFAULT_BOT_TYPE;
+    const normalizedIndustry = profileForm.industry.trim();
+    const normalizedBotType = botType.trim();
+    const templateId = site?.templateId?.trim() || "";
+    const assistantProfileKey =
+      typeof site?.assistantProfile?.profileKey === "string" ? site.assistantProfile.profileKey.trim() : "";
+    const isNeutralIndustry = !normalizedIndustry || normalizedIndustry === "generic";
+    const isUniversalBotType = !normalizedBotType || normalizedBotType === DEFAULT_BOT_TYPE;
+
+    if (assistantProfileKey === "local-service-first-contact" || templateId === "local-service-first-contact") {
+      return true;
+    }
+
+    if (normalizedIndustry && !isNeutralIndustry) {
+      return true;
+    }
+
+    return !isUniversalBotType;
   }
 
   async function saveGoal() {
