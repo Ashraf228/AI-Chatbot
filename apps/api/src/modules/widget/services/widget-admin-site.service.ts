@@ -64,6 +64,7 @@ type SiteRow = {
   public_key: string;
   allowed_domains: string[] | null;
   config: unknown;
+  assistant_profile_module_config: unknown;
   created_at: string;
 };
 
@@ -73,6 +74,49 @@ function parseSiteConfig(value: unknown): SiteConfig {
   }
 
   return value as SiteConfig;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function sanitizeAssistantProfileForAdminRead(value: unknown) {
+  const profile = asRecord(value);
+  if (!profile) {
+    return null;
+  }
+
+  const deliveryChannels = asRecord(profile.deliveryChannels);
+  if (!deliveryChannels) {
+    return profile;
+  }
+
+  const sanitizedDeliveryChannels = Object.fromEntries(
+    Object.entries(deliveryChannels).map(([type, rawChannel]) => {
+      const channel = asRecord(rawChannel);
+      if (!channel) {
+        return [type, rawChannel];
+      }
+
+      const safeChannel = { ...channel };
+      delete safeChannel.recipientEmail;
+      delete safeChannel.secret;
+      delete safeChannel.signingSecret;
+      delete safeChannel.token;
+      delete safeChannel.apiKey;
+      return [type, safeChannel];
+    }),
+  );
+
+  return {
+    ...profile,
+    deliveryChannels: sanitizedDeliveryChannels,
+  };
+}
+
+function readAssistantProfileFromModule(value: unknown) {
+  const config = parseSiteConfig(value);
+  return sanitizeAssistantProfileForAdminRead(config.assistantProfile);
 }
 
 @Injectable()
@@ -110,8 +154,12 @@ export class WidgetAdminSiteService {
          s.public_key,
          s.allowed_domains,
          s.config,
+         sm.config AS assistant_profile_module_config,
          s.created_at
        FROM sites s
+       LEFT JOIN site_modules sm
+         ON sm.site_id = s.id
+        AND sm.module_key = 'assistant-profile'
        WHERE s.id = $1
        LIMIT 1`,
       [siteId],
@@ -123,6 +171,7 @@ export class WidgetAdminSiteService {
     }
 
     const config = parseSiteConfig(row.config);
+    const moduleAssistantProfile = readAssistantProfileFromModule(row.assistant_profile_module_config);
     return {
       id: row.id,
       tenantId: row.tenant_id,
@@ -155,7 +204,7 @@ export class WidgetAdminSiteService {
       tone: config.tone || '',
       knowledgeMode: config.knowledgeMode || 'flexible',
       fallbackBehavior: config.fallbackBehavior || 'ask_followup',
-      assistantProfile: config.assistantProfile || null,
+      assistantProfile: moduleAssistantProfile || sanitizeAssistantProfileForAdminRead(config.assistantProfile),
       enabledTasks: Array.isArray(config.enabledTasks) ? config.enabledTasks : [],
       conversationEngine: config.conversationEngine || null,
       ctaText: config.ctaText || '',
