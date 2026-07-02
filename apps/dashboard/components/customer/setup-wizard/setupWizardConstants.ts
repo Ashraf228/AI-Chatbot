@@ -30,8 +30,8 @@ export const ENABLED_TASK_OPTIONS = [
 ] as const;
 
 export const WIZARD_STEPS: WizardStep[] = [
-  { key: "customer", label: "Kundendaten", description: "Firma, Website, erlaubte Website und Sprache" },
-  { key: "bot", label: "KI-Mitarbeiter", description: "Ziel, Rolle und Antwortverhalten festlegen" },
+  { key: "customer", label: "Kundendaten", description: "Kundenname, Hauptdomain und Standardsprache" },
+  { key: "bot", label: "KI-Mitarbeiter", description: "Rolle, Hauptaufgabe und Kommunikationsstil festlegen" },
   { key: "delivery", label: "Anfrage-Zustellung", description: "Anfrage-Erfassung und Empfänger-E-Mail" },
   { key: "flow", label: "Gesprächslogik", description: "Antworten, Rückfragen, Übergabe und Pflichtinformationen" },
   { key: "knowledge", label: "Wissen", description: "PDF, Website, FAQ oder eigene Texte" },
@@ -83,7 +83,7 @@ export const STATUS_STEP_GROUPS: Record<WizardStepKey, string[]> = {
 };
 
 export const STEP_EXPLANATIONS: Record<WizardStepKey, string> = {
-  customer: "Diese Angaben reichen, um den Kunden eindeutig anzulegen und die Website freizugeben.",
+  customer: "Diese Angaben reichen, um den Kunden eindeutig anzulegen und die erlaubten Websites freizugeben.",
   bot: "Der Standard ist ein universeller KI-Mitarbeiter. Legacy-Branchenprofile bleiben nur für Alt-Konfigurationen verfügbar.",
   delivery: "Anfragen werden zuerst gespeichert und danach per E-Mail an das Unternehmen zugestellt.",
   flow: "Die Gesprächslogik bleibt universell: verstehen, mit Wissen antworten, Rückfragen stellen und Übergaben vorbereiten.",

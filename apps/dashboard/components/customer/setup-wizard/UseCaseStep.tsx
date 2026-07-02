@@ -48,16 +48,17 @@ export function UseCaseStep({
   return (
     <section className="dashboard-card dashboard-stack" id="setup-step-industry">
       <SetupStepHeader
-        title="KI-Mitarbeiter & Aufgaben"
-        description="Lege Ziel, Rolle und Antwortverhalten des KI-Mitarbeiters fest. Legacy-Branchenprofile bleiben im erweiterten Bereich."
+        title="KI-Mitarbeiter-Rolle & Hauptaufgaben"
+        description="Lege Aufgabe, Kommunikationsstil und Antwortverhalten des KI-Mitarbeiters fest. Legacy-Branchenprofile bleiben im erweiterten Bereich."
         explanation={explanation}
         status={status}
         statusLabel={statusLabel}
       />
       <div className="dashboard-grid dashboard-grid--two">
         <label className="dashboard-field">
-          <span className="dashboard-field-label">Ziel des Chatfensters</span>
+          <span className="dashboard-field-label">Aufgabe des KI-Mitarbeiters</span>
           <Select
+            aria-label="Aufgabe des KI-Mitarbeiters"
             value={goalValue.primaryGoal}
             onChange={(event) => onGoalChange({ ...goalValue, primaryGoal: event.target.value as SiteDetails["primaryGoal"] })}
           >
@@ -67,16 +68,22 @@ export function UseCaseStep({
               </option>
             ))}
           </Select>
+          <span className="dashboard-field-hint">Lege fest, was der KI-Mitarbeiter hauptsächlich übernehmen soll.</span>
         </label>
         <label className="dashboard-field">
-          <span className="dashboard-field-label">Tonalität</span>
-          <Select value={goalValue.tone} onChange={(event) => onGoalChange({ ...goalValue, tone: event.target.value as SiteDetails["tone"] })}>
+          <span className="dashboard-field-label">Kommunikationsstil</span>
+          <Select
+            aria-label="Kommunikationsstil"
+            value={goalValue.tone}
+            onChange={(event) => onGoalChange({ ...goalValue, tone: event.target.value as SiteDetails["tone"] })}
+          >
             {TONE_OPTIONS.map((option) => (
               <option key={option.value || "empty"} value={option.value}>
                 {option.label}
               </option>
             ))}
           </Select>
+          <span className="dashboard-field-hint">Bestimmt, wie der KI-Mitarbeiter formuliert.</span>
         </label>
       </div>
       <div className="setup-template-panel">
