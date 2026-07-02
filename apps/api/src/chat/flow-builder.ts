@@ -1,11 +1,13 @@
 type ConversationFlowQuestions = {
   opening?: string;
+  context?: string;
   industry?: string;
   urgency?: string;
 };
 
 type ConversationFlowInstructions = {
   clarify?: string;
+  qualifiedMissingContext?: string;
   qualifiedMissingIndustry?: string;
   qualifiedMissingUrgency?: string;
   qualifiedReady?: string;
@@ -15,6 +17,7 @@ type ConversationFlowInstructions = {
 type ConversationFlowTriggers = {
   contactIntent?: string[];
   qualifiedNeed?: string[];
+  context?: string[];
   industry?: string[];
   urgency?: string[];
 };
@@ -22,6 +25,7 @@ type ConversationFlowTriggers = {
 export const CONVERSATION_FLOW_SIGNALS = [
   'contactIntent',
   'qualifiedNeed',
+  'context',
   'industry',
   'urgency',
   'affirmedContactCta',
@@ -49,17 +53,20 @@ export type ConversationFlowConfig = {
 
 const DEFAULT_FLOW: Required<Omit<ConversationFlowConfig, 'states'>> = {
   questions: {
-    opening: 'Geht es bei dir eher um Support, Prozesse, Marketing oder etwas anderes?',
-    industry: 'Für welches Unternehmen oder welche Branche ist das gerade gedacht?',
-    urgency: 'Wie dringend oder wie groß ist das Thema aktuell bei euch?',
+    opening: 'Worum geht es genau, und was möchtest du erreichen?',
+    context: 'Für welchen Kontext oder welches Ziel soll ich das einordnen?',
+    industry: 'Für welchen Kontext oder welches Ziel soll ich das einordnen?',
+    urgency: 'Welche Priorität oder welchen zeitlichen Rahmen hat das Thema?',
   },
   instructions: {
     clarify:
       'Der Einstieg ist noch allgemein. Gib eine kurze Einordnung und stelle genau eine gezielte Qualifizierungsfrage.',
+    qualifiedMissingContext:
+      'Der Bedarf ist klar. Gib eine kurze Einordnung und stelle genau eine Rueckfrage zum Kontext oder Ziel. Fuehre danach Richtung Kontakt.',
     qualifiedMissingIndustry:
-      'Der Bedarf ist klar. Gib eine kurze Einordnung und stelle genau eine Rueckfrage zur Branche oder zum Unternehmenskontext. Fuehre danach Richtung Kontakt.',
+      'Der Bedarf ist klar. Gib eine kurze Einordnung und stelle genau eine Rueckfrage zum Kontext oder Ziel. Fuehre danach Richtung Kontakt.',
     qualifiedMissingUrgency:
-      'Der Bedarf ist klar. Gib eine kurze Einordnung und stelle genau eine Rueckfrage zu Dringlichkeit, Umfang oder Prioritaet. Fuehre danach Richtung Kontakt.',
+      'Der Bedarf ist klar. Gib eine kurze Einordnung und stelle genau eine Rueckfrage zu Prioritaet, Umfang oder Zeitrahmen. Fuehre danach Richtung Kontakt.',
     qualifiedReady:
       'Der Bedarf ist klar. Gib eine kurze, konkrete Einordnung und fuehre direkt in Richtung Kontakt oder Termin. Stelle keine weitere Qualifizierungsrunde mehr.',
     contactReady:
@@ -93,6 +100,19 @@ const DEFAULT_FLOW: Required<Omit<ConversationFlowConfig, 'states'>> = {
       'seo',
       'google ads',
       'kosten',
+    ],
+    context: [
+      'unternehmen',
+      'firma',
+      'team',
+      'website',
+      'shop',
+      'produkt',
+      'support',
+      'vertrieb',
+      'beratung',
+      'prozess',
+      'prozesse',
     ],
     industry: [
       'unternehmen',
@@ -182,29 +202,38 @@ function createDefaultStates(
       forbids: [],
     },
     {
-      id: 'qualified-missing-industry',
-      label: 'Bedarf klar, Branche fehlt',
-      instruction: instructions.qualifiedMissingIndustry,
-      preferredQuestion: questions.industry,
+      id: 'qualified-missing-context',
+      label: 'Bedarf klar, Kontext fehlt',
+      instruction: instructions.qualifiedMissingContext,
+      preferredQuestion: questions.context,
       requires: ['qualifiedNeed'],
       requiresAny: [],
-      forbids: ['industry'],
+      forbids: ['context', 'industry'],
+    },
+    {
+      id: 'qualified-missing-industry',
+      label: 'Bedarf klar, Kontext fehlt',
+      instruction: instructions.qualifiedMissingIndustry,
+      preferredQuestion: questions.context || questions.industry,
+      requires: ['qualifiedNeed'],
+      requiresAny: [],
+      forbids: ['context', 'industry'],
     },
     {
       id: 'qualified-missing-urgency',
       label: 'Bedarf klar, Dringlichkeit fehlt',
       instruction: instructions.qualifiedMissingUrgency,
       preferredQuestion: questions.urgency,
-      requires: ['qualifiedNeed', 'industry'],
-      requiresAny: [],
+      requires: ['qualifiedNeed'],
+      requiresAny: ['context', 'industry'],
       forbids: ['urgency'],
     },
     {
       id: 'qualified-ready',
       label: 'Genug Infos da',
       instruction: instructions.qualifiedReady,
-      requires: ['qualifiedNeed', 'industry', 'urgency'],
-      requiresAny: [],
+      requires: ['qualifiedNeed', 'urgency'],
+      requiresAny: ['context', 'industry'],
       forbids: [],
     },
     {
@@ -267,11 +296,13 @@ export function parseConversationFlow(value: unknown): ConversationFlowConfig | 
   return {
     questions: {
       opening: normalizeString(questions.opening),
+      context: normalizeString(questions.context),
       industry: normalizeString(questions.industry),
       urgency: normalizeString(questions.urgency),
     },
     instructions: {
       clarify: normalizeString(instructions.clarify),
+      qualifiedMissingContext: normalizeString(instructions.qualifiedMissingContext),
       qualifiedMissingIndustry: normalizeString(instructions.qualifiedMissingIndustry),
       qualifiedMissingUrgency: normalizeString(instructions.qualifiedMissingUrgency),
       qualifiedReady: normalizeString(instructions.qualifiedReady),
@@ -280,6 +311,7 @@ export function parseConversationFlow(value: unknown): ConversationFlowConfig | 
     triggers: {
       contactIntent: normalizeStringArray(triggers.contactIntent),
       qualifiedNeed: normalizeStringArray(triggers.qualifiedNeed),
+      context: normalizeStringArray(triggers.context),
       industry: normalizeStringArray(triggers.industry),
       urgency: normalizeStringArray(triggers.urgency),
     },
@@ -296,11 +328,17 @@ export function parseConversationFlow(value: unknown): ConversationFlowConfig | 
 export function resolveConversationFlow(flow?: ConversationFlowConfig | undefined) {
   const questions: Required<ConversationFlowQuestions> = {
     opening: resolveString(flow?.questions?.opening, DEFAULT_FLOW.questions.opening as string),
+    context: resolveString(flow?.questions?.context, DEFAULT_FLOW.questions.context as string),
     industry: resolveString(flow?.questions?.industry, DEFAULT_FLOW.questions.industry as string),
     urgency: resolveString(flow?.questions?.urgency, DEFAULT_FLOW.questions.urgency as string),
   };
   const instructions: Required<ConversationFlowInstructions> = {
     clarify: resolveString(flow?.instructions?.clarify, DEFAULT_FLOW.instructions.clarify as string),
+    qualifiedMissingContext:
+      resolveString(
+        flow?.instructions?.qualifiedMissingContext,
+        DEFAULT_FLOW.instructions.qualifiedMissingContext as string,
+      ),
     qualifiedMissingIndustry:
       resolveString(
         flow?.instructions?.qualifiedMissingIndustry,
@@ -322,6 +360,7 @@ export function resolveConversationFlow(flow?: ConversationFlowConfig | undefine
   };
   const contactIntent = flow?.triggers?.contactIntent ?? DEFAULT_FLOW.triggers.contactIntent ?? [];
   const qualifiedNeed = flow?.triggers?.qualifiedNeed ?? DEFAULT_FLOW.triggers.qualifiedNeed ?? [];
+  const context = flow?.triggers?.context ?? DEFAULT_FLOW.triggers.context ?? [];
   const industry = flow?.triggers?.industry ?? DEFAULT_FLOW.triggers.industry ?? [];
   const urgency = flow?.triggers?.urgency ?? DEFAULT_FLOW.triggers.urgency ?? [];
 
@@ -345,6 +384,7 @@ export function resolveConversationFlow(flow?: ConversationFlowConfig | undefine
     triggerPatterns: {
       contactIntent: toRegExp(contactIntent),
       qualifiedNeed: toRegExp(qualifiedNeed),
+      context: toRegExp(context),
       industry: toRegExp(industry),
       urgency: toRegExp(urgency),
     },

@@ -58,6 +58,54 @@ function matchesKeyword(text: string, keywords: string[] = []) {
   });
 }
 
+function asObject(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function asStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
+    : [];
+}
+
+function isLocalServiceKey(value: unknown) {
+  return ['local-service-first-contact', 'local-services', 'local-service'].includes(
+    asString(value).toLowerCase().replace(/_/g, '-'),
+  );
+}
+
+function isExplicitLocalServiceIntakeFlow(value: unknown) {
+  const flow = asObject(value);
+  if (Object.keys(flow).length === 0) {
+    return false;
+  }
+
+  if (isLocalServiceKey(flow.templateKey) || isLocalServiceKey(flow.templateId) || isLocalServiceKey(flow.profileKey)) {
+    return true;
+  }
+
+  const questionTexts = asObject(flow.questionTexts);
+  const requiredFields = asStringArray(flow.requiredFields);
+  const questionOrder = asStringArray(flow.questionOrder);
+  const hasAddressQuestion = Boolean(asString(questionTexts.fullAddress) || asString(questionTexts.location));
+  const hasLocalField =
+    requiredFields.includes('fullAddress') ||
+    requiredFields.includes('location') ||
+    requiredFields.includes('urgency') ||
+    requiredFields.includes('problem');
+  const hasLocalOrder =
+    questionOrder.includes('fullAddress') ||
+    questionOrder.includes('location') ||
+    questionOrder.includes('urgency') ||
+    questionOrder.includes('problem');
+
+  return Boolean(hasAddressQuestion && hasLocalField && hasLocalOrder);
+}
+
 function getLocalServiceKeywords(intakeFlow?: LocalServiceIntakeFlowConfig) {
   if (!intakeFlow) {
     return [];
@@ -88,7 +136,11 @@ function isLocalServicePricingQuestion(text: string, intakeFlow?: LocalServiceIn
 export function resolveChatRoute(context: ChatRouteContext): ChatRouteDecision {
   const normalizedMessage = compact(context.message || '');
   const assistantText = compact(latestAssistantMessage(context.history));
-  const leadSalesConfig = normalizeLeadSalesModuleConfig(context.moduleConfigs?.['lead-sales']);
+  const rawLeadSalesConfig = asObject(context.moduleConfigs?.['lead-sales']);
+  const leadSalesConfig = normalizeLeadSalesModuleConfig(rawLeadSalesConfig);
+  const localServiceIntakeFlow = isExplicitLocalServiceIntakeFlow(rawLeadSalesConfig.intakeFlow)
+    ? leadSalesConfig.intakeFlow
+    : undefined;
   const ecommerceConfig = normalizeEcommerceProductAdvisorModuleConfig(
     context.moduleConfigs?.['ecommerce-product-advisor'],
   );
@@ -173,9 +225,9 @@ export function resolveChatRoute(context: ChatRouteContext): ChatRouteDecision {
 
   if (
     hasModule(context.enabledModuleKeys, 'lead-sales') &&
-    !isLocalServicePricingQuestion(normalizedMessage, leadSalesConfig.intakeFlow) &&
+    !isLocalServicePricingQuestion(normalizedMessage, localServiceIntakeFlow) &&
     (SALES_PATTERN.test(normalizedMessage) ||
-      matchesKeyword(normalizedMessage, getLocalServiceKeywords(leadSalesConfig.intakeFlow)) ||
+      matchesKeyword(normalizedMessage, getLocalServiceKeywords(localServiceIntakeFlow)) ||
       (AFFIRMATION_PATTERN.test(normalizedMessage) && CONTACT_CTA_PATTERN.test(assistantText)))
   ) {
     return {

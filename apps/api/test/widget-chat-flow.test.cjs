@@ -5,6 +5,9 @@ const { WidgetChatService } = require('../dist/modules/widget/services/widget-ch
 const {
   AssistantProfileResolverService,
 } = require('../dist/assistant-profiles/assistant-profile-resolver.service.js');
+const {
+  ResponseComposerService,
+} = require('../dist/ai/chat-pipeline/response-composer.service.js');
 
 function createDb(messages = []) {
   return {
@@ -345,4 +348,50 @@ test('widget chat keeps legacy behavior when AssistantProfile resolution fails',
   } finally {
     console.log = originalLog;
   }
+});
+
+test('universal conversation guide does not turn generic required fields into local-service language', () => {
+  const composer = new ResponseComposerService();
+  const guide = composer.buildConversationGuide(
+    [{ role: 'user', content: 'Hallo, ich brauche Hilfe.' }],
+    {
+      requiredFields: ['name', 'email', 'phone', 'request'],
+      questionOrder: ['request', 'name', 'email', 'phone'],
+      questionTexts: {
+        request: 'Worum geht es?',
+        phone: 'Telefon?',
+      },
+    },
+    {
+      botType: 'universal-assistant',
+      assistantProfile: { profileKey: 'universal-assistant' },
+    },
+  );
+
+  assert.doesNotMatch(
+    guide,
+    /Branche|Handwerker|lokaler Dienstleister|Einsatzadresse|vollständige Adresse|Dringlichkeit|vor Ort/i,
+  );
+  assert.match(guide, /Kontext|Ziel|Worum geht es/i);
+});
+
+test('explicit local-service conversation guide remains available for legacy sites', () => {
+  const composer = new ResponseComposerService();
+  const guide = composer.buildConversationGuide(
+    [{ role: 'user', content: 'Mein Klo ist verstopft.' }],
+    {
+      templateKey: 'local-service-first-contact',
+      requiredFields: ['problem', 'urgency', 'fullAddress', 'phone'],
+      questionOrder: ['problem', 'urgency', 'fullAddress', 'phone'],
+      questionTexts: {
+        fullAddress: 'Bitte nennen Sie die vollständige Einsatzadresse.',
+      },
+    },
+    {
+      botType: 'handwerker-first-contact',
+    },
+  );
+
+  assert.match(guide, /local_service_intake/);
+  assert.match(guide, /Einsatzadresse|Dringlichkeit/i);
 });

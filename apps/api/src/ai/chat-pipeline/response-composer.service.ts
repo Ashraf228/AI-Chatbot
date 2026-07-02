@@ -22,8 +22,12 @@ ${routeDecision.guide}
     `.trim();
   }
 
-  buildConversationGuide(history: ChatPipelineHistoryEntry[], conversationFlow: unknown) {
-    const localServiceGuide = buildLocalServiceConversationGuide(history, conversationFlow);
+  buildConversationGuide(
+    history: ChatPipelineHistoryEntry[],
+    conversationFlow: unknown,
+    siteConfig?: Record<string, unknown> | null,
+  ) {
+    const localServiceGuide = buildLocalServiceConversationGuide(history, conversationFlow, siteConfig);
     if (localServiceGuide) {
       return localServiceGuide;
     }
@@ -129,12 +133,17 @@ Varianten: ${product.variantSummary || 'nicht angegeben'}${variants ? `\nBekannt
 function buildLocalServiceConversationGuide(
   history: ChatPipelineHistoryEntry[],
   conversationFlow: unknown,
+  siteConfig?: Record<string, unknown> | null,
 ) {
   if (!conversationFlow || typeof conversationFlow !== 'object' || Array.isArray(conversationFlow)) {
     return undefined;
   }
 
   const flow = conversationFlow as Record<string, unknown>;
+  if (!isExplicitLocalServiceLegacyConfig(siteConfig, flow)) {
+    return undefined;
+  }
+
   const questionTexts = flow.questionTexts && typeof flow.questionTexts === 'object' && !Array.isArray(flow.questionTexts)
     ? flow.questionTexts as Record<string, unknown>
     : {};
@@ -176,6 +185,58 @@ function asStringArray(value: unknown) {
 
 function asString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function asObject(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function normalizeKey(value: unknown) {
+  return asString(value)?.toLowerCase().replace(/_/g, '-') || '';
+}
+
+function isLocalServiceKey(value: unknown) {
+  return ['local-service-first-contact', 'local-services', 'local-service'].includes(normalizeKey(value));
+}
+
+function isExplicitLocalServiceIntakeShape(flow: Record<string, unknown>) {
+  const questionTexts = asObject(flow.questionTexts);
+  const requiredFields = asStringArray(flow.requiredFields);
+  const questionOrder = asStringArray(flow.questionOrder);
+  const hasAddressQuestion = Boolean(asString(questionTexts.fullAddress) || asString(questionTexts.location));
+  const hasLocalRequiredFields =
+    requiredFields.includes('fullAddress') ||
+    requiredFields.includes('location') ||
+    requiredFields.includes('urgency') ||
+    requiredFields.includes('problem');
+  const hasLocalOrder =
+    questionOrder.includes('fullAddress') ||
+    questionOrder.includes('location') ||
+    questionOrder.includes('urgency') ||
+    questionOrder.includes('problem');
+
+  return Boolean(hasAddressQuestion && hasLocalRequiredFields && hasLocalOrder);
+}
+
+function isExplicitLocalServiceLegacyConfig(
+  siteConfig: Record<string, unknown> | null | undefined,
+  flow: Record<string, unknown>,
+) {
+  const config = asObject(siteConfig);
+  const assistantProfile = asObject(config.assistantProfile);
+
+  return Boolean(
+    isLocalServiceKey(assistantProfile.profileKey) ||
+      isLocalServiceKey(config.profileKey) ||
+      normalizeKey(config.botType) === 'handwerker-first-contact' ||
+      isLocalServiceKey(config.industry) ||
+      isLocalServiceKey(config.industryTemplate) ||
+      isLocalServiceKey(config.templateId) ||
+      isLocalServiceKey(flow.profileKey) ||
+      isLocalServiceKey(flow.templateKey) ||
+      isLocalServiceKey(flow.templateId) ||
+      isExplicitLocalServiceIntakeShape(flow)
+  );
 }
 
 function compactText(value: string) {

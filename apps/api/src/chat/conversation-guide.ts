@@ -27,6 +27,7 @@ function detectState(history: PromptMessage[], flow?: ConversationFlowConfig) {
   const signals = {
     contactIntent: resolvedFlow.triggerPatterns.contactIntent.test(wholeUserText),
     qualifiedNeed: resolvedFlow.triggerPatterns.qualifiedNeed.test(wholeUserText),
+    context: resolvedFlow.triggerPatterns.context.test(wholeUserText),
     industry: resolvedFlow.triggerPatterns.industry.test(wholeUserText),
     urgency: resolvedFlow.triggerPatterns.urgency.test(wholeUserText),
     affirmedContactCta:
