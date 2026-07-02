@@ -138,8 +138,8 @@ Moegliche Werte:
 - Redis laeuft mit Passwortschutz und ist nicht mehr ueber einen Host-Port erreichbar.
 - Das Dashboard verwendet fuer Login-Rate-Limits Redis statt eines rein lokalen In-Memory-Counters.
 - Der Widget-Host liefert `loader.js` und `widget.js` gemeinsam aus und proxyt `/widget/*` intern zur API. Dadurch reicht spaeter ein einziges Script-Snippet fuer Kunden.
-- Das Backend fuehrt Datenbankmigrationen beim API-Start automatisch aus. Dazu gehoert auch `015_conversation_metadata.sql`, die fuer den Pending-Lead-State in `conversations.metadata` benoetigt wird.
-- Bei Bedarf koennen Migrationen vor dem Start manuell mit `docker compose run --rm api node dist/db/run-migrations.js` ausgefuehrt werden.
+- Das Backend fuehrt Datenbankmigrationen in Production beim API-Start standardmaessig nicht automatisch aus. Migrationen werden vor dem Start bewusst mit `docker compose run --rm api node dist/db/run-migrations.js` ausgefuehrt.
+- Auto-Migration beim API-Start ist in Production nur moeglich, wenn `RUN_MIGRATIONS_ON_STARTUP=true` und `ALLOW_PRODUCTION_AUTO_MIGRATIONS=true` gesetzt sind. Diese Ausnahme ist nicht der normale Deploy-Pfad.
 - Fuer produktive Umgebungen sollte vor dem Go-Live ein echter End-to-End-Compose-Test durchgefuehrt werden.
 - Wenn `TLS_ENABLED=true` gesetzt ist, lauscht der interne Nginx-Proxy auch auf `443` und verwendet die unter `TLS_CERTS_DIR` gemounteten Zertifikate.
 - Fuer Hetzner ist die empfohlene Variante, dein Let's-Encrypt-Verzeichnis read-only nach `TLS_CERTS_DIR` zu mounten und `443` direkt ueber den Proxy zu terminieren.

@@ -4,7 +4,7 @@ import { PrismaService } from './prisma.service';
 async function run() {
   const db = new PrismaService();
   const migrations = new DatabaseMigrationsService(db);
-  await migrations.onModuleInit();
+  await migrations.runPendingMigrations();
 }
 
 run().catch((error) => {

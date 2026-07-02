@@ -1,6 +1,6 @@
 # Migrations
 
-Die API fuehrt SQL-Migrationen ueber `DatabaseMigrationsService` beim Start automatisch aus. Migrationen liegen in `apps/api/migrations` und werden in der Dateireihenfolge angewendet.
+SQL-Migrationen liegen in `apps/api/migrations` und werden in der Dateireihenfolge angewendet. In Production fuehrt der API-Start Migrationen standardmaessig nicht automatisch aus. Production-Migrationen sollen bewusst ueber den expliziten Migrationsbefehl gestartet werden.
 
 ## Lokal
 
@@ -21,7 +21,7 @@ Empfohlene Reihenfolge:
 1. Backup erstellen.
 2. Neuen Code pullen.
 3. `.env` pruefen.
-4. Migration optional vorab ausfuehren:
+4. Migration nach Backup/Freigabe explizit ausfuehren:
 
 ```bash
 docker compose run --rm api node dist/db/run-migrations.js
@@ -32,6 +32,22 @@ docker compose run --rm api node dist/db/run-migrations.js
 ```bash
 docker compose up --build -d
 ```
+
+## Auto-Migration Beim API-Start
+
+Production ist fail-safe:
+
+- `RUN_MIGRATIONS_ON_STARTUP=false`
+- `ALLOW_PRODUCTION_AUTO_MIGRATIONS=false`
+
+Wenn `NODE_ENV=production` gesetzt ist, laeuft Auto-Migration beim API-Start nur, wenn beide Flags explizit `true` sind:
+
+- `RUN_MIGRATIONS_ON_STARTUP=true`
+- `ALLOW_PRODUCTION_AUTO_MIGRATIONS=true`
+
+Diese Kombination ist nur fuer bewusst freigegebene Ausnahmefaelle gedacht. Der normale Production-Pfad bleibt der explizite Migrationsbefehl nach Backup, Dry-Run und Freigabe.
+
+In Development/Staging bleibt das bisherige Verhalten kompatibel: Auto-Migration darf laufen, solange `RUN_MIGRATIONS_ON_STARTUP` nicht auf `false` gesetzt ist.
 
 ## Idempotenz
 
