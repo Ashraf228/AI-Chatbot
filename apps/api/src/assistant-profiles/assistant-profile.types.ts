@@ -38,6 +38,9 @@ export type AssistantDeliveryChannels = {
   webhook?: {
     enabled: boolean;
   };
+  system?: {
+    enabled: boolean;
+  };
 };
 
 export type ConversationEngineConfig = {
@@ -71,8 +74,8 @@ export type AssistantProfile = {
   businessDescription: string;
   targetUsers: string[];
   tone: 'formal' | 'friendly' | 'professional' | 'consultative';
-  answerStyle: 'short' | 'structured' | 'guided' | 'knowledge_first';
-  knowledgeMode: 'strict' | 'flexible' | 'disabled';
+  answerStyle: 'concise' | 'short' | 'structured' | 'guided' | 'knowledge_first';
+  knowledgeMode: 'strict' | 'grounded' | 'flexible' | 'disabled';
   enabledTasks: string[];
   enabledAgents: string[];
   requiredFields: AssistantRequiredField[];

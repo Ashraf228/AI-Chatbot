@@ -4664,6 +4664,26 @@
       "exception": null
     },
     {
+      "id": "API-106A",
+      "layer": "api",
+      "method": "PATCH",
+      "path": "/admin/sites/:siteId/assistant-profile",
+      "source": "apps/api/src/assistant-profiles/assistant-profile-diagnostics.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
       "id": "API-107",
       "layer": "api",
       "method": "GET",

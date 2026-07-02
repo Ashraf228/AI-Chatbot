@@ -236,6 +236,12 @@ test('assistant profile diagnostics controller enforces site access before retur
       },
     },
     {
+      async saveAssistantProfile(siteId) {
+        calls.push({ method: 'saveAssistantProfile', siteId });
+        return { saved: true };
+      },
+    },
+    {
       getAuth(req) {
         calls.push({ method: 'getAuth', req });
         return { role: 'operator', tenantId: 'tenant-1' };
@@ -366,6 +372,12 @@ test('assistant profile diagnostics controller exposes migration preview only af
       },
     },
     {
+      async saveAssistantProfile(siteId) {
+        calls.push({ method: 'saveAssistantProfile', siteId });
+        return { saved: true };
+      },
+    },
+    {
       getAuth(req) {
         calls.push({ method: 'getAuth', req });
         return { role: 'admin', tenantId: 'tenant-1' };
@@ -454,6 +466,12 @@ test('assistant profile diagnostics controller saves profile only after site acc
       },
     },
     {
+      async saveAssistantProfile(siteId, body, tenantId, actorId) {
+        calls.push({ method: 'saveAssistantProfile', siteId, body, tenantId, actorId });
+        return { saved: true };
+      },
+    },
+    {
       getAuth(req) {
         calls.push({ method: 'getAuth', req });
         return { role: 'operator', tenantId: 'tenant-1', actorId: 'actor-1' };
@@ -477,6 +495,73 @@ test('assistant profile diagnostics controller saves profile only after site acc
   assert.deepEqual(calls[2], {
     method: 'savePreviewAsAssistantProfile',
     siteId: 'site-1',
+    tenantId: 'tenant-1',
+    actorId: 'actor-1',
+  });
+});
+
+test('assistant profile diagnostics controller patches profile only after site access', async () => {
+  const calls = [];
+  const controller = new AssistantProfileDiagnosticsController(
+    {
+      async getDiagnostics(siteId) {
+        calls.push({ method: 'getDiagnostics', siteId });
+        return { assistantProfileDebug: { profileKey: 'universal-assistant' } };
+      },
+    },
+    {
+      async getMigrationPreview(siteId) {
+        calls.push({ method: 'getMigrationPreview', siteId });
+        return { proposedAssistantProfile: { profileKey: 'universal-assistant' } };
+      },
+    },
+    {
+      async savePreviewAsAssistantProfile(siteId) {
+        calls.push({ method: 'savePreviewAsAssistantProfile', siteId });
+        return { saved: true };
+      },
+    },
+    {
+      async saveAssistantProfile(siteId, body, tenantId, actorId) {
+        calls.push({ method: 'saveAssistantProfile', siteId, body, tenantId, actorId });
+        return { saved: true };
+      },
+    },
+    {
+      getAuth(req) {
+        calls.push({ method: 'getAuth', req });
+        return { role: 'operator', tenantId: 'tenant-1', actorId: 'actor-1' };
+      },
+      async assertSiteAccess(auth, siteId, options) {
+        calls.push({ method: 'assertSiteAccess', auth, siteId, options });
+        return { id: siteId, tenant_id: 'tenant-1' };
+      },
+    },
+  );
+
+  const body = {
+    assistantProfile: {
+      profileKey: 'universal-assistant',
+      profileVersion: 1,
+      role: 'Support Assistent',
+      enabledTasks: ['answer_questions'],
+      knowledgeMode: 'grounded',
+    },
+    updatedFrom: 'dashboard-wizard',
+  };
+  const result = await controller.updateAssistantProfile('site-1', body, { dashboardAuth: { role: 'operator' } });
+
+  assert.deepEqual(result, { saved: true });
+  assert.deepEqual(calls[1], {
+    method: 'assertSiteAccess',
+    auth: { role: 'operator', tenantId: 'tenant-1', actorId: 'actor-1' },
+    siteId: 'site-1',
+    options: { allowedRoles: ['admin', 'operator'] },
+  });
+  assert.deepEqual(calls[2], {
+    method: 'saveAssistantProfile',
+    siteId: 'site-1',
+    body,
     tenantId: 'tenant-1',
     actorId: 'actor-1',
   });

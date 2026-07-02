@@ -1,9 +1,10 @@
-import { Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AdminScopeService } from '../utils/admin-scope.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { AssistantProfileDiagnosticsService } from './assistant-profile-diagnostics.service';
 import { AssistantProfileMigrationService } from './assistant-profile-migration.service';
 import { AssistantProfileMigrationPreviewService } from './assistant-profile-migration-preview.service';
+import { AssistantProfileSaveService } from './assistant-profile-save.service';
 
 @UseGuards(AdminKeyGuard)
 @Controller('admin/sites/:siteId/assistant-profile')
@@ -12,6 +13,7 @@ export class AssistantProfileDiagnosticsController {
     private readonly diagnostics: AssistantProfileDiagnosticsService,
     private readonly migrationPreview: AssistantProfileMigrationPreviewService,
     private readonly migration: AssistantProfileMigrationService,
+    private readonly saveService: AssistantProfileSaveService,
     private readonly scope: AdminScopeService,
   ) {}
 
@@ -38,5 +40,18 @@ export class AssistantProfileDiagnosticsController {
       allowedRoles: ['admin', 'operator'],
     });
     return this.migration.savePreviewAsAssistantProfile(siteId, site.tenant_id, auth.actorId);
+  }
+
+  @Patch()
+  async updateAssistantProfile(
+    @Param('siteId') siteId: string,
+    @Body() body: { assistantProfile?: unknown; updatedFrom?: unknown },
+    @Req() req: { dashboardAuth?: unknown },
+  ) {
+    const auth = this.scope.getAuth(req);
+    const site = await this.scope.assertSiteAccess(auth, siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+    return this.saveService.saveAssistantProfile(siteId, body, site.tenant_id, auth.actorId);
   }
 }
