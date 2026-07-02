@@ -5,7 +5,7 @@ import { vi } from "vitest";
 import { CustomerSetupWizard } from "../components/customer/CustomerSetupWizard";
 import { LaunchStep } from "../components/customer/setup-wizard/LaunchStep";
 import { SetupReadinessChecklist } from "../components/sites/SetupReadinessChecklist";
-import { getSite, updateSiteSettings } from "../lib/setup-wizard-api";
+import { getSite, updateAssistantProfileConfig, updateSiteSettings } from "../lib/setup-wizard-api";
 
 vi.mock("../lib/setup-wizard-api", () => ({
   createManualKnowledgeSource: vi.fn(),
@@ -59,6 +59,7 @@ vi.mock("../lib/setup-wizard-api", () => ({
   resyncKnowledgeSource: vi.fn(),
   setKnowledgeSourceActive: vi.fn(),
   setSiteGoLive: vi.fn(),
+  updateAssistantProfileConfig: vi.fn(async () => ({})),
   updateSiteBasics: vi.fn(),
   updateSiteBranding: vi.fn(),
   updateSiteSettings: vi.fn(async () => ({})),
@@ -68,6 +69,7 @@ vi.mock("../lib/setup-wizard-api", () => ({
 describe("CustomerSetupWizard", () => {
   beforeEach(() => {
     vi.mocked(getSite).mockClear();
+    vi.mocked(updateAssistantProfileConfig).mockClear();
     vi.mocked(updateSiteSettings).mockClear();
     vi.stubGlobal(
       "fetch",
@@ -214,25 +216,34 @@ describe("CustomerSetupWizard", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Speichern & weiter$/ }));
 
     await waitFor(() =>
-      expect(updateSiteSettings).toHaveBeenCalledWith(
+      expect(updateAssistantProfileConfig).toHaveBeenCalledWith(
         "site-1",
         expect.objectContaining({
-          primaryGoal: "lead_generation",
-          setupGoal: "lead_generation",
-          industry: "",
-          botType: "universal-assistant",
-          tone: "professional",
-          ctaText: "Anfrage aufnehmen",
-          enabledTasks: ["answer_questions", "collect_requests", "prepare_handoff"],
-          conversationEngine: {
-            previewEnabled: false,
-            compareEnabled: false,
-            responsePreviewEnabled: false,
-            knowledgePreviewEnabled: false,
-            adminTestOnly: true,
-          },
+          assistantProfile: expect.objectContaining({
+            profileKey: "universal-assistant",
+            profileVersion: 1,
+            role: "Anfragen aufnehmen und qualifizieren",
+            tone: "professional",
+            answerStyle: "concise",
+            knowledgeMode: "flexible",
+            enabledTasks: ["answer_questions", "collect_requests", "prepare_handoff"],
+          }),
+          updatedFrom: "dashboard-wizard",
         }),
       ),
+    );
+    expect(updateSiteSettings).toHaveBeenCalledWith("site-1", { ctaText: "Anfrage aufnehmen" });
+    expect(updateSiteSettings).not.toHaveBeenCalledWith(
+      "site-1",
+      expect.objectContaining({
+        assistantProfile: expect.anything(),
+      }),
+    );
+    expect(updateSiteSettings).not.toHaveBeenCalledWith(
+      "site-1",
+      expect.objectContaining({
+        enabledTasks: expect.anything(),
+      }),
     );
     expect(screen.queryByText("Aktion konnte nicht ausgeführt werden.")).not.toBeInTheDocument();
   });
@@ -245,6 +256,7 @@ describe("CustomerSetupWizard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Später erledigen" }));
 
     expect(screen.getByText(/Schritt 3 von 7: Anfrage-Zustellung/i)).toBeInTheDocument();
+    expect(updateAssistantProfileConfig).not.toHaveBeenCalled();
     expect(updateSiteSettings).not.toHaveBeenCalled();
     expect(screen.queryByText("Aktion konnte nicht ausgeführt werden.")).not.toBeInTheDocument();
   });
@@ -272,6 +284,51 @@ describe("CustomerSetupWizard", () => {
   });
 
   test("toggles and saves universal conversation logic chips", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1",
+      name: "Musterkunde",
+      siteKey: "musterkunde",
+      allowedDomains: ["kunde.de"],
+      companyName: "Musterkunde",
+      websiteUrl: "https://kunde.de",
+      supportEmail: "",
+      phone: "",
+      language: "de",
+      botName: "Service-Assistent",
+      logoUrl: "",
+      brandColor: "#b55400",
+      accentColor: "#fff0d9",
+      welcomeMessage: "",
+      placeholderText: "Nachricht schreiben...",
+      widgetPosition: "bottom_right",
+      launcherLabel: "Chat",
+      privacyUrl: "",
+      privacyNoticeText: "",
+      fontFamily: "system",
+      systemPrompt: "",
+      industry: "",
+      botType: "universal-assistant",
+      setupGoal: "",
+      primaryGoal: "",
+      tone: "",
+      knowledgeMode: "flexible",
+      fallbackBehavior: "ask_followup",
+      conversationFlow: {},
+      enabledTasks: [],
+      assistantProfile: null,
+      ctaText: "",
+      leadCaptureEnabled: true,
+      leadNotificationEmail: "",
+      consentRequired: true,
+      templateId: "",
+      templateVersion: null,
+      templateAppliedAt: "",
+      lastTestedAt: "",
+      lastTestQuestion: "",
+      lastTestAnswer: "",
+      goLiveAt: "",
+    });
+
     render(<CustomerSetupWizard siteId="site-1" />);
 
     await screen.findByText("Setup-Assistent");
@@ -292,16 +349,53 @@ describe("CustomerSetupWizard", () => {
     await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
 
     await waitFor(() =>
+      expect(updateAssistantProfileConfig).toHaveBeenCalledWith(
+        "site-1",
+        expect.objectContaining({
+          assistantProfile: expect.objectContaining({
+            requiredFields: [
+              { key: "name", label: "Name", required: true },
+              { key: "request", label: "Anliegen", required: true },
+            ],
+            enabledTasks: ["answer_questions", "collect_requests", "prepare_handoff", "support"],
+          }),
+          updatedFrom: "dashboard-wizard",
+        }),
+      ),
+    );
+    expect(updateSiteSettings).not.toHaveBeenCalledWith(
+      "site-1",
+      expect.objectContaining({
+        conversationFlow: expect.anything(),
+      }),
+    );
+    expect(updateSiteSettings).not.toHaveBeenCalledWith(
+      "site-1",
+      expect.objectContaining({
+        enabledTasks: expect.anything(),
+      }),
+    );
+  });
+
+  test("keeps legacy conversation flow saves on the legacy settings path", async () => {
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /Gesprächslogik/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+
+    await waitFor(() =>
       expect(updateSiteSettings).toHaveBeenCalledWith(
         "site-1",
         expect.objectContaining({
           conversationFlow: expect.objectContaining({
-            requiredFields: ["name", "request"],
+            requiredFields: ["name", "email", "request"],
           }),
-          enabledTasks: ["answer_questions", "collect_requests", "prepare_handoff", "support"],
+          enabledTasks: ["answer_questions", "collect_requests", "prepare_handoff"],
         }),
       ),
     );
+    expect(updateAssistantProfileConfig).not.toHaveBeenCalled();
   });
 
   test("saves and reloads stored universal conversation logic selections", async () => {
@@ -334,9 +428,17 @@ describe("CustomerSetupWizard", () => {
       tone: "",
       knowledgeMode: "flexible",
       fallbackBehavior: "ask_followup",
-      conversationFlow: { requiredFields: ["phone", "product_or_topic"] },
-      enabledTasks: ["support", "create_ticket"],
-      assistantProfile: null,
+      conversationFlow: { requiredFields: ["name"] },
+      enabledTasks: ["answer_questions"],
+      assistantProfile: {
+        profileKey: "universal-assistant",
+        profileVersion: 1,
+        requiredFields: [
+          { key: "phone", label: "Telefon", required: true },
+          { key: "product_or_topic", label: "Produkt / Thema", required: true },
+        ],
+        enabledTasks: ["support", "create_ticket"],
+      },
       ctaText: "",
       leadCaptureEnabled: true,
       leadNotificationEmail: "",
@@ -371,6 +473,7 @@ describe("CustomerSetupWizard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Später erledigen" }));
 
     expect(screen.getByText(/Schritt 5 von 7: Wissen/i)).toBeInTheDocument();
+    expect(updateAssistantProfileConfig).not.toHaveBeenCalled();
     expect(updateSiteSettings).not.toHaveBeenCalled();
     expect(screen.queryByText("Aktion konnte nicht ausgeführt werden.")).not.toBeInTheDocument();
   });

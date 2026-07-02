@@ -4944,6 +4944,26 @@
       "exception": null
     },
     {
+      "id": "DASH-228A",
+      "layer": "dashboard",
+      "method": "PATCH",
+      "path": "/api/sites/:siteId/assistant-profile",
+      "source": "apps/dashboard/app/api/sites/[siteId]/assistant-profile/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
       "id": "DASH-229",
       "layer": "dashboard",
       "method": "GET",

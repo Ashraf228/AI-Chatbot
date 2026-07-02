@@ -40,6 +40,10 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
+function recordValue(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
 const REQUIRED_FIELD_KEYS = new Set<string>(REQUIRED_FIELD_OPTIONS.map((option) => option.key));
 const ENABLED_TASK_KEYS = new Set<string>(ENABLED_TASK_OPTIONS.map((option) => option.key));
 
@@ -48,7 +52,15 @@ export function normalizeRequiredFields(value: unknown) {
     return [...DEFAULT_REQUIRED_FIELDS];
   }
 
-  const keys = stringArray(value).filter((entry) => REQUIRED_FIELD_KEYS.has(entry));
+  const keys = value
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return entry;
+      }
+      const field = recordValue(entry);
+      return firstString(field?.key);
+    })
+    .filter((entry) => REQUIRED_FIELD_KEYS.has(entry));
   return keys;
 }
 
@@ -78,15 +90,45 @@ export function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function normalizeTone(value: unknown): SiteDetails["tone"] {
+  const raw = firstString(value);
+  if (raw === "friendly" || raw === "professional" || raw === "consultative" || raw === "premium" || raw === "direct") {
+    return raw as SiteDetails["tone"];
+  }
+  if (raw === "formal") {
+    return "professional";
+  }
+  if (raw === "warm") {
+    return "friendly";
+  }
+  if (raw === "neutral") {
+    return "direct";
+  }
+  return DEFAULT_TONE;
+}
+
 export function normalizeSite(data: Record<string, unknown>): SiteDetails {
   const allowedDomains = Array.isArray(data.allowedDomains)
     ? data.allowedDomains.filter((entry): entry is string => typeof entry === "string")
     : [];
   const primaryGoal = normalizePrimaryGoal(data.primaryGoal, data.setupGoal);
+  const assistantProfile =
+    data.assistantProfile && typeof data.assistantProfile === "object" && !Array.isArray(data.assistantProfile)
+      ? (data.assistantProfile as Record<string, unknown>)
+      : null;
   const conversationFlow =
     data.conversationFlow && typeof data.conversationFlow === "object" && !Array.isArray(data.conversationFlow)
       ? (data.conversationFlow as Record<string, unknown>)
       : {};
+  const assistantRequiredFields = assistantProfile?.requiredFields;
+  const assistantEnabledTasks = assistantProfile?.enabledTasks;
+  const effectiveConversationFlow =
+    assistantRequiredFields !== undefined
+      ? {
+          ...conversationFlow,
+          requiredFields: assistantRequiredFields,
+        }
+      : conversationFlow;
 
   return {
     id: firstString(data.id),
@@ -114,19 +156,16 @@ export function normalizeSite(data: Record<string, unknown>): SiteDetails {
     botType: firstString(data.botType, DEFAULT_BOT_TYPE),
     setupGoal: firstString(data.setupGoal),
     primaryGoal,
-    tone: (firstString(data.tone) || DEFAULT_TONE) as SiteDetails["tone"],
-    knowledgeMode: ["flexible", "grounded", "strict"].includes(firstString(data.knowledgeMode))
-      ? (data.knowledgeMode as KnowledgeMode)
+    tone: normalizeTone(assistantProfile?.tone || data.tone),
+    knowledgeMode: ["flexible", "grounded", "strict"].includes(firstString(assistantProfile?.knowledgeMode || data.knowledgeMode))
+      ? ((assistantProfile?.knowledgeMode || data.knowledgeMode) as KnowledgeMode)
       : "flexible",
     fallbackBehavior: ["ask_followup", "collect_contact", "handoff"].includes(firstString(data.fallbackBehavior))
       ? (data.fallbackBehavior as FallbackBehavior)
       : "ask_followup",
-    conversationFlow,
-    enabledTasks: normalizeEnabledTasks(data.enabledTasks),
-    assistantProfile:
-      data.assistantProfile && typeof data.assistantProfile === "object" && !Array.isArray(data.assistantProfile)
-        ? (data.assistantProfile as Record<string, unknown>)
-        : null,
+    conversationFlow: effectiveConversationFlow,
+    enabledTasks: normalizeEnabledTasks(assistantEnabledTasks || data.enabledTasks),
+    assistantProfile,
     ctaText: firstString(data.ctaText),
     leadCaptureEnabled: data.leadCaptureEnabled !== false,
     leadNotificationEmail: firstString(data.leadNotificationEmail),
