@@ -8,6 +8,7 @@ import { AssistantProfileDiagnosticsService } from './assistant-profile-diagnost
 import { AssistantProfileMigrationService } from './assistant-profile-migration.service';
 import { AssistantProfileMigrationPreviewService } from './assistant-profile-migration-preview.service';
 import { AssistantProfileResolverService } from './assistant-profile-resolver.service';
+import { AssistantProfileSaveService } from './assistant-profile-save.service';
 
 @Module({
   imports: [SitesModule, SiteModulesModule, AuditLogsModule],
@@ -17,6 +18,7 @@ import { AssistantProfileResolverService } from './assistant-profile-resolver.se
     AssistantProfileDiagnosticsService,
     AssistantProfileMigrationPreviewService,
     AssistantProfileMigrationService,
+    AssistantProfileSaveService,
     PrismaService,
   ],
   exports: [AssistantProfileResolverService, AssistantProfileDiagnosticsService],
