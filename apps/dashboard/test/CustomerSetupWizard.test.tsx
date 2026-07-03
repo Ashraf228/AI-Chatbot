@@ -248,6 +248,225 @@ describe("CustomerSetupWizard", () => {
     expect(screen.queryByText("Aktion konnte nicht ausgeführt werden.")).not.toBeInTheDocument();
   });
 
+  test("loads stored assistant profile values into KI-Mitarbeiter selects", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1",
+      name: "Musterkunde",
+      siteKey: "musterkunde",
+      allowedDomains: ["kunde.de"],
+      companyName: "Musterkunde",
+      websiteUrl: "https://kunde.de",
+      supportEmail: "",
+      phone: "",
+      language: "de",
+      botName: "Service-Assistent",
+      logoUrl: "",
+      brandColor: "#b55400",
+      accentColor: "#fff0d9",
+      welcomeMessage: "",
+      placeholderText: "Nachricht schreiben...",
+      widgetPosition: "bottom_right",
+      launcherLabel: "Chat",
+      privacyUrl: "",
+      privacyNoticeText: "",
+      fontFamily: "system",
+      systemPrompt: "",
+      industry: "generic",
+      botType: "universal-assistant",
+      setupGoal: "",
+      primaryGoal: "",
+      tone: "",
+      knowledgeMode: "flexible",
+      fallbackBehavior: "ask_followup",
+      conversationFlow: {},
+      enabledTasks: [],
+      assistantProfile: {
+        profileKey: "universal-assistant",
+        profileVersion: 1,
+        role: "Support und Kundenhilfe",
+        tone: "professional",
+        answerStyle: "concise",
+        knowledgeMode: "grounded",
+        enabledTasks: ["answer_questions", "collect_requests"],
+        requiredFields: [
+          { key: "name", label: "Name", required: true },
+          { key: "request", label: "Anliegen", required: true },
+        ],
+      },
+      ctaText: "",
+      leadCaptureEnabled: true,
+      leadNotificationEmail: "",
+      consentRequired: true,
+      templateId: "",
+      templateVersion: null,
+      templateAppliedAt: "",
+      lastTestedAt: "",
+      lastTestQuestion: "",
+      lastTestAnswer: "",
+      goLiveAt: "",
+    });
+
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+
+    expect(screen.getByLabelText("Aufgabe des KI-Mitarbeiters")).toHaveValue("support_automation");
+    expect(screen.getByLabelText("Kommunikationsstil")).toHaveValue("professional");
+    expect(screen.getByText("Mit Wissensbasis")).toBeInTheDocument();
+  });
+
+  test("derives KI-Mitarbeiter select defaults from assistant profile tasks", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1",
+      name: "Musterkunde",
+      siteKey: "musterkunde",
+      allowedDomains: ["kunde.de"],
+      companyName: "Musterkunde",
+      websiteUrl: "https://kunde.de",
+      supportEmail: "",
+      phone: "",
+      language: "de",
+      botName: "Service-Assistent",
+      logoUrl: "",
+      brandColor: "#b55400",
+      accentColor: "#fff0d9",
+      welcomeMessage: "",
+      placeholderText: "Nachricht schreiben...",
+      widgetPosition: "bottom_right",
+      launcherLabel: "Chat",
+      privacyUrl: "",
+      privacyNoticeText: "",
+      fontFamily: "system",
+      systemPrompt: "",
+      industry: "generic",
+      botType: "universal-assistant",
+      setupGoal: "",
+      primaryGoal: "",
+      tone: "",
+      knowledgeMode: "flexible",
+      fallbackBehavior: "ask_followup",
+      conversationFlow: {},
+      enabledTasks: [],
+      assistantProfile: {
+        profileKey: "universal-assistant",
+        profileVersion: 1,
+        role: "",
+        tone: "",
+        knowledgeMode: "",
+        enabledTasks: ["product_advice"],
+        requiredFields: [],
+      },
+      ctaText: "",
+      leadCaptureEnabled: true,
+      leadNotificationEmail: "",
+      consentRequired: true,
+      templateId: "",
+      templateVersion: null,
+      templateAppliedAt: "",
+      lastTestedAt: "",
+      lastTestQuestion: "",
+      lastTestAnswer: "",
+      goLiveAt: "",
+    });
+
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+
+    expect(screen.getByLabelText("Aufgabe des KI-Mitarbeiters")).toHaveValue("product_questions");
+    expect(screen.getByLabelText("Kommunikationsstil")).toHaveValue("professional");
+  });
+
+  test("falls back safely for unknown assistant profile role and saves without legacy settings payload", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1",
+      name: "Musterkunde",
+      siteKey: "musterkunde",
+      allowedDomains: ["kunde.de"],
+      companyName: "Musterkunde",
+      websiteUrl: "https://kunde.de",
+      supportEmail: "",
+      phone: "",
+      language: "de",
+      botName: "Service-Assistent",
+      logoUrl: "",
+      brandColor: "#b55400",
+      accentColor: "#fff0d9",
+      welcomeMessage: "",
+      placeholderText: "Nachricht schreiben...",
+      widgetPosition: "bottom_right",
+      launcherLabel: "Chat",
+      privacyUrl: "",
+      privacyNoticeText: "",
+      fontFamily: "system",
+      systemPrompt: "",
+      industry: "generic",
+      botType: "universal-assistant",
+      setupGoal: "",
+      primaryGoal: "",
+      tone: "",
+      knowledgeMode: "flexible",
+      fallbackBehavior: "ask_followup",
+      conversationFlow: {},
+      enabledTasks: [],
+      assistantProfile: {
+        profileKey: "universal-assistant",
+        profileVersion: 1,
+        role: "Individuelle Sonderrolle",
+        tone: "freundlich/professionell",
+        knowledgeMode: "grounded",
+        enabledTasks: [],
+        requiredFields: [],
+      },
+      ctaText: "",
+      leadCaptureEnabled: true,
+      leadNotificationEmail: "",
+      consentRequired: true,
+      templateId: "",
+      templateVersion: null,
+      templateAppliedAt: "",
+      lastTestedAt: "",
+      lastTestQuestion: "",
+      lastTestAnswer: "",
+      goLiveAt: "",
+    });
+
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+
+    expect(screen.getByLabelText("Aufgabe des KI-Mitarbeiters")).toHaveValue("lead_generation");
+    expect(screen.getByLabelText("Kommunikationsstil")).toHaveValue("professional");
+
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+
+    await waitFor(() =>
+      expect(updateAssistantProfileConfig).toHaveBeenCalledWith(
+        "site-1",
+        expect.objectContaining({
+          assistantProfile: expect.objectContaining({
+            profileKey: "universal-assistant",
+            role: "Anfragen aufnehmen und qualifizieren",
+            tone: "professional",
+            enabledTasks: ["answer_questions", "collect_requests", "prepare_handoff"],
+          }),
+          updatedFrom: "dashboard-wizard",
+        }),
+      ),
+    );
+    expect(updateSiteSettings).not.toHaveBeenCalledWith(
+      "site-1",
+      expect.objectContaining({
+        primaryGoal: expect.anything(),
+        enabledTasks: expect.anything(),
+        assistantProfile: expect.anything(),
+      }),
+    );
+  });
+
   test("treats generic industry with universal assistant as neutral for KI-Mitarbeiter saves", async () => {
     vi.mocked(getSite).mockResolvedValueOnce({
       id: "site-1",

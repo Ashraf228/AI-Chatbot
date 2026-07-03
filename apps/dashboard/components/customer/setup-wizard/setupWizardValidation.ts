@@ -69,10 +69,78 @@ export function normalizeEnabledTasks(value: unknown) {
   return keys.length > 0 ? keys : [...DEFAULT_ENABLED_TASKS];
 }
 
-export function normalizePrimaryGoal(primaryGoal: unknown, setupGoal: unknown): PrimaryGoal | "" {
+function normalizeAssistantProfilePrimaryGoal(value: unknown): PrimaryGoal | "" {
+  const raw = firstString(value);
+  return PRIMARY_GOAL_VALUES.has(raw) ? (raw as PrimaryGoal) : "";
+}
+
+function normalizePrimaryGoalFromAssistantRole(value: unknown): PrimaryGoal | "" {
+  const raw = firstString(value).trim().toLowerCase();
+  if (!raw) {
+    return "";
+  }
+
+  const roleMap: Record<string, PrimaryGoal> = {
+    "support und kundenhilfe": "support_automation",
+    "anfragen aufnehmen und qualifizieren": "lead_generation",
+    "kunden beraten": "customer_advice",
+    "produkt- und leistungsfragen beantworten": "product_questions",
+    "termine und rückrufe vorbereiten": "appointment_requests",
+    "wissen strukturiert bereitstellen": "internal_knowledge",
+  };
+
+  return roleMap[raw] || "";
+}
+
+function normalizePrimaryGoalFromTasks(value: unknown): PrimaryGoal | "" {
+  const tasks = stringArray(value).filter((entry) => ENABLED_TASK_KEYS.has(entry));
+  if (tasks.length === 0) {
+    return "";
+  }
+
+  if (tasks.includes("support") || tasks.includes("create_ticket")) {
+    return "support_automation";
+  }
+  if (tasks.includes("product_advice")) {
+    return "product_questions";
+  }
+  if (tasks.includes("appointment")) {
+    return "appointment_requests";
+  }
+  if (tasks.includes("answer_questions") && tasks.includes("collect_requests")) {
+    return "lead_generation";
+  }
+  if (tasks.includes("answer_questions")) {
+    return "customer_advice";
+  }
+  return "";
+}
+
+export function normalizePrimaryGoal(
+  primaryGoal: unknown,
+  setupGoal: unknown,
+  assistantProfile?: Record<string, unknown> | null,
+  enabledTasks?: unknown,
+): PrimaryGoal | "" {
+  const profilePrimaryGoal = normalizeAssistantProfilePrimaryGoal(assistantProfile?.primaryGoal);
+  if (profilePrimaryGoal) {
+    return profilePrimaryGoal;
+  }
+
   const rawPrimaryGoal = firstString(primaryGoal);
   if (PRIMARY_GOAL_VALUES.has(rawPrimaryGoal)) {
     return rawPrimaryGoal as PrimaryGoal;
+  }
+
+  const rolePrimaryGoal = normalizePrimaryGoalFromAssistantRole(assistantProfile?.role);
+  if (rolePrimaryGoal) {
+    return rolePrimaryGoal;
+  }
+
+  const assistantTasks = stringArray(assistantProfile?.enabledTasks).filter((entry) => ENABLED_TASK_KEYS.has(entry));
+  const taskPrimaryGoal = normalizePrimaryGoalFromTasks(assistantTasks.length > 0 ? assistantTasks : enabledTasks);
+  if (taskPrimaryGoal) {
+    return taskPrimaryGoal;
   }
 
   const rawSetupGoal = firstString(setupGoal);
@@ -111,7 +179,6 @@ export function normalizeSite(data: Record<string, unknown>): SiteDetails {
   const allowedDomains = Array.isArray(data.allowedDomains)
     ? data.allowedDomains.filter((entry): entry is string => typeof entry === "string")
     : [];
-  const primaryGoal = normalizePrimaryGoal(data.primaryGoal, data.setupGoal);
   const assistantProfile =
     data.assistantProfile && typeof data.assistantProfile === "object" && !Array.isArray(data.assistantProfile)
       ? (data.assistantProfile as Record<string, unknown>)
@@ -122,6 +189,7 @@ export function normalizeSite(data: Record<string, unknown>): SiteDetails {
       : {};
   const assistantRequiredFields = assistantProfile?.requiredFields;
   const assistantEnabledTasks = assistantProfile?.enabledTasks;
+  const primaryGoal = normalizePrimaryGoal(data.primaryGoal, data.setupGoal, assistantProfile, data.enabledTasks);
   const effectiveConversationFlow =
     assistantRequiredFields !== undefined
       ? {
