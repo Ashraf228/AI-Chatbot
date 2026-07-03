@@ -34,6 +34,15 @@ import {
   shouldQualifyBeforeContact as shouldQualifyContactBeforeContact,
 } from './contact-collection.helpers';
 import {
+  buildCompletedLeadMetadataPatch,
+  buildContactRequestPayload,
+  buildLeadAuditPayload,
+  buildLeadEmailJobPayload,
+  buildLeadNotificationPayload,
+  buildWidgetLeadPayload,
+  summarizeLeadConcern,
+} from './lead-capture.builders';
+import {
   buildLocalServiceMissingFieldsQuestion,
   cleanLocalServiceExtractedText,
   getMissingLocalServiceContactFields,
@@ -787,17 +796,13 @@ export class ChatAgentOrchestratorService {
     }
 
     if (leadCapture.created) {
-      await this.saveConversationMetadata(params.conversationId, {
-        pendingLead: {
-          ...contact,
-          status: 'completed',
-          intent: effectiveScheduleIntent ? 'schedule' : 'lead',
-          scheduleIntent: effectiveScheduleIntent,
-          startedAt: activePendingLead?.startedAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-          completedLeadId: leadCapture.leadId,
-        },
+      const completedAt = new Date().toISOString();
+      const completedLeadMetadata = buildCompletedLeadMetadataPatch({
+        contact,
+        leadId: leadCapture.leadId,
+        scheduleIntent: effectiveScheduleIntent,
+        startedAt: activePendingLead?.startedAt,
+        completedAt,
         conversationState: buildContactConversationState({
           previous: activeConversationState,
           message: params.message,
@@ -808,16 +813,20 @@ export class ChatAgentOrchestratorService {
           intakeFlow,
         }),
       });
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: completedLeadMetadata.pendingLead,
+        conversationState: completedLeadMetadata.conversationState,
+      });
+      const auditPayload = buildLeadAuditPayload({
+        leadId: leadCapture.leadId,
+        scheduleIntent: effectiveScheduleIntent,
+        contact,
+      });
       await this.recordLeadAudit({
         tenantId: params.tenantId,
         siteId: params.siteId,
-        action: 'lead_captured',
-        metadata: {
-          leadId: leadCapture.leadId,
-          scheduleIntent: effectiveScheduleIntent,
-          hasEmail: Boolean(contact.email),
-          hasPhone: Boolean(contact.phone),
-        },
+        action: auditPayload.action,
+        metadata: auditPayload.metadata,
       });
 
       await this.queueInternalLeadNotification({
@@ -832,17 +841,13 @@ export class ChatAgentOrchestratorService {
         localServiceFlow,
       });
     } else if (activePendingLead?.status === 'pending') {
-      await this.saveConversationMetadata(params.conversationId, {
-        pendingLead: {
-          ...contact,
-          status: 'completed',
-          intent: effectiveScheduleIntent ? 'schedule' : 'lead',
-          scheduleIntent: effectiveScheduleIntent,
-          startedAt: activePendingLead.startedAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          completedAt: new Date().toISOString(),
-          completedLeadId: leadCapture.leadId,
-        },
+      const completedAt = new Date().toISOString();
+      const completedLeadMetadata = buildCompletedLeadMetadataPatch({
+        contact,
+        leadId: leadCapture.leadId,
+        scheduleIntent: effectiveScheduleIntent,
+        startedAt: activePendingLead.startedAt,
+        completedAt,
         conversationState: buildContactConversationState({
           previous: activeConversationState,
           message: params.message,
@@ -852,6 +857,10 @@ export class ChatAgentOrchestratorService {
           stage: 'completed',
           intakeFlow,
         }),
+      });
+      await this.saveConversationMetadata(params.conversationId, {
+        pendingLead: completedLeadMetadata.pendingLead,
+        conversationState: completedLeadMetadata.conversationState,
       });
     }
 
@@ -1535,17 +1544,23 @@ export class ChatAgentOrchestratorService {
       }
 
       await assertLimit();
+      const payload = buildWidgetLeadPayload({
+        siteId: params.siteId,
+        sessionId: params.sessionId,
+        contact: params.contact,
+        localServiceFlow: params.localServiceFlow,
+      });
       await db.query(
         `INSERT INTO widget_leads(id, site_id, session_id, name, email, phone, message, status, created_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', now())`,
         [
           leadId,
-          params.siteId,
-          params.sessionId,
-          params.contact.name || 'Unbekannt',
-          params.contact.email || '',
-          params.contact.phone || null,
-          summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat', params.localServiceFlow),
+          payload.siteId,
+          payload.sessionId,
+          payload.name,
+          payload.email,
+          payload.phone,
+          payload.message,
         ],
       );
 
@@ -1591,19 +1606,24 @@ export class ChatAgentOrchestratorService {
     }
 
     const id = randomUUID();
+    const payload = buildContactRequestPayload(params);
+    if (!payload) {
+      return undefined;
+    }
+
     await this.db.query(
       `INSERT INTO agent_contact_requests(
          id, tenant_id, site_id, agent_run_id, name, email, phone, preferred_channel, note, status, created_at
        ) VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, $8, 'new', now())`,
       [
         id,
-        params.tenantId,
-        params.siteId,
-        params.contact.name || null,
-        params.contact.email || null,
-        params.contact.phone || null,
-        params.contact.email ? 'email' : 'phone',
-        `Widget session: ${params.sessionId}\n${summarizeLeadConcern(params.contact, 'Terminanfrage aus dem Chat')}`,
+        payload.tenantId,
+        payload.siteId,
+        payload.name,
+        payload.email,
+        payload.phone,
+        payload.preferredChannel,
+        payload.note,
       ],
     );
 
@@ -1730,20 +1750,29 @@ export class ChatAgentOrchestratorService {
     }
 
     try {
-      const mailPayload = this.leadMailer.buildLeadNotification({
+      const notificationPayload = buildLeadNotificationPayload({
         recipientEmail: params.recipientEmail,
         siteId: params.siteId,
         siteName: params.siteName || params.siteId,
         submittedAt: new Date().toISOString(),
-        source: 'Widget Chat',
         scheduleIntent: params.scheduleIntent,
         dashboardUrl: buildDashboardUrl(params.siteId),
-        lead: {
-          name: params.contact.name || 'Unbekannt',
-          email: params.contact.email || '',
-          phone: params.contact.phone || null,
-          message: summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat', params.localServiceFlow),
-        },
+        contact: params.contact,
+        localServiceFlow: params.localServiceFlow,
+      });
+      if (!notificationPayload) {
+        return;
+      }
+
+      const mailPayload = this.leadMailer.buildLeadNotification(notificationPayload);
+      const jobPayload = buildLeadEmailJobPayload({
+        mail: mailPayload,
+        tenantId: params.tenantId,
+        siteId: params.siteId,
+        sessionId: params.sessionId,
+        leadId: params.leadId,
+        contact: params.contact,
+        scheduleIntent: params.scheduleIntent,
       });
 
       const jobId = randomUUID();
@@ -1758,18 +1787,11 @@ export class ChatAgentOrchestratorService {
          )`,
         [
           jobId,
-          mailPayload.to,
-          mailPayload.subject,
-          mailPayload.html || null,
-          mailPayload.text || null,
-          JSON.stringify({
-            tenantId: params.tenantId,
-            siteId: params.siteId,
-            sessionId: params.sessionId,
-            leadId: params.leadId,
-            leadEmail: params.contact.email || null,
-            scheduleIntent: params.scheduleIntent,
-          }),
+          jobPayload.recipientEmail,
+          jobPayload.subject,
+          jobPayload.html,
+          jobPayload.text,
+          JSON.stringify(jobPayload.metadata),
         ],
       );
 
@@ -2994,25 +3016,6 @@ function hasLeadCaptureQuality(contact: ContactDetails) {
       (contact.name || contact.concern) &&
       contact.concern,
   );
-}
-
-function summarizeLeadConcern(contact: ContactDetails, fallback: string, structured = false) {
-  if (!structured) {
-    return contact.concern || fallback;
-  }
-
-  const parts = [
-    contact.concern ? `Problem / Anliegen: ${contact.concern}` : '',
-    contact.urgency ? `Dringlichkeit: ${contact.urgency}` : '',
-    contact.location ? `Einsatzadresse: ${contact.location}` : '',
-    contact.name ? `Name: ${contact.name}` : '',
-    contact.phone ? `Telefon: ${contact.phone}` : '',
-    contact.concern
-      ? `Zusammenfassung: Der Besucher meldet: ${contact.concern}. Ein Rückruf ist erforderlich.`
-      : '',
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join('\n') : fallback;
 }
 
 function shouldQualifyBeforeContact(text: string, contact: ContactDetails) {
