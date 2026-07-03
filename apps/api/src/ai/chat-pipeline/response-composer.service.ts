@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { buildConversationGuide } from '../../chat/conversation-guide';
 import { parseConversationFlow } from '../../chat/flow-builder';
+import { isExplicitLegacyLocalServiceConfig } from '../../chat/legacy-routing.guard';
 import { buildSystemPrompt, getSiteSystemPrompt } from '../../chat/prompt';
 import { buildResponseParts } from '../../chat/response-parts';
 import { ChatRouteDecision } from '../../chat-routing/chat-route-types';
@@ -191,52 +192,15 @@ function asObject(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function normalizeKey(value: unknown) {
-  return asString(value)?.toLowerCase().replace(/_/g, '-') || '';
-}
-
-function isLocalServiceKey(value: unknown) {
-  return ['local-service-first-contact', 'local-services', 'local-service'].includes(normalizeKey(value));
-}
-
-function isExplicitLocalServiceIntakeShape(flow: Record<string, unknown>) {
-  const questionTexts = asObject(flow.questionTexts);
-  const requiredFields = asStringArray(flow.requiredFields);
-  const questionOrder = asStringArray(flow.questionOrder);
-  const hasAddressQuestion = Boolean(asString(questionTexts.fullAddress) || asString(questionTexts.location));
-  const hasLocalRequiredFields =
-    requiredFields.includes('fullAddress') ||
-    requiredFields.includes('location') ||
-    requiredFields.includes('urgency') ||
-    requiredFields.includes('problem');
-  const hasLocalOrder =
-    questionOrder.includes('fullAddress') ||
-    questionOrder.includes('location') ||
-    questionOrder.includes('urgency') ||
-    questionOrder.includes('problem');
-
-  return Boolean(hasAddressQuestion && hasLocalRequiredFields && hasLocalOrder);
-}
-
 function isExplicitLocalServiceLegacyConfig(
   siteConfig: Record<string, unknown> | null | undefined,
   flow: Record<string, unknown>,
 ) {
   const config = asObject(siteConfig);
-  const assistantProfile = asObject(config.assistantProfile);
-
-  return Boolean(
-    isLocalServiceKey(assistantProfile.profileKey) ||
-      isLocalServiceKey(config.profileKey) ||
-      normalizeKey(config.botType) === 'handwerker-first-contact' ||
-      isLocalServiceKey(config.industry) ||
-      isLocalServiceKey(config.industryTemplate) ||
-      isLocalServiceKey(config.templateId) ||
-      isLocalServiceKey(flow.profileKey) ||
-      isLocalServiceKey(flow.templateKey) ||
-      isLocalServiceKey(flow.templateId) ||
-      isExplicitLocalServiceIntakeShape(flow)
-  );
+  return isExplicitLegacyLocalServiceConfig({
+    ...config,
+    conversationFlow: flow,
+  });
 }
 
 function compactText(value: string) {
