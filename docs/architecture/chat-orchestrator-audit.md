@@ -501,3 +501,7 @@ Side Effects: none.
 ## Recommended Next Step
 
 P1.2B sollte mit Phase 1 starten: reine Helper-Extraktion ohne Verhaltensaenderung. Die beste erste Scheibe ist `FieldExtractionService` plus `LegacyRoutingGuard` als pure Funktionen mit vorhandenen Tests. Danach koennen Local-Service- und Contact-Collection-Flows getrennt werden, ohne Lead-/Ticket-Side-Effects oder Public Widget Shape anzufassen.
+
+## Implementation Status
+
+Implementation status for P1.2B-1 through P1.2B-4 is tracked in `docs/architecture/chat-orchestrator-refactor-status.md`.
