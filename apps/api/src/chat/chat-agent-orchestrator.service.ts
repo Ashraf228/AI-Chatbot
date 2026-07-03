@@ -54,10 +54,12 @@ import {
 import {
   buildItSupportCancelledAnswer,
   buildItSupportResolvedAnswer,
+  buildCreatedItTicketAnswer,
   buildCreateTicketInputFromPendingTicket,
   buildItTicketMissingFieldQuestion,
   buildItTicketOfferAnswer,
   buildItTicketReadyToCreateAnswer,
+  buildTicketConversationState,
   compactPendingTicketState,
   extractItTicketFields,
   getMissingItTicketFields,
@@ -71,11 +73,15 @@ import {
   hasTicketCollectionAbort,
   hasTicketConfirmationNo,
   hasTicketConfirmationYes,
+  isActivePendingTicket,
+  mapTicketMissingFieldToAssistantAsk,
   shouldStartNewItSupportContext,
   mergePendingTicket,
   parsePendingTicketState,
-} from '../modules/it-support/it-support-flow';
-import type { PendingTicketForwardingStatus, PendingTicketState } from '../modules/it-support/it-support-flow';
+  parseTicketForwardingStatus,
+  withItSecurityWarning,
+} from './it-support-ticket.helpers';
+import type { PendingTicketState } from './it-support-ticket.helpers';
 
 type ChatHistoryEntry = {
   role: 'user' | 'assistant' | 'system';
@@ -1810,98 +1816,6 @@ export class ChatAgentOrchestratorService {
       });
     }
   }
-}
-
-function isActivePendingTicket(ticket: PendingTicketState | null): ticket is PendingTicketState {
-  return Boolean(
-    ticket &&
-      !['created', 'cancelled', 'resolved'].includes(ticket.status),
-  );
-}
-
-function parseTicketForwardingStatus(value: string): PendingTicketForwardingStatus {
-  if (['queued', 'not_configured', 'failed', 'unknown'].includes(value)) {
-    return value as PendingTicketForwardingStatus;
-  }
-  return 'unknown';
-}
-
-function mapTicketMissingFieldToAssistantAsk(field: string): PendingTicketState['lastAssistantAsk'] {
-  if (field === 'reporterEmail' || field === 'reporterPhone' || field === 'reporterName') {
-    return 'reporter_contact';
-  }
-  if (field === 'impact') {
-    return 'impact';
-  }
-  if (field === 'affectedSystem') {
-    return 'affected_system';
-  }
-  if (field === 'errorMessage') {
-    return 'error_message';
-  }
-  return 'description';
-}
-
-function buildTicketConversationState(
-  previous: ConversationState | null,
-  ticket: PendingTicketState,
-  stage: ConversationState['stage'],
-  goal: ConversationState['goal'] = 'create_ticket',
-): ConversationState {
-  return {
-    intent: 'ticket',
-    stage,
-    topic: ticket.summary || ticket.description || previous?.topic || null,
-    urgency: ticket.urgency || previous?.urgency || null,
-    goal,
-    collectedFields: {
-      ...previous?.collectedFields,
-      concern: ticket.summary || ticket.description || previous?.collectedFields?.concern,
-      email: ticket.reporterEmail || previous?.collectedFields?.email,
-      phone: ticket.reporterPhone || previous?.collectedFields?.phone,
-      name: ticket.reporterName || previous?.collectedFields?.name,
-    },
-    missingFields: ticket.missingFields || [],
-    nextExpectedField: ticket.nextExpectedField || null,
-    lastUserIntent: 'ticket',
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function buildCreatedItTicketAnswer(
-  ticket: PendingTicketState,
-  forwardingStatus: PendingTicketForwardingStatus = ticket.forwardingStatus || 'unknown',
-) {
-  const headline = forwardingStatus === 'queued'
-    ? 'Danke, ich habe das Support-Ticket erstellt und zur Weiterleitung an den IT-Support eingereiht.'
-    : forwardingStatus === 'not_configured'
-      ? 'Danke, ich habe das Support-Ticket erstellt. Die automatische Weiterleitung ist für diese Website noch nicht eingerichtet.'
-      : forwardingStatus === 'failed'
-        ? 'Danke, ich habe das Support-Ticket erstellt. Die automatische Weiterleitung konnte gerade nicht bestätigt werden.'
-        : 'Danke, ich habe das Support-Ticket erstellt.';
-
-  return [
-    headline,
-    '',
-    `Ticket: ${ticket.createdTicketId || 'erstellt'}`,
-    '',
-    'Zusammenfassung:',
-    `- Problem: ${ticket.description || ticket.summary || 'nicht angegeben'}`,
-    `- Betroffenes System: ${ticket.affectedSystem || 'nicht angegeben'}`,
-    `- Auswirkung: ${ticket.impact || 'nicht angegeben'}`,
-    `- Kontakt: ${ticket.reporterEmail || ticket.reporterPhone || ticket.reporterName || 'nicht angegeben'}`,
-    `- Priorität: ${ticket.priority || 'normal'}`,
-    '',
-    'Bitte gib hier weiterhin keine Passwörter, MFA-Codes oder vertraulichen Daten ein.',
-  ].join('\n');
-}
-
-function withItSecurityWarning(answer: string) {
-  const warning = [
-    'Das klingt nach einem kritischen IT- oder Sicherheitsvorfall.',
-    'Bitte öffnen Sie keine weiteren Links oder Anhänge, geben Sie keine Passwörter, MFA-Codes oder vertraulichen Daten ein und nutzen Sie das betroffene Gerät bei Malware-Verdacht möglichst nicht weiter.',
-  ].join(' ');
-  return `${warning}\n\n${answer}`;
 }
 
 function parsePendingLeadState(value: unknown): PendingLeadState | null {
