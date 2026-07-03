@@ -17,6 +17,10 @@ import {
 } from '../site-modules/module-configs';
 import type { ItSupportModuleConfig, LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
 import {
+  isExplicitLegacyLocalServiceConfig,
+  isExplicitLocalServiceIntakeFlow,
+} from './legacy-routing.guard';
+import {
   buildItSupportCancelledAnswer,
   buildItSupportResolvedAnswer,
   buildCreateTicketInputFromPendingTicket,
@@ -1427,9 +1431,11 @@ export class ChatAgentOrchestratorService {
     ]);
     const contactUrl = findFirstUrl(config, ['contactUrl', 'ctaUrl', 'contactFormUrl', 'kontaktUrl']);
 
-    const industry = asString(config.industry) || asString(config.industryTemplate);
     const hasConversationFlow = Object.keys(conversationFlow).length > 0;
-    const isLocalService = isExplicitLocalServiceSiteConfig(config);
+    const isLocalService = isExplicitLegacyLocalServiceConfig({
+      ...config,
+      conversationFlow,
+    });
     const hasLocalServiceConversationFlow = isExplicitLocalServiceIntakeFlow(conversationFlow);
 
     return {
@@ -2204,57 +2210,6 @@ function shouldRestartCompletedLocalServiceIntake(params: {
       params.contact.urgency ||
       hasLocalServiceSignal(params.text, params.intakeFlow),
   );
-}
-
-function isLocalServiceIndustry(value: string) {
-  return ['local-service-first-contact', 'local-services', 'local_service', 'local-service', 'local_services'].includes(value);
-}
-
-function isLocalServiceKey(value: unknown) {
-  return isLocalServiceIndustry(asString(value).toLowerCase().replace(/_/g, '-'));
-}
-
-function isExplicitLocalServiceSiteConfig(config: Record<string, unknown>) {
-  const assistantProfile = asObject(config.assistantProfile);
-  return Boolean(
-    asString(config.botType).toLowerCase() === 'handwerker-first-contact' ||
-      isLocalServiceKey(config.industry) ||
-      isLocalServiceKey(config.industryTemplate) ||
-      isLocalServiceKey(config.templateId) ||
-      isLocalServiceKey(config.profileKey) ||
-      isLocalServiceKey(assistantProfile.profileKey)
-  );
-}
-
-function isExplicitLocalServiceIntakeFlow(flow: Record<string, unknown>) {
-  if (Object.keys(flow).length === 0) {
-    return false;
-  }
-
-  if (
-    isLocalServiceKey(flow.templateKey) ||
-    isLocalServiceKey(flow.templateId) ||
-    isLocalServiceKey(flow.profileKey)
-  ) {
-    return true;
-  }
-
-  const questionTexts = asObject(flow.questionTexts);
-  const requiredFields = asStringArray(flow.requiredFields);
-  const questionOrder = asStringArray(flow.questionOrder);
-  const hasAddressQuestion = Boolean(asString(questionTexts.fullAddress) || asString(questionTexts.location));
-  const hasLocalField =
-    requiredFields.includes('fullAddress') ||
-    requiredFields.includes('location') ||
-    requiredFields.includes('urgency') ||
-    requiredFields.includes('problem');
-  const hasLocalOrder =
-    questionOrder.includes('fullAddress') ||
-    questionOrder.includes('location') ||
-    questionOrder.includes('urgency') ||
-    questionOrder.includes('problem');
-
-  return Boolean(hasAddressQuestion && hasLocalField && hasLocalOrder);
 }
 
 function hasLocalServiceSiteSignal(value: string, intakeFlow?: LocalServiceIntakeFlowConfig) {

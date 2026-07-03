@@ -7,6 +7,7 @@ import {
 } from '../site-modules/module-configs';
 import type { LocalServiceIntakeFlowConfig } from '../site-modules/module-configs';
 import { buildItSupportAnswerGuide } from '../modules/it-support/it-support-flow';
+import { isExplicitLocalServiceIntakeFlow } from '../chat/legacy-routing.guard';
 
 const ECOMMERCE_PATTERN =
   /\b(shop|shopify|produkt|produkte|artikel|kaufen|bestellen|bestellung|kollektion|variante|groesse|größe|farbe|lieferung|versand|retoure|retouren|rueckgabe|rückgabe|umtausch|preis|preise|kostet|verfuegbar|verfügbar|verfuegbarkeit|verfügbarkeit|lager)\b/i;
@@ -64,46 +65,6 @@ function asObject(value: unknown) {
 
 function asString(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function asStringArray(value: unknown) {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim()))
-    : [];
-}
-
-function isLocalServiceKey(value: unknown) {
-  return ['local-service-first-contact', 'local-services', 'local-service'].includes(
-    asString(value).toLowerCase().replace(/_/g, '-'),
-  );
-}
-
-function isExplicitLocalServiceIntakeFlow(value: unknown) {
-  const flow = asObject(value);
-  if (Object.keys(flow).length === 0) {
-    return false;
-  }
-
-  if (isLocalServiceKey(flow.templateKey) || isLocalServiceKey(flow.templateId) || isLocalServiceKey(flow.profileKey)) {
-    return true;
-  }
-
-  const questionTexts = asObject(flow.questionTexts);
-  const requiredFields = asStringArray(flow.requiredFields);
-  const questionOrder = asStringArray(flow.questionOrder);
-  const hasAddressQuestion = Boolean(asString(questionTexts.fullAddress) || asString(questionTexts.location));
-  const hasLocalField =
-    requiredFields.includes('fullAddress') ||
-    requiredFields.includes('location') ||
-    requiredFields.includes('urgency') ||
-    requiredFields.includes('problem');
-  const hasLocalOrder =
-    questionOrder.includes('fullAddress') ||
-    questionOrder.includes('location') ||
-    questionOrder.includes('urgency') ||
-    questionOrder.includes('problem');
-
-  return Boolean(hasAddressQuestion && hasLocalField && hasLocalOrder);
 }
 
 function getLocalServiceKeywords(intakeFlow?: LocalServiceIntakeFlowConfig) {
