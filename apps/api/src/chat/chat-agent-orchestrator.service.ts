@@ -42,6 +42,7 @@ import {
   buildWidgetLeadPayload,
   summarizeLeadConcern,
 } from './lead-capture.builders';
+import { selectPostCaptureHandoffAction } from './handoff-policy.helpers';
 import {
   buildLocalServiceMissingFieldsQuestion,
   cleanLocalServiceExtractedText,
@@ -886,7 +887,10 @@ export class ChatAgentOrchestratorService {
     }
 
     return {
-      action: scheduleUrl ? 'suggest_schedule' : contactRequestId ? 'handoff_to_contact' : 'capture_lead',
+      action: selectPostCaptureHandoffAction({
+        hasScheduleTarget: Boolean(scheduleUrl),
+        hasContactRequest: Boolean(contactRequestId),
+      }),
       handled: true,
       answer: buildCapturedLeadAnswer({
         scheduleUrl,
