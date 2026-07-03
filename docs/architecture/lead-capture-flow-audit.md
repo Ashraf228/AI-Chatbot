@@ -191,3 +191,7 @@ Das frühe Modell sollte Side Effects explizit benennen, nicht implizit versteck
 ## Recommended Next Step
 
 P1.2B-4B sollte zuerst pure Lead-Capture-Payload- und Side-Effect-Command-Helper für den Legacy-Orchestrator-Pfad extrahieren. Die Ausführung der Side Effects und die öffentliche Widget-Response sollten zunächst im Orchestrator bleiben.
+
+## Implementation Status
+
+Implementation status for P1.2B-4 is tracked in `docs/architecture/chat-orchestrator-refactor-status.md`.
