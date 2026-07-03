@@ -5,9 +5,24 @@ Scope: Read-only Audit der Konfigurationsquellen fuer AssistantProfile, Conversa
 
 ## Kurzfazit
 
-Die Anwendung unterstuetzt bereits eine neutrale `AssistantProfile`-Schicht, aber die Konfigurationsquellen sind noch gemischt. Neue universelle Dashboard-Felder werden aktuell teilweise in `sites.config` gespeichert, waehrend die langfristig passendere Stelle `site_modules.config["assistant-profile"].assistantProfile` ist. Legacy-Felder wie `industry`, `botType`, `conversationFlow`, `lead-sales.intakeFlow`, `leadCaptureEnabled` und `leadNotificationEmail` bleiben aktiv und werden vom Resolver weiterhin als Fallback benoetigt.
+Die Anwendung unterstuetzt eine neutrale `AssistantProfile`-Schicht und P1.1B hat die wichtigsten neuen Schreib- und Lesepfade auf das Modul `site_modules["assistant-profile"]` umgestellt. Der Dashboard-Wizard speichert KI-Mitarbeiter- und Gespraechslogik-Einstellungen jetzt ueber den dedizierten AssistantProfile Save-Pfad. Der Admin-Read-Pfad bevorzugt das gespeicherte Modulprofil, sodass Reloads den gleichen Stand anzeigen, den der Resolver nutzt.
 
-Fuer den naechsten Refactor sollte `sites.config` auf Public-Widget-, Branding-, Domain- und Basis-Metadaten begrenzt werden. Assistant-Verhalten, Aufgaben, Pflichtfelder, Uebergabe- und Zustellregeln gehoeren in das Assistant-Profile-Modul. Admin-Testflags und Testfaelle gehoeren in das `conversation-engine-tests`-Modul.
+`sites.config` bleibt fuer Public-Widget-, Branding-, Domain-, Datenschutz- und Legacy-Fallback-Felder zustaendig. Legacy-Felder wie `industry`, `botType`, `conversationFlow`, `lead-sales.intakeFlow`, `leadCaptureEnabled` und `leadNotificationEmail` bleiben aktiv und werden vom Resolver weiterhin als Fallback benoetigt. Admin-Testflags und Testfaelle gehoeren weiterhin in das `conversation-engine-tests`-Modul. Das Public Widget bleibt unveraendert auf der Legacy-Pipeline und erhaelt keine Admin-/Preview-/Knowledge-Felder.
+
+## Implementation Status
+
+P1.1B ist umgesetzt und runtime-seitig validiert.
+
+- Backend Save Endpoint: `PATCH /admin/sites/:siteId/assistant-profile` speichert nach `site_modules["assistant-profile"].config.assistantProfile`.
+- Dashboard Proxy: `PATCH /api/sites/:siteId/assistant-profile` nutzt den Backend-Endpunkt.
+- Wizard Write Path: Der Schritt `KI-Mitarbeiter` speichert universelle Assistant-Konfiguration ueber AssistantProfile Save.
+- Wizard Write Path: Der Schritt `Gespraechslogik` speichert `requiredFields` und `enabledTasks` ueber AssistantProfile Save.
+- Admin Read Path: `GET /admin/widget/sites/:siteId` bevorzugt `site_modules["assistant-profile"].config.assistantProfile`.
+- Reload: Der Setup-Wizard liest AssistantProfile-Werte bevorzugt; gespeicherte Select-Werte und Chips bleiben nach Reload sichtbar.
+- Universal Mode: `industry=generic` und `botType=universal-assistant` gelten als universell, nicht als Legacy-Handwerker-Modus.
+- Legacy Compatibility: Handwerker-/Local-Service- und andere Legacy-Sites bleiben ueber Resolver-Fallbacks kompatibel.
+- Public Widget Safety: Public Widget Responses bleiben ohne Admin-, Debug-, Preview-, Compare-, Response-Preview- oder Knowledge-Preview-Felder.
+- Production Safety: Keine Production Feature Flags, keine automatische AssistantProfile-Migration, keine Conversation Engine im Public Widget.
 
 ## Relevante Dateien
 
@@ -49,12 +64,12 @@ Fuer den naechsten Refactor sollte `sites.config` auf Public-Widget-, Branding-,
 
 | Quelle | Aktuelle Rolle | Schreiber | Leser | Public Widget | Status |
 | --- | --- | --- | --- | --- | --- |
-| `sites.config` | Gemischte Site-, Widget-, Legacy- und neue Assistant-Felder | Dashboard Wizard, Admin Widget Config, Site-Erstellung, Templates | Public Widget Config, Chat-Kontext, Resolver, Dashboard, Statusdienste | Ja, aber nur ausgewaehlte public Felder | Ueberladen |
-| `sites.config.assistantProfile` | Neutrales Profil als transitional storage | Universal Site Create, Setup-Wizard | AssistantProfileResolver, Dashboard | Nein | Transitional |
-| `site_modules.config["assistant-profile"].assistantProfile` | Zielort fuer gespeichertes AssistantProfile | AssistantProfileMigrationService | Resolver, Diagnostics, Migration Preview, Conversation Engine Admin-Routen | Nein | Ziel-SoT |
+| `sites.config` | Site-, Public-Widget-, Branding-, Domain-, Datenschutz- und Legacy-Fallback-Felder | Site-Erstellung, Public Widget Config, Legacy/Advanced UI | Public Widget Config, Chat-Kontext, Resolver-Fallback, Dashboard, Statusdienste | Ja, aber nur ausgewaehlte public Felder | Begrenzte Basis-SoT plus Legacy |
+| `sites.config.assistantProfile` | Transitional fallback fuer aeltere universelle Sites | Legacy-/Uebergangspfade | AssistantProfileResolver als Fallback | Nein | Deprecated Transitional |
+| `site_modules.config["assistant-profile"].assistantProfile` | Source of Truth fuer neue universelle Assistant-Konfiguration | AssistantProfile Save Endpoint, Dashboard Wizard, Opt-in Migration Service | Resolver, Admin Read, Diagnostics, Migration Preview, Conversation Engine Admin-Routen, Dashboard Wizard Reload | Nein | Ziel-SoT, P1.1B umgesetzt |
 | `site_modules.config["lead-sales"].intakeFlow` | Legacy Local-Service-/Handwerker-Intake | Module-/Template-Konfiguration | Resolver, Legacy Chat-/Lead-Flow | Indirekt ueber Chatverhalten | Legacy |
 | `sites.config.conversationFlow` | Legacy Flow/Pflichtfelder | Setup-Wizard, Widget Config, Templates | Resolver, Legacy Orchestrator/Chat-Kontext, Dashboard | Nicht als Debug-Response | Legacy |
-| `sites.config.enabledTasks` | Neue Aufgabenliste, aktuell top-level | Site-Erstellung, Setup-Wizard | Dashboard, Resolver-nahe Adminfunktionen | Nein | Transitional |
+| `sites.config.enabledTasks` | Transitional Aufgabenliste fuer aeltere universelle Sites | Legacy-/Uebergangspfade | Dashboard/Resolver-Fallback | Nein | Deprecated Transitional |
 | `sites.config.leadCaptureEnabled` | Legacy Lead-Erfassungsschalter | Setup-Wizard, Widget Config | Public Widget Config, Lead-Flow, Resolver Mapping | Ja, als public runtime flag | Legacy/Kompatibilitaet |
 | `sites.config.leadNotificationEmail` | Legacy E-Mail-Zustellung | Setup-Wizard, Widget Config | Lead-Mailer, Resolver Mapping, Dashboard | Nein | Legacy/Kompatibilitaet |
 | `sites.config.industry` | Legacy Branchen-/Template-Signal | Site-Erstellung, Advanced UI, Templates | Resolver, Widget Config Normalisierung, Dashboard | Indirekt fuer Texte/Fragen | Legacy |
@@ -73,21 +88,32 @@ Der `AssistantProfileResolverService` normalisiert Konfigurationen ohne Produktd
 5. Legacy-Ableitung aus `botType`, `industry` oder `templateId`.
 6. Fallback `universal-assistant@v1`.
 
-Das ist fuer Rueckwaertskompatibilitaet sinnvoll, zeigt aber auch den aktuellen Konflikt: neue Dashboard-Flows schreiben noch haeufig in `sites.config.assistantProfile`, obwohl das Modul der stabilere Zielort ist.
+Das ist fuer Rueckwaertskompatibilitaet sinnvoll. Nach P1.1B schreiben neue Wizard-Flows fuer KI-Mitarbeiter und Gespraechslogik nicht mehr primaer in `sites.config.assistantProfile`, sondern in das Assistant-Profile-Modul.
+
+## Read/Write Matrix nach P1.1B
+
+| Bereich | Schreibpfad | Lesepfad | Bemerkung |
+| --- | --- | --- | --- |
+| KI-Mitarbeiter-Step | `PATCH /api/sites/:siteId/assistant-profile` -> `PATCH /admin/sites/:siteId/assistant-profile` -> `site_modules["assistant-profile"].config.assistantProfile` | Wizard initialisiert aus Admin Read mit bevorzugtem Modulprofil | Nicht mehr primaer ueber Widget Config fuer Assistant-Verhalten |
+| Gespraechslogik-Step | `requiredFields` und `enabledTasks` nach `site_modules["assistant-profile"].config.assistantProfile` | Wizard und Admin Read bevorzugen Modulprofil | Chips bleiben nach Save/Reload stabil |
+| Admin Read | Kein Schreibpfad | `GET /admin/widget/sites/:siteId` bevorzugt `site_modules["assistant-profile"].config.assistantProfile` | `sites.config.assistantProfile` bleibt Fallback |
+| Public Widget | Keine AssistantProfile-Schreiboperation | Public Widget Config liest keine Admin-/Preview-Felder | Public Widget bleibt Legacy-Pipeline |
+| Legacy/Advanced | Darf alte Felder weiter verwenden | Resolver nutzt Legacy-Felder als Fallback | Keine automatische Migration oder Loeschung |
+| Conversation Engine Tests | Admin-Test-Routen schreiben `site_modules["conversation-engine-tests"]` | Nur Admin-/Operator-Testmodus | Keine Live-Umschaltung im Public Widget |
 
 ## Konflikte und Drift-Risiken
 
 ### AssistantProfile doppelt gespeichert
 
-`AssistantProfile` kann aktuell in `sites.config.assistantProfile` und in `site_modules.config["assistant-profile"].assistantProfile` existieren. Der Resolver bevorzugt das Modul. Das Dashboard schreibt im normalen Wizard aber noch in `sites.config`. Dadurch kann die UI einen anderen Stand anzeigen oder speichern als der Resolver nutzt, sobald ein Modulprofil existiert.
+`AssistantProfile` kann weiterhin in `sites.config.assistantProfile` und in `site_modules.config["assistant-profile"].assistantProfile` existieren. Der Resolver und der Admin-Read-Pfad bevorzugen das Modul. Neue Wizard-Writes gehen nach P1.1B in das Modul. Verbleibendes Risiko: aeltere Sites oder Legacy-/Advanced-Pfade koennen noch alte Kopien in `sites.config.assistantProfile` enthalten.
 
 ### Pflichtfelder doppelt modelliert
 
-Pflichtinformationen koennen aus `lead-sales.intakeFlow`, `conversationFlow.requiredFields` und `assistantProfile.requiredFields` stammen. Bei widerspruechlichen Feldern ist ohne klare Schreibregel nicht sofort erkennbar, welcher Stand fachlich gilt.
+Pflichtinformationen koennen aus `lead-sales.intakeFlow`, `conversationFlow.requiredFields` und `assistantProfile.requiredFields` stammen. Fuer neue Wizard-Writes ist der Konflikt geloest: `requiredFields` werden nach `assistantProfile.requiredFields` geschrieben. Legacy-Quellen bleiben Fallback und muessen fuer bestehende Sites weiter lesbar bleiben.
 
 ### Aufgaben doppelt modelliert
 
-`enabledTasks` existiert als top-level `sites.config.enabledTasks` und als Teil von `assistantProfile.enabledTasks`. Langfristig sollte nur das Profil fachliche Aufgaben enthalten.
+`enabledTasks` existiert als top-level `sites.config.enabledTasks` und als Teil von `assistantProfile.enabledTasks`. Fuer neue Wizard-Writes ist der Konflikt geloest: `enabledTasks` werden nach `assistantProfile.enabledTasks` geschrieben. `sites.config.enabledTasks` bleibt nur Transitional-/Fallback-Feld.
 
 ### Uebergabe und Zustellung doppelt modelliert
 
@@ -95,7 +121,7 @@ Pflichtinformationen koennen aus `lead-sales.intakeFlow`, `conversationFlow.requ
 
 ### Conversation-Engine-Flags an mehreren Stellen
 
-Flags wie `previewEnabled`, `compareEnabled`, `responsePreviewEnabled`, `knowledgePreviewEnabled` und `adminTestOnly` koennen aus `sites.config.conversationEngine`, aus dem Assistant-Profile-Modul oder aus `conversation-engine-tests` gelesen werden. Fuer Admin-Testfunktionen sollte ausschliesslich `site_modules.config["conversation-engine-tests"]` schreiben und langfristig auch priorisiert lesen.
+Flags wie `previewEnabled`, `compareEnabled`, `responsePreviewEnabled`, `knowledgePreviewEnabled` und `adminTestOnly` gehoeren in `site_modules.config["conversation-engine-tests"]`. Sie bleiben Admin-/Operator-Testmodus und duerfen keine Public-Widget-Live-Umschaltung bewirken.
 
 ### Legacy-Branchenlogik beeinflusst Public Widget
 
@@ -103,7 +129,7 @@ Flags wie `previewEnabled`, `compareEnabled`, `responsePreviewEnabled`, `knowled
 
 ### Breiter Widget-Config-Endpunkt
 
-`PATCH /admin/widget/config/:siteId` akzeptiert Public-Widget-Felder, Legacy-Felder und neue Assistant-Felder in einem DTO. Dadurch ist die Source-of-Truth-Grenze schwer durchzusetzen und versehentliches Ueberschreiben wahrscheinlicher.
+`PATCH /admin/widget/config/:siteId` bleibt fuer Public-Widget- und Legacy-Kompatibilitaetsfelder breit. Neue Wizard-Writes fuer KI-Mitarbeiter und Gespraechslogik nutzen jedoch den dedizierten AssistantProfile Save-Pfad. Verbleibendes Risiko: Legacy-/Advanced- oder Integrationspfade koennen weiterhin alte Felder schreiben und muessen bei spaeterer Deprecation separat betrachtet werden.
 
 ## Zielmodell
 
@@ -125,12 +151,13 @@ Neue Assistant-Verhaltenslogik sollte nicht dauerhaft primaer in `sites.config` 
 
 ### `site_modules.config["assistant-profile"]`
 
-Soll die fachliche Source of Truth fuer den KI-Mitarbeiter werden:
+Ist nach P1.1B die fachliche Source of Truth fuer neue universelle Assistant-Konfiguration:
 
 - `assistantProfile.profileKey`
 - `assistantProfile.profileVersion`
 - `assistantProfile.assistantName`
 - `assistantProfile.role`
+- `assistantProfile.primaryGoal`
 - `assistantProfile.businessDescription`
 - `assistantProfile.targetUsers`
 - `assistantProfile.tone`
@@ -140,7 +167,7 @@ Soll die fachliche Source of Truth fuer den KI-Mitarbeiter werden:
 - `assistantProfile.enabledAgents`
 - `assistantProfile.requiredFields`
 - `assistantProfile.handoffRules`
-- `assistantProfile.deliveryChannels`
+- `assistantProfile.deliveryChannels`, nur sanitized in Admin-Diagnose-/Read-Responses
 - `assistantProfile.legacySource`
 - `migration`-Metadaten: `migratedFrom`, `migratedAt`, `migratedBy`, `reversible`, `legacyFieldsPreserved`
 
@@ -176,12 +203,13 @@ Sie sollten nicht automatisch geloescht oder umgeschrieben werden. Neue UI-Flows
 
 ## Empfohlene Migrationsreihenfolge
 
-### Phase 1: Schreibpfade trennen
+### Phase 1: Schreibpfade trennen - erledigt
 
-- Einen dedizierten API-Schreibpfad fuer `site_modules.config["assistant-profile"]` nutzen oder erstellen.
-- Setup-Wizard fuer KI-Mitarbeiter und Gespraechslogik auf diesen Pfad umstellen.
-- `sites.config` nur noch fuer Public-Widget- und Basismetadaten aktualisieren.
-- Bestehende Legacy-Felder unveraendert lassen.
+- Dedizierter API-Schreibpfad fuer `site_modules.config["assistant-profile"]` ist vorhanden.
+- Setup-Wizard fuer KI-Mitarbeiter und Gespraechslogik nutzt diesen Pfad.
+- Admin Read bevorzugt das Assistant-Profile-Modul.
+- Reload-Validierung fuer gespeicherte Select-Werte und Chips ist erfolgt.
+- Bestehende Legacy-Felder bleiben unveraendert.
 
 ### Phase 2: Kompatibilitaets-Mirror begrenzen
 
@@ -210,6 +238,19 @@ Sie sollten nicht automatisch geloescht oder umgeschrieben werden. Neue UI-Flows
 - Ein zu breiter PATCH-Endpunkt kann versehentlich Legacy- und neue Konfigurationen ueberschreiben.
 - `sites.config.industry` hat noch Public-Widget-Nebeneffekte fuer Legacy-Texte und Fragen.
 - Conversation-Engine-Compare bleibt Admin-Dry-Run und darf nicht als Live-Entscheidung interpretiert werden.
+- Aeltere Sites koennen weiterhin alte Felder enthalten; das ist kompatibel, darf aber bei zukuenftigen Deprecations nicht als Fehler interpretiert werden.
+- Legacy Advanced kann alte Felder weiterhin schreiben; diese Pfade muessen getrennt auditiert werden, bevor Felder deprecated oder entfernt werden.
+- Keine automatische Migration ist aktiv; Opt-in Migration pro Site bleibt ein separater Schritt.
+
+## Sicherheitsstatus nach P1.1B
+
+- Keine Production Feature Flags aktiviert.
+- Keine AssistantProfile-Migration auf produktiven Sites ausgefuehrt.
+- Keine Conversation Engine im Public Widget aktiviert.
+- Public Widget Response unveraendert ohne Admin-/Preview-/Knowledge-Felder.
+- Legacy-Kompatibilitaet bleibt erhalten.
+- Runtime-Validierung erfolgte mit einer internen Testsite.
+- Keine echten Kundensites wurden fuer die P1.1B-Validierung mutiert.
 
 ## Empfohlene Tests
 
@@ -228,11 +269,9 @@ Sie sollten nicht automatisch geloescht oder umgeschrieben werden. Neue UI-Flows
 
 ## Naechster sinnvoller Schritt
 
-P1.1B sollte die Schreibpfade konkret trennen:
+Nach P1.1B sollte der naechste Schritt die verbleibenden Transitional- und Legacy-Grenzen adressieren:
 
-1. Dedizierte Admin-Route oder Service-Methode fuer `site_modules.config["assistant-profile"]` verwenden.
-2. Dashboard-Setup-Wizard fuer KI-Mitarbeiter und Gespraechslogik auf diesen Modul-Schreibpfad umstellen.
-3. `PATCH /admin/widget/config/:siteId` auf Public-Widget- und Legacy-Kompatibilitaetsfelder begrenzen oder fachlich klar trennen.
-4. Tests fuer Resolver-Prioritaet, Wizard-Speicherung, Public Widget Safety und Legacy-Kompatibilitaet erweitern.
-
-Bis dahin bleibt die aktuelle Lage funktionsfaehig, aber nicht sauber getrennt: `sites.config` ist weiterhin zu breit und enthaelt sowohl Public Widget Metadata als auch neue Assistant-Verhaltensdaten.
+1. `PATCH /admin/widget/config/:siteId` weiter auf Public-Widget- und Legacy-Kompatibilitaetsfelder begrenzen oder fachlich klarer trennen.
+2. Legacy-/Advanced-Schreibpfade fuer `industry`, `botType`, `conversationFlow`, `leadCaptureEnabled` und `leadNotificationEmail` separat auditieren.
+3. Opt-in Migration pro Site weiterhin nur nach Preview ohne Blocker erlauben.
+4. Public Widget Safety und Legacy-Kompatibilitaet bei jeder weiteren Deprecation erneut pruefen.
