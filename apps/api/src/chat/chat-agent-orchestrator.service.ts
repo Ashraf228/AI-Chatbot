@@ -21,6 +21,19 @@ import {
   isExplicitLocalServiceIntakeFlow,
 } from './legacy-routing.guard';
 import {
+  buildConversationState as buildContactConversationState,
+  buildPausedLeadState as buildContactPausedLeadState,
+  buildPendingLeadState as buildContactPendingLeadState,
+  canAskForLeadDetails as canAskForContactLeadDetails,
+  ensureScheduleContactContext as ensureContactScheduleContext,
+  extractContactDetails as extractContactCollectionDetails,
+  getMissingContactFields as getMissingContactCollectionFields,
+  hasLeadCaptureQuality as hasContactLeadCaptureQuality,
+  mergeContactDetails as mergeContactCollectionDetails,
+  mergeContactDetailsFromState as mergeContactCollectionDetailsFromState,
+  shouldQualifyBeforeContact as shouldQualifyContactBeforeContact,
+} from './contact-collection.helpers';
+import {
   buildLocalServiceMissingFieldsQuestion,
   cleanLocalServiceExtractedText,
   getMissingLocalServiceContactFields,
@@ -172,7 +185,7 @@ export class ChatAgentOrchestratorService {
     const activePendingLead = pendingLead?.status === 'pending' ? pendingLead : null;
     const currentConversationState = pendingLead?.status === 'completed' ? null : metadataState.conversationState;
     const pendingActive = activePendingLead?.status === 'pending';
-    let contactFromMessage = extractContactDetails(params.message, activePendingLead, intakeFlow);
+    let contactFromMessage = extractContactCollectionDetails(params.message, activePendingLead, intakeFlow);
     const greetingIntent = hasGreetingIntent(text);
     const recoveryIntent = hasRecoveryIntent(text);
     const refusalIntent = hasRefusalIntent(text);
@@ -188,7 +201,7 @@ export class ChatAgentOrchestratorService {
       intakeFlow = DEFAULT_LOCAL_SERVICE_INTAKE_FLOW;
       leadIntent = hasLeadIntent(text, intakeFlow);
       scheduleIntent = hasScheduleIntent(text, intakeFlow);
-      contactFromMessage = extractContactDetails(params.message, activePendingLead, intakeFlow);
+      contactFromMessage = extractContactCollectionDetails(params.message, activePendingLead, intakeFlow);
       localServiceFlow = isLocalServiceFlow({
         text,
         siteName: siteConfig.siteSignalText || siteConfig.siteName,
@@ -198,10 +211,10 @@ export class ChatAgentOrchestratorService {
         intakeFlow,
       });
     }
-    const conversationState = buildConversationState({
+    const conversationState = buildContactConversationState({
       previous: currentConversationState,
       message: params.message,
-      contact: mergeContactDetails(activePendingLead, contactFromMessage),
+      contact: mergeContactCollectionDetails(activePendingLead, contactFromMessage),
       leadIntent,
       scheduleIntent,
       intakeFlow,
@@ -233,7 +246,7 @@ export class ChatAgentOrchestratorService {
 
     if (localServiceFlow && hasCompletedLeadAcknowledgementIntent(text) && pendingLead?.status === 'completed') {
       await this.saveConversationMetadata(params.conversationId, {
-        conversationState: buildConversationState({
+        conversationState: buildContactConversationState({
           previous: null,
           message: params.message,
           contact: {},
@@ -254,15 +267,15 @@ export class ChatAgentOrchestratorService {
     if (localServiceFlow && hasLocalServiceStopIntent(text)) {
       if (pendingActive || askedForContact) {
         await this.saveConversationMetadata(params.conversationId, {
-          pendingLead: buildPausedLeadState({
+          pendingLead: buildContactPausedLeadState({
             previous: activePendingLead,
-            contact: mergeContactDetails(activePendingLead, contactFromMessage),
+            contact: mergeContactCollectionDetails(activePendingLead, contactFromMessage),
             reason: 'stop',
           }),
-          conversationState: buildConversationState({
+          conversationState: buildContactConversationState({
             previous: conversationState,
             message: params.message,
-            contact: mergeContactDetails(activePendingLead, contactFromMessage),
+            contact: mergeContactCollectionDetails(activePendingLead, contactFromMessage),
             leadIntent: false,
             scheduleIntent: false,
             stage: 'discovery',
@@ -307,14 +320,14 @@ export class ChatAgentOrchestratorService {
     }
 
     if ((pendingActive || askedForContact) && shouldPauseLeadCapture(text, contactFromMessage)) {
-      const pausedState = buildPausedLeadState({
+      const pausedState = buildContactPausedLeadState({
         previous: activePendingLead,
-        contact: mergeContactDetails(activePendingLead, contactFromMessage),
+        contact: mergeContactCollectionDetails(activePendingLead, contactFromMessage),
         reason: recoveryIntent ? 'recovery' : refusalIntent ? 'refusal' : greetingIntent ? 'greeting' : 'unclear',
       });
       await this.saveConversationMetadata(params.conversationId, {
         pendingLead: pausedState,
-        conversationState: buildConversationState({
+        conversationState: buildContactConversationState({
           previous: conversationState,
           message: params.message,
           contact: pausedState,
@@ -365,7 +378,7 @@ export class ChatAgentOrchestratorService {
         intakeFlow,
       })
     ) {
-      const restartedConversationState = buildConversationState({
+      const restartedConversationState = buildContactConversationState({
         previous: null,
         message: params.message,
         contact: contactFromMessage,
@@ -374,9 +387,9 @@ export class ChatAgentOrchestratorService {
         stage: 'qualification',
         intakeFlow,
       });
-      const restartedContact = mergeContactDetailsFromState(contactFromMessage, restartedConversationState);
-      const restartedMissing = getMissingContactFields(restartedContact, true, intakeFlow);
-      const restartedLeadState = buildPendingLeadState({
+      const restartedContact = mergeContactCollectionDetailsFromState(contactFromMessage, restartedConversationState);
+      const restartedMissing = getMissingContactCollectionFields(restartedContact, true);
+      const restartedLeadState = buildContactPendingLeadState({
         previous: null,
         contact: restartedContact,
         scheduleIntent,
@@ -432,7 +445,7 @@ export class ChatAgentOrchestratorService {
       !scheduleIntent
     ) {
       await this.saveConversationMetadata(params.conversationId, {
-        conversationState: buildConversationState({
+        conversationState: buildContactConversationState({
           previous: conversationState,
           message: params.message,
           contact: pendingLead,
@@ -480,7 +493,7 @@ export class ChatAgentOrchestratorService {
       intakeFlow,
     });
     const intakeConversationState = freshLocalServiceIntake
-      ? buildConversationState({
+      ? buildContactConversationState({
           previous: null,
           message: params.message,
           contact: contactFromMessage,
@@ -489,15 +502,15 @@ export class ChatAgentOrchestratorService {
           intakeFlow,
         })
       : conversationState;
-    const contact = ensureScheduleContactContext(
-      mergeContactDetailsFromState(
-        mergeContactDetails(activePendingLead, contactFromMessage),
+    const contact = ensureContactScheduleContext(
+      mergeContactCollectionDetailsFromState(
+        mergeContactCollectionDetails(activePendingLead, contactFromMessage),
         intakeConversationState,
       ),
       intakeConversationState,
       effectiveScheduleIntent,
     );
-    const missing = getMissingContactFields(contact, localServiceFlow, intakeFlow);
+    const missing = getMissingContactCollectionFields(contact, localServiceFlow);
     const cta = buildLeadCta(
       moduleContext.ctaLabel,
       moduleContext.ctaDescription,
@@ -505,7 +518,7 @@ export class ChatAgentOrchestratorService {
       localServiceFlow,
     );
     const leadPromptCount = activePendingLead?.leadPromptCount || 0;
-    const shouldAskForContactDetails = canAskForLeadDetails({
+    const shouldAskForContactDetails = canAskForContactLeadDetails({
       missing,
       contact,
       pendingActive,
@@ -517,7 +530,7 @@ export class ChatAgentOrchestratorService {
       localServiceFlow,
       intakeFlow,
     });
-    const activeConversationState = buildConversationState({
+    const activeConversationState = buildContactConversationState({
       previous: intakeConversationState,
       message: params.message,
       contact,
@@ -534,7 +547,7 @@ export class ChatAgentOrchestratorService {
     });
 
     if (localServiceFlow && pendingActive && isServicePricingOrBillingQuestion(text, intakeFlow)) {
-      const nextState = buildPendingLeadState({
+      const nextState = buildContactPendingLeadState({
         previous: activePendingLead,
         contact,
         scheduleIntent: effectiveScheduleIntent,
@@ -572,7 +585,7 @@ export class ChatAgentOrchestratorService {
       if (
         !pendingActive &&
         !effectiveScheduleIntent &&
-        shouldQualifyBeforeContact(text, contact) &&
+        shouldQualifyContactBeforeContact(text, contact) &&
         missing.includes('name') &&
         missing.includes('contact')
       ) {
@@ -593,14 +606,14 @@ export class ChatAgentOrchestratorService {
       }
 
       if (!shouldAskForContactDetails) {
-        const pausedState = buildPausedLeadState({
+        const pausedState = buildContactPausedLeadState({
           previous: activePendingLead,
           contact,
           reason: leadPromptCount >= 1 ? 'prompt_limit' : 'weak_intent',
         });
         await this.saveConversationMetadata(params.conversationId, {
           pendingLead: pausedState,
-          conversationState: buildConversationState({
+          conversationState: buildContactConversationState({
             previous: activeConversationState,
             message: params.message,
             contact,
@@ -619,7 +632,7 @@ export class ChatAgentOrchestratorService {
         };
       }
 
-      const nextState = buildPendingLeadState({
+      const nextState = buildContactPendingLeadState({
         previous: activePendingLead,
         contact,
         scheduleIntent: effectiveScheduleIntent,
@@ -674,9 +687,9 @@ export class ChatAgentOrchestratorService {
     }
 
     if (localServiceFlow) {
-      const hardMissing = getMissingContactFields(contact, true, intakeFlow);
+      const hardMissing = getMissingContactCollectionFields(contact, true);
       if (hardMissing.length > 0) {
-        const guardedState = buildPendingLeadState({
+        const guardedState = buildContactPendingLeadState({
           previous: activePendingLead,
           contact,
           scheduleIntent: effectiveScheduleIntent,
@@ -684,7 +697,7 @@ export class ChatAgentOrchestratorService {
         });
         await this.saveConversationMetadata(params.conversationId, {
           pendingLead: guardedState,
-          conversationState: buildConversationState({
+          conversationState: buildContactConversationState({
             previous: intakeConversationState,
             message: params.message,
             contact,
@@ -727,9 +740,9 @@ export class ChatAgentOrchestratorService {
       }
     }
 
-    if (!hasLeadCaptureQuality(contact)) {
+    if (!hasContactLeadCaptureQuality(contact)) {
       await this.saveConversationMetadata(params.conversationId, {
-        pendingLead: buildPausedLeadState({
+        pendingLead: buildContactPausedLeadState({
           previous: activePendingLead,
           contact,
           reason: 'weak_lead_quality',
@@ -785,7 +798,7 @@ export class ChatAgentOrchestratorService {
           completedAt: new Date().toISOString(),
           completedLeadId: leadCapture.leadId,
         },
-        conversationState: buildConversationState({
+        conversationState: buildContactConversationState({
           previous: activeConversationState,
           message: params.message,
           contact,
@@ -830,7 +843,7 @@ export class ChatAgentOrchestratorService {
           completedAt: new Date().toISOString(),
           completedLeadId: leadCapture.leadId,
         },
-        conversationState: buildConversationState({
+        conversationState: buildContactConversationState({
           previous: activeConversationState,
           message: params.message,
           contact,
