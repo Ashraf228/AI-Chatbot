@@ -413,8 +413,38 @@ Fruehe Phasen sollten keine versteckten DB-Writes enthalten. Der Orchestrator bl
 
 ## Recommended Next Step
 
-P1.2B-5B sollte zuerst reine IT-Support-/Ticket-Helper extrahieren. Die Ausfuehrung von `saveConversationMetadata`, `ToolExecutorService.executeTool('create_ticket')`, DB-Schreiboperationen, Webhook-/Integration-Dispatch und Public-Widget-Antwortassembly sollte im ersten Implementierungsschritt unveraendert bleiben.
+P1.2B-5B wurde umgesetzt und production-validiert. Der naechste sinnvolle Schritt ist kein weiterer direkter Ticket-Refactor, sondern ein Micro-Audit der Handoff-/Delivery-/Notification-Grenzen, weil dort nach Lead und Ticket weiterhin die riskantesten Side-Effect-Ueberschneidungen liegen.
 
 ## Implementation Status
 
-Dieses Dokument ist nur das P1.2B-5A Audit. Die Implementierung ist noch nicht gestartet.
+P1.2B-5 wurde abgeschlossen.
+
+Implemented:
+
+- Reine IT-Support-/Ticket-Helper in `apps/api/src/chat/it-support-ticket.helpers.ts`.
+- Status-, Missing-Field-, Metadata-Patch-, Payload-, SideEffectCommand- und Antwort-Builder.
+- Production-safe API-only Deploy auf `6832a8e35c8e9cd316b4aa1cbb1211f56a040121`.
+
+Deliberately not moved:
+
+- `agent_tickets` insert.
+- `saveConversationMetadata`.
+- Ticket notification and audit execution.
+- LeadCapture.
+- ContactCollection.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- IT-/ticket-side-effect execution.
+
+Validation summary:
+
+- API `/healthz` green on the target commit.
+- Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
+- Database auto-migrations skipped on production startup.
+- Public widget loader, bundle, config, and chat smoke green.
+- Universal internal testsite smoke produced no branch, Handwerker, local-service, Einsatzadresse, or Dringlichkeit wording.
+- No public debug, preview, compare, response-quality, knowledge-preview, or knowledge-grounding fields.
+- No unexpected `widget_leads`, `email_jobs`, `webhook_jobs`, or `agent_tickets`.
+- One technical smoke conversation was created by the explicit production smoke test.
+- Final log scan clean.
+- Rollback not required.
