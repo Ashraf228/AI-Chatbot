@@ -2,7 +2,7 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-5 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-6 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` remains the executor for database writes, queue writes, audit writes, lead finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
@@ -10,7 +10,7 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `6832a8e35c8e9cd316b4aa1cbb1211f56a040121` |
+| API | `17f352231ccd52e069e0182336e2f44cc1eef444` |
 | Dashboard | `25480866a7bffab7007adf1495477b4e22c7380a` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
@@ -136,6 +136,36 @@ Not moved:
 - `ToolDispatcherService`.
 - IT-/ticket-side-effect execution.
 
+### P1.2B-6 HandoffPolicy Helpers
+
+File: `apps/api/src/chat/handoff-policy.helpers.ts`
+
+Extracted pure helpers and decisions:
+
+- Handoff rule normalization.
+- Required-field readiness.
+- Prepare/defer handoff decision.
+- Post-capture action priority.
+
+Existing post-capture action priority is preserved:
+
+- `scheduleUrl` -> `suggest_schedule`.
+- `contactRequestId` -> `handoff_to_contact`.
+- fallback -> `capture_lead`.
+
+Not moved:
+
+- `email_jobs`.
+- `webhook_jobs`.
+- `deliveryChannels` execution.
+- `queueInternalLeadNotification`.
+- `createContactRequest`.
+- `captureLead`.
+- `saveConversationMetadata`.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- `DeliveryExecutor`.
+
 ## Still in ChatAgentOrchestrator
 
 The following responsibilities deliberately remain in `ChatAgentOrchestratorService`:
@@ -148,6 +178,8 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - Contact request creation.
 - Lead audit execution.
 - Ticket audit/notification execution.
+- Delivery execution.
+- `email_jobs` / `webhook_jobs` creation.
 - Conversation metadata persistence.
 - ToolExecutor/ToolDispatcher separation.
 - IT-/ticket-side-effect execution.
@@ -158,7 +190,7 @@ This is intentional. The extracted modules are pure helpers/builders only; they 
 
 ## Safety Boundaries
 
-The P1.2B-1 through P1.2B-5 refactor keeps these boundaries:
+The P1.2B-1 through P1.2B-6 refactor keeps these boundaries:
 
 - No public widget response change.
 - No Conversation Engine public activation.
@@ -166,6 +198,9 @@ The P1.2B-1 through P1.2B-5 refactor keeps these boundaries:
 - No feature flags enabled.
 - No database migration.
 - No hidden side effects introduced.
+- No DeliveryExecutor introduced.
+- No `email_jobs` / `webhook_jobs` moved into helpers.
+- No automatic `deliveryChannels` activation.
 - No ToolExecutor/ToolDispatcher consolidation.
 - No `agent_tickets` insert moved into helpers.
 - No response text changes intended.
@@ -177,7 +212,7 @@ The refactor groups were deployed incrementally and validated after each product
 
 Validation summary:
 
-- API-only deploy to `6832a8e35c8e9cd316b4aa1cbb1211f56a040121` completed successfully.
+- API-only deploy to `17f352231ccd52e069e0182336e2f44cc1eef444` completed successfully.
 - API `/healthz` green with the target API commit.
 - Database and Redis health green.
 - Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
@@ -189,6 +224,12 @@ Validation summary:
 - No debug, preview, compare, response-quality, knowledge-preview, or knowledge-grounding fields exposed publicly.
 - No unexpected `widget_leads`, `email_jobs`, `webhook_jobs`, or `agent_tickets`.
 - One technical smoke conversation was created by the explicit production smoke test.
+- HandoffPolicy helper compatibility validated.
+- Required-field readiness validated.
+- Prepare/defer handoff decision compatibility validated.
+- Post-capture action priority validated: `scheduleUrl` -> `suggest_schedule`, `contactRequestId` -> `handoff_to_contact`, fallback -> `capture_lead`.
+- Side effects remained in `ChatAgentOrchestratorService`.
+- `DeliveryExecutor` was not introduced.
 - No ingestion.
 - No new documents or chunks.
 - Final log scan clean.
@@ -210,6 +251,7 @@ Operational note:
 - `LeadCaptureFlowService` is not yet a real service; P1.2B-4 only extracted pure builders.
 - `ToolExecutorService` and `ToolDispatcherService` still have separate lead-capture-related paths.
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
+- Handoff policy is extracted as pure helpers, but delivery payloads and notification safety are not yet isolated.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
@@ -217,8 +259,8 @@ Operational note:
 
 1. Do not immediately continue with a broad refactor.
 2. Prefer the next audit as:
-   - `P1.2B-6A` Handoff / Delivery / Notification boundaries micro-audit.
+   - `P1.2B-7A` DeliveryPayload / NotificationSafetyGuard micro-audit.
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-The next best technical area is Handoff / Delivery / Notification boundaries. After Lead and Ticket extraction, the remaining high-risk side-effect area includes `email_jobs`, `webhook_jobs`, `deliveryChannels`, `handoffRules`, `summaryBeforeHandoff`, escalation paths, and overlap with LeadCapture and TicketFlow.
+The next best technical area is DeliveryPayload / NotificationSafetyGuard. After HandoffPolicy extraction, the remaining high-risk side-effect area includes `email_jobs`, `webhook_jobs`, `deliveryChannels`, `handoffRules`, notification payloads, sensitive delivery values, fallback/no-op behavior, and overlap with LeadCapture and TicketFlow.

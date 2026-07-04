@@ -18,6 +18,8 @@ Handoff, Delivery und Notification sind aktuell kein einzelner klarer Service, s
 
 Eine spaetere Extraktion sollte zuerst Policies und Payload-/Command-Builder isolieren. DB-/Queue-Writes, externe Dispatches und Public-Response-Assembly sollten in fruehen Phasen sichtbar beim Orchestrator beziehungsweise den bestehenden Tool-/Job-Services bleiben.
 
+Status nach P1.2B-6: Phase 1 ist umgesetzt und production-validiert. Reine `HandoffPolicy`-Helper liegen in `apps/api/src/chat/handoff-policy.helpers.ts`. Sie normalisieren Handoff-Regeln, pruefen Required-Field-Readiness, entscheiden Prepare/Defer und erhalten die Post-Capture-Action-Prioritaet. Delivery-Payloads, `email_jobs`, `webhook_jobs`, `deliveryChannels`-Ausfuehrung, DB-/Queue-Writes und ToolExecutor-/ToolDispatcher-Pfade wurden nicht verschoben.
+
 ## Current Responsibilities
 
 | Methode/Funktion | Datei | Verantwortung | liest Config | schreibt Metadata | erzeugt Side Effects | Antworttext | Risiko |
@@ -231,6 +233,8 @@ Regeln:
 
 ### Phase 1: Pure Handoff Policy Helpers
 
+Status: umgesetzt und production-validiert in P1.2B-6.
+
 - Extrahiere reine Entscheidungshilfen fuer `requiredBeforeHandoff`, `summaryBeforeHandoff`, `fallbackBehavior` und `handoffWhenUncertain`.
 - Keine DB-/Queue-Writes.
 - Keine Antworttexte aendern.
@@ -312,7 +316,7 @@ Regeln:
 
 ## Recommended Next Step
 
-P1.2B-6B sollte mit Phase 1 starten: reine HandoffPolicy-Helper extrahieren, ohne Side Effects, ohne Antworttextaenderung und ohne Public-Widget-Response-Aenderung.
+P1.2B-7A sollte mit einem DeliveryPayload / NotificationSafetyGuard Micro-Audit starten. Nach der HandoffPolicy-Extraktion bleiben `email_jobs`, `webhook_jobs`, `deliveryChannels`, Notification-Payloads, sensible Delivery-Werte, fallback/no-op behavior und die Ueberschneidung mit LeadCapture und TicketFlow die naechsten riskanten Grenzen.
 
 Nicht direkt starten:
 
