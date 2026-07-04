@@ -264,3 +264,5 @@ Operational note:
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
 The next best technical area is DeliveryPayload / NotificationSafetyGuard. After HandoffPolicy extraction, the remaining high-risk side-effect area includes `email_jobs`, `webhook_jobs`, `deliveryChannels`, `handoffRules`, notification payloads, sensitive delivery values, fallback/no-op behavior, and overlap with LeadCapture and TicketFlow.
+
+Status: `P1.2B-7A` tracks Delivery Payload / Notification Safety boundaries in `docs/architecture/delivery-payload-notification-safety-audit.md`.
