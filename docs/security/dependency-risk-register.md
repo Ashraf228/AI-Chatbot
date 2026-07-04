@@ -83,7 +83,7 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
   - Advisory: GHSA-qx2v-qp2m-jg93 / CVE-2026-41305.
   - Severity: moderate.
   - Pfad im Root-Workspace-Audit: `apps/dashboard` -> `next@16.2.9` -> internes `postcss@8.4.31`.
-  - `next@latest` ist `16.2.9` und buendelt weiterhin `postcss@8.4.31`.
+  - Re-Review am 2026-07-04: `next@latest` ist `16.2.10` und buendelt weiterhin `postcss@8.4.31`.
   - `npm audit fix --force` wuerde einen riskanten Downgrade-Pfad vorschlagen und wurde nicht verwendet.
   - `apps/dashboard` nutzt im eigenen Docker-Kontext einen eigenen Lockfile-Stand mit `postcss@8.5.15`; der standalone Audit ist clean.
 - Angriffspfadbewertung:
@@ -94,4 +94,4 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
 - Entscheidung:
   - High/Critical bleiben Blocker.
   - Das moderate Next/PostCSS-Risiko bleibt als zeitlich begrenzte Ausnahme akzeptiert.
-  - Naechster Review: spaetestens 2026-07-03 oder sobald ein stabiler Next-Patch mit internem `postcss>=8.5.10` verfuegbar ist.
+  - Naechster Review: spaetestens 2026-07-18 oder sobald ein stabiler Next-Patch mit internem `postcss>=8.5.10` verfuegbar ist.

@@ -100,9 +100,13 @@ if grep -Eq '^[[:space:]]+-[[:space:]]+"?0\.0\.0\.0:' "$COMPOSE_FILE"; then
   exit 70
 fi
 
-if [[ -f docs/security/audit-exceptions.md ]] && grep -q '2026-07-03' docs/security/audit-exceptions.md; then
+audit_exception_expiry=""
+if [[ -f docs/security/audit-exceptions.md ]]; then
+  audit_exception_expiry="$(awk '/^## postcss via next/{found=1} found && /^Expires: /{print $2; exit}' docs/security/audit-exceptions.md)"
+fi
+if [[ -n "$audit_exception_expiry" ]]; then
   today="$(date -u +%Y-%m-%d)"
-  if [[ "$today" > "2026-07-03" ]]; then
+  if [[ "$today" > "$audit_exception_expiry" ]]; then
     echo "FAIL: documented Next/PostCSS audit exception date has passed" >&2
     exit 70
   fi
