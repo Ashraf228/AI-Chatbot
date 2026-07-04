@@ -4,7 +4,9 @@
 
 Date: 2026-06-19
 
-Expires: 2026-07-03
+Reviewed: 2026-07-04
+
+Expires: 2026-07-18
 
 Owner: Platform Owner
 
@@ -20,17 +22,17 @@ Finding:
 
 Reason:
 - The vulnerable package is nested under the stable Next.js release used by the dashboard.
-- `next@latest` was checked on 2026-06-19 and resolves to `16.2.9`, which still depends on internal `postcss@8.4.31`.
+- `next@latest` was checked again on 2026-07-04 and resolves to `16.2.10`, which still depends on internal `postcss@8.4.31`.
 - A dashboard-local npm override pins `postcss@8.5.15` for the standalone dashboard Docker context and `apps/dashboard` standalone audit is clean.
 - The root workspace audit still reports Next's internal dependency path.
 - `npm audit fix --force` proposes an unsafe Next downgrade and is rejected.
 - Canary, beta, release-candidate or downgrade paths are not used for this demonstrator.
 
 Temporary decision:
-- This moderate finding is accepted temporarily for the NOLIS demonstrator hardening cycle.
+- This moderate finding remains accepted temporarily after review on 2026-07-04.
 - High and critical findings still block deployment.
 - The audit report remains visible.
-- This exception expires on 2026-07-03 or earlier if a stable Next release fixes the nested postcss dependency.
+- This exception expires on 2026-07-18 or earlier if a stable Next release fixes the nested postcss dependency.
 
 Mitigation:
 - No force install.
