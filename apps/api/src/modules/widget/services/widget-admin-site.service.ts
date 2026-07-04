@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { resolveSiteKey } from '../../../sites/site-key';
 import { PrismaService } from '../../../db/prisma.service';
+import { sanitizeDeliveryConfigForAdminRead } from '../../../chat/notification-safety.guard';
 
 type SiteConfig = {
   domain?: string;
@@ -86,32 +87,7 @@ function sanitizeAssistantProfileForAdminRead(value: unknown) {
     return null;
   }
 
-  const deliveryChannels = asRecord(profile.deliveryChannels);
-  if (!deliveryChannels) {
-    return profile;
-  }
-
-  const sanitizedDeliveryChannels = Object.fromEntries(
-    Object.entries(deliveryChannels).map(([type, rawChannel]) => {
-      const channel = asRecord(rawChannel);
-      if (!channel) {
-        return [type, rawChannel];
-      }
-
-      const safeChannel = { ...channel };
-      delete safeChannel.recipientEmail;
-      delete safeChannel.secret;
-      delete safeChannel.signingSecret;
-      delete safeChannel.token;
-      delete safeChannel.apiKey;
-      return [type, safeChannel];
-    }),
-  );
-
-  return {
-    ...profile,
-    deliveryChannels: sanitizedDeliveryChannels,
-  };
+  return sanitizeDeliveryConfigForAdminRead(profile);
 }
 
 function readAssistantProfileFromModule(value: unknown) {
