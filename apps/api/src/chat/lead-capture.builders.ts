@@ -1,4 +1,11 @@
 import type { ContactDetails, ConversationState, PendingLeadState } from './contact-collection.helpers';
+import {
+  buildLeadEmailJobPayload,
+  buildLeadNotificationPayload,
+  summarizeDeliveryConcern,
+} from './delivery-payload.builders';
+import type { EmailJobPayload } from './delivery-payload.builders';
+export type { EmailJobPayload, LeadNotificationPayload } from './delivery-payload.builders';
 
 export type WidgetLeadPayload = {
   siteId: string;
@@ -17,37 +24,6 @@ export type ContactRequestPayload = {
   phone: string | null;
   preferredChannel: 'email' | 'phone';
   note: string;
-};
-
-export type LeadNotificationPayload = {
-  recipientEmail: string;
-  siteId: string;
-  siteName: string;
-  submittedAt: string;
-  source: 'Widget Chat';
-  scheduleIntent: boolean;
-  dashboardUrl?: string;
-  lead: {
-    name: string;
-    email: string;
-    phone: string | null;
-    message: string;
-  };
-};
-
-export type EmailJobPayload = {
-  recipientEmail: string;
-  subject: string;
-  html: string | null;
-  text: string | null;
-  metadata: {
-    tenantId: string;
-    siteId: string;
-    sessionId: string;
-    leadId: string;
-    leadEmail: string | null;
-    scheduleIntent: boolean;
-  };
 };
 
 export type LeadAuditPayload = {
@@ -69,22 +45,7 @@ export type LeadSideEffectCommand =
   | { type: 'update_metadata'; patch: Record<string, unknown> };
 
 export function summarizeLeadConcern(contact: ContactDetails, fallback: string, structured = false) {
-  if (!structured) {
-    return contact.concern || fallback;
-  }
-
-  const parts = [
-    contact.concern ? `Problem / Anliegen: ${contact.concern}` : '',
-    contact.urgency ? `Dringlichkeit: ${contact.urgency}` : '',
-    contact.location ? `Einsatzadresse: ${contact.location}` : '',
-    contact.name ? `Name: ${contact.name}` : '',
-    contact.phone ? `Telefon: ${contact.phone}` : '',
-    contact.concern
-      ? `Zusammenfassung: Der Besucher meldet: ${contact.concern}. Ein Rückruf ist erforderlich.`
-      : '',
-  ].filter(Boolean);
-
-  return parts.length > 0 ? parts.join('\n') : fallback;
+  return summarizeDeliveryConcern(contact, fallback, structured);
 }
 
 export function buildWidgetLeadPayload(params: {
@@ -171,66 +132,7 @@ export function buildLeadAuditPayload(params: {
   };
 }
 
-export function buildLeadNotificationPayload(params: {
-  recipientEmail?: string;
-  siteId: string;
-  siteName: string;
-  submittedAt: string;
-  scheduleIntent: boolean;
-  dashboardUrl?: string;
-  contact: ContactDetails;
-  localServiceFlow?: boolean;
-}): LeadNotificationPayload | null {
-  if (!params.recipientEmail) {
-    return null;
-  }
-
-  return {
-    recipientEmail: params.recipientEmail,
-    siteId: params.siteId,
-    siteName: params.siteName || params.siteId,
-    submittedAt: params.submittedAt,
-    source: 'Widget Chat',
-    scheduleIntent: params.scheduleIntent,
-    dashboardUrl: params.dashboardUrl,
-    lead: {
-      name: params.contact.name || 'Unbekannt',
-      email: params.contact.email || '',
-      phone: params.contact.phone || null,
-      message: summarizeLeadConcern(params.contact, 'Kontaktanfrage aus dem Chat', Boolean(params.localServiceFlow)),
-    },
-  };
-}
-
-export function buildLeadEmailJobPayload(params: {
-  mail: {
-    to: string;
-    subject: string;
-    html?: string | null;
-    text?: string | null;
-  };
-  tenantId: string;
-  siteId: string;
-  sessionId: string;
-  leadId: string;
-  contact: ContactDetails;
-  scheduleIntent: boolean;
-}): EmailJobPayload {
-  return {
-    recipientEmail: params.mail.to,
-    subject: params.mail.subject,
-    html: params.mail.html || null,
-    text: params.mail.text || null,
-    metadata: {
-      tenantId: params.tenantId,
-      siteId: params.siteId,
-      sessionId: params.sessionId,
-      leadId: params.leadId,
-      leadEmail: params.contact.email || null,
-      scheduleIntent: params.scheduleIntent,
-    },
-  };
-}
+export { buildLeadEmailJobPayload, buildLeadNotificationPayload };
 
 export function shouldCreateContactRequest(params: {
   scheduleIntent: boolean;
