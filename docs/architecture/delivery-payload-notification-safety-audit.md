@@ -8,6 +8,19 @@ Delivery Payload und Notification Safety sind aktuell ueber mehrere Live-Chat- u
 
 P1.2B-7 sollte nicht direkt einen `DeliveryExecutorService` einfuehren. Der risikoarme naechste Schritt ist zuerst ein reiner `NotificationSafetyGuard`, danach reine Delivery-Payload-Builder und erst spaeter Side-Effect-Command-Builder. DB-/Queue-Writes und externe Dispatches muessen in fruehen Phasen beim Orchestrator beziehungsweise den bestehenden Services bleiben.
 
+## Status After P1.2B-7
+
+P1.2B-7 ist umgesetzt, gemerged und production-validiert.
+
+- `apps/api/src/chat/notification-safety.guard.ts` enthaelt reine, zustandslose Helper fuer sensitive Delivery-Key-/Path-Erkennung, Header-/Config-/Payload-Sanitizing, Public-Unsafe-Key-Erkennung und no-op Delivery-Entscheidungen.
+- Das bestehende Admin-Read-Sanitizing fuer `assistantProfile.deliveryChannels` nutzt den Guard.
+- Public Widget Response Shape, Antworttexte, Live-Delivery-Entscheidungen und Side Effects blieben unveraendert.
+- `DeliveryPayloadBuilder`, `DeliverySideEffectCommandBuilder` und `DeliveryExecutor` wurden nicht eingefuehrt.
+- `email_jobs`, `webhook_jobs`, `queueInternalLeadNotification`, `ToolExecutorService` und `ToolDispatcherService` wurden nicht verschoben.
+- Der production-safe API-only Deploy auf `3727a5d5bbed6f3febaadf7b952f81464a07b3bf` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
+
+Der naechste sinnvolle Schritt ist nicht Delivery-Ausfuehrung, sondern `P1.2B-8A` als DeliveryPayload-Builder Micro-Plan / Scope-Check.
+
 ## Current Responsibilities
 
 | Methode/Funktion | Datei | Verantwortung | liest Config | baut Payload | erzeugt Side Effects | sensitive Werte | Risiko |
