@@ -19,7 +19,7 @@ P1.2B-7 ist umgesetzt, gemerged und production-validiert.
 - `email_jobs`, `webhook_jobs`, `queueInternalLeadNotification`, `ToolExecutorService` und `ToolDispatcherService` wurden nicht verschoben.
 - Der production-safe API-only Deploy auf `3727a5d5bbed6f3febaadf7b952f81464a07b3bf` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
 
-Der naechste sinnvolle Schritt ist nicht Delivery-Ausfuehrung, sondern `P1.2B-8A` als DeliveryPayload-Builder Micro-Plan / Scope-Check.
+Der naechste sinnvolle Schritt ist nicht Delivery-Ausfuehrung, sondern `P1.2B-8A` als DeliveryPayload-Builder Micro-Plan / Scope-Check. Der Scope ist in `docs/architecture/delivery-payload-builder-scope.md` dokumentiert.
 
 ## Current Responsibilities
 

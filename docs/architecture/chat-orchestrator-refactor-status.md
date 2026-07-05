@@ -333,4 +333,4 @@ Recommended scope for the next code step:
 - No Public Widget response change.
 - No automatic `deliveryChannels` activation.
 
-Status: `P1.2B-7` completed the NotificationSafetyGuard extraction and production validation. `P1.2B-8A` should scope the DeliveryPayload Builder boundary before any code extraction.
+Status: `P1.2B-7` completed the NotificationSafetyGuard extraction and production validation. `P1.2B-8A` scopes the DeliveryPayload Builder boundary in `docs/architecture/delivery-payload-builder-scope.md` before any code extraction.
