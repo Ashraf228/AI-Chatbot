@@ -21,6 +21,19 @@ P1.2B-7 ist umgesetzt, gemerged und production-validiert.
 
 Der naechste sinnvolle Schritt ist nicht Delivery-Ausfuehrung, sondern `P1.2B-8A` als DeliveryPayload-Builder Micro-Plan / Scope-Check. Der Scope ist in `docs/architecture/delivery-payload-builder-scope.md` dokumentiert.
 
+## Status After P1.2B-8
+
+P1.2B-8 ist umgesetzt, gemerged und production-validiert.
+
+- `DeliveryPayloadBuilder` wurde als reine Payload-/Projection-Grenze eingefuehrt.
+- Lead-/Email-Payload Builder, no-op Delivery Target Decisions und audit-/log-safe Projektionen sind extrahiert.
+- `NotificationSafetyGuard` bleibt die Sanitizing- und no-op-Safety-Grenze fuer Delivery-nahe Daten.
+- `lead-capture.builders.ts` bleibt API-kompatibel und delegiert an die neue Builder-Datei.
+- Public Widget Response Shape, Antworttexte, Live-Delivery-Entscheidungen und Side Effects blieben unveraendert.
+- `email_jobs`, `webhook_jobs`, `queueInternalLeadNotification`, `ToolExecutorService`, `ToolDispatcherService` und `IntegrationDispatcher` wurden nicht verschoben.
+- Webhook-Payloads mit Signing/Headern, `DeliverySideEffectCommandBuilder` und `DeliveryExecutor` bleiben nicht extrahiert.
+- Der production-safe API-only Deploy auf `cbf561963bf4b33faa5889af79c71b7ae2127fb0` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
+
 ## Current Responsibilities
 
 | Methode/Funktion | Datei | Verantwortung | liest Config | baut Payload | erzeugt Side Effects | sensitive Werte | Risiko |
