@@ -2,7 +2,7 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-7 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-8 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` remains the executor for database writes, queue writes, audit writes, lead finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
@@ -10,7 +10,7 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `3727a5d5bbed6f3febaadf7b952f81464a07b3bf` |
+| API | `cbf561963bf4b33faa5889af79c71b7ae2127fb0` |
 | Dashboard | `25480866a7bffab7007adf1495477b4e22c7380a` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
@@ -196,7 +196,6 @@ Productive use:
 
 Not introduced or moved:
 
-- `DeliveryPayloadBuilder`.
 - `DeliverySideEffectCommandBuilder`.
 - `DeliveryExecutor`.
 - `email_jobs`.
@@ -204,6 +203,39 @@ Not introduced or moved:
 - `queueInternalLeadNotification`.
 - `ToolExecutorService`.
 - `ToolDispatcherService`.
+- External integrations.
+- Public Widget response shape.
+
+### P1.2B-8 DeliveryPayloadBuilder
+
+File: `apps/api/src/chat/delivery-payload.builders.ts`
+
+Extracted pure helpers and builders:
+
+- Lead/email Delivery payload builders.
+- Delivery target and no-op decision helpers.
+- Audit/log-safe Delivery projections.
+- `NotificationSafetyGuard` integration for sanitizing and no-op safety.
+
+Compatibility preserved:
+
+- `apps/api/src/chat/lead-capture.builders.ts` keeps its existing public API.
+- `lead-capture.builders.ts` delegates to the new DeliveryPayloadBuilder file.
+- Answer text remains unchanged.
+- Side effects remain unchanged and outside the new builder.
+- Existing lead notification payload and email-job payload shapes remain compatible.
+
+Not introduced or moved:
+
+- Webhook payloads with signing or custom transport headers.
+- `DeliverySideEffectCommandBuilder`.
+- `DeliveryExecutor`.
+- `email_jobs`.
+- `webhook_jobs`.
+- `queueInternalLeadNotification`.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- `IntegrationDispatcher`.
 - External integrations.
 - Public Widget response shape.
 
@@ -222,9 +254,11 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - Delivery execution.
 - `email_jobs` / `webhook_jobs` creation.
 - `queueInternalLeadNotification`.
-- Delivery payload construction.
+- Webhook signing / webhook headers.
+- WebhookJobsService execution.
 - Conversation metadata persistence.
 - ToolExecutor/ToolDispatcher separation.
+- IntegrationDispatcher.
 - Final decision ordering.
 - IT-/ticket-side-effect execution.
 - Public response assembly.
@@ -233,7 +267,7 @@ This is intentional. The extracted modules are pure helpers/builders only; they 
 
 ## Safety Boundaries
 
-The P1.2B-1 through P1.2B-7 refactor keeps these boundaries:
+The P1.2B-1 through P1.2B-8 refactor keeps these boundaries:
 
 - No public widget response change.
 - Public Widget does not expose `deliveryChannels`, `signingSecret`, `token`, `apiKey`, `authorization`, `recipientEmail`, or `webhookUrl`.
@@ -242,13 +276,15 @@ The P1.2B-1 through P1.2B-7 refactor keeps these boundaries:
 - No feature flags enabled.
 - No database migration.
 - No hidden side effects introduced.
-- No `DeliveryPayloadBuilder` introduced.
+- `DeliveryPayloadBuilder` is pure payload/projection logic only.
 - No `DeliverySideEffectCommandBuilder` introduced.
 - No DeliveryExecutor introduced.
 - No `email_jobs` / `webhook_jobs` moved into helpers.
 - No automatic `deliveryChannels` activation.
 - No ToolExecutor/ToolDispatcher consolidation.
+- No IntegrationDispatcher changes.
 - No `agent_tickets` insert moved into helpers.
+- No webhook signing or webhook headers moved into helpers.
 - No response text changes intended.
 - No branch-order changes intended.
 
@@ -258,16 +294,18 @@ The refactor groups were deployed incrementally and validated after each product
 
 Validation summary:
 
-- API-only deploy to `3727a5d5bbed6f3febaadf7b952f81464a07b3bf` completed successfully for P1.2B-7.
+- API-only deploy to `cbf561963bf4b33faa5889af79c71b7ae2127fb0` completed successfully for P1.2B-8.
 - API `/healthz` green with the target API commit.
 - Database and Redis health green.
 - Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
 - Database auto-migrations skipped on API startup.
 - Public widget loader, bundle, config, and chat smoke green.
 - Universal internal testsite smoke green.
-- Universal testsite did not receive branch, Handwerker, local-service, Einsatzadresse, or Dringlichkeit wording.
+- Universal testsite response was neutral.
+- Universal testsite did not receive Branchen-, Handwerker-, local-service-, Einsatzadresse-, vollständige-Adresse-, Dringlichkeit-, or vor-Ort wording.
 - Public widget response shape remained unchanged.
 - No debug, preview, compare, response-quality, knowledge-preview, knowledge-grounding, Delivery, or Secret fields exposed publicly.
+- Public output did not expose `deliveryChannels`, `signingSecret`, `token`, `apiKey`, `authorization`, `recipientEmail`, or `webhookUrl`.
 - Admin Read was checked for the internal testsite.
 - `assistantProfile.deliveryChannels` was sanitized through `NotificationSafetyGuard`.
 - Raw Delivery secrets were not visible in Admin Read output.
@@ -282,12 +320,18 @@ Validation summary:
 - Delivery config, header, admin-read, public-output, and audit sanitizing validated.
 - Notification no-op decisions validated as data-only helpers.
 - Live Delivery decision behavior remained unchanged.
+- DeliveryPayloadBuilder helper compatibility validated.
+- Lead/email payload builder compatibility validated.
+- No-op Delivery target decision compatibility validated.
+- Audit/log-safe Delivery projection compatibility validated.
+- `lead-capture.builders.ts` API compatibility validated.
 - Side effects remained in `ChatAgentOrchestratorService`.
-- `DeliveryPayloadBuilder` was not introduced.
 - `DeliverySideEffectCommandBuilder` was not introduced.
 - `DeliveryExecutor` was not introduced.
+- Webhook payloads with signing or headers were not extracted.
 - `queueInternalLeadNotification` remained unchanged.
 - `ToolExecutorService` and `ToolDispatcherService` remained unchanged.
+- `IntegrationDispatcher` remained unchanged.
 - No ingestion.
 - No new documents or chunks.
 - Final log scan clean.
@@ -295,11 +339,13 @@ Validation summary:
 - Authorization Matrix passed.
 - Security Boundaries passed.
 - Rollback was not required.
+- Rollback point was documented.
 
 Operational note:
 
 - During the API recreate there was one brief widget upstream connection error while the API container was being replaced.
 - Some read-only SQL probe queries were initially misquoted and produced database syntax errors in logs.
+- The string scan matched only the existing `messages[].tokens` field; this is not a secret or provider token.
 - The final post-stabilization log scan was clean; no application, migration, or runtime error remained.
 
 ## Remaining Risks
@@ -309,7 +355,7 @@ Operational note:
 - `LeadCaptureFlowService` is not yet a real service; P1.2B-4 only extracted pure builders.
 - `ToolExecutorService` and `ToolDispatcherService` still have separate lead-capture-related paths.
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
-- Handoff policy and NotificationSafetyGuard are extracted as pure helpers, but delivery payload building is not yet isolated.
+- Handoff policy, NotificationSafetyGuard, and DeliveryPayloadBuilder are extracted as pure helpers/builders, but Delivery side-effect commands and execution are not isolated.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
@@ -317,20 +363,21 @@ Operational note:
 
 1. Do not immediately continue with a broad refactor.
 2. Prefer the next audit as:
-   - `P1.2B-8A` DeliveryPayload Builder micro-plan / scope-check.
+   - `P1.2B-9A` DeliverySideEffectCommandBuilder micro-plan / scope-check.
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-The next best technical area is DeliveryPayload Builder. After NotificationSafetyGuard extraction, the remaining high-risk side-effect area includes `email_jobs`, `webhook_jobs`, `deliveryChannels`, notification payloads, sensitive delivery values, fallback/no-op behavior, and overlap with LeadCapture and TicketFlow.
+The next possible technical area is DeliverySideEffectCommandBuilder. After DeliveryPayloadBuilder extraction, the remaining high-risk side-effect area includes `email_jobs`, `webhook_jobs`, Delivery commands, no-op behavior, ToolExecutor/ToolDispatcher boundaries, IntegrationDispatcher boundaries, webhook signing, webhook headers, and overlap with LeadCapture and TicketFlow.
 
-Recommended scope for the next code step:
+Recommended scope for the next planning step:
 
-- Payload builders only.
+- Command data objects only.
 - No queue writes.
-- No delivery execution.
+- No DeliveryExecutor.
 - No external integrations.
 - No ToolExecutor/ToolDispatcher consolidation.
 - No Public Widget response change.
 - No automatic `deliveryChannels` activation.
+- No webhook signing or header movement.
 
-Status: `P1.2B-7` completed the NotificationSafetyGuard extraction and production validation. `P1.2B-8A` scopes the DeliveryPayload Builder boundary in `docs/architecture/delivery-payload-builder-scope.md` before any code extraction.
+Status: `P1.2B-8` completed the DeliveryPayloadBuilder extraction and production validation. `P1.2B-9A` should scope the DeliverySideEffectCommandBuilder boundary before any command-builder code extraction.

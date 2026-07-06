@@ -6,6 +6,16 @@ P1.2B-8A scopes a future `DeliveryPayloadBuilder` extraction. It is intentionall
 
 The safe next code step is narrow: extract only pure payload builders that already behave as data-object builders today. The executor boundary must remain unchanged. `ChatAgentOrchestratorService`, `ToolExecutorService`, `ToolDispatcherService`, `IntegrationEventDispatcherService`, `EmailJobsService`, and `WebhookJobsService` must continue to own side effects until separately audited.
 
+## Status After P1.2B-8
+
+P1.2B-8B through P1.2B-8E are implemented, merged, and production-validated.
+
+- `apps/api/src/chat/delivery-payload.builders.ts` now contains pure lead/email Delivery payload builders, no-op target decisions, and audit/log-safe Delivery projections.
+- `apps/api/src/chat/lead-capture.builders.ts` keeps its existing API and delegates compatible payload-building behavior to the new builder.
+- The safe scope from this document was kept: no queue writes, no DB writes, no DeliveryExecutor, no external integrations, no feature flags, no migrations, and no Public Widget response changes.
+- Deferred areas remain deferred: webhook payloads with headers/signing, ToolExecutor/ToolDispatcher consolidation, IntegrationDispatcher, WebhookJobs, DeliverySideEffectCommandBuilder, and DeliveryExecutor.
+- Production validation completed on API commit `cbf561963bf4b33faa5889af79c71b7ae2127fb0`.
+
 ## Current Payload-Building Locations
 
 | Methode/Funktion | Datei | Payload-Typ | liest Config | nutzt sensitive Werte | erzeugt Side Effects | kann pure extrahiert werden | Risiko |
