@@ -2,7 +2,7 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-10 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-11 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` remains the executor for database writes, queue writes, audit writes, lead finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
@@ -10,7 +10,7 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `b852b40a1a6a0afaeb2fcd9441483bdc2dd7ae37` |
+| API | `eed94afb67107329156ee59265093e49e1dce09a` |
 | Dashboard | `25480866a7bffab7007adf1495477b4e22c7380a` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
@@ -312,6 +312,49 @@ Not introduced or moved:
 - Public Widget response shape.
 - Conversation Engine public activation.
 
+### P1.2B-11 EmailDeliveryExecutor Boundary
+
+File: `apps/api/src/chat/email-delivery-executor.boundary.ts`
+
+Extracted pure validation and result helpers:
+
+- `EmailDeliveryExecutionStatus`.
+- `EmailDeliveryExecutionResult`.
+- `EmailDeliveryPlanValidationResult`.
+- Email delivery plan classification helpers.
+- Email delivery plan validation helpers.
+- `ready`, `skipped`, `blocked`, and `failed` result builders.
+- Audit/log-safe result projections.
+- E-mail and phone redaction for safe projections.
+
+Productive use:
+
+- No productive runtime usage was introduced.
+- No `ChatAgentOrchestratorService` rewiring was introduced.
+- The boundary is prepared but not connected to queue or execution paths.
+- Results are not executed.
+- `ChatAgentOrchestratorService` and existing services remain the executors.
+- `EmailJobsService` remains unchanged.
+
+Not introduced or moved:
+
+- `email_jobs` writes.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- `webhook_jobs` writes.
+- Webhook execution.
+- A real `EmailDeliveryExecutor` with execution.
+- `DeliveryExecutor`.
+- Orchestrator wiring.
+- Worker or SMTP changes.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- `IntegrationDispatcher`.
+- `WebhookJobsService`.
+- External integrations.
+- Public Widget response shape.
+- Conversation Engine public activation.
+
 ## Still in ChatAgentOrchestrator
 
 The following responsibilities deliberately remain in `ChatAgentOrchestratorService`:
@@ -327,11 +370,18 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - Delivery execution.
 - `email_jobs` / `webhook_jobs` creation.
 - `queueInternalLeadNotification`.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- Worker and SMTP execution.
 - Webhook signing / webhook headers.
 - WebhookJobsService execution.
 - EmailJobsService execution.
+- Contact request creation.
+- Lead audit execution.
+- Ticket audit/notification execution.
 - Delivery command execution.
 - Delivery execution wiring.
+- Email execution wiring.
 - Conversation metadata persistence.
 - ToolExecutor/ToolDispatcher separation.
 - IntegrationDispatcher.
@@ -343,7 +393,7 @@ This is intentional. The extracted modules are pure helpers/builders only; they 
 
 ## Safety Boundaries
 
-The P1.2B-1 through P1.2B-10 refactor keeps these boundaries:
+The P1.2B-1 through P1.2B-11 refactor keeps these boundaries:
 
 - No public widget response change.
 - Public Widget does not expose `deliveryChannels`, `signingSecret`, `token`, `apiKey`, `authorization`, `recipientEmail`, or `webhookUrl`.
@@ -355,7 +405,10 @@ The P1.2B-1 through P1.2B-10 refactor keeps these boundaries:
 - `DeliveryPayloadBuilder` is pure payload/projection logic only.
 - `DeliverySideEffectCommandBuilder` is pure command data-object logic only.
 - `DeliveryExecutionBoundary` is pure validation and ExecutionPlan logic only.
+- `EmailDeliveryExecutor` boundary is pure validation and result-data logic only.
+- No real EmailDeliveryExecutor with execution introduced.
 - No productive DeliverySideEffectCommand runtime execution introduced.
+- No productive EmailDeliveryExecutor runtime execution introduced.
 - No DeliveryExecutor introduced.
 - No Orchestrator wiring introduced for Delivery execution.
 - No `email_jobs` / `webhook_jobs` moved into helpers.
@@ -367,6 +420,9 @@ The P1.2B-1 through P1.2B-10 refactor keeps these boundaries:
 - No webhook commands with signing or headers introduced.
 - No Webhook execution introduced.
 - No WebhookJobsService or EmailJobsService behavior changed.
+- No `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs` behavior changed.
+- No worker or SMTP behavior changed.
+- No automatic `deliveryChannels` activation.
 - No response text changes intended.
 - No branch-order changes intended.
 
@@ -379,6 +435,7 @@ Validation summary:
 - API-only deploy to `cbf561963bf4b33faa5889af79c71b7ae2127fb0` completed successfully for P1.2B-8.
 - API-only deploy to `3e6f71cc235f7cc01a6cc41949dd7ac683241722` completed successfully for P1.2B-9.
 - API-only deploy to `b852b40a1a6a0afaeb2fcd9441483bdc2dd7ae37` completed successfully for P1.2B-10.
+- API-only deploy to `eed94afb67107329156ee59265093e49e1dce09a` completed successfully for P1.2B-11.
 - API `/healthz` green with the target API commit.
 - Database and Redis health green.
 - Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
@@ -390,6 +447,7 @@ Validation summary:
 - Public widget response shape remained unchanged.
 - No debug, preview, compare, response-quality, knowledge-preview, knowledge-grounding, Delivery, or Secret fields exposed publicly.
 - Public output did not expose `deliveryChannels`, `signingSecret`, `token`, `apiKey`, `authorization`, `recipientEmail`, or `webhookUrl`.
+- The existing public response field `messages[].tokens` remains a legacy count field and is not a secret or provider token.
 - Admin Read was checked for the internal testsite.
 - `assistantProfile.deliveryChannels` was sanitized through `NotificationSafetyGuard`.
 - Raw Delivery secrets were not visible in Admin Read output.
@@ -426,6 +484,18 @@ Validation summary:
 - E-mail and phone redaction for ExecutionPlan projections validated.
 - No productive DeliveryExecutionBoundary runtime usage introduced.
 - No DeliveryExecutionBoundary Orchestrator wiring introduced.
+- EmailDeliveryExecutor Boundary compatibility validated.
+- EmailDeliveryExecutionResult types validated.
+- Email delivery plan classification validated.
+- Email delivery plan validation validated.
+- `ready`, `skipped`, `blocked`, and `failed` result builders validated.
+- Audit/log-safe e-mail result projections validated.
+- E-mail and phone redaction for e-mail result projections validated.
+- No productive EmailDeliveryExecutor runtime usage introduced.
+- No EmailDeliveryExecutor Orchestrator wiring introduced.
+- `EmailJobsService.enqueue` remained unchanged.
+- `EmailJobsService.processPendingJobs` remained unchanged.
+- Worker and SMTP behavior remained unchanged.
 - No Delivery or Integration execution occurred during validation.
 - Side effects remained in `ChatAgentOrchestratorService`.
 - `DeliveryExecutor` was not introduced.
@@ -460,7 +530,7 @@ Operational note:
 - `LeadCaptureFlowService` is not yet a real service; P1.2B-4 only extracted pure builders.
 - `ToolExecutorService` and `ToolDispatcherService` still have separate lead-capture-related paths.
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
-- Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, and DeliveryExecutionBoundary are extracted as pure helpers/builders, but Delivery execution is not wired into a real executor.
+- Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, and EmailDeliveryExecutor Boundary are extracted as pure helpers/builders, but Delivery execution is not wired into a real executor.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
@@ -468,18 +538,19 @@ Operational note:
 
 1. Do not immediately continue with a broad refactor.
 2. Prefer the next audit as:
-   - `P1.2B-11A` EmailDeliveryExecutor Micro-Plan / Scope-Check.
+   - `P1.2B-12A` Email Queue Write / EmailJobsService.enqueue Boundary Audit.
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-The next possible technical area is email Delivery execution. After DeliverySideEffectCommandBuilder and DeliveryExecutionBoundary extraction, the remaining high-risk side-effect area includes `email_jobs` writes, idempotency and duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, queue execution results, Orchestrator wiring, and rollback behavior.
+The next possible technical area is the actual e-mail queue-write boundary. After DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, and EmailDeliveryExecutor Boundary extraction, the remaining high-risk side-effect area includes `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency and duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, and rollback behavior.
 
 Recommended scope for the next planning step:
 
 - Audit / scope only.
 - No queue writes moved.
-- No EmailDeliveryExecutor code.
+- No executor code.
 - No Orchestrator wiring.
+- No worker or SMTP changes.
 - No webhooks.
 - No external integrations.
 - No ToolExecutor/ToolDispatcher consolidation.
@@ -487,4 +558,4 @@ Recommended scope for the next planning step:
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-10` completed the DeliveryExecutionBoundary extraction and production validation. `P1.2B-11A` now scopes EmailDeliveryExecutor boundaries in `docs/architecture/email-delivery-executor-scope.md` before any queue writes or execution code are moved.
+Status: `P1.2B-11` completed the EmailDeliveryExecutor Boundary extraction and production validation. `P1.2B-12A` should scope the `email_jobs` queue-write and `EmailJobsService.enqueue` boundary before any persistence, worker, or Orchestrator wiring is moved.

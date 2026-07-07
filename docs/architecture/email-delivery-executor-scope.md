@@ -15,6 +15,18 @@ None of these layers writes queues, sends mail, calls webhooks, mutates chat met
 
 The safest next implementation step is still not real execution. P1.2B-11B should introduce only an unwired e-mail execution interface, result shapes, validation/no-op/blocked helpers, and log-safe result projections. It should not write `email_jobs` yet.
 
+## Status After P1.2B-11
+
+P1.2B-11B through P1.2B-11E are implemented, merged, and production-validated.
+
+- `apps/api/src/chat/email-delivery-executor.boundary.ts` contains only e-mail delivery validation, classification, result data-object builders, and safe projections.
+- `EmailDeliveryExecutionStatus`, `EmailDeliveryExecutionResult`, and `EmailDeliveryPlanValidationResult` are implemented as data shapes.
+- `ready`, `skipped`, `blocked`, and `failed` result builders remain side-effect-free.
+- Audit/log-safe result projections redact e-mail and phone values.
+- The safe scope from this document was kept: no runtime execution, no `email_jobs` writes, no `EmailJobsService.enqueue`, no `EmailJobsService.processPendingJobs`, no Orchestrator wiring, no worker/SMTP changes, no webhooks, no external integrations, no feature flags, no migrations, and no Public Widget response changes.
+- Production validation completed on API commit `eed94afb67107329156ee59265093e49e1dce09a`.
+- Deferred areas remain deferred: real `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, worker/SMTP execution, webhooks, ToolExecutor/ToolDispatcher, IntegrationDispatcher, and production wiring.
+
 ## Current Email Delivery Locations
 
 | Method / Function | File | Responsibility | Writes `email_jobs` | Reads Config | Uses Recipient | Uses Secrets | Dedupe / Idempotency | Error Behavior | Risk |
@@ -319,13 +331,8 @@ P1.2B-11 is not:
 
 ## Recommended Next Step
 
-Proceed to P1.2B-11B only with the no-side-effect scope:
+P1.2B-11 is complete. The next recommended step is `P1.2B-12A` Email Queue Write / `EmailJobsService.enqueue` Boundary Audit.
 
-- interface/types,
-- result object builders,
-- validation helpers,
-- no-op/blocked/failed result helpers,
-- safe projections,
-- tests proving no queue writes.
+That audit should remain read-only and cover `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, rollback behavior, and tests before any persistence or execution code is moved.
 
-Do not implement actual `email_jobs` insertion until a separate idempotency and persistence scope is approved.
+Do not implement actual `email_jobs` insertion, executor wiring, worker changes, SMTP changes, webhooks, external integrations, or Public Widget response changes until that separate queue-write scope is approved.
