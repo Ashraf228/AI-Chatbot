@@ -12,6 +12,15 @@ The current system already has pure builder layers:
 
 These builders do not execute delivery, write queues, call external services, or change Public Widget response shape.
 
+Status after P1.2B-10:
+
+- P1.2B-10B through P1.2B-10E are implemented, merged, and production-validated.
+- `apps/api/src/chat/delivery-execution.boundary.ts` adds only Delivery command classification, e-mail queue command validation, ExecutionPlan data objects, and audit/log-safe ExecutionPlan projections.
+- The safe scope from this audit was kept: Execution Plans are data objects only and are not executed.
+- No runtime execution, no queue writes, no `DeliveryExecutor`, no Orchestrator wiring, no feature flags, no migrations, and no Public Widget response changes were introduced.
+- Deferred areas remain deferred: `email_jobs` writes, `webhook_jobs` writes, real DeliveryExecutor behavior, Orchestrator wiring, Webhook execution, Webhook signing/header handling, ToolExecutor/ToolDispatcher consolidation, IntegrationDispatcher changes, WebhookJobsService changes, EmailJobsService changes, and external integrations.
+- Production validation completed on API commit `b852b40a1a6a0afaeb2fcd9441483bdc2dd7ae37`.
+
 Runtime delivery execution still lives in several older paths:
 
 - `ChatAgentOrchestratorService.queueInternalLeadNotification` directly inserts `email_jobs`.
@@ -68,6 +77,8 @@ Current side effects are split across chat, widget, tool, integration, and queue
 `DeliveryPayloadBuilder` is pure. It builds lead notification payloads, email job payloads, and audit/log projections. It returns `ready` or `noop` results. It does not write `email_jobs`, `webhook_jobs`, `widget_leads`, `agent_tickets`, or `audit_logs`.
 
 `DeliverySideEffectCommandBuilder` is pure. It builds `queue_email_job` and `noop` commands as data objects. It does not execute commands, import queue services, or call external integrations.
+
+`DeliveryExecutionBoundary` is pure. It classifies supported command objects, validates e-mail queue command payloads, builds `queue`, `noop`, and `blocked` ExecutionPlan data objects, and returns audit/log-safe projections with e-mail and phone redaction. It does not write queues, invoke mailers, invoke webhooks, mutate metadata, import queue services, or call external integrations.
 
 These boundaries are suitable inputs for a later executor, but they must remain separate from queue writing and external execution.
 
@@ -375,14 +386,15 @@ P1.2B-10 is not intended to:
 
 ## Recommended Next Step
 
-P1.2B-10B should not build a full DeliveryExecutor.
+P1.2B-10 is complete. P1.2B-10B did not build a full DeliveryExecutor.
 
 Recommended next step:
 
-1. Create a short EmailDeliveryExecutor micro-plan or an unwired executor shell.
+1. Create `P1.2B-11A` as an EmailDeliveryExecutor micro-plan / scope-check only.
 2. Keep it email-only and command-driven.
-3. Do not wire it into `ChatAgentOrchestratorService` yet.
-4. Do not include webhooks, signing, ToolExecutor, ToolDispatcher, or IntegrationDispatcher.
-5. Add tests for no-op behavior, invalid commands, log-safe projections, and absence of queue writes for unsupported commands.
+3. Do not move queue writes or introduce executor code in the audit step.
+4. Do not wire it into `ChatAgentOrchestratorService`.
+5. Do not include webhooks, signing, ToolExecutor, ToolDispatcher, or IntegrationDispatcher.
+6. Scope idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, queue execution result, rollback behavior, and tests before any implementation.
 
 This keeps the next step small enough to validate without changing live chat behavior.

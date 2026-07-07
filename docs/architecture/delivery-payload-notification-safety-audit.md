@@ -47,6 +47,19 @@ P1.2B-9 ist umgesetzt, gemerged und production-validiert.
 - Webhook-Commands mit Signing/Headern, `DeliveryExecutor` und echte Delivery-Ausfuehrung bleiben nicht extrahiert.
 - Der production-safe API-only Deploy auf `3e6f71cc235f7cc01a6cc41949dd7ac683241722` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
 
+## Status After P1.2B-10
+
+P1.2B-10 ist umgesetzt, gemerged und production-validiert.
+
+- `DeliveryExecutionBoundary` wurde als reine Validation-/ExecutionPlan-Schicht eingefuehrt.
+- Delivery Command Classification, E-Mail-Queue-Command-Validation, `noop`-/`blocked`-/E-Mail-Queue-ExecutionPlan-Datenobjekte und audit-/log-safe ExecutionPlan-Projektionen sind extrahiert.
+- E-Mail-/Telefon-Redaction fuer sichere ExecutionPlan-Projektionen ist validiert.
+- Public Widget Response Shape, Antworttexte, Live-Delivery-Entscheidungen und Side Effects blieben unveraendert.
+- `email_jobs`, `webhook_jobs`, `queueInternalLeadNotification`, `ToolExecutorService`, `ToolDispatcherService`, `IntegrationDispatcher`, `WebhookJobsService` und `EmailJobsService` wurden nicht verschoben.
+- Execution Plans werden nicht ausgefuehrt und sind nicht in den Orchestrator verdrahtet.
+- Webhook Execution, Webhook-Signing/Header-Handling, echter DeliveryExecutor und externe Integrationen bleiben nicht extrahiert.
+- Der production-safe API-only Deploy auf `b852b40a1a6a0afaeb2fcd9441483bdc2dd7ae37` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
+
 ## Current Responsibilities
 
 | Methode/Funktion | Datei | Verantwortung | liest Config | baut Payload | erzeugt Side Effects | sensitive Werte | Risiko |
@@ -274,14 +287,25 @@ Regeln:
 
 Status: umgesetzt und production-validiert in P1.2B-9 fuer reine Lead-/Email-Command-Datenobjekte. Echte Queue-Writes und Delivery-Ausfuehrung bleiben ausserhalb dieser Phase.
 
-### Phase 4: Boundary Tests erweitern
+### Phase 4: DeliveryExecutionBoundary
+
+- Delivery Commands klassifizieren,
+- E-Mail-Queue-Commands validieren,
+- ExecutionPlan-Datenobjekte bauen,
+- audit-/log-safe ExecutionPlan-Projektionen bereitstellen,
+- keine Ausfuehrung,
+- keine Queue-Writes.
+
+Status: umgesetzt und production-validiert in P1.2B-10 fuer reine Validation-/ExecutionPlan-Datenobjekte. Echte Queue-Writes, Orchestrator-Wiring und Delivery-Ausfuehrung bleiben ausserhalb dieser Phase.
+
+### Phase 5: Boundary Tests erweitern
 
 - Public Widget Response Shape,
 - keine unerwarteten Jobs,
 - Header-/Secret-Sanitizing,
 - AssistantProfile deliveryChannels no-op.
 
-### Phase 5: Optionaler DeliveryExecutorService
+### Phase 6: Optionaler DeliveryExecutorService
 
 - nur nach separatem Audit,
 - nur mit Worker-/Retry-/Audit-Testabdeckung,
@@ -334,6 +358,6 @@ Status: umgesetzt und production-validiert in P1.2B-9 fuer reine Lead-/Email-Com
 
 ## Recommended Next Step
 
-P1.2B-7, P1.2B-8 und P1.2B-9 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-10A` DeliveryExecutor / Queue Execution Boundary Audit.
+P1.2B-7, P1.2B-8, P1.2B-9 und P1.2B-10 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-11A` EmailDeliveryExecutor Micro-Plan / Scope-Check.
 
-P1.2B-10A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen DeliveryExecutor-Code einfuehren, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte `email_jobs` Writes, `webhook_jobs` Writes, Queue Persistence, Retry-/Duplicate-Verhalten, DeliveryExecutor-Abgrenzung, ToolExecutor-/ToolDispatcher-Abgrenzung, IntegrationDispatcher-Abgrenzung, Webhook-Signing/Header, no-op versus queue behavior, Audit und Logging abdecken.
+P1.2B-11A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen EmailDeliveryExecutor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte `email_jobs` Writes, Idempotency, Duplicate Prevention, no-op versus queue behavior, Retry-/Status-Verhalten, Partial-Failure-Handling, Audit/Logging, Queue Execution Result, Orchestrator-Wiring und Rollback-Verhalten abdecken.
