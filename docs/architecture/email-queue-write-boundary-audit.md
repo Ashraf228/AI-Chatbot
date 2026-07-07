@@ -14,6 +14,17 @@ The existing P1.2B delivery refactor steps are pure boundaries only. `DeliveryPa
 
 P1.2B-12B should therefore extract a narrow `EmailQueueWriteBoundary` or equivalent helper around queue-write input normalization and persistence policy. It should not introduce a real `EmailDeliveryExecutor`, move SMTP processing, change retry semantics, or change the public widget response.
 
+## Status After P1.2B-12
+
+P1.2B-12B through P1.2B-12E are implemented, merged, and production-validated.
+
+- `apps/api/src/chat/email-queue-write.boundary.ts` contains only queue-write request/result data objects, source result classification helpers, queue write validation helpers, result builders, and safe projections.
+- The safe scope from this audit was kept: the boundary builds and validates enqueue request/result data only.
+- No runtime execution, no `email_jobs` writes, no `EmailJobsService.enqueue`, no `EmailJobsService.processPendingJobs`, no Orchestrator wiring, no worker/SMTP changes, no webhooks, no external integrations, no feature flags, no migrations, and no Public Widget response changes were introduced.
+- Audit/log-safe projections redact e-mail addresses, phone values, body fields, and secret-like fields.
+- Production validation completed on API commit `863739b1337e4ba6de48beb6779d861d2da117ce`.
+- Deferred areas remain deferred: real `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, worker/SMTP execution, webhooks, ToolExecutor/ToolDispatcher, IntegrationDispatcher, and production wiring.
+
 ## Current Email Queue Write Locations
 
 | Location | Current behavior | Writes `email_jobs` | Triggers processing | Scope risk |
@@ -272,4 +283,6 @@ git diff --check
 
 ## Recommended Next Step
 
-Proceed with P1.2B-12B as a narrow, pure `EmailQueueWriteBoundary` implementation. Keep the actual `email_jobs` insert paths and `processPendingJobs` behavior unchanged until the new boundary has isolated tests and a separate production-safe validation path.
+P1.2B-12 is complete. The next recommended step is `P1.2B-13A` EmailJobsService.enqueue Split / Persistence-vs-Processing Audit.
+
+That audit should remain read-only and cover `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `email_jobs` writes, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, and rollback behavior before any persistence or execution code is moved.
