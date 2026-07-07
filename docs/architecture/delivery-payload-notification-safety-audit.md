@@ -34,6 +34,19 @@ P1.2B-8 ist umgesetzt, gemerged und production-validiert.
 - Webhook-Payloads mit Signing/Headern, `DeliverySideEffectCommandBuilder` und `DeliveryExecutor` bleiben nicht extrahiert.
 - Der production-safe API-only Deploy auf `cbf561963bf4b33faa5889af79c71b7ae2127fb0` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
 
+## Status After P1.2B-9
+
+P1.2B-9 ist umgesetzt, gemerged und production-validiert.
+
+- `DeliverySideEffectCommandBuilder` wurde als reine Datenobjekt-Schicht eingefuehrt.
+- `queue_email_job` bleibt ein Datenobjekt und wird durch den neuen Helper nicht ausgefuehrt.
+- `noop` bleibt ein Datenobjekt.
+- Audit-/Log-safe Command-Projektionen und E-Mail-/Telefon-Redaction sind validiert.
+- Public Widget Response Shape, Antworttexte, Live-Delivery-Entscheidungen und Side Effects blieben unveraendert.
+- `email_jobs`, `webhook_jobs`, `queueInternalLeadNotification`, `ToolExecutorService`, `ToolDispatcherService`, `IntegrationDispatcher` und `WebhookJobsService` wurden nicht verschoben.
+- Webhook-Commands mit Signing/Headern, `DeliveryExecutor` und echte Delivery-Ausfuehrung bleiben nicht extrahiert.
+- Der production-safe API-only Deploy auf `3e6f71cc235f7cc01a6cc41949dd7ac683241722` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
+
 ## Current Responsibilities
 
 | Methode/Funktion | Datei | Verantwortung | liest Config | baut Payload | erzeugt Side Effects | sensitive Werte | Risiko |
@@ -259,6 +272,8 @@ Regeln:
 - Orchestrator bleibt Executor,
 - keine externen Integrationen.
 
+Status: umgesetzt und production-validiert in P1.2B-9 fuer reine Lead-/Email-Command-Datenobjekte. Echte Queue-Writes und Delivery-Ausfuehrung bleiben ausserhalb dieser Phase.
+
 ### Phase 4: Boundary Tests erweitern
 
 - Public Widget Response Shape,
@@ -319,6 +334,6 @@ Regeln:
 
 ## Recommended Next Step
 
-P1.2B-7B sollte mit Phase 1 starten: reine `NotificationSafetyGuard` Helper extrahieren, ohne Side Effects, ohne Antworttextaenderung, ohne Public-Widget-Response-Aenderung und ohne automatische Aktivierung von `deliveryChannels`.
+P1.2B-7, P1.2B-8 und P1.2B-9 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-10A` DeliveryExecutor / Queue Execution Boundary Audit.
 
-Vor jeder Payload-/Command-Extraktion sollten Tests fuer Header-/Secret-Sanitizing, no-op-Verhalten und Public-Response-Sicherheit vorhanden sein.
+P1.2B-10A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen DeliveryExecutor-Code einfuehren, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte `email_jobs` Writes, `webhook_jobs` Writes, Queue Persistence, Retry-/Duplicate-Verhalten, DeliveryExecutor-Abgrenzung, ToolExecutor-/ToolDispatcher-Abgrenzung, IntegrationDispatcher-Abgrenzung, Webhook-Signing/Header, no-op versus queue behavior, Audit und Logging abdecken.
