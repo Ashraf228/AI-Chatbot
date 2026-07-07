@@ -42,6 +42,19 @@ P1.2B-11B through P1.2B-11E are implemented, merged, and production-validated.
 - Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
 - Production validation completed on API commit `eed94afb67107329156ee59265093e49e1dce09a`.
 
+## Status After P1.2B-12
+
+P1.2B-12B through P1.2B-12E are implemented, merged, and production-validated.
+
+- `EmailQueueWriteBoundary` was added as a pure validation, request, and result data-object layer.
+- DeliverySideEffectCommandBuilder remains a pure command data-object layer.
+- DeliveryExecutionBoundary remains a pure validation and ExecutionPlan data-object layer.
+- EmailDeliveryExecutor Boundary remains a pure validation and result data-object layer.
+- Command, plan, result, and queue-request layers remain side-effect-free.
+- `email_jobs`, `webhook_jobs`, real DeliveryExecutor behavior, Orchestrator wiring, ToolExecutor/ToolDispatcher, IntegrationDispatcher, WebhookJobsService, EmailJobsService execution, worker/SMTP execution, and external integrations remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `863739b1337e4ba6de48beb6779d861d2da117ce`.
+
 ## Current Command / Side-Effect Locations
 
 | Method / Function | File | Responsibility | Reads Metadata | Writes Metadata | Creates Side Effects | Response Text | Extraction Risk |
@@ -218,6 +231,6 @@ P1.2B-9B should add focused unit tests for:
 
 ## Recommended Next Step
 
-P1.2B-9, P1.2B-10, and P1.2B-11 are complete. The next recommended step is `P1.2B-12A` Email Queue Write / `EmailJobsService.enqueue` Boundary Audit.
+P1.2B-9, P1.2B-10, P1.2B-11, and P1.2B-12 are complete. The next recommended step is `P1.2B-13A` EmailJobsService.enqueue Split / Persistence-vs-Processing Audit.
 
 That audit should stay read-only and cover `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, and rollback behavior. It should not move queue writes, introduce executor wiring, include webhooks, call external integrations, or change Public Widget responses.

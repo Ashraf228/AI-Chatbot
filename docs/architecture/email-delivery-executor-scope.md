@@ -27,6 +27,17 @@ P1.2B-11B through P1.2B-11E are implemented, merged, and production-validated.
 - Production validation completed on API commit `eed94afb67107329156ee59265093e49e1dce09a`.
 - Deferred areas remain deferred: real `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, worker/SMTP execution, webhooks, ToolExecutor/ToolDispatcher, IntegrationDispatcher, and production wiring.
 
+## Status After P1.2B-12
+
+P1.2B-12B through P1.2B-12E are implemented, merged, and production-validated.
+
+- `EmailQueueWriteBoundary` was added as a pure validation, request, and result data-object layer.
+- `EmailDeliveryExecutor` Boundary remains a pure validation and result data-object layer.
+- Queue write requests and results are not executed and are not wired into the orchestrator.
+- Queue execution, real `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, worker/SMTP execution, webhooks, ToolExecutor/ToolDispatcher, IntegrationDispatcher, and production wiring remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `863739b1337e4ba6de48beb6779d861d2da117ce`.
+
 ## Current Email Delivery Locations
 
 | Method / Function | File | Responsibility | Writes `email_jobs` | Reads Config | Uses Recipient | Uses Secrets | Dedupe / Idempotency | Error Behavior | Risk |
@@ -331,7 +342,7 @@ P1.2B-11 is not:
 
 ## Recommended Next Step
 
-P1.2B-11 is complete. The next recommended step is `P1.2B-12A` Email Queue Write / `EmailJobsService.enqueue` Boundary Audit.
+P1.2B-11 and P1.2B-12 are complete. The next recommended step is `P1.2B-13A` EmailJobsService.enqueue Split / Persistence-vs-Processing Audit.
 
 That audit should remain read-only and cover `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, rollback behavior, and tests before any persistence or execution code is moved.
 
