@@ -487,4 +487,4 @@ Recommended scope for the next planning step:
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-10` completed the DeliveryExecutionBoundary extraction and production validation. `P1.2B-11A` should audit the EmailDeliveryExecutor scope before any queue writes or execution code are moved.
+Status: `P1.2B-10` completed the DeliveryExecutionBoundary extraction and production validation. `P1.2B-11A` now scopes EmailDeliveryExecutor boundaries in `docs/architecture/email-delivery-executor-scope.md` before any queue writes or execution code are moved.
