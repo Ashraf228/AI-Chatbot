@@ -60,6 +60,19 @@ P1.2B-10 ist umgesetzt, gemerged und production-validiert.
 - Webhook Execution, Webhook-Signing/Header-Handling, echter DeliveryExecutor und externe Integrationen bleiben nicht extrahiert.
 - Der production-safe API-only Deploy auf `b852b40a1a6a0afaeb2fcd9441483bdc2dd7ae37` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
 
+## Status After P1.2B-11
+
+P1.2B-11 ist umgesetzt, gemerged und production-validiert.
+
+- `EmailDeliveryExecutor` Boundary wurde als reine Validation-/Result-Schicht eingefuehrt.
+- Email Delivery Plan Classification, Plan Validation, `ready`-/`skipped`-/`blocked`-/`failed`-Result-Datenobjekte und audit-/log-safe Result-Projektionen sind extrahiert.
+- E-Mail-/Telefon-Redaction fuer sichere Result-Projektionen ist validiert.
+- Public Widget Response Shape, Antworttexte, Live-Delivery-Entscheidungen und Side Effects blieben unveraendert.
+- `email_jobs`, `webhook_jobs`, `queueInternalLeadNotification`, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `ToolExecutorService`, `ToolDispatcherService`, `IntegrationDispatcher`, `WebhookJobsService` und Worker-/SMTP-Ausfuehrung wurden nicht verschoben.
+- Results werden nicht ausgefuehrt und sind nicht in den Orchestrator verdrahtet.
+- Webhook Execution, Webhook-Signing/Header-Handling, echter DeliveryExecutor und externe Integrationen bleiben nicht extrahiert.
+- Der production-safe API-only Deploy auf `eed94afb67107329156ee59265093e49e1dce09a` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
+
 ## Current Responsibilities
 
 | Methode/Funktion | Datei | Verantwortung | liest Config | baut Payload | erzeugt Side Effects | sensitive Werte | Risiko |
@@ -298,14 +311,26 @@ Status: umgesetzt und production-validiert in P1.2B-9 fuer reine Lead-/Email-Com
 
 Status: umgesetzt und production-validiert in P1.2B-10 fuer reine Validation-/ExecutionPlan-Datenobjekte. Echte Queue-Writes, Orchestrator-Wiring und Delivery-Ausfuehrung bleiben ausserhalb dieser Phase.
 
-### Phase 5: Boundary Tests erweitern
+### Phase 5: EmailDeliveryExecutor Boundary
+
+- Email Delivery Plans klassifizieren,
+- Email Delivery Plans validieren,
+- Result-Datenobjekte fuer `ready`, `skipped`, `blocked` und `failed` bauen,
+- audit-/log-safe Result-Projektionen bereitstellen,
+- keine Ausfuehrung,
+- keine Queue-Writes,
+- kein Worker-/SMTP-Verhalten.
+
+Status: umgesetzt und production-validiert in P1.2B-11 fuer reine Validation-/Result-Datenobjekte. Echte Queue-Writes, `EmailJobsService.enqueue`, Orchestrator-Wiring, Worker-/SMTP-Ausfuehrung und Delivery-Ausfuehrung bleiben ausserhalb dieser Phase.
+
+### Phase 6: Boundary Tests erweitern
 
 - Public Widget Response Shape,
 - keine unerwarteten Jobs,
 - Header-/Secret-Sanitizing,
 - AssistantProfile deliveryChannels no-op.
 
-### Phase 6: Optionaler DeliveryExecutorService
+### Phase 7: Optionaler DeliveryExecutorService
 
 - nur nach separatem Audit,
 - nur mit Worker-/Retry-/Audit-Testabdeckung,
@@ -358,6 +383,6 @@ Status: umgesetzt und production-validiert in P1.2B-10 fuer reine Validation-/Ex
 
 ## Recommended Next Step
 
-P1.2B-7, P1.2B-8, P1.2B-9 und P1.2B-10 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-11A` EmailDeliveryExecutor Micro-Plan / Scope-Check.
+P1.2B-7, P1.2B-8, P1.2B-9, P1.2B-10 und P1.2B-11 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-12A` Email Queue Write / `EmailJobsService.enqueue` Boundary Audit.
 
-P1.2B-11A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen EmailDeliveryExecutor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte `email_jobs` Writes, Idempotency, Duplicate Prevention, no-op versus queue behavior, Retry-/Status-Verhalten, Partial-Failure-Handling, Audit/Logging, Queue Execution Result, Orchestrator-Wiring und Rollback-Verhalten abdecken.
+P1.2B-12A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen Executor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte `email_jobs` Writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Worker-/SMTP-Verhalten, Idempotency, Duplicate Prevention, no-op versus queue behavior, Retry-/Status-Verhalten, Partial-Failure-Handling, Audit/Logging, Orchestrator-Wiring und Rollback-Verhalten abdecken.
