@@ -2,7 +2,7 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-8 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-9 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` remains the executor for database writes, queue writes, audit writes, lead finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
@@ -10,7 +10,7 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `cbf561963bf4b33faa5889af79c71b7ae2127fb0` |
+| API | `3e6f71cc235f7cc01a6cc41949dd7ac683241722` |
 | Dashboard | `25480866a7bffab7007adf1495477b4e22c7380a` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
@@ -239,6 +239,40 @@ Not introduced or moved:
 - External integrations.
 - Public Widget response shape.
 
+### P1.2B-9 DeliverySideEffectCommandBuilder
+
+File: `apps/api/src/chat/delivery-side-effect.commands.ts`
+
+Extracted pure command builders and projections:
+
+- DeliverySideEffectCommand data-object builders.
+- `queue_email_job` command as a data object.
+- `noop` command as a data object.
+- Lead email Delivery commands.
+- Audit/log-safe command projections.
+- E-mail and phone redaction for safe projections.
+
+Productive use:
+
+- No productive runtime usage was introduced.
+- Builders are prepared but not wired into orchestrator or executor paths.
+- Commands are not executed.
+- `ChatAgentOrchestratorService` and existing services remain the executors.
+
+Not introduced or moved:
+
+- `email_jobs` writes.
+- `webhook_jobs` writes.
+- Webhook commands with signing or transport headers.
+- `DeliveryExecutor`.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- `IntegrationDispatcher`.
+- `WebhookJobsService`.
+- External integrations.
+- Public Widget response shape.
+- Conversation Engine public activation.
+
 ## Still in ChatAgentOrchestrator
 
 The following responsibilities deliberately remain in `ChatAgentOrchestratorService`:
@@ -256,6 +290,7 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - `queueInternalLeadNotification`.
 - Webhook signing / webhook headers.
 - WebhookJobsService execution.
+- Delivery command execution.
 - Conversation metadata persistence.
 - ToolExecutor/ToolDispatcher separation.
 - IntegrationDispatcher.
@@ -267,7 +302,7 @@ This is intentional. The extracted modules are pure helpers/builders only; they 
 
 ## Safety Boundaries
 
-The P1.2B-1 through P1.2B-8 refactor keeps these boundaries:
+The P1.2B-1 through P1.2B-9 refactor keeps these boundaries:
 
 - No public widget response change.
 - Public Widget does not expose `deliveryChannels`, `signingSecret`, `token`, `apiKey`, `authorization`, `recipientEmail`, or `webhookUrl`.
@@ -277,7 +312,8 @@ The P1.2B-1 through P1.2B-8 refactor keeps these boundaries:
 - No database migration.
 - No hidden side effects introduced.
 - `DeliveryPayloadBuilder` is pure payload/projection logic only.
-- No `DeliverySideEffectCommandBuilder` introduced.
+- `DeliverySideEffectCommandBuilder` is pure command data-object logic only.
+- No productive DeliverySideEffectCommand runtime execution introduced.
 - No DeliveryExecutor introduced.
 - No `email_jobs` / `webhook_jobs` moved into helpers.
 - No automatic `deliveryChannels` activation.
@@ -285,6 +321,7 @@ The P1.2B-1 through P1.2B-8 refactor keeps these boundaries:
 - No IntegrationDispatcher changes.
 - No `agent_tickets` insert moved into helpers.
 - No webhook signing or webhook headers moved into helpers.
+- No webhook commands with signing or headers introduced.
 - No response text changes intended.
 - No branch-order changes intended.
 
@@ -295,6 +332,7 @@ The refactor groups were deployed incrementally and validated after each product
 Validation summary:
 
 - API-only deploy to `cbf561963bf4b33faa5889af79c71b7ae2127fb0` completed successfully for P1.2B-8.
+- API-only deploy to `3e6f71cc235f7cc01a6cc41949dd7ac683241722` completed successfully for P1.2B-9.
 - API `/healthz` green with the target API commit.
 - Database and Redis health green.
 - Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
@@ -325,9 +363,17 @@ Validation summary:
 - No-op Delivery target decision compatibility validated.
 - Audit/log-safe Delivery projection compatibility validated.
 - `lead-capture.builders.ts` API compatibility validated.
+- DeliverySideEffectCommandBuilder compatibility validated.
+- `queue_email_job` remains a data object only.
+- `noop` remains a data object only.
+- Lead e-mail Delivery command projection compatibility validated.
+- Audit/log-safe command projections validated.
+- E-mail and phone redaction compatibility validated.
+- No productive DeliverySideEffectCommand runtime usage introduced.
+- No Delivery or Integration execution occurred during validation.
 - Side effects remained in `ChatAgentOrchestratorService`.
-- `DeliverySideEffectCommandBuilder` was not introduced.
 - `DeliveryExecutor` was not introduced.
+- Webhook commands with signing or headers were not introduced.
 - Webhook payloads with signing or headers were not extracted.
 - `queueInternalLeadNotification` remained unchanged.
 - `ToolExecutorService` and `ToolDispatcherService` remained unchanged.
@@ -346,6 +392,7 @@ Operational note:
 - During the API recreate there was one brief widget upstream connection error while the API container was being replaced.
 - Some read-only SQL probe queries were initially misquoted and produced database syntax errors in logs.
 - The string scan matched only the existing `messages[].tokens` field; this is not a secret or provider token.
+- A non-critical Next.js Server Action mismatch appeared in Dashboard logs and was unrelated to the API-only deploy.
 - The final post-stabilization log scan was clean; no application, migration, or runtime error remained.
 
 ## Remaining Risks
@@ -355,7 +402,7 @@ Operational note:
 - `LeadCaptureFlowService` is not yet a real service; P1.2B-4 only extracted pure builders.
 - `ToolExecutorService` and `ToolDispatcherService` still have separate lead-capture-related paths.
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
-- Handoff policy, NotificationSafetyGuard, and DeliveryPayloadBuilder are extracted as pure helpers/builders, but Delivery side-effect commands and execution are not isolated.
+- Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, and DeliverySideEffectCommandBuilder are extracted as pure helpers/builders, but Delivery execution is not isolated.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
@@ -363,21 +410,21 @@ Operational note:
 
 1. Do not immediately continue with a broad refactor.
 2. Prefer the next audit as:
-   - `P1.2B-9A` DeliverySideEffectCommandBuilder micro-plan / scope-check.
+   - `P1.2B-10A` DeliveryExecutor / Queue Execution Boundary Audit.
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-The next possible technical area is DeliverySideEffectCommandBuilder. After DeliveryPayloadBuilder extraction, the remaining high-risk side-effect area includes `email_jobs`, `webhook_jobs`, Delivery commands, no-op behavior, ToolExecutor/ToolDispatcher boundaries, IntegrationDispatcher boundaries, webhook signing, webhook headers, and overlap with LeadCapture and TicketFlow.
+The next possible technical area is Delivery execution. After DeliverySideEffectCommandBuilder extraction, the remaining high-risk side-effect area includes `email_jobs` writes, `webhook_jobs` writes, queue persistence, retry and duplicate behavior, DeliveryExecutor boundaries, ToolExecutor/ToolDispatcher boundaries, IntegrationDispatcher boundaries, webhook signing, webhook headers, no-op versus queue behavior, idempotency, audit, and logging.
 
 Recommended scope for the next planning step:
 
-- Command data objects only.
-- No queue writes.
-- No DeliveryExecutor.
+- Audit / scope only.
+- No queue writes moved.
+- No DeliveryExecutor code.
 - No external integrations.
 - No ToolExecutor/ToolDispatcher consolidation.
 - No Public Widget response change.
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-8` completed the DeliveryPayloadBuilder extraction and production validation. `P1.2B-9A` should scope the DeliverySideEffectCommandBuilder boundary before any command-builder code extraction.
+Status: `P1.2B-9` completed the DeliverySideEffectCommandBuilder extraction and production validation. `P1.2B-10A` should audit the DeliveryExecutor / Queue Execution boundary before any execution code is moved.

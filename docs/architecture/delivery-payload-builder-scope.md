@@ -16,6 +16,17 @@ P1.2B-8B through P1.2B-8E are implemented, merged, and production-validated.
 - Deferred areas remain deferred: webhook payloads with headers/signing, ToolExecutor/ToolDispatcher consolidation, IntegrationDispatcher, WebhookJobs, DeliverySideEffectCommandBuilder, and DeliveryExecutor.
 - Production validation completed on API commit `cbf561963bf4b33faa5889af79c71b7ae2127fb0`.
 
+## Status After P1.2B-9
+
+P1.2B-9B through P1.2B-9E are implemented, merged, and production-validated.
+
+- `DeliverySideEffectCommandBuilder` was added as a pure command data-object layer.
+- `queue_email_job` and `noop` commands remain data objects only.
+- Delivery payload execution and queue writes remain outside the builder.
+- `email_jobs`, `webhook_jobs`, DeliveryExecutor, ToolExecutor/ToolDispatcher, IntegrationDispatcher, WebhookJobsService, and external integrations remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `3e6f71cc235f7cc01a6cc41949dd7ac683241722`.
+
 ## Current Payload-Building Locations
 
 | Methode/Funktion | Datei | Payload-Typ | liest Config | nutzt sensitive Werte | erzeugt Side Effects | kann pure extrahiert werden | Risiko |
@@ -204,4 +215,4 @@ Webhook builders should mostly remain deferred. If a tiny webhook payload projec
 
 ## Recommended Next Step
 
-Proceed with `P1.2B-8B` only if it is limited to pure lead/email payload builders and safety projections. Defer webhook payload extraction, signing, queue commands, and executor work to a separate audit after this first narrow builder extraction is production-validated.
+P1.2B-8 and P1.2B-9 are complete. The next recommended step is `P1.2B-10A` DeliveryExecutor / Queue Execution Boundary Audit. Defer webhook payload execution, signing, queue writes, and executor work until that audit defines the boundary.

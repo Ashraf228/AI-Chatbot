@@ -7,6 +7,18 @@ The goal is to separate delivery command construction from execution without cha
 
 P1.2B-9B should only introduce pure, stateless command builders for existing lead/email delivery paths. Commands may describe what the existing runtime would do, but they must not execute it.
 
+## Status After P1.2B-9
+
+P1.2B-9B through P1.2B-9E are implemented, merged, and production-validated.
+
+- `apps/api/src/chat/delivery-side-effect.commands.ts` contains pure DeliverySideEffectCommand data-object builders.
+- `queue_email_job` remains a data object only and is not executed by the new helper.
+- `noop` remains a data object only.
+- Audit/log-safe command projections and e-mail/phone redaction are validated.
+- The safe scope from this document was kept: no queue writes, no database writes, no DeliveryExecutor, no external integrations, no feature flags, no migrations, and no Public Widget response changes.
+- Production validation completed on API commit `3e6f71cc235f7cc01a6cc41949dd7ac683241722`.
+- Deferred areas remain deferred: `email_jobs` writes, `webhook_jobs` writes, webhook commands with signing or headers, DeliveryExecutor, ToolExecutor/ToolDispatcher consolidation, IntegrationDispatcher, WebhookJobsService, and external integrations.
+
 ## Current Command / Side-Effect Locations
 
 | Method / Function | File | Responsibility | Reads Metadata | Writes Metadata | Creates Side Effects | Response Text | Extraction Risk |
@@ -183,6 +195,6 @@ P1.2B-9B should add focused unit tests for:
 
 ## Recommended Next Step
 
-Proceed with P1.2B-9B only if the implementation is limited to pure lead/email command construction and sanitized projections.
+P1.2B-9 is complete. The next recommended step is `P1.2B-10A` DeliveryExecutor / Queue Execution Boundary Audit.
 
-The next implementation should produce a small helper module with narrow unit tests, then validate that public widget responses, lead capture, contact request creation, ticket flows, webhook jobs, and email queue behavior remain byte-for-byte compatible at the behavior level.
+That audit should stay read-only and cover `email_jobs` writes, `webhook_jobs` writes, queue persistence, retry and duplicate behavior, DeliveryExecutor boundaries, ToolExecutor/ToolDispatcher boundaries, IntegrationDispatcher boundaries, webhook signing and headers, no-op versus queue behavior, idempotency, audit, and logging. It should not move queue writes, introduce DeliveryExecutor code, call external integrations, or change Public Widget responses.
