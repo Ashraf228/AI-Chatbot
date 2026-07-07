@@ -27,6 +27,19 @@ P1.2B-9B through P1.2B-9E are implemented, merged, and production-validated.
 - Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
 - Production validation completed on API commit `3e6f71cc235f7cc01a6cc41949dd7ac683241722`.
 
+## Status After P1.2B-10
+
+P1.2B-10B through P1.2B-10E are implemented, merged, and production-validated.
+
+- `DeliveryExecutionBoundary` was added as a pure validation and ExecutionPlan data-object layer.
+- Payload, command, and ExecutionPlan layers remain side-effect-free.
+- `DeliveryPayloadBuilder` remains pure payload/projection logic.
+- `DeliverySideEffectCommandBuilder` remains pure command data-object logic.
+- Execution Plans are not executed and are not wired into the orchestrator.
+- `email_jobs`, `webhook_jobs`, DeliveryExecutor, ToolExecutor/ToolDispatcher, IntegrationDispatcher, WebhookJobsService, EmailJobsService, and external integrations remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `b852b40a1a6a0afaeb2fcd9441483bdc2dd7ae37`.
+
 ## Current Payload-Building Locations
 
 | Methode/Funktion | Datei | Payload-Typ | liest Config | nutzt sensitive Werte | erzeugt Side Effects | kann pure extrahiert werden | Risiko |
@@ -215,4 +228,4 @@ Webhook builders should mostly remain deferred. If a tiny webhook payload projec
 
 ## Recommended Next Step
 
-P1.2B-8 and P1.2B-9 are complete. The next recommended step is `P1.2B-10A` DeliveryExecutor / Queue Execution Boundary Audit. Defer webhook payload execution, signing, queue writes, and executor work until that audit defines the boundary.
+P1.2B-8, P1.2B-9, and P1.2B-10 are complete. The next recommended step is `P1.2B-11A` EmailDeliveryExecutor Micro-Plan / Scope-Check. Defer queue writes, webhook payload execution, signing, executor wiring, and external integrations until that audit defines a safe boundary.

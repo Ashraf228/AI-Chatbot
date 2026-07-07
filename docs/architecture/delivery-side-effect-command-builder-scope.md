@@ -19,6 +19,17 @@ P1.2B-9B through P1.2B-9E are implemented, merged, and production-validated.
 - Production validation completed on API commit `3e6f71cc235f7cc01a6cc41949dd7ac683241722`.
 - Deferred areas remain deferred: `email_jobs` writes, `webhook_jobs` writes, webhook commands with signing or headers, DeliveryExecutor, ToolExecutor/ToolDispatcher consolidation, IntegrationDispatcher, WebhookJobsService, and external integrations.
 
+## Status After P1.2B-10
+
+P1.2B-10B through P1.2B-10E are implemented, merged, and production-validated.
+
+- `DeliveryExecutionBoundary` was added as a pure validation and ExecutionPlan data-object layer.
+- DeliverySideEffectCommandBuilder remains a pure command data-object layer.
+- Command execution and queue writes remain outside both helper layers.
+- `email_jobs`, `webhook_jobs`, DeliveryExecutor, Orchestrator wiring, ToolExecutor/ToolDispatcher, IntegrationDispatcher, WebhookJobsService, EmailJobsService, and external integrations remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `b852b40a1a6a0afaeb2fcd9441483bdc2dd7ae37`.
+
 ## Current Command / Side-Effect Locations
 
 | Method / Function | File | Responsibility | Reads Metadata | Writes Metadata | Creates Side Effects | Response Text | Extraction Risk |
@@ -195,6 +206,6 @@ P1.2B-9B should add focused unit tests for:
 
 ## Recommended Next Step
 
-P1.2B-9 is complete. The next recommended step is `P1.2B-10A` DeliveryExecutor / Queue Execution Boundary Audit.
+P1.2B-9 and P1.2B-10 are complete. The next recommended step is `P1.2B-11A` EmailDeliveryExecutor Micro-Plan / Scope-Check.
 
-That audit should stay read-only and cover `email_jobs` writes, `webhook_jobs` writes, queue persistence, retry and duplicate behavior, DeliveryExecutor boundaries, ToolExecutor/ToolDispatcher boundaries, IntegrationDispatcher boundaries, webhook signing and headers, no-op versus queue behavior, idempotency, audit, and logging. It should not move queue writes, introduce DeliveryExecutor code, call external integrations, or change Public Widget responses.
+That audit should stay read-only and cover `email_jobs` writes, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, queue execution result, Orchestrator wiring, and rollback behavior. It should not move queue writes, introduce EmailDeliveryExecutor code, include webhooks, call external integrations, or change Public Widget responses.
