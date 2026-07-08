@@ -753,4 +753,6 @@ Recommended scope for the next planning step:
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-14` completed the EmailJobProcessingTriggerBoundary extraction and production validation. `P1.2B-15A` should audit the EmailJobs worker / `processPendingJobs` boundary before any processing, worker, SMTP, retry, locking, report-run synchronization, or Orchestrator wiring is moved.
+Status: `P1.2B-14` completed the EmailJobProcessingTriggerBoundary extraction and production validation. `P1.2B-15A` documented the EmailJobs worker / `processPendingJobs` boundary in `docs/architecture/email-jobs-worker-process-pending-boundary-audit.md`.
+
+Recommended next step: `P1.2B-15B` may add a pure `EmailJobWorkerBoundary` with worker-plan, status-transition, retry-decision, worker-result, validation, no-op/blocked/failed, and safe-projection helpers only. It must not change `EmailJobsService`, `processPendingJobs`, SQL, SMTP, retry, locking, `report_runs`, queue writes, Orchestrator wiring, or public widget behavior.
