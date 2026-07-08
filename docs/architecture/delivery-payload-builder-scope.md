@@ -282,6 +282,12 @@ Webhook builders should mostly remain deferred. If a tiny webhook payload projec
 - No automatic activation of `deliveryChannels`.
 - No webhook signing execution.
 
+## Current Status After P1.2B-15
+
+DeliveryPayloadBuilder was production-validated in P1.2B-8. DeliverySideEffectCommandBuilder was production-validated in P1.2B-9. DeliveryExecutionBoundary was production-validated in P1.2B-10. EmailDeliveryExecutor Boundary was production-validated in P1.2B-11. EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15.
+
+Payload, command, ExecutionPlan, result, queue-request, persistence-request, processing-trigger-request, and worker-plan layers remain side-effect-free.
+
 ## Recommended Next Step
 
-P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, P1.2B-13, and P1.2B-14 are complete. The next recommended step is `P1.2B-15A` EmailJobs Worker / processPendingJobs Refactor Boundary Audit. Defer queue writes, webhook payload execution, signing, executor wiring, worker/SMTP changes, processing changes, retry/status/locking changes, `report_runs` synchronization changes, and external integrations until that audit defines a safe boundary.
+P1.2B-8 through P1.2B-15 are complete. The next recommended step is `P1.2B-16A` Email Job Status/Retry/Locking Boundary Audit. Defer queue writes, webhook payload execution, signing, executor wiring, worker/SMTP changes, processing changes, retry/status/locking changes, stale-processing recovery, `report_runs` synchronization changes, and external integrations until that audit defines a safe boundary.

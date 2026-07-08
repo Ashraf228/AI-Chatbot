@@ -420,17 +420,23 @@ P1.2B-10 is not intended to:
 - Call external integrations directly.
 - Wire a new executor into production chat without a separate deploy plan.
 
+## Current Status After P1.2B-15
+
+DeliveryExecutionBoundary was production-validated in P1.2B-10. EmailDeliveryExecutor Boundary was production-validated in P1.2B-11. EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15.
+
+Queue and processing execution, real `email_jobs`/`webhook_jobs` writes, worker/SMTP execution, retry/status/locking behavior, stale-processing recovery, and `report_runs` synchronization remain outside the extracted boundaries.
+
 ## Recommended Next Step
 
-P1.2B-10, P1.2B-11, P1.2B-12, P1.2B-13, and P1.2B-14 are complete. P1.2B-10B did not build a full DeliveryExecutor, P1.2B-11B did not write queues or wire execution, P1.2B-12B did not call `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs`, P1.2B-13B did not write `email_jobs`, and P1.2B-14B did not call `processPendingJobs`.
+P1.2B-10 through P1.2B-15 are complete. P1.2B-10B did not build a full DeliveryExecutor, P1.2B-11B did not write queues or wire execution, P1.2B-12B did not call `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs`, P1.2B-13B did not write `email_jobs`, P1.2B-14B did not call `processPendingJobs`, and P1.2B-15B did not execute WorkerPlans or WorkerResults.
 
 Recommended next step:
 
-1. Create `P1.2B-15A` as an EmailJobs Worker / processPendingJobs Refactor Boundary Audit only.
+1. Create `P1.2B-16A` as an Email Job Status/Retry/Locking Boundary Audit only.
 2. Keep it email-only and worker-/processing-focused.
 3. Do not move queue writes or introduce executor wiring in the audit step.
 4. Do not wire it into `ChatAgentOrchestratorService`.
 5. Do not include webhooks, signing, ToolExecutor, ToolDispatcher, or IntegrationDispatcher.
-6. Scope job selection, `FOR UPDATE SKIP LOCKED`, status transitions, retry/failure behavior, stale processing recovery, SMTP/provider boundary, `report_runs` synchronization, idempotency, duplicate prevention, audit/logging, rollback behavior, and tests before any implementation.
+6. Scope status transition policy, retry decision policy, locking boundaries, stale processing recovery, idempotency, duplicate prevention, audit/logging, rollback behavior, and required DB tests before any implementation.
 
 This keeps the next step small enough to validate without changing live chat behavior.
