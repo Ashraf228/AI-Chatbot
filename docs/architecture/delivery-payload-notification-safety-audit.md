@@ -86,6 +86,19 @@ P1.2B-12 ist umgesetzt, gemerged und production-validiert.
 - Webhook Execution, Webhook-Signing/Header-Handling, echter DeliveryExecutor und externe Integrationen bleiben nicht extrahiert.
 - Der production-safe API-only Deploy auf `863739b1337e4ba6de48beb6779d861d2da117ce` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
 
+## Status After P1.2B-13
+
+P1.2B-13 ist umgesetzt, gemerged und production-validiert.
+
+- `EmailJobPersistenceBoundary` wurde als reine Validation-/Request-/Result-Schicht eingefuehrt.
+- Source Queue Write Result Classification, Persistence Validation, `ready`-/`skipped`-/`blocked`-/`failed`-Result-Datenobjekte und audit-/log-safe Request-/Result-Projektionen sind extrahiert.
+- E-Mail-/Telefon-Redaction fuer sichere Persistence-Projektionen ist validiert.
+- Public Widget Response Shape, Antworttexte, Live-Delivery-Entscheidungen und Side Effects blieben unveraendert.
+- `email_jobs`, `webhook_jobs`, `queueInternalLeadNotification`, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Processing-Trigger-Typen, `ToolExecutorService`, `ToolDispatcherService`, `IntegrationDispatcher`, `WebhookJobsService` und Worker-/SMTP-Ausfuehrung wurden nicht verschoben.
+- Persistence Requests und Results werden nicht ausgefuehrt und sind nicht in den Orchestrator verdrahtet.
+- Webhook Execution, Webhook-Signing/Header-Handling, echter DeliveryExecutor und externe Integrationen bleiben nicht extrahiert.
+- Der production-safe API-only Deploy auf `8604f60f2a2822693f11b6accb066f3afab56c9f` war erfolgreich; Migration blieb `028_generic_webhook_signing_modes.sql` mit 28 angewendeten Migrationen.
+
 ## Current Responsibilities
 
 | Methode/Funktion | Datei | Verantwortung | liest Config | baut Payload | erzeugt Side Effects | sensitive Werte | Risiko |
@@ -410,6 +423,6 @@ Status: umgesetzt und production-validiert in P1.2B-12 fuer reine Validation-/Re
 
 ## Recommended Next Step
 
-P1.2B-7, P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11 und P1.2B-12 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-13A` EmailJobsService.enqueue Split / Persistence-vs-Processing Audit.
+P1.2B-7, P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12 und P1.2B-13 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope.
 
-P1.2B-13A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen Executor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte `email_jobs` Writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Worker-/SMTP-Verhalten, Idempotency, Duplicate Prevention, no-op versus queue behavior, Retry-/Status-Verhalten, Partial-Failure-Handling, Audit/Logging, Orchestrator-Wiring und Rollback-Verhalten abdecken.
+P1.2B-14A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen Executor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte Processing-Trigger-Entscheidungen, `EmailJobsService.processPendingJobs`, Worker-/SMTP-Verhalten, Idempotency, Duplicate Prevention, no-op versus queue behavior, Retry-/Status-Verhalten, Partial-Failure-Handling, Audit/Logging, Orchestrator-Wiring und Rollback-Verhalten abdecken.

@@ -17,6 +17,17 @@ Recommended next implementation scope:
 - P1.2B-13B should still avoid real `email_jobs` writes and should not change `EmailJobsService.enqueue` or `processPendingJobs`.
 - The safe next code step is a pure `EmailJobPersistenceBoundary` and, optionally, pure `EmailJobProcessingTriggerBoundary` types/results/projections with focused tests.
 
+## Status After P1.2B-13
+
+P1.2B-13B through P1.2B-13E are implemented, merged, and production-validated.
+
+- `apps/api/src/chat/email-job-persistence.boundary.ts` contains only persistence request/result data objects, source queue-write result classification helpers, persistence validation helpers, result builders, and safe projections.
+- The safe scope from this audit was kept: the boundary validates and describes persistence request/result data only.
+- No runtime execution, no `email_jobs` writes, no `EmailJobsService.enqueue`, no `EmailJobsService.processPendingJobs`, no processing trigger types, no Orchestrator wiring, no worker/SMTP changes, no webhooks, no external integrations, no feature flags, no migrations, and no Public Widget response changes were introduced.
+- Audit/log-safe projections redact e-mail addresses, phone values, body fields, and secret-like fields.
+- Production validation completed on API commit `8604f60f2a2822693f11b6accb066f3afab56c9f`.
+- Deferred areas remain deferred: real `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, processing trigger decisions, Orchestrator wiring, worker/SMTP execution, webhooks, ToolExecutor/ToolDispatcher, IntegrationDispatcher, and production wiring.
+
 ## Current EmailJobsService.enqueue Behavior
 
 | Methode/Funktion | Datei | Verantwortung | schreibt DB | Tabelle | startet Processing | nutzt SMTP/Worker | nutzt Config/env | Fehlerverhalten | Risiko |
@@ -387,11 +398,6 @@ P1.2B-13 is not intended to:
 
 ## Recommended Next Step
 
-Proceed with P1.2B-13B only as a pure boundary implementation:
+P1.2B-13 is complete. The next recommended step is `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope.
 
-1. Add `EmailJobPersistenceBoundary` request/result/validation/projection helpers.
-2. Keep it completely unwired from runtime.
-3. Do not call `EmailJobsService.enqueue`.
-4. Do not call `EmailJobsService.processPendingJobs`.
-5. Do not write `email_jobs`.
-6. Add side-effect-negative tests before any future persistence adapter is considered.
+That audit should remain read-only and cover processing trigger decisions, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, rollback behavior, and tests before any processing trigger or worker code is moved.

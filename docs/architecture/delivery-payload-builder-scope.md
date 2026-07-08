@@ -69,6 +69,22 @@ P1.2B-12B through P1.2B-12E are implemented, merged, and production-validated.
 - Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
 - Production validation completed on API commit `863739b1337e4ba6de48beb6779d861d2da117ce`.
 
+## Status After P1.2B-13
+
+P1.2B-13B through P1.2B-13E are implemented, merged, and production-validated.
+
+- `EmailJobPersistenceBoundary` was added as a pure validation, request, and result data-object layer.
+- Payload, command, ExecutionPlan, result, queue-request, and persistence-request layers remain side-effect-free.
+- `DeliveryPayloadBuilder` remains pure payload/projection logic.
+- `DeliverySideEffectCommandBuilder` remains pure command data-object logic.
+- `DeliveryExecutionBoundary` remains pure validation and ExecutionPlan logic.
+- `EmailDeliveryExecutor` Boundary remains pure validation and result data-object logic.
+- `EmailQueueWriteBoundary` remains pure validation, request, and result data-object logic.
+- Persistence requests and results are not executed and are not wired into the orchestrator.
+- `email_jobs`, `webhook_jobs`, real DeliveryExecutor behavior, ToolExecutor/ToolDispatcher, IntegrationDispatcher, WebhookJobsService, EmailJobsService execution, processing trigger decisions, worker/SMTP execution, and external integrations remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `8604f60f2a2822693f11b6accb066f3afab56c9f`.
+
 ## Current Payload-Building Locations
 
 | Methode/Funktion | Datei | Payload-Typ | liest Config | nutzt sensitive Werte | erzeugt Side Effects | kann pure extrahiert werden | Risiko |
@@ -257,4 +273,4 @@ Webhook builders should mostly remain deferred. If a tiny webhook payload projec
 
 ## Recommended Next Step
 
-P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, and P1.2B-12 are complete. The next recommended step is `P1.2B-13A` EmailJobsService.enqueue Split / Persistence-vs-Processing Audit. Defer queue writes, webhook payload execution, signing, executor wiring, worker/SMTP changes, and external integrations until that audit defines a safe boundary.
+P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, and P1.2B-13 are complete. The next recommended step is `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope. Defer queue writes, webhook payload execution, signing, executor wiring, worker/SMTP changes, processing trigger changes, and external integrations until that audit defines a safe boundary.

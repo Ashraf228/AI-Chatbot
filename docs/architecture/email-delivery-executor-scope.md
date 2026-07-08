@@ -38,6 +38,17 @@ P1.2B-12B through P1.2B-12E are implemented, merged, and production-validated.
 - Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
 - Production validation completed on API commit `863739b1337e4ba6de48beb6779d861d2da117ce`.
 
+## Status After P1.2B-13
+
+P1.2B-13B through P1.2B-13E are implemented, merged, and production-validated.
+
+- `EmailJobPersistenceBoundary` was added as a pure validation, request, and result data-object layer.
+- `EmailDeliveryExecutor` Boundary and `EmailQueueWriteBoundary` remain pure data-object boundaries.
+- Persistence requests and results are not executed and are not wired into the orchestrator.
+- Real `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, processing trigger decisions, Orchestrator wiring, worker/SMTP execution, webhooks, ToolExecutor/ToolDispatcher, IntegrationDispatcher, and production wiring remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `8604f60f2a2822693f11b6accb066f3afab56c9f`.
+
 ## Current Email Delivery Locations
 
 | Method / Function | File | Responsibility | Writes `email_jobs` | Reads Config | Uses Recipient | Uses Secrets | Dedupe / Idempotency | Error Behavior | Risk |
@@ -342,8 +353,8 @@ P1.2B-11 is not:
 
 ## Recommended Next Step
 
-P1.2B-11 and P1.2B-12 are complete. The next recommended step is `P1.2B-13A` EmailJobsService.enqueue Split / Persistence-vs-Processing Audit.
+P1.2B-11, P1.2B-12, and P1.2B-13 are complete. The next recommended step is `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope.
 
-That audit should remain read-only and cover `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, rollback behavior, and tests before any persistence or execution code is moved.
+That audit should remain read-only and cover processing trigger decisions, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, rollback behavior, and tests before any processing trigger or worker code is moved.
 
 Do not implement actual `email_jobs` insertion, executor wiring, worker changes, SMTP changes, webhooks, external integrations, or Public Widget response changes until that separate queue-write scope is approved.

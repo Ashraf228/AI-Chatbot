@@ -55,6 +55,17 @@ P1.2B-12B through P1.2B-12E are implemented, merged, and production-validated.
 - Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
 - Production validation completed on API commit `863739b1337e4ba6de48beb6779d861d2da117ce`.
 
+## Status After P1.2B-13
+
+P1.2B-13B through P1.2B-13E are implemented, merged, and production-validated.
+
+- `EmailJobPersistenceBoundary` was added as a pure validation, request, and result data-object layer.
+- DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, and EmailQueueWriteBoundary remain pure data-object layers.
+- Command, plan, result, queue-request, and persistence-request layers remain side-effect-free.
+- `email_jobs`, `webhook_jobs`, real DeliveryExecutor behavior, Orchestrator wiring, ToolExecutor/ToolDispatcher, IntegrationDispatcher, WebhookJobsService, EmailJobsService execution, processing trigger decisions, worker/SMTP execution, and external integrations remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `8604f60f2a2822693f11b6accb066f3afab56c9f`.
+
 ## Current Command / Side-Effect Locations
 
 | Method / Function | File | Responsibility | Reads Metadata | Writes Metadata | Creates Side Effects | Response Text | Extraction Risk |
@@ -231,6 +242,6 @@ P1.2B-9B should add focused unit tests for:
 
 ## Recommended Next Step
 
-P1.2B-9, P1.2B-10, P1.2B-11, and P1.2B-12 are complete. The next recommended step is `P1.2B-13A` EmailJobsService.enqueue Split / Persistence-vs-Processing Audit.
+P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, and P1.2B-13 are complete. The next recommended step is `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope.
 
-That audit should stay read-only and cover `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, and rollback behavior. It should not move queue writes, introduce executor wiring, include webhooks, call external integrations, or change Public Widget responses.
+That audit should stay read-only and cover processing trigger decisions, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, and rollback behavior. It should not move queue writes, introduce executor wiring, include webhooks, call external integrations, or change Public Widget responses.
