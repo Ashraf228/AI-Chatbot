@@ -36,6 +36,17 @@ P1.2B-13B through P1.2B-13E are implemented, merged, and production-validated.
 - Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
 - Production validation completed on API commit `8604f60f2a2822693f11b6accb066f3afab56c9f`.
 
+## Status After P1.2B-14
+
+P1.2B-14B through P1.2B-14E are implemented, merged, and production-validated.
+
+- `EmailJobProcessingTriggerBoundary` was added as a pure validation, request, and result data-object layer after the persistence boundary.
+- `EmailQueueWriteBoundary` and `EmailJobPersistenceBoundary` remain pure validation, request, and result data-object layers.
+- Queue write requests, persistence requests, processing trigger requests, and their results are not executed and are not wired into the orchestrator.
+- Real `email_jobs` writes, queue execution, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `processPendingJobs` calls, Orchestrator wiring, worker/SMTP execution, retry/status/locking behavior, `report_runs` synchronization, webhooks, ToolExecutor/ToolDispatcher, IntegrationDispatcher, and production wiring remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `3bfd9854894b7c5d241534877bf335e300dccd93`.
+
 ## Current Email Queue Write Locations
 
 | Location | Current behavior | Writes `email_jobs` | Triggers processing | Scope risk |
@@ -294,6 +305,6 @@ git diff --check
 
 ## Recommended Next Step
 
-P1.2B-12 and P1.2B-13 are complete. The next recommended step is `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope.
+P1.2B-12, P1.2B-13, and P1.2B-14 are complete. The next recommended step is `P1.2B-15A` EmailJobs Worker / processPendingJobs Refactor Boundary Audit.
 
 That audit should remain read-only and cover processing trigger decisions, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, and rollback behavior before any processing trigger or worker code is moved.

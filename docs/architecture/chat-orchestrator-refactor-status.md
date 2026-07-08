@@ -2,7 +2,7 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-13 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-14 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` remains the executor for database writes, queue writes, audit writes, lead finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
@@ -10,7 +10,7 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `8604f60f2a2822693f11b6accb066f3afab56c9f` |
+| API | `3bfd9854894b7c5d241534877bf335e300dccd93` |
 | Dashboard | `25480866a7bffab7007adf1495477b4e22c7380a` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
@@ -442,6 +442,52 @@ Not introduced or moved:
 - Public Widget response shape.
 - Conversation Engine public activation.
 
+### P1.2B-14 EmailJobProcessingTriggerBoundary
+
+File: `apps/api/src/chat/email-job-processing-trigger.boundary.ts`
+
+Extracted pure validation, request, and result helpers:
+
+- `EmailJobProcessingTriggerRequest`.
+- `EmailJobProcessingTriggerResult`.
+- Source Persistence Result Classification helpers.
+- Processing Trigger Validation helpers.
+- `ready_to_trigger`, `skipped`, `blocked`, and `failed` result builders.
+- Audit/log-safe ProcessingTriggerRequest and ProcessingTriggerResult projections.
+- E-mail and phone redaction for safe projections.
+
+Productive use:
+
+- No productive runtime usage was introduced.
+- No `ChatAgentOrchestratorService` rewiring was introduced.
+- The boundary is prepared but not connected to `EmailJobsService`, `processPendingJobs`, worker, SMTP, retry, locking, status, or `report_runs` paths.
+- ProcessingTriggerRequests and ProcessingTriggerResults are data objects only and are not executed.
+- `ChatAgentOrchestratorService` and existing services remain the executors.
+- `EmailJobsService` remains unchanged.
+- `processPendingJobs` remains unchanged.
+
+Not introduced or moved:
+
+- `email_jobs` writes.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- `processPendingJobs` calls.
+- `webhook_jobs` writes.
+- Webhook execution.
+- A real `EmailDeliveryExecutor` with execution.
+- `DeliveryExecutor`.
+- Orchestrator wiring.
+- Worker or SMTP changes.
+- Retry, status, or locking changes.
+- `report_runs` synchronization changes.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- `IntegrationDispatcher`.
+- `WebhookJobsService`.
+- External integrations.
+- Public Widget response shape.
+- Conversation Engine public activation.
+
 ## Still in ChatAgentOrchestrator
 
 The following responsibilities deliberately remain in `ChatAgentOrchestratorService`:
@@ -459,7 +505,10 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - `queueInternalLeadNotification`.
 - `EmailJobsService.enqueue`.
 - `EmailJobsService.processPendingJobs`.
+- `processPendingJobs` execution.
 - Worker and SMTP execution.
+- Retry, status, and locking behavior.
+- `report_runs` synchronization.
 - Webhook signing / webhook headers.
 - WebhookJobsService execution.
 - EmailJobsService execution.
@@ -470,6 +519,7 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - Email queue write execution.
 - Email job persistence execution.
 - Email processing trigger execution.
+- Email processing execution wiring.
 - Delivery execution wiring.
 - Email execution wiring.
 - Conversation metadata persistence.
@@ -483,7 +533,7 @@ This is intentional. The extracted modules are pure helpers/builders only; they 
 
 ## Safety Boundaries
 
-The P1.2B-1 through P1.2B-13 refactor keeps these boundaries:
+The P1.2B-1 through P1.2B-14 refactor keeps these boundaries:
 
 - No public widget response change.
 - Public Widget does not expose `deliveryChannels`, `signingSecret`, `token`, `apiKey`, `authorization`, `recipientEmail`, or `webhookUrl`.
@@ -498,13 +548,16 @@ The P1.2B-1 through P1.2B-13 refactor keeps these boundaries:
 - `EmailDeliveryExecutor` boundary is pure validation and result-data logic only.
 - `EmailQueueWriteBoundary` is pure validation, request-data, result-data, and safe-projection logic only.
 - `EmailJobPersistenceBoundary` is pure validation, request-data, result-data, and safe-projection logic only.
+- `EmailJobProcessingTriggerBoundary` is pure validation, request-data, result-data, and safe-projection logic only.
 - No real EmailDeliveryExecutor with execution introduced.
 - No productive DeliverySideEffectCommand runtime execution introduced.
 - No productive EmailDeliveryExecutor runtime execution introduced.
 - No productive EmailQueueWriteBoundary runtime execution introduced.
 - No productive EmailJobPersistenceBoundary runtime execution introduced.
+- No productive EmailJobProcessingTriggerBoundary runtime execution introduced.
 - No EmailJobPersistenceBoundary Orchestrator wiring introduced.
-- No email processing trigger types introduced.
+- No EmailJobProcessingTriggerBoundary Orchestrator wiring introduced.
+- No `processPendingJobs` call introduced.
 - No DeliveryExecutor introduced.
 - No Orchestrator wiring introduced for Delivery execution.
 - No `email_jobs` / `webhook_jobs` moved into helpers.
@@ -519,6 +572,8 @@ The P1.2B-1 through P1.2B-13 refactor keeps these boundaries:
 - No `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs` behavior changed.
 - No EmailJobsService behavior changed.
 - No worker or SMTP behavior changed.
+- No retry, status, or locking behavior changed.
+- No `report_runs` synchronization changed.
 - No automatic `deliveryChannels` activation.
 - No response text changes intended.
 - No branch-order changes intended.
@@ -535,6 +590,7 @@ Validation summary:
 - API-only deploy to `eed94afb67107329156ee59265093e49e1dce09a` completed successfully for P1.2B-11.
 - API-only deploy to `863739b1337e4ba6de48beb6779d861d2da117ce` completed successfully for P1.2B-12.
 - API-only deploy to `8604f60f2a2822693f11b6accb066f3afab56c9f` completed successfully for P1.2B-13.
+- API-only deploy to `3bfd9854894b7c5d241534877bf335e300dccd93` completed successfully for P1.2B-14.
 - API `/healthz` green with the target API commit.
 - Database and Redis health green.
 - Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
@@ -615,9 +671,19 @@ Validation summary:
 - E-mail and phone redaction for persistence projections validated.
 - No productive EmailJobPersistenceBoundary runtime usage introduced.
 - No EmailJobPersistenceBoundary Orchestrator wiring introduced.
-- No email processing trigger types introduced.
+- EmailJobProcessingTriggerBoundary compatibility validated.
+- EmailJobProcessingTriggerRequest and EmailJobProcessingTriggerResult types validated.
+- Source Persistence Result Classification validated.
+- Processing Trigger Validation validated.
+- `ready_to_trigger`, `skipped`, `blocked`, and `failed` processing-trigger result builders validated.
+- Audit/log-safe processing-trigger request and result projections validated.
+- E-mail and phone redaction for processing-trigger projections validated.
+- No productive EmailJobProcessingTriggerBoundary runtime usage introduced.
+- No EmailJobProcessingTriggerBoundary Orchestrator wiring introduced.
+- No `processPendingJobs` call introduced.
 - No `EmailJobsService.enqueue` usage introduced or changed.
 - No `EmailJobsService.processPendingJobs` usage introduced or changed.
+- No worker, SMTP, retry, status, locking, or `report_runs` synchronization behavior changed.
 - Worker and SMTP behavior remained unchanged.
 - No Delivery or Integration execution occurred during validation.
 - Side effects remained in `ChatAgentOrchestratorService`.
@@ -645,7 +711,8 @@ Operational note:
 - The string scan matched only the existing `messages[].tokens` field; this is not a secret or provider token.
 - A non-critical Next.js Server Action mismatch appeared in Dashboard logs and was unrelated to the API-only deploy.
 - The final post-stabilization log scan was clean; no application, migration, or runtime error remained.
-- P1.2B-12 and P1.2B-13 validation created explicit technical smoke conversations on the internal testsite; no leads, e-mail jobs, webhook jobs, tickets, documents, chunks, or Delivery executions were created.
+- P1.2B-12, P1.2B-13, and P1.2B-14 validation created explicit technical smoke conversations on the internal testsite; no leads, e-mail jobs, webhook jobs, tickets, documents, chunks, or Delivery executions were created.
+- P1.2B-14 validation documented technical smoke conversations increasing `conversations` from 40 to 42.
 
 ## Remaining Risks
 
@@ -654,7 +721,7 @@ Operational note:
 - `LeadCaptureFlowService` is not yet a real service; P1.2B-4 only extracted pure builders.
 - `ToolExecutorService` and `ToolDispatcherService` still have separate lead-capture-related paths.
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
-- Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, and EmailJobPersistenceBoundary are extracted as pure helpers/builders, but Delivery execution and e-mail job persistence execution are not wired into a real executor.
+- Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, and EmailJobProcessingTriggerBoundary are extracted as pure helpers/builders, but Delivery execution, e-mail job persistence execution, and e-mail processing execution are not wired into a real executor.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
@@ -662,11 +729,11 @@ Operational note:
 
 1. Do not immediately continue with a broad refactor.
 2. Prefer the next audit as:
-   - `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope.
+   - `P1.2B-15A` EmailJobs Worker / processPendingJobs Refactor Boundary Audit.
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-The next possible technical area is the processing-trigger side of e-mail delivery. After DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, and EmailJobPersistenceBoundary extraction, the remaining high-risk side-effect area includes processing trigger decisions, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency and duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, and rollback behavior.
+The next possible technical area is the worker side of e-mail delivery. After DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, and EmailJobProcessingTriggerBoundary extraction, the remaining high-risk side-effect area includes `EmailJobsService.processPendingJobs`, worker/SMTP behavior, job selection and locking, status transitions, idempotency and duplicate prevention, retry and failed handling, stale processing recovery, `report_runs` synchronization, provider logging, audit/logging, Orchestrator wiring, and rollback behavior.
 
 Recommended scope for the next planning step:
 
@@ -674,10 +741,11 @@ Recommended scope for the next planning step:
 - No queue writes moved.
 - No `EmailJobsService.enqueue` refactor.
 - No `EmailJobsService.processPendingJobs` refactor.
-- No processing trigger code.
+- No processPendingJobs worker-loop refactor.
 - No executor code.
 - No Orchestrator wiring.
 - No worker or SMTP changes.
+- No retry, status, locking, stale processing recovery, or `report_runs` synchronization changes.
 - No webhooks.
 - No external integrations.
 - No ToolExecutor/ToolDispatcher consolidation.
@@ -685,4 +753,4 @@ Recommended scope for the next planning step:
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-13` completed the EmailJobPersistenceBoundary extraction and production validation. `P1.2B-14A` should audit the EmailJobProcessingTriggerBoundary scope before any processing trigger, worker, or Orchestrator wiring is moved.
+Status: `P1.2B-14` completed the EmailJobProcessingTriggerBoundary extraction and production validation. `P1.2B-15A` should audit the EmailJobs worker / `processPendingJobs` boundary before any processing, worker, SMTP, retry, locking, report-run synchronization, or Orchestrator wiring is moved.
