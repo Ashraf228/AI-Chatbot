@@ -39,6 +39,15 @@ Status after P1.2B-12:
 - Queue execution and real `email_jobs` / `webhook_jobs` writes remain deferred.
 - Production validation completed on API commit `863739b1337e4ba6de48beb6779d861d2da117ce`.
 
+Status after P1.2B-13:
+
+- P1.2B-13B through P1.2B-13E are implemented, merged, and production-validated.
+- `apps/api/src/chat/email-job-persistence.boundary.ts` adds only e-mail job persistence request validation, source queue-write result classification, persistence result data objects, and audit/log-safe request/result projections.
+- The safe scope from the EmailJobsService enqueue split audit was kept: persistence requests and results are data objects only and are not executed.
+- No runtime execution, no queue writes, no `EmailJobsService.enqueue`, no `EmailJobsService.processPendingJobs`, no processing trigger types, no Orchestrator wiring, no worker/SMTP changes, no feature flags, no migrations, and no Public Widget response changes were introduced.
+- Queue execution and real `email_jobs` / `webhook_jobs` writes remain deferred.
+- Production validation completed on API commit `8604f60f2a2822693f11b6accb066f3afab56c9f`.
+
 Runtime delivery execution still lives in several older paths:
 
 - `ChatAgentOrchestratorService.queueInternalLeadNotification` directly inserts `email_jobs`.
@@ -47,7 +56,7 @@ Runtime delivery execution still lives in several older paths:
 - `IntegrationEventDispatcherService.dispatch` directly inserts `webhook_jobs` for configured webhook integrations.
 - `ToolExecutorService` and `ToolDispatcherService` write leads, contact requests, tickets, conversation metadata, and webhooks through their own paths.
 
-Recommended outcome: do not build a full DeliveryExecutor yet. P1.2B-12 has already added an unwired EmailQueueWriteBoundary with validation/request/result types only. The next safe step is a read-only EmailJobsService persistence-vs-processing audit before any `email_jobs` persistence, `EmailJobsService.enqueue`, or `EmailJobsService.processPendingJobs` behavior is moved. Webhook execution, signing, ToolExecutor/ToolDispatcher consolidation, and IntegrationDispatcher changes should remain out of scope.
+Recommended outcome: do not build a full DeliveryExecutor yet. P1.2B-13 has already added an unwired EmailJobPersistenceBoundary with validation/request/result types only. The next safe step is a read-only EmailJobProcessingTriggerBoundary audit before any processing trigger, worker, or Orchestrator behavior is moved. Webhook execution, signing, ToolExecutor/ToolDispatcher consolidation, and IntegrationDispatcher changes should remain out of scope.
 
 ## Current Queue / Delivery Execution Locations
 
@@ -404,12 +413,12 @@ P1.2B-10 is not intended to:
 
 ## Recommended Next Step
 
-P1.2B-10, P1.2B-11, and P1.2B-12 are complete. P1.2B-10B did not build a full DeliveryExecutor, P1.2B-11B did not write queues or wire execution, and P1.2B-12B did not call `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs`.
+P1.2B-10, P1.2B-11, P1.2B-12, and P1.2B-13 are complete. P1.2B-10B did not build a full DeliveryExecutor, P1.2B-11B did not write queues or wire execution, P1.2B-12B did not call `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs`, and P1.2B-13B did not introduce processing trigger types.
 
 Recommended next step:
 
-1. Create `P1.2B-13A` as an EmailJobsService.enqueue Split / Persistence-vs-Processing Audit only.
-2. Keep it email-only and queue-write-focused.
+1. Create `P1.2B-14A` as an EmailJobProcessingTriggerBoundary Audit / Scope only.
+2. Keep it email-only and processing-trigger-focused.
 3. Do not move queue writes or introduce executor wiring in the audit step.
 4. Do not wire it into `ChatAgentOrchestratorService`.
 5. Do not include webhooks, signing, ToolExecutor, ToolDispatcher, or IntegrationDispatcher.
