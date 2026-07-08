@@ -85,6 +85,17 @@ P1.2B-13B through P1.2B-13E are implemented, merged, and production-validated.
 - Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
 - Production validation completed on API commit `8604f60f2a2822693f11b6accb066f3afab56c9f`.
 
+## Status After P1.2B-14
+
+P1.2B-14B through P1.2B-14E are implemented, merged, and production-validated.
+
+- `EmailJobProcessingTriggerBoundary` was added as a pure validation, request, and result data-object layer.
+- DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, and EmailJobPersistenceBoundary remain pure payload/command/validation/request/result layers.
+- Payload, command, ExecutionPlan, result, queue-request, persistence-request, and processing-trigger-request layers remain side-effect-free.
+- `email_jobs`, `webhook_jobs`, real DeliveryExecutor behavior, ToolExecutor/ToolDispatcher, IntegrationDispatcher, WebhookJobsService, EmailJobsService execution, worker/SMTP execution, retry/status/locking behavior, `report_runs` synchronization, and external integrations remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `3bfd9854894b7c5d241534877bf335e300dccd93`.
+
 ## Current Payload-Building Locations
 
 | Methode/Funktion | Datei | Payload-Typ | liest Config | nutzt sensitive Werte | erzeugt Side Effects | kann pure extrahiert werden | Risiko |
@@ -273,4 +284,4 @@ Webhook builders should mostly remain deferred. If a tiny webhook payload projec
 
 ## Recommended Next Step
 
-P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, and P1.2B-13 are complete. The next recommended step is `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope. Defer queue writes, webhook payload execution, signing, executor wiring, worker/SMTP changes, processing trigger changes, and external integrations until that audit defines a safe boundary.
+P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, P1.2B-13, and P1.2B-14 are complete. The next recommended step is `P1.2B-15A` EmailJobs Worker / processPendingJobs Refactor Boundary Audit. Defer queue writes, webhook payload execution, signing, executor wiring, worker/SMTP changes, processing changes, retry/status/locking changes, `report_runs` synchronization changes, and external integrations until that audit defines a safe boundary.

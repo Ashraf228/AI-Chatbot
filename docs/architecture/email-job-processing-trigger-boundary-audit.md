@@ -17,6 +17,17 @@ Recommended next implementation scope:
 - P1.2B-14B should not call `processPendingJobs` and should not change `EmailJobsService.enqueue`.
 - The safe next code step is a pure `EmailJobProcessingTriggerBoundary` with request/result types, validation helpers, no-op/blocked/failed result builders, and log-/audit-safe projections only.
 
+## Status After P1.2B-14
+
+P1.2B-14B through P1.2B-14E are implemented, merged, and production-validated.
+
+- `apps/api/src/chat/email-job-processing-trigger.boundary.ts` contains only ProcessingTriggerRequest and ProcessingTriggerResult data objects, source persistence result classification helpers, processing trigger validation helpers, result builders, and safe projections.
+- The safe scope from this audit was kept: the boundary builds and validates processing trigger request/result data only.
+- No runtime execution, no `processPendingJobs` call, no `EmailJobsService.enqueue`, no `EmailJobsService.processPendingJobs`, no Orchestrator wiring, no worker/SMTP changes, no retry/status/locking changes, no `report_runs` synchronization changes, no webhooks, no external integrations, no feature flags, no migrations, and no Public Widget response changes were introduced.
+- Audit/log-safe projections redact e-mail addresses, phone values, body fields, and secret-like fields.
+- Production validation completed on API commit `3bfd9854894b7c5d241534877bf335e300dccd93`.
+- Deferred areas remain deferred: real `processPendingJobs` calls, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, worker/SMTP execution, retry/status/locking behavior, `report_runs` synchronization, webhooks, ToolExecutor/ToolDispatcher, IntegrationDispatcher, and production wiring.
+
 ## Current processPendingJobs Behavior
 
 | Methode/Funktion | Datei | Verantwortung | liest email_jobs | schreibt email_jobs | SMTP/Provider | Locking | Retry/Status | report_runs Sync | Fehlerverhalten | Risiko |
@@ -392,6 +403,6 @@ P1.2B-14 is not intended to:
 
 ## Recommended Next Step
 
-Proceed to `P1.2B-14A-D` for review and merge of this documentation-only audit.
+P1.2B-14A through P1.2B-14E are complete. The EmailJobProcessingTriggerBoundary is implemented, merged, and production-validated as a pure request/result boundary.
 
-Then plan `P1.2B-14B` as a pure `EmailJobProcessingTriggerBoundary` implementation only if the scope remains limited to data objects, validation helpers, result builders, and safe projections with no runtime wiring and no `processPendingJobs` invocation.
+The next recommended step is `P1.2B-15A` as a read-only EmailJobs Worker / processPendingJobs Refactor Boundary Audit. It should scope worker-loop behavior, job selection and locking, status transitions, retry/failure handling, stale processing recovery, SMTP/provider boundaries, `report_runs` synchronization, idempotency, duplicate behavior, safe logging/redaction, and rollback strategy before any worker, SMTP, processing, or Orchestrator wiring changes are implemented.

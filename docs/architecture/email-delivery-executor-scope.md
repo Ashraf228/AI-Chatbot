@@ -49,6 +49,16 @@ P1.2B-13B through P1.2B-13E are implemented, merged, and production-validated.
 - Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
 - Production validation completed on API commit `8604f60f2a2822693f11b6accb066f3afab56c9f`.
 
+## Status After P1.2B-14
+
+P1.2B-14B through P1.2B-14E are implemented, merged, and production-validated.
+
+- `EmailJobProcessingTriggerBoundary` was added as a pure validation, request, and result data-object layer.
+- EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, and EmailJobPersistenceBoundary remain pure validation/result/request layers.
+- Queue execution, processing execution, real `email_jobs` writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `processPendingJobs` calls, worker/SMTP execution, retry/status/locking behavior, `report_runs` synchronization, and real `webhook_jobs` writes remain deferred.
+- Public Widget response shape, answer text, feature flags, migrations, and side effects remained unchanged.
+- Production validation completed on API commit `3bfd9854894b7c5d241534877bf335e300dccd93`.
+
 ## Current Email Delivery Locations
 
 | Method / Function | File | Responsibility | Writes `email_jobs` | Reads Config | Uses Recipient | Uses Secrets | Dedupe / Idempotency | Error Behavior | Risk |
@@ -353,7 +363,7 @@ P1.2B-11 is not:
 
 ## Recommended Next Step
 
-P1.2B-11, P1.2B-12, and P1.2B-13 are complete. The next recommended step is `P1.2B-14A` EmailJobProcessingTriggerBoundary Audit / Scope.
+P1.2B-11, P1.2B-12, P1.2B-13, and P1.2B-14 are complete. The next recommended step is `P1.2B-15A` EmailJobs Worker / processPendingJobs Refactor Boundary Audit.
 
 That audit should remain read-only and cover processing trigger decisions, `EmailJobsService.processPendingJobs`, worker/SMTP behavior, idempotency, duplicate prevention, no-op versus queue behavior, retry/status behavior, partial failure handling, audit/logging, Orchestrator wiring, rollback behavior, and tests before any processing trigger or worker code is moved.
 
