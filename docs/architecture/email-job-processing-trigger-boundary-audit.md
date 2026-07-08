@@ -401,8 +401,14 @@ P1.2B-14 is not intended to:
 - Add Orchestrator wiring.
 - Add production wiring without a separate deploy plan.
 
+## Current Status After P1.2B-15
+
+EmailJobProcessingTriggerBoundary was implemented and production-validated in P1.2B-14. EmailJobWorkerBoundary was implemented and production-validated in P1.2B-15 as a pure WorkerPlan, StatusTransitionPlan, RetryDecision, WorkerResult, validation, and safe-projection layer.
+
+`processPendingJobs`, Worker/SMTP execution, real `email_jobs` reads, writes, and updates, retry/status/locking behavior, stale-processing recovery, and `report_runs` synchronization remain outside the extracted boundaries.
+
 ## Recommended Next Step
 
-P1.2B-14A through P1.2B-14E are complete. The EmailJobProcessingTriggerBoundary is implemented, merged, and production-validated as a pure request/result boundary.
+P1.2B-14A through P1.2B-14E are complete. The EmailJobProcessingTriggerBoundary is implemented, merged, and production-validated as a pure request/result boundary. P1.2B-15 is also complete and production-validated as a pure EmailJobWorkerBoundary.
 
-The next recommended step is `P1.2B-15A` as a read-only EmailJobs Worker / processPendingJobs Refactor Boundary Audit. It should scope worker-loop behavior, job selection and locking, status transitions, retry/failure handling, stale processing recovery, SMTP/provider boundaries, `report_runs` synchronization, idempotency, duplicate behavior, safe logging/redaction, and rollback strategy before any worker, SMTP, processing, or Orchestrator wiring changes are implemented.
+The next recommended step is `P1.2B-16A` as a read-only Email Job Status/Retry/Locking Boundary Audit. It should scope status transition policy, retry decision policy, locking boundaries, stale processing recovery, idempotency, duplicate behavior, safe logging/redaction, required DB tests, and rollback strategy before any worker, SMTP, processing, status, retry, locking, SQL, or Orchestrator wiring changes are implemented.

@@ -487,8 +487,29 @@ Regression:
 - No Orchestrator wiring.
 - No production wiring without a separate deploy plan.
 
+## Current Status After P1.2B-15
+
+P1.2B-15B through P1.2B-15E are implemented, merged, deployed API-only, and production-validated. The safe scope was preserved.
+
+The implemented `EmailJobWorkerBoundary` builds only WorkerSelectionPlan, StatusTransitionPlan, RetryDecision, and WorkerResult data objects plus validation helpers and audit/log-safe projections. It introduced no runtime execution, no `processPendingJobs` call, no `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs` change, no SQL, no DB reads or writes, no `email_jobs` reads, writes, or updates, no Orchestrator wiring, and no Worker, SMTP, retry, status, locking, stale-processing recovery, or `report_runs` behavior change.
+
+Deferred areas remain deferred:
+
+- Real `processPendingJobs` execution.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- SQL, DB reads, and DB writes.
+- `email_jobs` reads, writes, and updates.
+- Orchestrator wiring.
+- Worker and SMTP execution.
+- Retry, status, and locking behavior.
+- Stale-processing recovery.
+- `report_runs` synchronization.
+- Webhooks.
+- ToolExecutor/ToolDispatcher.
+- IntegrationDispatcher.
+- Production wiring.
+
 ## Recommended Next Step
 
-Proceed with P1.2B-15B only as a pure `EmailJobWorkerBoundary` implementation if code is allowed.
-
-P1.2B-15B should create worker-plan, status-transition, retry-decision, worker-result, validation, no-op/blocked/failed, and safe-projection helpers only. It should not change `EmailJobsService`, `processPendingJobs`, SQL, SMTP, retry, locking, `report_runs`, queue writes, orchestrator wiring, or public widget behavior.
+Proceed with P1.2B-16A only as a read-only Email Job Status/Retry/Locking Boundary Audit. It should not implement code, SQL, DB changes, `processPendingJobs` refactors, queue writes, worker/SMTP changes, Orchestrator wiring, or production wiring.

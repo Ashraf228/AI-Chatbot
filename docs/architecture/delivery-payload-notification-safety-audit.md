@@ -376,14 +376,26 @@ Status: umgesetzt und production-validiert in P1.2B-11 fuer reine Validation-/Re
 
 Status: umgesetzt und production-validiert in P1.2B-12 fuer reine Validation-/Request-/Result-Datenobjekte. Echte Queue-Writes, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator-Wiring, Worker-/SMTP-Ausfuehrung und Delivery-Ausfuehrung bleiben ausserhalb dieser Phase.
 
-### Phase 7: Boundary Tests erweitern
+### Phase 7: EmailJobPersistenceBoundary
+
+Status: umgesetzt und production-validiert in P1.2B-13 fuer reine PersistenceRequest-/PersistenceResult-Datenobjekte. Echte `email_jobs` Writes/Updates, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator-Wiring, Worker-/SMTP-Ausfuehrung und Delivery-Ausfuehrung bleiben ausserhalb dieser Phase.
+
+### Phase 8: EmailJobProcessingTriggerBoundary
+
+Status: umgesetzt und production-validiert in P1.2B-14 fuer reine ProcessingTriggerRequest-/ProcessingTriggerResult-Datenobjekte. Echte Processing-Ausfuehrung, `processPendingJobs`, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Worker-/SMTP-Ausfuehrung, Retry-/Status-/Locking-Verhalten und `report_runs` Sync bleiben ausserhalb dieser Phase.
+
+### Phase 9: EmailJobWorkerBoundary
+
+Status: umgesetzt und production-validiert in P1.2B-15 fuer reine WorkerPlan-/WorkerResult-Datenobjekte. Echte Worker-Ausfuehrung, `processPendingJobs`, SQL, DB reads/writes, `email_jobs` Reads/Writes/Updates, Worker-/SMTP-Ausfuehrung, Retry-/Status-/Locking-Verhalten, stale-processing-Recovery und `report_runs` Sync bleiben ausserhalb dieser Phase.
+
+### Phase 10: Boundary Tests erweitern
 
 - Public Widget Response Shape,
 - keine unerwarteten Jobs,
 - Header-/Secret-Sanitizing,
 - AssistantProfile deliveryChannels no-op.
 
-### Phase 8: Optionaler DeliveryExecutorService
+### Phase 11: Optionaler DeliveryExecutorService
 
 - nur nach separatem Audit,
 - nur mit Worker-/Retry-/Audit-Testabdeckung,
@@ -436,6 +448,6 @@ Status: umgesetzt und production-validiert in P1.2B-12 fuer reine Validation-/Re
 
 ## Recommended Next Step
 
-P1.2B-7, P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, P1.2B-13 und P1.2B-14 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-15A` EmailJobs Worker / processPendingJobs Refactor Boundary Audit.
+P1.2B-7, P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, P1.2B-13, P1.2B-14 und P1.2B-15 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-16A` Email Job Status/Retry/Locking Boundary Audit.
 
-P1.2B-15A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen Executor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte `EmailJobsService.processPendingJobs`, Worker-/SMTP-Verhalten, Job-Auswahl und Locking, Status-Transitions, Idempotency, Duplicate Prevention, Retry-/Failure-Verhalten, stale processing recovery, `report_runs` Sync, Audit/Logging, Orchestrator-Wiring und Rollback-Verhalten abdecken.
+P1.2B-16A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen Executor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte Status Transition Policy, Retry Decision Policy, Locking Boundary, stale processing recovery, Idempotency, Duplicate Prevention, `report_runs` Sync, Audit/Logging, Orchestrator-Wiring, Rollback-Verhalten und erforderliche DB-Tests abdecken.
