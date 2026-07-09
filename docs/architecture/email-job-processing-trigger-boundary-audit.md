@@ -401,14 +401,16 @@ P1.2B-14 is not intended to:
 - Add Orchestrator wiring.
 - Add production wiring without a separate deploy plan.
 
-## Current Status After P1.2B-15
+## Current Status After P1.2B-16
 
 EmailJobProcessingTriggerBoundary was implemented and production-validated in P1.2B-14. EmailJobWorkerBoundary was implemented and production-validated in P1.2B-15 as a pure WorkerPlan, StatusTransitionPlan, RetryDecision, WorkerResult, validation, and safe-projection layer.
+
+EmailJobStatusPolicyBoundary was implemented and production-validated in P1.2B-16 as a pure StatusTransitionPolicy, RetryPolicy, LockingPolicy, StaleProcessingPolicy, PolicyResult, validation, and safe-projection layer. `processPendingJobs`, Worker/SMTP execution, status/retry/locking execution, stale-processing recovery, and real `email_jobs` writes or updates remain not extracted.
 
 `processPendingJobs`, Worker/SMTP execution, real `email_jobs` reads, writes, and updates, retry/status/locking behavior, stale-processing recovery, and `report_runs` synchronization remain outside the extracted boundaries.
 
 ## Recommended Next Step
 
-P1.2B-14A through P1.2B-14E are complete. The EmailJobProcessingTriggerBoundary is implemented, merged, and production-validated as a pure request/result boundary. P1.2B-15 is also complete and production-validated as a pure EmailJobWorkerBoundary.
+P1.2B-14A through P1.2B-16E are complete. The EmailJobProcessingTriggerBoundary is implemented, merged, and production-validated as a pure request/result boundary. P1.2B-15 is also complete and production-validated as a pure EmailJobWorkerBoundary. P1.2B-16 is complete and production-validated as a pure EmailJobStatusPolicyBoundary.
 
-The next recommended step is `P1.2B-16A` as a read-only Email Job Status/Retry/Locking Boundary Audit. It should scope status transition policy, retry decision policy, locking boundaries, stale processing recovery, idempotency, duplicate behavior, safe logging/redaction, required DB tests, and rollback strategy before any worker, SMTP, processing, status, retry, locking, SQL, or Orchestrator wiring changes are implemented.
+The next recommended step is `P1.2B-17A` as a read-only Email Jobs DB Schema / Idempotency Key Audit. It should scope DB schema/indexes, semantic idempotency keys, duplicate detection, migration/backfill risk, rollout strategy, rollback strategy, required DB tests, and safe logging/redaction before any SQL, DB, worker, SMTP, processing, status, retry, locking, or Orchestrator wiring changes are implemented.

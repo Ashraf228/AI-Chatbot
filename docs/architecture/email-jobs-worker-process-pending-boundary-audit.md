@@ -487,11 +487,13 @@ Regression:
 - No Orchestrator wiring.
 - No production wiring without a separate deploy plan.
 
-## Current Status After P1.2B-15
+## Current Status After P1.2B-16
 
 P1.2B-15B through P1.2B-15E are implemented, merged, deployed API-only, and production-validated. The safe scope was preserved.
 
 The implemented `EmailJobWorkerBoundary` builds only WorkerSelectionPlan, StatusTransitionPlan, RetryDecision, and WorkerResult data objects plus validation helpers and audit/log-safe projections. It introduced no runtime execution, no `processPendingJobs` call, no `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs` change, no SQL, no DB reads or writes, no `email_jobs` reads, writes, or updates, no Orchestrator wiring, and no Worker, SMTP, retry, status, locking, stale-processing recovery, or `report_runs` behavior change.
+
+P1.2B-16B through P1.2B-16E are also implemented and production-validated. The implemented `EmailJobStatusPolicyBoundary` adds only pure StatusTransitionPolicy, RetryPolicy, LockingPolicy, StaleProcessingPolicy, PolicyResult, validation, and safe-projection data-object logic. `processPendingJobs`, SQL, Worker/SMTP execution, real `email_jobs` reads/writes/updates, status/retry/locking execution, stale-processing recovery, and `report_runs` synchronization remain not extracted.
 
 Deferred areas remain deferred:
 
@@ -512,4 +514,4 @@ Deferred areas remain deferred:
 
 ## Recommended Next Step
 
-Proceed with P1.2B-16A only as a read-only Email Job Status/Retry/Locking Boundary Audit. It should not implement code, SQL, DB changes, `processPendingJobs` refactors, queue writes, worker/SMTP changes, Orchestrator wiring, or production wiring.
+Proceed with `P1.2B-17A` only as a read-only Email Jobs DB Schema / Idempotency Key Audit. It should not implement code, SQL, DB changes, `email_jobs` reads/writes/updates, `processPendingJobs` refactors, queue writes, worker/SMTP changes, Orchestrator wiring, or production wiring.

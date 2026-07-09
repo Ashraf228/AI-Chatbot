@@ -388,14 +388,18 @@ Status: umgesetzt und production-validiert in P1.2B-14 fuer reine ProcessingTrig
 
 Status: umgesetzt und production-validiert in P1.2B-15 fuer reine WorkerPlan-/WorkerResult-Datenobjekte. Echte Worker-Ausfuehrung, `processPendingJobs`, SQL, DB reads/writes, `email_jobs` Reads/Writes/Updates, Worker-/SMTP-Ausfuehrung, Retry-/Status-/Locking-Verhalten, stale-processing-Recovery und `report_runs` Sync bleiben ausserhalb dieser Phase.
 
-### Phase 10: Boundary Tests erweitern
+### Phase 10: EmailJobStatusPolicyBoundary
+
+Status: umgesetzt und production-validiert in P1.2B-16 fuer reine StatusTransitionPolicy-/RetryPolicy-/LockingPolicy-/StaleProcessingPolicy-/PolicyResult-Datenobjekte. Echte Status-/Retry-/Locking-Ausfuehrung, stale-processing-Recovery, SQL, DB reads/writes, `email_jobs` Reads/Writes/Updates, `processPendingJobs`, Worker-/SMTP-Ausfuehrung und `report_runs` Sync bleiben ausserhalb dieser Phase.
+
+### Phase 11: Boundary Tests erweitern
 
 - Public Widget Response Shape,
 - keine unerwarteten Jobs,
 - Header-/Secret-Sanitizing,
 - AssistantProfile deliveryChannels no-op.
 
-### Phase 11: Optionaler DeliveryExecutorService
+### Phase 12: Optionaler DeliveryExecutorService
 
 - nur nach separatem Audit,
 - nur mit Worker-/Retry-/Audit-Testabdeckung,
@@ -448,6 +452,6 @@ Status: umgesetzt und production-validiert in P1.2B-15 fuer reine WorkerPlan-/Wo
 
 ## Recommended Next Step
 
-P1.2B-7, P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, P1.2B-13, P1.2B-14 und P1.2B-15 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-16A` Email Job Status/Retry/Locking Boundary Audit.
+P1.2B-7, P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, P1.2B-13, P1.2B-14, P1.2B-15 und P1.2B-16 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-17A` Email Jobs DB Schema / Idempotency Key Audit.
 
-P1.2B-16A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen Executor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte Status Transition Policy, Retry Decision Policy, Locking Boundary, stale processing recovery, Idempotency, Duplicate Prevention, `report_runs` Sync, Audit/Logging, Orchestrator-Wiring, Rollback-Verhalten und erforderliche DB-Tests abdecken.
+P1.2B-17A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen Executor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte DB schema/indexes, semantic idempotency keys, duplicate detection, migration/backfill risk, rollout strategy, rollback strategy, `report_runs` interaction, safe logging/redaction und erforderliche DB-Tests abdecken.

@@ -2,7 +2,7 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-15 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-16 are implemented, merged, and production-validated. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` remains the executor for database reads/writes, queue writes, audit writes, lead finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
@@ -10,7 +10,7 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `5b57f4c0710e87197e30a1fdd158a5901ebbb85e` |
+| API | `473c392295eee0b907fdee81e464fb0acfc76e08` |
 | Dashboard | `25480866a7bffab7007adf1495477b4e22c7380a` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
@@ -540,6 +540,67 @@ Not introduced or moved:
 - Public Widget response shape.
 - Conversation Engine public activation.
 
+### P1.2B-16 EmailJobStatusPolicyBoundary
+
+File: `apps/api/src/chat/email-job-status-policy.boundary.ts`
+
+Extracted pure validation, status-policy, retry-policy, locking-policy, stale-processing-policy, and result helpers:
+
+- `StatusTransitionPolicy` data objects.
+- `RetryPolicy` data objects.
+- `LockingPolicy` data objects.
+- `StaleProcessingPolicy` data objects.
+- `PolicyResult` data objects.
+- Status Transition Validation Helper.
+- Retry Policy Validation Helper.
+- Locking Policy Validation Helper.
+- Stale Processing Policy Validation Helper.
+- `ready`, `skipped`, `blocked`, and `failed` result builders.
+- Audit/log-safe Policy projections.
+
+Productive use:
+
+- No productive runtime usage was introduced.
+- No `ChatAgentOrchestratorService` rewiring was introduced.
+- The boundary is prepared but not connected to `EmailJobsService`, `processPendingJobs`, SQL, database, `email_jobs`, worker, SMTP, retry, status, locking, stale-processing recovery, or `report_runs` paths.
+- StatusTransitionPolicies, RetryPolicies, LockingPolicies, StaleProcessingPolicies, and PolicyResults are data objects only and are not executed.
+- `ChatAgentOrchestratorService` and existing services remain the executors.
+- `EmailJobsService` remains unchanged.
+- `processPendingJobs` remains unchanged.
+
+Not introduced or moved:
+
+- `email_jobs` reads.
+- `email_jobs` writes.
+- `email_jobs` updates.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- `processPendingJobs` calls.
+- SQL execution.
+- `FOR UPDATE SKIP LOCKED` execution.
+- Status Transition Execution.
+- Retry Update Execution.
+- Locking Query Execution.
+- Stale-processing recovery execution.
+- `webhook_jobs` writes.
+- Webhook execution.
+- A real `EmailDeliveryExecutor` with execution.
+- `DeliveryExecutor`.
+- Orchestrator wiring.
+- Worker or SMTP changes.
+- Retry, status, or locking changes.
+- Stale-processing recovery changes.
+- `report_runs` synchronization changes.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- `IntegrationDispatcher`.
+- `WebhookJobsService`.
+- External integrations.
+- Public Widget response shape.
+- Conversation Engine public activation.
+- NOLIS-specific logic.
+- Municipality-specific hardcoding.
+
 ## Still in ChatAgentOrchestrator
 
 The following responsibilities deliberately remain in `ChatAgentOrchestratorService`:
@@ -574,6 +635,7 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - Email job persistence execution.
 - Email processing trigger execution.
 - Email worker execution wiring.
+- Email status, retry, locking, and stale-processing policy execution.
 - Email processing execution wiring.
 - Delivery execution wiring.
 - Email execution wiring.
@@ -590,7 +652,7 @@ This is intentional. The extracted modules are pure helpers/builders only; they 
 
 ## Safety Boundaries
 
-The P1.2B-1 through P1.2B-15 refactor keeps these boundaries:
+The P1.2B-1 through P1.2B-16 refactor keeps these boundaries:
 
 - No public widget response change.
 - Public Widget does not expose `deliveryChannels`, `signingSecret`, `token`, `apiKey`, `authorization`, `recipientEmail`, or `webhookUrl`.
@@ -614,9 +676,11 @@ The P1.2B-1 through P1.2B-15 refactor keeps these boundaries:
 - No productive EmailJobPersistenceBoundary runtime execution introduced.
 - No productive EmailJobProcessingTriggerBoundary runtime execution introduced.
 - No productive EmailJobWorkerBoundary runtime execution introduced.
+- No productive EmailJobStatusPolicyBoundary runtime execution introduced.
 - No EmailJobPersistenceBoundary Orchestrator wiring introduced.
 - No EmailJobProcessingTriggerBoundary Orchestrator wiring introduced.
 - No EmailJobWorkerBoundary Orchestrator wiring introduced.
+- No EmailJobStatusPolicyBoundary Orchestrator wiring introduced.
 - No `processPendingJobs` call introduced.
 - No DeliveryExecutor introduced.
 - No Orchestrator wiring introduced for Delivery execution.
@@ -631,6 +695,8 @@ The P1.2B-1 through P1.2B-15 refactor keeps these boundaries:
 - No WebhookJobsService or EmailJobsService behavior changed.
 - No `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs` behavior changed.
 - No EmailJobsService behavior changed.
+- No SQL, DB read, DB write, queue write, `email_jobs` read, `email_jobs` write, or `email_jobs` update introduced by `EmailJobStatusPolicyBoundary`.
+- No status transition execution, retry update execution, locking query execution, or stale-processing recovery execution introduced.
 - No worker or SMTP behavior changed.
 - No retry, status, or locking behavior changed.
 - No stale-processing recovery behavior changed.
@@ -638,6 +704,7 @@ The P1.2B-1 through P1.2B-15 refactor keeps these boundaries:
 - No automatic `deliveryChannels` activation.
 - No response text changes intended.
 - No branch-order changes intended.
+- No NOLIS-specific logic or municipality-specific hardcoding introduced.
 
 ## Production Validation
 
@@ -653,6 +720,7 @@ Validation summary:
 - API-only deploy to `8604f60f2a2822693f11b6accb066f3afab56c9f` completed successfully for P1.2B-13.
 - API-only deploy to `3bfd9854894b7c5d241534877bf335e300dccd93` completed successfully for P1.2B-14.
 - API-only deploy to `5b57f4c0710e87197e30a1fdd158a5901ebbb85e` completed successfully for P1.2B-15.
+- API-only deploy to `473c392295eee0b907fdee81e464fb0acfc76e08` completed successfully for P1.2B-16.
 - API `/healthz` green with the target API commit.
 - Database and Redis health green.
 - Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
@@ -762,6 +830,27 @@ Validation summary:
 - No DB reads or writes introduced.
 - No `email_jobs` reads, writes, or updates introduced.
 - No Worker, SMTP, retry, status, locking, stale-processing recovery, or `report_runs` synchronization behavior changed.
+- EmailJobStatusPolicyBoundary compatibility validated.
+- StatusTransitionPolicy data objects validated.
+- RetryPolicy data objects validated.
+- LockingPolicy data objects validated.
+- StaleProcessingPolicy data objects validated.
+- PolicyResult data objects validated.
+- Status Transition, Retry, Locking, and Stale Processing validation helpers validated.
+- `ready`, `skipped`, `blocked`, and `failed` PolicyResult builders validated.
+- Audit/log-safe Policy projections validated.
+- No productive EmailJobStatusPolicyBoundary runtime usage introduced.
+- No EmailJobStatusPolicyBoundary Orchestrator wiring introduced.
+- No SQL introduced or executed by the boundary.
+- No DB reads or writes introduced by the boundary.
+- No queue writes introduced by the boundary.
+- No `email_jobs` reads, writes, or updates introduced by the boundary.
+- No `processPendingJobs` call introduced.
+- No status transition execution introduced.
+- No retry update execution introduced.
+- No locking query execution introduced.
+- No stale-processing recovery execution introduced.
+- No Worker, SMTP, retry, status, locking, stale-processing recovery, or `report_runs` synchronization behavior changed.
 - No Delivery, Integration, or Processing execution occurred during validation.
 - Worker and SMTP behavior remained unchanged.
 - No Delivery or Integration execution occurred during validation.
@@ -790,9 +879,10 @@ Operational note:
 - The string scan matched only the existing `messages[].tokens` field; this is not a secret or provider token.
 - A non-critical Next.js Server Action mismatch appeared in Dashboard logs and was unrelated to the API-only deploy.
 - The final post-stabilization log scan was clean; no application, migration, or runtime error remained.
-- P1.2B-12, P1.2B-13, P1.2B-14, and P1.2B-15 validation created explicit technical smoke conversations on the internal testsite; no leads, e-mail jobs, webhook jobs, tickets, documents, chunks, or Delivery executions were created.
+- P1.2B-12, P1.2B-13, P1.2B-14, P1.2B-15, and P1.2B-16 validation created explicit technical smoke conversations on the internal testsite; no leads, e-mail jobs, webhook jobs, tickets, documents, chunks, or Delivery executions were created.
 - P1.2B-14 validation documented technical smoke conversations increasing `conversations` from 40 to 42.
 - P1.2B-15 validation documented one technical smoke conversation and no unexpected leads, e-mail jobs, webhook jobs, tickets, documents, chunks, Delivery execution, Integration execution, or Processing execution.
+- P1.2B-16 validation documented one technical smoke conversation increasing `conversations` from 43 to 44; `widget_leads`, `email_jobs`, `webhook_jobs`, `agent_tickets`, documents, chunks, and `report_runs` remained unchanged.
 
 ## Remaining Risks
 
@@ -801,7 +891,7 @@ Operational note:
 - `LeadCaptureFlowService` is not yet a real service; P1.2B-4 only extracted pure builders.
 - `ToolExecutorService` and `ToolDispatcherService` still have separate lead-capture-related paths.
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
-- Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, EmailJobProcessingTriggerBoundary, and EmailJobWorkerBoundary are extracted as pure helpers/builders, but Delivery execution, e-mail job persistence execution, e-mail processing execution, and e-mail worker execution are not wired into a real executor.
+- Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, EmailJobProcessingTriggerBoundary, EmailJobWorkerBoundary, and EmailJobStatusPolicyBoundary are extracted as pure helpers/builders, but Delivery execution, e-mail job persistence execution, e-mail processing execution, e-mail worker execution, and e-mail status/retry/locking execution are not wired into a real executor.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
@@ -809,11 +899,11 @@ Operational note:
 
 1. Do not immediately continue with a broad refactor.
 2. Prefer the next audit as:
-   - `P1.2B-16A` Email Job Status/Retry/Locking Boundary Audit.
+   - `P1.2B-17A` Email Jobs DB Schema / Idempotency Key Audit.
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-The next possible technical area is e-mail job status, retry, and locking policy. After DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, EmailJobProcessingTriggerBoundary, and EmailJobWorkerBoundary extraction, the remaining high-risk side-effect area includes actual `EmailJobsService.processPendingJobs` execution, worker/SMTP behavior, job selection and locking, status transitions, idempotency and duplicate prevention, retry and failed handling, stale processing recovery, `report_runs` synchronization, provider logging, audit/logging, Orchestrator wiring, and rollback behavior.
+The next possible technical area is e-mail job database schema and idempotency key design. After DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, EmailJobProcessingTriggerBoundary, EmailJobWorkerBoundary, and EmailJobStatusPolicyBoundary extraction, the remaining high-risk side-effect area includes actual `EmailJobsService.processPendingJobs` execution, worker/SMTP behavior, job selection and locking, status transitions, idempotency and duplicate prevention, retry and failed handling, stale processing recovery, `report_runs` synchronization, provider logging, audit/logging, Orchestrator wiring, database constraints/indexes, backfill strategy, and rollback behavior.
 
 Recommended scope for the next planning step:
 
@@ -825,7 +915,7 @@ Recommended scope for the next planning step:
 - No executor code.
 - No Orchestrator wiring.
 - No worker or SMTP changes.
-- No retry, status, locking, stale processing recovery, or `report_runs` synchronization changes.
+- No retry, status, locking, stale processing recovery, DB schema, idempotency key, backfill, or `report_runs` synchronization changes.
 - No webhooks.
 - No external integrations.
 - No ToolExecutor/ToolDispatcher consolidation.
@@ -833,6 +923,6 @@ Recommended scope for the next planning step:
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-15` completed the EmailJobWorkerBoundary extraction and production validation. The boundary remains pure worker-plan, status-transition-plan, retry-decision, worker-result, validation, and safe-projection logic only.
+Status: `P1.2B-16` completed the EmailJobStatusPolicyBoundary extraction and production validation. The boundary remains pure status-transition-policy, retry-policy, locking-policy, stale-processing-policy, policy-result, validation, and safe-projection logic only.
 
-Recommended next step: `P1.2B-16A` should audit and scope Email Job Status/Retry/Locking policy before any implementation. It should cover queued-to-processing, processing-to-sent, processing-to-retry-queued, processing-to-failed, retry count, max attempts, retry delay, `available_at`, `FOR UPDATE SKIP LOCKED`, stale processing recovery, duplicate mail risk, idempotency, `report_runs` interaction, rollback behavior, safe logging, and required DB tests. It must not implement code, SQL, DB changes, `processPendingJobs` refactors, `EmailJobsService.enqueue` refactors, worker/SMTP changes, queue writes, Orchestrator wiring, or production wiring.
+Recommended next step: `P1.2B-17A` should audit and scope Email Jobs DB schema / idempotency key design before any implementation. It should cover `email_jobs` schema, unique constraints, idempotency key candidates, correlation fields such as `leadId`, `contactRequestId`, `conversationId`, `sessionId`, and `siteId`, duplicate prevention, migration/backfill strategy, existing queued jobs, rollback behavior, `report_runs` interaction, safe logging/redaction, rollout strategy, and required DB tests. It must not implement code, SQL, DB changes, `email_jobs` reads/writes/updates, `processPendingJobs` refactors, `EmailJobsService.enqueue` refactors, worker/SMTP changes, queue writes, Orchestrator wiring, or production wiring.

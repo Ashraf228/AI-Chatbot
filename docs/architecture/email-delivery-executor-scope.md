@@ -361,15 +361,17 @@ P1.2B-11 is not:
 - an automatic deliveryChannels activation,
 - a production wiring step.
 
-## Current Status After P1.2B-15
+## Current Status After P1.2B-16
 
-EmailDeliveryExecutor Boundary was production-validated in P1.2B-11. EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15.
+EmailDeliveryExecutor Boundary was production-validated in P1.2B-11. EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15. EmailJobStatusPolicyBoundary was production-validated in P1.2B-16.
+
+Queue execution, processing execution, status/retry/locking execution, and real `email_jobs` / `webhook_jobs` writes remain not extracted.
 
 Queue and processing execution, real `email_jobs`/`webhook_jobs` writes, worker/SMTP execution, retry/status/locking behavior, stale-processing recovery, and `report_runs` synchronization remain outside the extracted boundaries.
 
 ## Recommended Next Step
 
-P1.2B-11 through P1.2B-15 are complete. The next recommended step is `P1.2B-16A` Email Job Status/Retry/Locking Boundary Audit.
+P1.2B-11 through P1.2B-16 are complete. The next recommended step is `P1.2B-17A` Email Jobs DB Schema / Idempotency Key Audit.
 
 That audit should remain read-only and cover status transition policy, retry decision policy, locking boundaries, stale processing recovery, idempotency, duplicate prevention, audit/logging, Orchestrator wiring, rollback behavior, and tests before any processing trigger, worker, SQL, queue-write, or status-update code is moved.
 

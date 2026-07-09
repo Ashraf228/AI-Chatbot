@@ -429,7 +429,32 @@ Not allowed:
 
 ## Recommended Next Step
 
-Proceed to P1.2B-16B only if the scope remains pure policy/data-object extraction:
+P1.2B-16B through P1.2B-16E are implemented, merged, deployed API-only, and production-validated. The safe scope was preserved.
+
+The implemented `EmailJobStatusPolicyBoundary` builds only StatusTransitionPolicy, RetryPolicy, LockingPolicy, StaleProcessingPolicy, and PolicyResult data objects plus validation helpers and audit/log-safe projections. It introduced no runtime execution, no SQL, no DB reads or writes, no `email_jobs` reads, writes, or updates, no `processPendingJobs` call, no `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs` change, no Orchestrator wiring, no Worker/SMTP/retry/status/locking/stale-processing recovery behavior change, no `report_runs` synchronization change, no NOLIS-specific logic, and no municipality-specific hardcoding.
+
+Deferred areas remain deferred:
+
+- Real status transition execution.
+- Real retry updates.
+- Real locking queries.
+- Stale-processing recovery.
+- SQL / DB reads / DB writes.
+- `email_jobs` reads, writes, and updates.
+- `processPendingJobs`.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- Orchestrator wiring.
+- Worker / SMTP execution.
+- `report_runs` synchronization.
+- Webhooks.
+- `ToolExecutorService` / `ToolDispatcherService`.
+- `IntegrationDispatcher`.
+- Production wiring.
+
+P1.2B-16 is complete. Proceed next to `P1.2B-17A` as an Email Jobs DB Schema / Idempotency Key Audit only.
+
+Historical P1.2B-16B scope was:
 
 - `EmailJobStatusPolicyBoundary`.
 - Status transition, retry, locking, and stale-processing policy data objects.
