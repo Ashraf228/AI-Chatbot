@@ -141,10 +141,6 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
     "Sichere Nicht-Antwort",
     "Keine externe Übermittlung",
   ];
-  const expansionStages = context.expansionStages?.length ? context.expansionStages : [
-    { title: "Standard", items: ["Quellenantworten", "Ticketvorschau", "Mock-Handoff"] },
-  ];
-
   async function ensureConversation() {
     if (conversationId) return conversationId;
     const response = await fetch("/api/evaluation/chat/session", {
@@ -589,20 +585,6 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
               <ul className="evaluation-feature-list">
                 {context.technicalFeatures.map((feature) => <li key={feature}>{feature}</li>)}
               </ul>
-            </div>
-            <div className="evaluation-card">
-              <p className="evaluation-eyebrow">Mögliche Ausbaustufen</p>
-              <h2>Vom Standard-Modul bis OEM</h2>
-              <div className="evaluation-stage-list">
-                {expansionStages.map((stage) => (
-                  <section key={stage.title} className="evaluation-stage">
-                    <h3>{stage.title}</h3>
-                    <ul>
-                      {stage.items.map((item) => <li key={item}>{item}</li>)}
-                    </ul>
-                  </section>
-                ))}
-              </div>
             </div>
           </aside>
         </section>

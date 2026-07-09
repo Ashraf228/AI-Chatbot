@@ -203,31 +203,6 @@ function buildSiteConfig(config) {
         'Keine externe Übermittlung',
         'Mandanten- und Site-Trennung',
       ],
-      expansionStages: [
-        {
-          title: 'Standard',
-          items: ['ein kommunaler Bereich', 'Quellenantworten', 'Ticketvorschau', 'Mock-Handoff'],
-        },
-        {
-          title: 'Plus',
-          items: [
-            'mehrere Produktbereiche',
-            'echte freigegebene NOLIS-Inhalte',
-            'produktive Ticket-/Webhook-Anbindung',
-            'erweiterte Auswertung',
-          ],
-        },
-        {
-          title: 'Premium/OEM',
-          items: [
-            'NOLIS-White-Label-Modul',
-            'kommunale Mandanten',
-            'Provisionierung',
-            'Betrieb und Supportmodell',
-            'wiederkehrendes Lizenz-/Umsatzmodell',
-          ],
-        },
-      ],
       scenarios: DEMO_SCENARIOS,
       technicalFeatures: [
         'Mandanten- und Site-Trennung',

@@ -50,11 +50,6 @@ const context = {
   ],
   demoAreas: ["Bürgerservice", "Online-Anträge", "CMS/CityApp", "Rathausintern", "Sportstätten", "Support & Handoff"],
   proofPoints: ["Quellenbasierte Antwortlogik", "Synthetische kommunale Wissensbasis", "Keine externe Übermittlung"],
-  expansionStages: [
-    { title: "Standard", items: ["ein kommunaler Bereich", "Quellenantworten"] },
-    { title: "Plus", items: ["mehrere Produktbereiche", "produktive Ticket-/Webhook-Anbindung"] },
-    { title: "Premium/OEM", items: ["NOLIS-White-Label-Modul", "Betrieb und Supportmodell"] },
-  ],
   technicalFeatures: ["Mandanten- und Site-Trennung", "Keine Verwaltungsentscheidung durch die KI"],
 };
 
@@ -74,7 +69,8 @@ describe("EvaluationWorkspace", () => {
     expect(screen.getByText("Wiederkehrend vermarktbares KI-Zusatzmodul für kommunale Bestandskunden.")).toBeInTheDocument();
     expect(screen.getByText("Bürgerservice")).toBeInTheDocument();
     expect(screen.getByText("Quellenbasierte Antwortlogik")).toBeInTheDocument();
-    expect(screen.getByText("Premium/OEM")).toBeInTheDocument();
+    expect(screen.queryByText("Mögliche Ausbaustufen")).not.toBeInTheDocument();
+    expect(screen.queryByText("Vom Standard-Modul bis OEM")).not.toBeInTheDocument();
     expect(screen.getByText("Neuen Reisepass vorbereiten")).toBeInTheDocument();
     expect(screen.getByText("Formular lässt sich nicht absenden")).toBeInTheDocument();
     expect(screen.getByText("Keine falsche externe Übergabe behaupten")).toBeInTheDocument();
