@@ -20,7 +20,7 @@ export function BrandLogo({ size = 52, showWordmark = true }: BrandLogoProps) {
       {showWordmark ? (
         <div>
           <div className="dashboard-brand-overline dashboard-brand-overline--light">Managed Chat</div>
-          <div className="dashboard-brand-name dashboard-brand-name--light">Soulé</div>
+          <div className="dashboard-brand-name dashboard-brand-name--light">SSB</div>
         </div>
       ) : null}
     </div>
