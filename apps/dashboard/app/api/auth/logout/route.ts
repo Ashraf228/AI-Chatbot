@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { getSessionCookieOptions, SESSION_COOKIE_NAME } from "@/lib/auth";
 
 export async function POST(req: Request) {
-  const res = NextResponse.redirect(new URL("/login", req.url), 303);
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || new URL(req.url).host;
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  const res = NextResponse.redirect(new URL("/login", `${proto}://${host}`), 303);
   res.cookies.set(SESSION_COOKIE_NAME, "", {
     ...getSessionCookieOptions(),
     maxAge: 0,
