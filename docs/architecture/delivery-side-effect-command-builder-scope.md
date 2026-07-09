@@ -251,14 +251,16 @@ P1.2B-9B should add focused unit tests for:
 - No IntegrationDispatcher changes.
 - No queue or database write relocation.
 
-## Current Status After P1.2B-15
+## Current Status After P1.2B-16
 
-DeliverySideEffectCommandBuilder was production-validated in P1.2B-9. DeliveryExecutionBoundary was production-validated in P1.2B-10. EmailDeliveryExecutor Boundary was production-validated in P1.2B-11. EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15.
+DeliverySideEffectCommandBuilder was production-validated in P1.2B-9. DeliveryExecutionBoundary was production-validated in P1.2B-10. EmailDeliveryExecutor Boundary was production-validated in P1.2B-11. EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15. EmailJobStatusPolicyBoundary was production-validated in P1.2B-16.
+
+Command, plan, result, queue-request, persistence-request, processing-trigger-request, worker-plan, and status-policy layers remain side-effect-free.
 
 Command, plan, result, queue-request, persistence-request, processing-trigger-request, and worker-plan layers remain side-effect-free.
 
 ## Recommended Next Step
 
-P1.2B-9 through P1.2B-15 are complete. The next recommended step is `P1.2B-16A` Email Job Status/Retry/Locking Boundary Audit.
+P1.2B-9 through P1.2B-16 are complete. The next recommended step is `P1.2B-17A` Email Jobs DB Schema / Idempotency Key Audit.
 
 That audit should stay read-only and cover status transition policy, retry decision policy, locking boundaries, stale processing recovery, idempotency, duplicate prevention, audit/logging, Orchestrator wiring, rollback behavior, and required DB tests. It should not move queue writes, introduce executor wiring, include webhooks, call external integrations, or change Public Widget responses.

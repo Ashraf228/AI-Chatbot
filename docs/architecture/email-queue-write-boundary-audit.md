@@ -303,14 +303,16 @@ git diff --check
 - No webhook delivery changes.
 - No ToolExecutor, ToolDispatcher, IntegrationDispatcher, or WebhookJobs changes.
 
-## Current Status After P1.2B-15
+## Current Status After P1.2B-16
 
-EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15.
+EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15. EmailJobStatusPolicyBoundary was production-validated in P1.2B-16.
+
+Queue execution, status/retry/locking execution, real `email_jobs` reads/writes/updates, and `processPendingJobs` remain not extracted.
 
 Queue execution, real `email_jobs` reads, writes, and updates, `processPendingJobs`, worker/SMTP execution, retry/status/locking behavior, stale-processing recovery, and `report_runs` synchronization remain outside the extracted boundaries.
 
 ## Recommended Next Step
 
-P1.2B-12, P1.2B-13, P1.2B-14, and P1.2B-15 are complete. The next recommended step is `P1.2B-16A` Email Job Status/Retry/Locking Boundary Audit.
+P1.2B-12, P1.2B-13, P1.2B-14, P1.2B-15, and P1.2B-16 are complete. The next recommended step is `P1.2B-17A` Email Jobs DB Schema / Idempotency Key Audit.
 
 That audit should remain read-only and cover status transition policy, retry decision policy, locking boundaries, stale processing recovery, idempotency, duplicate prevention, audit/logging, Orchestrator wiring, and rollback behavior before any processing trigger, worker, SQL, queue-write, or status-update code is moved.

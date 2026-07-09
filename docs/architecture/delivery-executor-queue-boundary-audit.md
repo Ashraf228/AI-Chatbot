@@ -420,19 +420,21 @@ P1.2B-10 is not intended to:
 - Call external integrations directly.
 - Wire a new executor into production chat without a separate deploy plan.
 
-## Current Status After P1.2B-15
+## Current Status After P1.2B-16
 
-DeliveryExecutionBoundary was production-validated in P1.2B-10. EmailDeliveryExecutor Boundary was production-validated in P1.2B-11. EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15.
+DeliveryExecutionBoundary was production-validated in P1.2B-10. EmailDeliveryExecutor Boundary was production-validated in P1.2B-11. EmailQueueWriteBoundary was production-validated in P1.2B-12. EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15. EmailJobStatusPolicyBoundary was production-validated in P1.2B-16.
+
+Queue execution, processing execution, status/retry/locking execution, and real `email_jobs` / `webhook_jobs` writes remain not extracted.
 
 Queue and processing execution, real `email_jobs`/`webhook_jobs` writes, worker/SMTP execution, retry/status/locking behavior, stale-processing recovery, and `report_runs` synchronization remain outside the extracted boundaries.
 
 ## Recommended Next Step
 
-P1.2B-10 through P1.2B-15 are complete. P1.2B-10B did not build a full DeliveryExecutor, P1.2B-11B did not write queues or wire execution, P1.2B-12B did not call `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs`, P1.2B-13B did not write `email_jobs`, P1.2B-14B did not call `processPendingJobs`, and P1.2B-15B did not execute WorkerPlans or WorkerResults.
+P1.2B-10 through P1.2B-16 are complete. P1.2B-10B did not build a full DeliveryExecutor, P1.2B-11B did not write queues or wire execution, P1.2B-12B did not call `EmailJobsService.enqueue` or `EmailJobsService.processPendingJobs`, P1.2B-13B did not write `email_jobs`, P1.2B-14B did not call `processPendingJobs`, P1.2B-15B did not execute WorkerPlans or WorkerResults, and P1.2B-16B did not execute status/retry/locking/stale-processing policies.
 
 Recommended next step:
 
-1. Create `P1.2B-16A` as an Email Job Status/Retry/Locking Boundary Audit only.
+1. Create `P1.2B-17A` as an Email Jobs DB Schema / Idempotency Key Audit only.
 2. Keep it email-only and worker-/processing-focused.
 3. Do not move queue writes or introduce executor wiring in the audit step.
 4. Do not wire it into `ChatAgentOrchestratorService`.

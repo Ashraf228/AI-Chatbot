@@ -407,14 +407,16 @@ P1.2B-13 is not intended to:
 - Add Orchestrator wiring.
 - Add production wiring without a separate deploy plan.
 
-## Current Status After P1.2B-15
+## Current Status After P1.2B-16
 
 EmailJobPersistenceBoundary was production-validated in P1.2B-13. EmailJobProcessingTriggerBoundary was production-validated in P1.2B-14. EmailJobWorkerBoundary was production-validated in P1.2B-15 as a pure WorkerPlan, StatusTransitionPlan, RetryDecision, WorkerResult, validation, and safe-projection layer.
+
+EmailJobStatusPolicyBoundary was production-validated in P1.2B-16 as a pure StatusTransitionPolicy, RetryPolicy, LockingPolicy, StaleProcessingPolicy, PolicyResult, validation, and safe-projection layer. `processPendingJobs`, `EmailJobsService.enqueue`, and real `email_jobs` reads, writes, or updates remain not extracted.
 
 `processPendingJobs`, `EmailJobsService.enqueue`, real `email_jobs` reads, writes, and updates, worker/SMTP execution, retry/status/locking behavior, stale-processing recovery, and `report_runs` synchronization remain outside the extracted boundaries.
 
 ## Recommended Next Step
 
-P1.2B-13, P1.2B-14, and P1.2B-15 are complete. The next recommended step is `P1.2B-16A` Email Job Status/Retry/Locking Boundary Audit.
+P1.2B-13, P1.2B-14, P1.2B-15, and P1.2B-16 are complete. The next recommended step is `P1.2B-17A` Email Jobs DB Schema / Idempotency Key Audit.
 
 That audit should remain read-only and cover status transition policy, retry decision policy, locking boundaries, stale processing recovery, idempotency, duplicate prevention, audit/logging, rollback behavior, and tests before any worker code or SQL behavior is moved.
