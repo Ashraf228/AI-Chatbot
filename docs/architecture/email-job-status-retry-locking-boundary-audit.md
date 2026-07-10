@@ -462,3 +462,8 @@ Historical P1.2B-16B scope was:
 - Tests proving no SQL, DB access, queue writes, SMTP calls, `processPendingJobs`, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `report_runs` sync, Orchestrator wiring, or public widget response changes.
 
 Do not implement status update SQL, stale recovery, idempotency keys, worker/SMTP changes, or production wiring in P1.2B-16B.
+## P1.2B-17 Status Note
+
+P1.2B-17 implemented and production-validated `EmailJobIdempotencyBoundary` as a pure idempotency, dedupe, schema-plan, backfill-risk, validation, and safe-projection data-object layer.
+
+No DB migration, SQL, DB reads or writes, `email_jobs` reads/writes/updates, idempotency enforcement, backfill, unique index, constraint, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, Worker/SMTP change, `report_runs` change, NOLIS-specific logic, or production wiring was introduced. Those areas remain deferred.

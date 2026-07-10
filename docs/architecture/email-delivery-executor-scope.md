@@ -376,3 +376,8 @@ P1.2B-11 through P1.2B-16 are complete. The next recommended step is `P1.2B-17A`
 That audit should remain read-only and cover status transition policy, retry decision policy, locking boundaries, stale processing recovery, idempotency, duplicate prevention, audit/logging, Orchestrator wiring, rollback behavior, and tests before any processing trigger, worker, SQL, queue-write, or status-update code is moved.
 
 Do not implement actual `email_jobs` insertion, executor wiring, worker changes, SMTP changes, webhooks, external integrations, or Public Widget response changes until that separate queue-write scope is approved.
+## P1.2B-17 Status Note
+
+P1.2B-17 implemented and production-validated `EmailJobIdempotencyBoundary` as a pure idempotency, dedupe, schema-plan, backfill-risk, validation, and safe-projection data-object layer.
+
+No DB migration, SQL, DB reads or writes, `email_jobs` reads/writes/updates, idempotency enforcement, backfill, unique index, constraint, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, Worker/SMTP change, `report_runs` change, NOLIS-specific logic, or production wiring was introduced. Those areas remain deferred.

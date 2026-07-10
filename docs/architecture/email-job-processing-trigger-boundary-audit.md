@@ -414,3 +414,8 @@ EmailJobStatusPolicyBoundary was implemented and production-validated in P1.2B-1
 P1.2B-14A through P1.2B-16E are complete. The EmailJobProcessingTriggerBoundary is implemented, merged, and production-validated as a pure request/result boundary. P1.2B-15 is also complete and production-validated as a pure EmailJobWorkerBoundary. P1.2B-16 is complete and production-validated as a pure EmailJobStatusPolicyBoundary.
 
 The next recommended step is `P1.2B-17A` as a read-only Email Jobs DB Schema / Idempotency Key Audit. It should scope DB schema/indexes, semantic idempotency keys, duplicate detection, migration/backfill risk, rollout strategy, rollback strategy, required DB tests, and safe logging/redaction before any SQL, DB, worker, SMTP, processing, status, retry, locking, or Orchestrator wiring changes are implemented.
+## P1.2B-17 Status Note
+
+P1.2B-17 implemented and production-validated `EmailJobIdempotencyBoundary` as a pure idempotency, dedupe, schema-plan, backfill-risk, validation, and safe-projection data-object layer.
+
+No DB migration, SQL, DB reads or writes, `email_jobs` reads/writes/updates, idempotency enforcement, backfill, unique index, constraint, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, Worker/SMTP change, `report_runs` change, NOLIS-specific logic, or production wiring was introduced. Those areas remain deferred.
