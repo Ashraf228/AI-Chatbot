@@ -293,3 +293,8 @@ Payload, command, ExecutionPlan, result, queue-request, persistence-request, pro
 ## Recommended Next Step
 
 P1.2B-8 through P1.2B-16 are complete. The next recommended step is `P1.2B-17A` Email Jobs DB Schema / Idempotency Key Audit. Defer queue writes, webhook payload execution, signing, executor wiring, worker/SMTP changes, processing changes, retry/status/locking execution, stale-processing recovery, DB schema/index changes, idempotency keys, `report_runs` synchronization changes, and external integrations until that audit defines a safe boundary.
+## P1.2B-17 Status Note
+
+P1.2B-17 implemented and production-validated `EmailJobIdempotencyBoundary` as a pure idempotency, dedupe, schema-plan, backfill-risk, validation, and safe-projection data-object layer.
+
+No DB migration, SQL, DB reads or writes, `email_jobs` reads/writes/updates, idempotency enforcement, backfill, unique index, constraint, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, Worker/SMTP change, `report_runs` change, NOLIS-specific logic, or production wiring was introduced. Those areas remain deferred.

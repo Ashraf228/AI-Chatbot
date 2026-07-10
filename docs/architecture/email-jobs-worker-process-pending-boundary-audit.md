@@ -515,3 +515,8 @@ Deferred areas remain deferred:
 ## Recommended Next Step
 
 Proceed with `P1.2B-17A` only as a read-only Email Jobs DB Schema / Idempotency Key Audit. It should not implement code, SQL, DB changes, `email_jobs` reads/writes/updates, `processPendingJobs` refactors, queue writes, worker/SMTP changes, Orchestrator wiring, or production wiring.
+## P1.2B-17 Status Note
+
+P1.2B-17 implemented and production-validated `EmailJobIdempotencyBoundary` as a pure idempotency, dedupe, schema-plan, backfill-risk, validation, and safe-projection data-object layer.
+
+No DB migration, SQL, DB reads or writes, `email_jobs` reads/writes/updates, idempotency enforcement, backfill, unique index, constraint, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, Worker/SMTP change, `report_runs` change, NOLIS-specific logic, or production wiring was introduced. Those areas remain deferred.

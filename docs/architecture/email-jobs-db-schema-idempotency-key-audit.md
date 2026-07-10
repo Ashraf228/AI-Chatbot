@@ -497,3 +497,57 @@ Proceed to P1.2B-17B only as a pure `EmailJobIdempotencyBoundary` extraction:
 - No DB, SQL, migration, reads, writes, queue writes, enforcement, or productive wiring.
 
 After P1.2B-17B, the next separate audits should cover DB migration design, existing duplicate cleanup, privacy/hash policy, partial unique index design, and rollback strategy before any real enforcement is introduced.
+
+## P1.2B-17 Implementation Status
+
+P1.2B-17B through P1.2B-17E implemented and production-validated the safe scope from this audit.
+
+Implemented:
+
+- `EmailJobIdempotencyBoundary` as pure IdempotencyKeyCandidate, IdempotencyKeyPolicy, DedupeDecision, SchemaPlan, and BackfillRisk data-object logic.
+- Validation helpers.
+- Safe audit/log projections.
+- Privacy-safe recipient identity handling.
+
+Production validation:
+
+- API-only deploy to `a82225d3fbecf06346dd7c5c45c522e783662a67`.
+- Public Widget stayed on the legacy pipeline.
+- No public response shape change.
+- No NOLIS-specific logic or municipality-specific hardcoding.
+
+Safe scope preserved:
+
+- No runtime execution.
+- No SQL.
+- No DB reads or writes.
+- No `email_jobs` reads, writes, or updates.
+- No idempotency enforcement.
+- No migration.
+- No `idempotency_key` column.
+- No backfill.
+- No unique index or constraint.
+- No `EmailJobsService.enqueue` change.
+- No `EmailJobsService.processPendingJobs` change.
+- No Orchestrator wiring.
+- No Worker, SMTP, or `report_runs` change.
+
+Deferred areas remain deferred:
+
+- Real DB migration.
+- `idempotency_key` column.
+- Unique or partial unique index.
+- Existing duplicate cleanup.
+- Backfill.
+- Idempotency enforcement.
+- SQL, DB reads, DB writes, and `email_jobs` reads/writes/updates.
+- `processPendingJobs`.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- Orchestrator wiring.
+- Worker and SMTP execution.
+- `report_runs` synchronization.
+- Webhooks.
+- ToolExecutor/ToolDispatcher consolidation.
+- IntegrationDispatcher.
+- Production wiring.

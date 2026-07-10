@@ -455,3 +455,8 @@ Status: umgesetzt und production-validiert in P1.2B-16 fuer reine StatusTransiti
 P1.2B-7, P1.2B-8, P1.2B-9, P1.2B-10, P1.2B-11, P1.2B-12, P1.2B-13, P1.2B-14, P1.2B-15 und P1.2B-16 sind umgesetzt und production-validiert. Der naechste empfohlene Schritt ist `P1.2B-17A` Email Jobs DB Schema / Idempotency Key Audit.
 
 P1.2B-17A sollte nur Audit / Scope bleiben und keine Queue-Writes verschieben, keinen Executor-Code einfuehren, keine Webhooks einbeziehen, keine externen Integrationen ausloesen und keine Public Widget Response aendern. Der Audit sollte DB schema/indexes, semantic idempotency keys, duplicate detection, migration/backfill risk, rollout strategy, rollback strategy, `report_runs` interaction, safe logging/redaction und erforderliche DB-Tests abdecken.
+## P1.2B-17 Status Note
+
+P1.2B-17 implemented and production-validated `EmailJobIdempotencyBoundary` as a pure idempotency, dedupe, schema-plan, backfill-risk, validation, and safe-projection data-object layer.
+
+No DB migration, SQL, DB reads or writes, `email_jobs` reads/writes/updates, idempotency enforcement, backfill, unique index, constraint, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, Worker/SMTP change, `report_runs` change, NOLIS-specific logic, or production wiring was introduced. Those areas remain deferred.
