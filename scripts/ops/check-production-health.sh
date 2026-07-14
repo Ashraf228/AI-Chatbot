@@ -10,9 +10,8 @@ DASHBOARD_HEALTH_URL="${DASHBOARD_HEALTH_URL:-https://app.soulesmartbusiness.com
 DASHBOARD_URL="${DASHBOARD_URL:-https://app.soulesmartbusiness.com/login}"
 WIDGET_LOADER_URL="${WIDGET_LOADER_URL:-https://widget.soulesmartbusiness.com/loader.js}"
 WIDGET_VERSION_URL="${WIDGET_VERSION_URL:-https://widget.soulesmartbusiness.com/version.json}"
-WIDGET_CONFIG_URL="${WIDGET_CONFIG_URL:-https://widget.soulesmartbusiness.com/widget/config?siteKey=rohrreinigung-ffm24}"
+WIDGET_CONFIG_BASE_URL="${WIDGET_CONFIG_BASE_URL:-https://widget.soulesmartbusiness.com/widget/config}"
 PRIVACY_URL="${PRIVACY_URL:-https://www.rohrreinigung-ffm24.de/datenschutz}"
-EXPECTED_WIDGET_SITE_KEY="${EXPECTED_WIDGET_SITE_KEY:-rohrreinigung-ffm24}"
 EXPECTED_SERVICES="${EXPECTED_SERVICES:-api dashboard widget proxy db redis}"
 DISK_WARN_PERCENT="${DISK_WARN_PERCENT:-85}"
 DISK_FAIL_PERCENT="${DISK_FAIL_PERCENT:-90}"
@@ -42,6 +41,26 @@ warn() {
 fail() {
   fails=$((fails + 1))
   line "FAIL" "$1"
+}
+
+json_field() {
+  local body_file="$1"
+  local field_name="$2"
+
+  node -e "const fs = require('fs'); const key = process.argv[2]; try { const data = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); const value = data?.[key]; if (typeof value === 'string' || typeof value === 'boolean') process.stdout.write(String(value)); } catch {}" "$body_file" "$field_name"
+}
+
+site_key_from_url() {
+  local url="$1"
+
+  node -e "try { const value = new URL(process.argv[1]).searchParams.get('siteKey'); if (value) process.stdout.write(value); } catch {}" "$url"
+}
+
+build_widget_config_url() {
+  local base_url="$1"
+  local site_key="$2"
+
+  node -e "const url = new URL(process.argv[1]); url.searchParams.set('siteKey', process.argv[2]); process.stdout.write(url.toString());" "$base_url" "$site_key"
 }
 
 is_non_negative_int() {
@@ -153,12 +172,51 @@ else
 fi
 rm -f "$widget_version_body_file"
 
+legacy_widget_site_key=""
+if [[ -n "${WIDGET_CONFIG_URL:-}" ]]; then
+  legacy_widget_site_key="$(site_key_from_url "$WIDGET_CONFIG_URL")"
+fi
+
+synthetic_widget_site_key="${PRODUCTION_HEALTH_SYNTHETIC_SITE_KEY:-${EXPECTED_WIDGET_SITE_KEY:-${legacy_widget_site_key:-production-health-synthetic}}}"
+synthetic_widget_config_url="${WIDGET_CONFIG_URL:-$(build_widget_config_url "$WIDGET_CONFIG_BASE_URL" "$synthetic_widget_site_key")}"
+synthetic_widget_request_site_key="$(site_key_from_url "$synthetic_widget_config_url")"
+
 config_body_file="$(mktemp)"
-config_code="$(http_body "$WIDGET_CONFIG_URL" "$config_body_file")"
-if [[ "$config_code" == "200" ]] && grep -q "\"siteKey\":\"$EXPECTED_WIDGET_SITE_KEY\"" "$config_body_file"; then
-  ok "widget config siteKey=$EXPECTED_WIDGET_SITE_KEY"
+config_code="$(http_body "$synthetic_widget_config_url" "$config_body_file")"
+config_response_site_key="$(json_field "$config_body_file" "siteKey")"
+
+config_reachable="no"
+if [[ "$config_code" == "200" ]]; then
+  config_reachable="yes"
+fi
+
+config_diag="expectedSiteKey=$synthetic_widget_site_key"
+if [[ -n "$synthetic_widget_request_site_key" ]]; then
+  config_diag="$config_diag requestSiteKey=$synthetic_widget_request_site_key"
+fi
+config_diag="$config_diag http=${config_code:-request_failed} reachable=$config_reachable"
+if [[ -n "$config_response_site_key" ]]; then
+  config_diag="$config_diag responseSiteKey=$config_response_site_key"
+fi
+
+if [[ -z "$synthetic_widget_request_site_key" ]]; then
+  fail "synthetic widget config request missing siteKey $config_diag drift_hint=url_missing_siteKey"
+elif [[ "$config_code" != "200" ]]; then
+  if [[ "$config_code" == "404" ]]; then
+    fail "synthetic widget config missing $config_diag drift_hint=missing_or_stale_synthetic_key"
+  elif [[ "$config_code" == "403" ]]; then
+    fail "synthetic widget config inactive $config_diag drift_hint=inactive_synthetic_key"
+  else
+    fail "synthetic widget config unreachable $config_diag"
+  fi
+elif [[ -z "$config_response_site_key" ]]; then
+  fail "synthetic widget config response missing siteKey $config_diag drift_hint=invalid_or_unexpected_payload"
+elif [[ "$synthetic_widget_request_site_key" != "$synthetic_widget_site_key" ]]; then
+  fail "synthetic widget config request mismatch $config_diag drift_hint=url_or_env_mismatch"
+elif [[ "$config_response_site_key" != "$synthetic_widget_site_key" ]]; then
+  fail "synthetic widget config response mismatch $config_diag drift_hint=config_or_key_drift"
 else
-  fail "widget config invalid http=${config_code:-request_failed}"
+  ok "synthetic widget config siteKey=$synthetic_widget_site_key http=200 reachable=yes"
 fi
 rm -f "$config_body_file"
 
