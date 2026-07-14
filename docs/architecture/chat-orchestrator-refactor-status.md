@@ -1246,6 +1246,8 @@ Operational note:
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
+`P1.2B-20A` scopes Email Job Duplicate Read-only Query Plan boundaries in `docs/architecture/email-job-duplicate-readonly-query-plan-audit.md`.
+
 Recommended scope for `P1.2B-20A`:
 
 - Audit / scope only.
