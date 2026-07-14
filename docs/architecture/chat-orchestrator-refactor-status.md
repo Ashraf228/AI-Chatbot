@@ -1132,7 +1132,7 @@ Operational note:
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-The next technical area should be the production synthetic monitoring key, not another runtime refactor. `scripts/ops/check-production-health.sh` remains yellow because `production-health-synthetic` returns widget config HTTP 404, while manual internal testsite smokes and service/container health are green. This should be repaired so the monitoring signal is trustworthy before continuing with e-mail job duplicate cleanup, idempotency enforcement, or additional production wiring work.
+The next technical area should be the production synthetic monitoring key, not another runtime refactor. `scripts/ops/check-production-health.sh` previously reported `production-health-synthetic` widget config HTTP 404, while manual internal testsite smokes and service/container health were green. The P1.2B-Synthetic-1A audit now documents that a current read-only public config check for `production-health-synthetic` returns HTTP 200, but the monitoring path still needs explicit script/config stabilization so the health signal remains trustworthy and non-customer-specific before continuing with e-mail job duplicate cleanup, idempotency enforcement, or additional production wiring work.
 
 Recommended scope for `P1.2B-Synthetic-1A`:
 
@@ -1149,6 +1149,8 @@ Recommended scope for `P1.2B-Synthetic-1A`:
 - No runtime refactor.
 - No NOLIS-specific logic.
 - No municipality-specific hardcoding.
+
+Audit artifact: `docs/architecture/production-health-synthetic-site-key-audit.md`.
 
 After `production-health-synthetic` is fixed, the next possible runtime planning area is `P1.2B-19A` Email Job Duplicate Audit / Cleanup Scope. It should remain audit-only until the production health script is reliably green.
 
