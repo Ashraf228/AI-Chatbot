@@ -12,6 +12,22 @@ The current read-only verification on 2026-07-14 showed that the synthetic Widge
 
 This audit is documentation only. It does not change the production health script, runtime code, site data, widget data, feature flags, database records, migrations, or public widget behavior.
 
+## P1.2B-Synthetic-1B Implementation Note
+
+`P1.2B-Synthetic-1B` applies the recommended script-only stabilization in `scripts/ops/check-production-health.sh`:
+
+- default synthetic monitoring key is now `production-health-synthetic`, not a customer-like default
+- the script derives the Widget Config URL from `WIDGET_CONFIG_BASE_URL` plus the effective synthetic key unless a legacy `WIDGET_CONFIG_URL` override is provided
+- `PRODUCTION_HEALTH_SYNTHETIC_SITE_KEY` is supported as an explicit non-secret override
+- diagnostics now separate:
+  - expected synthetic key
+  - requested key from the config URL
+  - HTTP status / reachability
+  - returned `siteKey` from the response
+- widget service checks and synthetic widget config smoke remain separate from the privacy/customer page check
+
+The change is still script/docs only. It does not mutate site data, widget data, production config, runtime code, or database state.
+
 ## Current Production Health Script Behavior
 
 Script: `scripts/ops/check-production-health.sh`
@@ -25,12 +41,12 @@ The script is a mixed production health check that combines public HTTP checks w
 | Dashboard login | `DASHBOARD_URL`, default `https://app.soulesmartbusiness.com/login` | Expects HTTP 200. | Fails if login page is unavailable. |
 | Widget loader | `WIDGET_LOADER_URL`, default `https://widget.soulesmartbusiness.com/loader.js` | Expects HTTP 200. | Fails if loader is unavailable. |
 | Widget version | `WIDGET_VERSION_URL`, default `https://widget.soulesmartbusiness.com/version.json` | Reads widget build commit. | Warns if version metadata is unavailable or unknown. |
-| Widget config | `WIDGET_CONFIG_URL`, default `https://widget.soulesmartbusiness.com/widget/config?siteKey=rohrreinigung-ffm24` | Expects HTTP 200 and a JSON body containing `"siteKey":"$EXPECTED_WIDGET_SITE_KEY"`. | Fails as `widget config invalid` if HTTP status is not 200 or the expected key is absent. |
-| Expected widget key | `EXPECTED_WIDGET_SITE_KEY`, default `rohrreinigung-ffm24` | Used only as a body assertion for the Widget Config response. | A stale or mismatched value creates a false red/yellow production health signal. |
+| Widget config | `WIDGET_CONFIG_BASE_URL` + effective synthetic key, default key `production-health-synthetic` | Builds the config URL from the synthetic key unless a legacy full `WIDGET_CONFIG_URL` override is provided. | Prevents the default check from silently drifting back to a customer-like key. |
+| Synthetic widget key | `PRODUCTION_HEALTH_SYNTHETIC_SITE_KEY`, fallback `EXPECTED_WIDGET_SITE_KEY`, fallback URL `siteKey`, final fallback `production-health-synthetic` | Defines the expected synthetic site key and is compared against both the requested key and the response payload. | A mismatch now produces an explicit drift diagnostic instead of a generic widget-config failure. |
 | Privacy URL | `PRIVACY_URL`, default `https://www.rohrreinigung-ffm24.de/datenschutz` | Expects HTTP 200. | Fails if the configured page is unavailable. |
 | Host-local checks | Docker Compose, backups, offsite backups, logs, disk, job health | Runs inside the production host context. | Fails or warns based on container state, backup freshness, log patterns, disk usage, and job health. |
 
-Important detail: the script accepts a full `WIDGET_CONFIG_URL` and separately asserts `EXPECTED_WIDGET_SITE_KEY`. If these values drift apart, the check fails even when the widget service is healthy.
+Important detail: legacy `WIDGET_CONFIG_URL` is still accepted, but the script now reports request-key drift and response-key drift explicitly. That keeps the synthetic widget smoke diagnostic, while avoiding the old generic `widget config invalid` failure for multiple unrelated causes.
 
 ## Current Synthetic Key Failure
 
