@@ -272,3 +272,11 @@ After merge, perform `P1.2B-Synthetic-1B` as a narrow script/config stabilizatio
 - Make key mismatch diagnostics explicit.
 - Keep customer/privacy checks separate from synthetic widget health.
 - Avoid DB, runtime, feature flag, deploy, and public widget behavior changes.
+
+## P1.2B-19E Monitoring Note
+
+Monitoring was green during P1.2B-19E.
+
+- `scripts/ops/check-production-health.sh` returned exit code 0.
+- `production-health-synthetic` widget config returned HTTP 200.
+- The synthetic siteKey matched the expected value.

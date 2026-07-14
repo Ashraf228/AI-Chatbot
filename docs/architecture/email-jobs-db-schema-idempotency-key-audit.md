@@ -557,3 +557,9 @@ Deferred areas remain deferred:
 P1.2B-18 implemented and production-validated `EmailJobIdempotencyMigrationPlanBoundary` as a pure enforcement-plan, migration-phase, unique-index-plan, backfill-plan, duplicate-conflict-policy, rollback-plan, validation, result-data, and safe-projection layer.
 
 No DB migration, SQL, DB reads or writes, `email_jobs` reads/writes/updates, idempotency enforcement, unique index, constraint, backfill, existing duplicate cleanup, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, Worker/SMTP change, `report_runs` change, NOLIS-specific logic, or production wiring was introduced. Those areas remain deferred. Production validation is yellow only because `production-health-synthetic` still returns widget config HTTP 404.
+
+## P1.2B-19 Status Note
+
+`EmailJobDuplicateAuditPlanBoundary` was implemented in P1.2B-19 as a pure duplicate-audit and cleanup-plan data-object layer and production-validated.
+
+DB reads, SQL, `email_jobs` reads/writes/updates, duplicate cleanup, backfill, unique index or constraint work, idempotency enforcement, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `processPendingJobs`, Orchestrator wiring, worker/SMTP execution, `report_runs` synchronization, webhooks, ToolExecutor/ToolDispatcher work, IntegrationDispatcher work, and Production wiring remain deferred.

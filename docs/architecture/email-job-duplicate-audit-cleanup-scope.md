@@ -11,9 +11,38 @@ The main findings are:
 - Duplicate creation risk exists before SMTP delivery because lead and report jobs can be queued more than once without a semantic uniqueness boundary.
 - Duplicate interpretation risk exists after SMTP delivery because `sent`, `queued`, `processing`, and `failed` rows can represent either true duplicates or partial-failure recovery state.
 - Cleanup is materially safer only after duplicate classification is defined as a pure, read-only data model first.
-- The safest follow-up scope for `P1.2B-19B` is a pure helper and type layer for duplicate classification, cleanup planning, and audit-safe projections only.
+- `P1.2B-19B` through `P1.2B-19E` are now implemented and production-validated as a pure helper and type layer for duplicate classification, cleanup planning, and audit-safe projections only.
 
 This document does not recommend any direct DB cleanup, SQL migration, worker refactor, or production behavior change in the current step.
+
+## P1.2B-19 Status Update
+
+`P1.2B-19B` through `P1.2B-19E` are implemented and production-validated. The safe scope held: `EmailJobDuplicateAuditPlanBoundary` builds only `DuplicateCandidate`, `DuplicateRiskGroup`, `CleanupEligibilityPolicy`, `DuplicateAuditPlan`, `CleanupPlan`, `ManualReviewDecision`, and `DuplicateAuditPlanResult` data objects plus validation helpers, result builders, classification helpers, and safe projections.
+
+No runtime execution, SQL, DB reads, DB writes, `email_jobs` reads/writes/updates, duplicate cleanup, backfill, existing duplicate cleanup, hard delete, soft delete or mark-duplicate path, unique index, constraint, idempotency enforcement, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `processPendingJobs`, Orchestrator wiring, worker/SMTP changes, `report_runs` changes, webhooks, ToolExecutor/ToolDispatcher consolidation, IntegrationDispatcher change, production wiring, NOLIS-specific logic, or municipality-specific hardcoding was introduced.
+
+Deferred areas remain deferred:
+
+- Read-only DB audit queries.
+- SQL.
+- `email_jobs` reads, writes, and updates.
+- Duplicate cleanup.
+- Existing duplicate cleanup.
+- Backfill.
+- Hard delete.
+- Soft delete or mark duplicate.
+- Unique index or constraint.
+- Idempotency enforcement.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- `processPendingJobs`.
+- Orchestrator wiring.
+- Worker and SMTP execution.
+- `report_runs` synchronization.
+- Webhooks.
+- ToolExecutor/ToolDispatcher work.
+- IntegrationDispatcher work.
+- Production wiring.
 
 ## Current Duplicate Risk Sources
 
@@ -57,11 +86,13 @@ This document does not recommend any direct DB cleanup, SQL migration, worker re
 
 ## Future Read-only Duplicate Audit Design
 
-The next safe step is not DB cleanup.
+The next safe step is still not DB cleanup.
 
-The next safe step is a pure duplicate-audit helper layer that can classify potential duplicate clusters without touching SQL, `EmailJobsService`, `processPendingJobs`, or production wiring.
+`P1.2B-19` already delivered the pure duplicate-audit helper layer that classifies potential duplicate clusters without touching SQL, `EmailJobsService`, `processPendingJobs`, or production wiring.
 
-Recommended `P1.2B-19B` shape:
+The next safe planning step is a read-only duplicate query plan audit that still excludes SQL execution, production DB reads, `email_jobs` reads, cleanup, backfill, and enforcement.
+
+Implemented `P1.2B-19B` shape:
 
 - Add a pure module such as `apps/api/src/chat/email-job-duplicate-audit.boundary.ts`.
 - Define normalized read-only types such as:
@@ -118,9 +149,9 @@ Recommended future modules, all pure and non-runtime in their first iteration:
 | `EmailJobDuplicateAuditRepository` | Would later encapsulate actual read-only DB queries | Nein | Separate DB-read approval required |
 | `EmailJobDuplicateCleanupRunner` | Would later perform actual cleanup actions | Nein | Separate runbook, backup, and approval required |
 
-## Recommended P1.2B-19B Scope
+## Implemented P1.2B-19B Scope
 
-Recommended safe scope:
+Implemented safe scope:
 
 - `EmailJobDuplicateAuditPlanBoundary` interface and types
 - `DuplicateCandidate` data objects
@@ -215,17 +246,15 @@ Non-goals for `P1.2B-19` at this stage:
 
 ## Recommended Next Step
 
-Recommended sequence:
+Proceed with `P1.2B-20A` as an Email Job Duplicate Read-only Query Plan Audit only.
 
-1. Create and review the documentation-only PR for `P1.2B-19A`.
-2. Run CI, wait for green status, and merge that PR.
-3. Start `P1.2B-19B` only after merge.
+`P1.2B-20A` should remain audit/scope only and should still exclude:
 
-`P1.2B-19B` should remain pure and should still exclude:
-
+- code changes
 - DB reads
 - SQL
 - `email_jobs` reads, writes, or updates
+- reports with live row data
 - cleanup
 - backfill
 - unique index or constraint work

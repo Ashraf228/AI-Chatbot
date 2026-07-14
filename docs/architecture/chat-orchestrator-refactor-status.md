@@ -2,17 +2,18 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-18 are implemented, merged, and production-validated. P1.2B-18 has a yellow operational note caused by the existing `production-health-synthetic` widget config 404, not by the API boundary, database, or public widget behavior. The refactor is intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-19 are implemented, merged, and production-validated. P1.2B-19 added `EmailJobDuplicateAuditPlanBoundary` as a pure duplicate-audit and cleanup-plan data-object layer and revalidated a green production-health baseline after the earlier synthetic monitoring follow-up. The refactor remains intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
-The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` remains the executor for database reads/writes, queue writes, audit writes, lead finalization, contact request creation, conversation metadata persistence, and public response assembly.
+The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` and the existing services remain the executors for database reads/writes, queue writes, audit writes, lead finalization, ticket finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
 Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `b3e0c8e6718aa4985594b422ea8d645e82abbd62` |
+| API | `98de7282b1fa81f30b5ec273c5a381ab1ae8d4ee` |
 | Dashboard | `25480866a7bffab7007adf1495477b4e22c7380a` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
+| Main-CI / Docker gate | Green on run `29369455078` |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
 | Migration count | `28` |
 | Public widget | Legacy pipeline |
@@ -728,9 +729,78 @@ Not introduced or moved:
 - NOLIS-specific logic.
 - Municipality-specific hardcoding.
 
-## Still in ChatAgentOrchestrator
+### P1.2B-19 EmailJobDuplicateAuditPlanBoundary
 
-The following responsibilities deliberately remain in `ChatAgentOrchestratorService`:
+Files:
+
+- `apps/api/src/chat/email-job-duplicate-audit-plan.boundary.ts`
+- `apps/api/test/email-job-duplicate-audit-plan-boundary.test.cjs`
+
+Extracted pure duplicate-audit and cleanup-plan data objects, helpers, and projections:
+
+- `DuplicateCandidate` data objects.
+- `DuplicateRiskGroup` data objects.
+- `CleanupEligibilityPolicy` data objects.
+- `DuplicateAuditPlan` data objects.
+- `CleanupPlan` data objects.
+- `ManualReviewDecision` data objects.
+- `DuplicateAuditPlanResult` data objects.
+- Validation helpers.
+- `ready`, `skipped`, `blocked`, and `failed` result builders.
+- Classification helpers.
+- Audit-/log-safe DuplicateAudit projections.
+
+Productive use:
+
+- No productive runtime use was introduced.
+- No `ChatAgentOrchestratorService` rewiring was introduced.
+- The boundary is prepared but not connected to `EmailJobsService`, `processPendingJobs`, SQL, database, `email_jobs`, worker, SMTP, retry, status, locking, stale-processing recovery, `report_runs`, or production wiring paths.
+- DuplicateCandidates, DuplicateRiskGroups, CleanupEligibilityPolicies, DuplicateAuditPlans, CleanupPlans, ManualReviewDecisions, and DuplicateAuditPlanResults are data objects only and are not productively executed.
+- `ChatAgentOrchestratorService` and existing services remain the executors.
+- `EmailJobsService` remains unchanged.
+- `processPendingJobs` remains unchanged.
+
+Not introduced or moved:
+
+- Database reads.
+- SQL.
+- Database writes.
+- `email_jobs` reads.
+- `email_jobs` writes.
+- `email_jobs` updates.
+- Duplicate cleanup.
+- Backfill.
+- Existing duplicate cleanup.
+- Hard delete.
+- Soft delete or mark duplicate.
+- Unique index.
+- Constraint.
+- Idempotency enforcement.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- `processPendingJobs` calls.
+- `webhook_jobs` writes.
+- Webhook execution.
+- A real `EmailDeliveryExecutor` with execution.
+- `DeliveryExecutor`.
+- Orchestrator wiring.
+- Worker or SMTP changes.
+- Retry, status, or locking changes.
+- Stale-processing recovery changes.
+- `report_runs` synchronization changes.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- `IntegrationDispatcher`.
+- `WebhookJobsService`.
+- External integrations.
+- Public Widget response shape.
+- Conversation Engine public activation.
+- NOLIS-specific logic.
+- Municipality-specific hardcoding.
+
+## Remaining Responsibilities
+
+The following responsibilities deliberately remain in `ChatAgentOrchestratorService` or the existing runtime services:
 
 - Side-effect execution.
 - Database reads.
@@ -743,20 +813,32 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - Ticket audit/notification execution.
 - Delivery execution.
 - `email_jobs` / `webhook_jobs` creation.
-- `email_jobs` reads and updates.
+- `email_jobs` reads, writes, and updates.
 - `queueInternalLeadNotification`.
 - `EmailJobsService.enqueue`.
 - `EmailJobsService.processPendingJobs`.
 - `processPendingJobs` execution.
 - Worker and SMTP execution.
 - Retry, status, and locking behavior.
+- Stale-processing recovery.
 - `report_runs` synchronization.
+- `email_jobs` schema management.
+- Idempotency key enforcement.
+- Dedupe enforcement.
+- Duplicate audit execution.
+- Duplicate cleanup execution.
+- Manual review execution.
+- Backfill and migration execution.
+- Unique index and constraint management.
+- Migration rollout and rollback execution.
 - Webhook signing / webhook headers.
 - WebhookJobsService execution.
 - EmailJobsService execution.
-- Contact request creation.
-- Lead audit execution.
-- Ticket audit/notification execution.
+- ToolExecutor/ToolDispatcher separation.
+- IntegrationDispatcher.
+- Final decision ordering.
+- Conversation metadata persistence.
+- Public response assembly.
 - Delivery command execution.
 - Email queue write execution.
 - Email job persistence execution.
@@ -765,30 +847,15 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - Email status, retry, locking, and stale-processing policy execution.
 - Email idempotency enforcement.
 - Email idempotency migration execution.
-- Email job schema management.
-- Idempotency key enforcement.
-- Dedupe enforcement.
-- Existing duplicate cleanup.
-- Backfill / migration.
-- Unique index / constraint management.
-- Migration rollout / rollback execution.
-- Email processing execution wiring.
-- Delivery execution wiring.
-- Email execution wiring.
-- Queue write execution.
-- Worker, SMTP, retry, status, locking, and stale-processing recovery execution.
-- Conversation metadata persistence.
-- ToolExecutor/ToolDispatcher separation.
-- IntegrationDispatcher.
-- Final decision ordering.
+- Email duplicate audit execution.
+- Email duplicate cleanup execution.
 - IT-/ticket-side-effect execution.
-- Public response assembly.
 
 This is intentional. The extracted modules are pure helpers/builders only; they prepare values and decisions but do not execute side effects.
 
 ## Safety Boundaries
 
-The P1.2B-1 through P1.2B-18 refactor keeps these boundaries:
+The P1.2B-1 through P1.2B-19 refactor keeps these boundaries:
 
 - No public widget response change.
 - Public Widget does not expose `deliveryChannels`, `signingSecret`, `token`, `apiKey`, `authorization`, `recipientEmail`, or `webhookUrl`.
@@ -808,6 +875,7 @@ The P1.2B-1 through P1.2B-18 refactor keeps these boundaries:
 - `EmailJobStatusPolicyBoundary` is pure status-transition-policy, retry-policy, locking-policy, stale-processing-policy, result-data, validation, and safe-projection logic only.
 - `EmailJobIdempotencyBoundary` is pure idempotency, dedupe, schema-plan, backfill-risk, validation, and safe-projection data-object logic only.
 - `EmailJobIdempotencyMigrationPlanBoundary` is pure validation, enforcement-plan, migration-phase, index-plan, backfill-plan, conflict-policy, rollback-plan, result-data, and safe-projection data-object logic only.
+- `EmailJobDuplicateAuditPlanBoundary` is pure validation, duplicate-audit-plan, cleanup-plan, manual-review-decision, result-data, classification, and safe-projection data-object logic only.
 - No real EmailDeliveryExecutor with execution introduced.
 - No productive DeliverySideEffectCommand runtime execution introduced.
 - No productive EmailDeliveryExecutor runtime execution introduced.
@@ -818,12 +886,14 @@ The P1.2B-1 through P1.2B-18 refactor keeps these boundaries:
 - No productive EmailJobStatusPolicyBoundary runtime execution introduced.
 - No productive EmailJobIdempotencyBoundary runtime execution introduced.
 - No productive EmailJobIdempotencyMigrationPlanBoundary runtime execution introduced.
+- No productive EmailJobDuplicateAuditPlanBoundary runtime execution introduced.
 - No EmailJobPersistenceBoundary Orchestrator wiring introduced.
 - No EmailJobProcessingTriggerBoundary Orchestrator wiring introduced.
 - No EmailJobWorkerBoundary Orchestrator wiring introduced.
 - No EmailJobStatusPolicyBoundary Orchestrator wiring introduced.
 - No EmailJobIdempotencyBoundary Orchestrator wiring introduced.
 - No EmailJobIdempotencyMigrationPlanBoundary Orchestrator wiring introduced.
+- No EmailJobDuplicateAuditPlanBoundary Orchestrator wiring introduced.
 - No `processPendingJobs` call introduced.
 - No DeliveryExecutor introduced.
 - No Orchestrator wiring introduced for Delivery execution.
@@ -841,13 +911,17 @@ The P1.2B-1 through P1.2B-18 refactor keeps these boundaries:
 - No SQL, DB read, DB write, queue write, `email_jobs` read, `email_jobs` write, or `email_jobs` update introduced by `EmailJobStatusPolicyBoundary`.
 - No SQL, DB read, DB write, queue write, `email_jobs` read, `email_jobs` write, or `email_jobs` update introduced by `EmailJobIdempotencyBoundary`.
 - No migration-plan SQL, DB read, DB write, queue write, `email_jobs` read, `email_jobs` write, or `email_jobs` update introduced by `EmailJobIdempotencyMigrationPlanBoundary`.
+- No duplicate-audit-plan SQL, DB read, DB write, queue write, `email_jobs` read, `email_jobs` write, or `email_jobs` update introduced by `EmailJobDuplicateAuditPlanBoundary`.
 - No `idempotency_key` column, unique index, constraint, backfill, duplicate cleanup, or idempotency enforcement introduced.
+- No existing duplicate cleanup, hard delete, soft delete or mark-duplicate path introduced.
 - No status transition execution, retry update execution, locking query execution, or stale-processing recovery execution introduced.
 - No worker or SMTP behavior changed.
 - No retry, status, or locking behavior changed.
 - No stale-processing recovery behavior changed.
 - No `report_runs` synchronization changed.
 - No automatic `deliveryChannels` activation.
+- No `EmailJobsService.enqueue` or `processPendingJobs` change introduced by the duplicate-audit boundary.
+- No delivery, integration, processing, migration, idempotency-enforcement, or duplicate-cleanup execution occurred during P1.2B-19 validation.
 - No response text changes intended.
 - No branch-order changes intended.
 - No NOLIS-specific logic or municipality-specific hardcoding introduced.
@@ -869,17 +943,23 @@ Validation summary:
 - API-only deploy to `473c392295eee0b907fdee81e464fb0acfc76e08` completed successfully for P1.2B-16.
 - API-only deploy to `a82225d3fbecf06346dd7c5c45c522e783662a67` completed successfully with a yellow operational note for P1.2B-17.
 - API-only deploy to `b3e0c8e6718aa4985594b422ea8d645e82abbd62` completed successfully with a yellow operational note for P1.2B-18.
+- API-only deploy to `98de7282b1fa81f30b5ec273c5a381ab1ae8d4ee` completed successfully for P1.2B-19.
+- Main-CI and Docker gate were green on run `29369455078`.
 - P1.2B-18 deploy gate used a local equivalent API Docker build because Main-CI contexts for the Squash Commit were not visible.
 - The Docker fallback command was `docker compose --env-file .env.example build api`.
 - Local full checks were green before the API-only deploy.
 - API `/healthz` green with the target API commit.
 - API `/healthz` green with `b3e0c8e6718aa4985594b422ea8d645e82abbd62` after P1.2B-18E.
+- API `/healthz` green with `98de7282b1fa81f30b5ec273c5a381ab1ae8d4ee` after P1.2B-19E.
 - Database and Redis health green.
 - Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
 - Database auto-migrations skipped on API startup.
 - `db:migrate` was not executed.
 - The production DB target was sanitized before and after deploy and remained `chatbot`.
 - The previous `soule_demo` config drift did not recur.
+- `scripts/ops/check-production-health.sh` returned exit code 0 during P1.2B-19E.
+- `production-health-synthetic` widget config returned HTTP 200 during P1.2B-19E.
+- `production-health-synthetic` siteKey matched the expected value during P1.2B-19E.
 - Public widget loader, bundle, config, and chat smoke green.
 - Universal internal testsite smoke green.
 - Universal testsite response was neutral.
@@ -1058,6 +1138,41 @@ Validation summary:
 - No `EmailJobsService.processPendingJobs` usage introduced or changed.
 - No `processPendingJobs` call introduced.
 - No worker, SMTP, retry, status, locking, stale-processing recovery, or `report_runs` synchronization behavior changed.
+- EmailJobDuplicateAuditPlanBoundary compatibility validated.
+- DuplicateCandidate data objects validated.
+- DuplicateRiskGroup data objects validated.
+- CleanupEligibilityPolicy data objects validated.
+- DuplicateAuditPlan data objects validated.
+- CleanupPlan data objects validated.
+- ManualReviewDecision data objects validated.
+- DuplicateAuditPlanResult data objects validated.
+- Duplicate-audit validation helpers validated.
+- `ready`, `skipped`, `blocked`, and `failed` DuplicateAuditPlanResult builders validated.
+- Duplicate classification helpers validated.
+- Audit/log-safe duplicate-audit projections validated.
+- No productive EmailJobDuplicateAuditPlanBoundary runtime usage introduced.
+- No EmailJobDuplicateAuditPlanBoundary Orchestrator wiring introduced.
+- No SQL introduced or executed by the boundary.
+- No DB reads or writes introduced by the boundary.
+- No queue writes introduced by the boundary.
+- No `email_jobs` reads, writes, or updates introduced by the boundary.
+- No duplicate cleanup introduced.
+- No backfill introduced.
+- No existing duplicate cleanup introduced.
+- No hard delete introduced.
+- No soft delete or mark-duplicate path introduced.
+- No unique index or constraint introduced.
+- No idempotency enforcement introduced.
+- No `EmailJobsService.enqueue` usage introduced or changed.
+- No `EmailJobsService.processPendingJobs` usage introduced or changed.
+- No `processPendingJobs` call introduced.
+- No worker, SMTP, retry, status, locking, stale-processing recovery, or `report_runs` synchronization behavior changed.
+- No delivery, integration, processing, migration, idempotency-enforcement, or duplicate-cleanup execution occurred during P1.2B-19 validation.
+- No unexpected `email_jobs` reads, writes, or updates occurred during validation.
+- No unexpected duplicate cleanup, backfill, or enforcement occurred during validation.
+- No DB reads or SQL were performed by the boundary during validation.
+- No `report_runs` changes occurred during validation.
+- One technical smoke conversation was documented for the P1.2B-19 validation pass.
 - No Delivery, Integration, Processing, Migration, Idempotency-Enforcement, or Production-Wiring execution occurred during P1.2B-18 validation.
 - No Delivery, Integration, or Processing execution occurred during validation.
 - Worker and SMTP behavior remained unchanged.
@@ -1102,12 +1217,12 @@ Operational note:
 - P1.2B-16 validation documented one technical smoke conversation increasing `conversations` from 43 to 44; `widget_leads`, `email_jobs`, `webhook_jobs`, `agent_tickets`, documents, chunks, and `report_runs` remained unchanged.
 - P1.2B-17 validation documented one technical smoke conversation increasing `conversations` from 44 to 45; `widget_leads`, `email_jobs`, `webhook_jobs`, `agent_tickets`, documents, chunks, and `report_runs` remained unchanged.
 - P1.2B-18 validation documented one technical smoke conversation increasing `conversations` from 25 to 26 after the API-only deploy; `widget_leads`, `email_jobs`, `webhook_jobs`, `agent_tickets`, documents, and chunks remained unchanged at zero in the inspected production smoke scope.
-- P1.2B-18E remained yellow because `scripts/ops/check-production-health.sh` still reports `production-health-synthetic` widget config HTTP 404.
-- The P1.2B-18E yellow status is a known synthetic-monitoring site-key issue, not an API, DB, Redis, Dashboard, Widget container, boundary, or public-widget behavior failure.
+- P1.2B-19 validation documented one technical smoke conversation with green public widget loader/config/chat checks and no unexpected leads, `email_jobs`, `webhook_jobs`, `agent_tickets`, documents, or chunks in the inspected smoke scope.
+- The earlier P1.2B-18E yellow synthetic-monitoring note was resolved before P1.2B-19E; the current production-health script baseline is green.
 - Manual internal testsite widget loader, bundle, config, and chat smokes were green.
 - API, DB, Redis, Dashboard, Widget, Proxy, and container health were green.
-- No API rollback was required for P1.2B-18E.
-- Recommended follow-up: repair the stable dedicated `production-health-synthetic` Synthetic Monitoring Site Key before further runtime refactor deploys.
+- No API rollback was required for P1.2B-18E or P1.2B-19E.
+- The synthetic site-key/config stabilization follow-up is complete for the current baseline; the remaining follow-up is routine drift observation, not a blocker for the duplicate-audit planning line.
 - Dashboard logs still show Next.js `Failed to find Server Action` messages; Dashboard health and login remain OK, Dashboard was not redeployed, no relationship to the API-only deploy is established, and this remains a separate observation item with no rollback required.
 
 ## Remaining Risks
@@ -1118,49 +1233,47 @@ Operational note:
 - `ToolExecutorService` and `ToolDispatcherService` still have separate lead-capture-related paths.
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
 - Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, EmailJobProcessingTriggerBoundary, EmailJobWorkerBoundary, EmailJobStatusPolicyBoundary, EmailJobIdempotencyBoundary, and EmailJobIdempotencyMigrationPlanBoundary are extracted as pure helpers/builders, but Delivery execution, e-mail job persistence execution, e-mail processing execution, e-mail worker execution, e-mail status/retry/locking execution, DB schema changes, e-mail idempotency enforcement, and e-mail idempotency migration execution are not wired into a real executor.
-- Production DB config drift was corrected during P1.2B-17E and did not recur during P1.2B-18E; the P1.2B-18E DB target was sanitized before and after deploy and remained `chatbot`.
-- The `production-health-synthetic` widget config 404 keeps production health reporting yellow and should be fixed before additional runtime refactor deploys.
+- Production DB config drift was corrected during P1.2B-17E and did not recur during P1.2B-18E or P1.2B-19E; the production DB target stayed sanitized to `chatbot`, but the deploy checklist should continue to verify that value explicitly.
+- Duplicate read-only query planning, SQL scoping, and cleanup policy decisions are still deferred; the current boundary does not execute audit queries, cleanup, backfill, or enforcement.
 - Dashboard Server Action mismatch logs should be observed separately; they are not a P1.2B-18 blocker because Dashboard health stayed green and Dashboard was not redeployed.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
 ## Recommended Next Steps
 
-1. Do not immediately continue with a broad refactor.
-2. Prefer the next audit as:
-   - `P1.2B-Synthetic-1A` Production Health Synthetic Site Key Audit / Fix Scope.
+1. Prefer the next audit as `P1.2B-20A Email Job Duplicate Read-only Query Plan Audit`.
+2. Keep `P1.2B-20A` audit/scope only.
 3. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 4. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-The next technical area should be the production synthetic monitoring key, not another runtime refactor. `scripts/ops/check-production-health.sh` previously reported `production-health-synthetic` widget config HTTP 404, while manual internal testsite smokes and service/container health were green. The P1.2B-Synthetic-1A audit now documents that a current read-only public config check for `production-health-synthetic` returns HTTP 200, but the monitoring path still needs explicit script/config stabilization so the health signal remains trustworthy and non-customer-specific before continuing with e-mail job duplicate cleanup, idempotency enforcement, or additional production wiring work.
-
-Recommended scope for `P1.2B-Synthetic-1A`:
+Recommended scope for `P1.2B-20A`:
 
 - Audit / scope only.
-- Identify which site and tenant are expected for `production-health-synthetic`.
-- Confirm whether that site still exists and whether its widget config is reachable.
-- Decide whether the synthetic key should point to a stable internal testsite.
-- Decide whether `check-production-health.sh` should distinguish a synthetic monitoring key from the internal testsite smoke key.
-- Define safe smoke commands and validation criteria.
-- No production customer changes.
+- Define the read-only duplicate query plan and query-shape constraints only.
+- Keep the work out of runtime code, production wiring, and cleanup execution.
+- No code changes.
+- No SQL execution.
+- No production DB reads.
+- No `email_jobs` reads.
+- No reports with live row data.
+- No duplicate cleanup.
+- No backfill.
+- No idempotency enforcement.
+- No `EmailJobsService.enqueue` or `processPendingJobs` changes.
 - No feature flags.
-- No Conversation Engine activation.
 - No migration.
-- No runtime refactor.
 - No NOLIS-specific logic.
 - No municipality-specific hardcoding.
 
-Audit artifact: `docs/architecture/production-health-synthetic-site-key-audit.md`.
-
-After `production-health-synthetic` is fixed, the next possible runtime planning area is `P1.2B-19A` Email Job Duplicate Audit / Cleanup Scope. It should remain audit-only until the production health script is reliably green.
-
 Deferred runtime areas still include:
 
-- Actual `EmailJobsService.processPendingJobs` execution.
+- Actual read-only duplicate audit queries against live rows.
+- Actual `EmailJobsService.processPendingJobs` execution changes.
 - Worker and SMTP behavior.
 - Job selection and locking.
 - Status transitions.
 - Idempotency enforcement and duplicate prevention.
+- Duplicate cleanup execution.
 - Retry and failed handling.
 - Stale processing recovery.
 - `report_runs` synchronization.
