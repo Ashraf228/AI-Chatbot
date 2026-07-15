@@ -10,7 +10,9 @@ Current documented baseline for this planning step:
 
 - `P1.2B-19` is complete and production-validated.
 - `EmailJobDuplicateAuditPlanBoundary` is production-validated as pure data-object logic only.
-- API baseline is documented at commit `98de7282b1fa81f30b5ec273c5a381ab1ae8d4ee`.
+- `P1.2B-20B` through `P1.2B-20E` are complete and production-validated.
+- `EmailJobDuplicateReadOnlyQueryPlanBoundary` is production-validated as pure data-object logic only.
+- API baseline is documented at commit `9b6f1141995caff52784c222b359363bf55a7d4f`.
 - Production health is documented as green.
 - `check-production-health.sh` is documented as green with exit code `0`.
 - `production-health-synthetic` is documented as HTTP `200` with matching `siteKey`.
@@ -435,6 +437,6 @@ Non-goals for `P1.2B-20A`:
 
 ## Recommended Next Step
 
-`P1.2B-20A-D` should review the documentation PR, wait for clean CI, and merge it.
+`P1.2B-20A` through `P1.2B-20E` are now complete. The next safe step is a separate actual read-only DB duplicate-audit execution-planning or execution-scope task.
 
-Only after that should `P1.2B-20B` be considered, and `P1.2B-20B` should still remain limited to pure planning-boundary code with no DB reads, no SQL execution, no `email_jobs` reads or writes, no query runner, no reports with data, no cleanup, no backfill, no unique index or constraint work, and no idempotency enforcement.
+That next step should still remain outside runtime code, SQL execution, `email_jobs` reads or writes, query runners, reports with live data, cleanup, backfill, unique index or constraint work, and idempotency enforcement unless a later explicit DB-read-only audit assignment approves more.
