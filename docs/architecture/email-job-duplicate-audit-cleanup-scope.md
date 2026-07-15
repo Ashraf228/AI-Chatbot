@@ -12,6 +12,7 @@ The main findings are:
 - Duplicate interpretation risk exists after SMTP delivery because `sent`, `queued`, `processing`, and `failed` rows can represent either true duplicates or partial-failure recovery state.
 - Cleanup is materially safer only after duplicate classification is defined as a pure, read-only data model first.
 - `P1.2B-19B` through `P1.2B-19E` are now implemented and production-validated as a pure helper and type layer for duplicate classification, cleanup planning, and audit-safe projections only.
+- `P1.2B-20B` through `P1.2B-20E` and `P1.2B-21B` through `P1.2B-21E` are now implemented and production-validated as pure read-only query-plan and read-only audit-execution-boundary layers only.
 
 This document does not recommend any direct DB cleanup, SQL migration, worker refactor, or production behavior change in the current step.
 
@@ -23,9 +24,15 @@ No runtime execution, SQL, DB reads, DB writes, `email_jobs` reads/writes/update
 
 Deferred areas remain deferred:
 
+- Real `DB_READ_ONLY_AUDIT`.
 - Read-only DB audit queries.
 - SQL.
 - `email_jobs` reads, writes, and updates.
+- `webhook_jobs` reads, writes, and updates.
+- Query runner.
+- Query results.
+- Reports with data.
+- CSV or JSON exports.
 - Duplicate cleanup.
 - Existing duplicate cleanup.
 - Backfill.
@@ -246,16 +253,27 @@ Non-goals for `P1.2B-19` at this stage:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E` are complete and production-validated.
+`P1.2B-20A` through `P1.2B-20E` and `P1.2B-21B` through `P1.2B-21E` are complete and production-validated.
 
-The next safe step is a separate actual read-only DB duplicate-audit execution-planning or execution-scope task.
+The next safe step is `P1.2B-22A` as an approval / execution decision gate only.
 
-That next step should remain audit/scope only and should still exclude:
+That next step should decide only:
+
+- whether a real `DB_READ_ONLY_AUDIT` is approved
+- which environment is allowed first
+- which read-only role is required
+- which query classes are allowed
+- which outputs are allowed
+- which stop criteria are mandatory
+
+`P1.2B-22A` should still exclude:
 
 - code changes
 - DB reads
 - SQL
+- query runner
 - `email_jobs` reads, writes, or updates
+- query results
 - reports with live row data
 - cleanup
 - backfill

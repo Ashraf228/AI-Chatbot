@@ -12,13 +12,16 @@ Current documented baseline for this planning step:
 - `EmailJobDuplicateAuditPlanBoundary` is production-validated as pure data-object logic only.
 - `P1.2B-20B` through `P1.2B-20E` are complete and production-validated.
 - `EmailJobDuplicateReadOnlyQueryPlanBoundary` is production-validated as pure data-object logic only.
-- API baseline is documented at commit `9b6f1141995caff52784c222b359363bf55a7d4f`.
+- `P1.2B-21B` through `P1.2B-21E` are complete and production-validated.
+- `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` is production-validated as pure data-object logic only.
+- API baseline is documented at commit `cf696042b68f463923e6f026a75658c563c51985`.
 - Production health is documented as green.
 - `check-production-health.sh` is documented as green with exit code `0`.
 - `production-health-synthetic` is documented as HTTP `200` with matching `siteKey`.
 - Migration count is documented as `28`.
 - Latest migration is documented as `028_generic_webhook_signing_modes.sql`.
 - Production DB target is documented as `chatbot`.
+- Production DB drift guard is documented as green with no `soule_demo` recurrence.
 - Public widget remains on the legacy pipeline.
 - Conversation Engine remains off for the public widget.
 - Feature flags remain off.
@@ -70,6 +73,7 @@ The same codebase also confirms the current hard boundaries:
 The current runtime split remains:
 
 - Pure boundaries define safe types, policies, and projections.
+- `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` defines execution preconditions, query steps, approval gates, output policies, risk assessments, execution plans, execution results, validation, classification, and safe projections only.
 - `EmailJobsService` remains the real persistence and worker executor.
 - `ChatAgentOrchestratorService.queueInternalLeadNotification` remains a direct queue writer.
 - `report_runs` synchronization remains runtime code inside `EmailJobsService`.
@@ -437,6 +441,15 @@ Non-goals for `P1.2B-20A`:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E` are now complete. The next safe step is a separate actual read-only DB duplicate-audit execution-planning or execution-scope task.
+`P1.2B-20A` through `P1.2B-20E` and `P1.2B-21B` through `P1.2B-21E` are now complete. The next safe step is `P1.2B-22A` as an approval / execution decision gate only.
 
-That next step should still remain outside runtime code, SQL execution, `email_jobs` reads or writes, query runners, reports with live data, cleanup, backfill, unique index or constraint work, and idempotency enforcement unless a later explicit DB-read-only audit assignment approves more.
+That next step should decide only:
+
+- whether a real `DB_READ_ONLY_AUDIT` is approved
+- which environment is allowed first
+- which read-only role is required
+- which query classes are allowed
+- which outputs are allowed
+- which stop criteria are mandatory
+
+`P1.2B-22A` must still remain outside runtime code, SQL execution, `email_jobs` reads or writes, query runners, reports with live data, cleanup, backfill, unique index or constraint work, and idempotency enforcement unless a later explicit DB-read-only audit assignment approves more.
