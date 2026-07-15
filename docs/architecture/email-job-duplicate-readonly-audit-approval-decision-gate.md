@@ -21,13 +21,20 @@ Current documented baseline:
 
 - `P1.2B-20` introduced `EmailJobDuplicateReadOnlyQueryPlanBoundary`.
 - `P1.2B-21` introduced `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary`.
-- Both boundaries are production-validated as pure data-object / plan / safety layers only.
-- API live baseline remains `cf696042b68f463923e6f026a75658c563c51985`.
-- Current documented `main` baseline for the status line is `76b7a7f90416e343bf17eb143f8c92e8b8f4e4df`.
+- `P1.2B-22B` through `P1.2B-22E` introduced and production-validated `EmailJobDuplicateReadOnlyAuditApprovalBoundary`.
+- All three boundaries are production-validated as pure data-object / plan / safety layers only.
+- API live baseline is `cfa992b448016545d1fba1bdbaba3af3716991e6`.
+- Main-CI / Docker gate was green on run `29446620828`.
+- The actual live API / Dashboard basis before the P1.2B-22 API-only deploy was already `3a276e7f0ef898bae791638b964087780da80c4d`; this is a baseline correction, not a regression.
+- The previous API image before the deploy was `sha256:d922f9b389089ef9b2a495728b498bb4ab27454ec4f68eeb7eadf7d8befc5854`.
+- The deployed API image is `sha256:ccbbfcaf21cb83746169c2e9407368bec9ba5f6f67120f401dab6de0559c664e`.
 - Production health is green.
-- Production DB target remains sanitized to `chatbot`.
+- `check-production-health.sh` returned exit code `0`.
+- `production-health-synthetic` returned HTTP `200` with matching `siteKey`.
+- Production DB target remains sanitized to `chatbot` with no `soule_demo` recurrence.
 - Migration count remains `28`.
 - Latest migration remains `028_generic_webhook_signing_modes.sql`.
+- Database auto-migrations remained skipped and `db:migrate` was not executed.
 - Public widget remains unchanged on the legacy pipeline.
 
 Current hard boundaries remain:
@@ -217,20 +224,18 @@ None of those steps executes a DB read.
 
 ## Recommended Next Step
 
-Recommended next step: `P1.2B-22B EmailJobDuplicateReadOnlyAuditApprovalBoundary`
+Recommended next step: `P1.2B-23A Email Job Duplicate Staging Read-only Audit Scope / Approval Preconditions`
 
-Recommended scope for `P1.2B-22B`:
+Recommended scope for `P1.2B-23A`:
 
-- pure `ApprovalDecision` data objects
-- `ApprovalMatrix` data objects
-- `EnvironmentSequence` data objects
-- `StopCriteria` data objects
-- `OutputPolicy` data objects
-- `no-op`, `blocked`, `failed`, and `ready` result builders
-- safe projections
-- tests
+- document whether a staging read-only duplicate audit may be prepared
+- document which staging environment and read-only role would be required
+- document which future query classes are allowed only as categories
+- document which outputs are allowed
+- document which stop criteria are mandatory before any later staging read
+- keep the current approval status explicitly `not_granted`
 
-Still not allowed in `P1.2B-22B`:
+Still not allowed in `P1.2B-23A`:
 
 - DB reads
 - SQL
@@ -243,3 +248,4 @@ Still not allowed in `P1.2B-22B`:
 - backfill
 - runtime wiring
 - production wiring
+- any real approval grant by the boundary
