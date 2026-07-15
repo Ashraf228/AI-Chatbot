@@ -219,23 +219,28 @@ Current planning line:
 - `EmailJobDuplicateReadOnlyQueryPlanBoundary` models allowed query classes and safe query-shape planning.
 - `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` models execution preconditions, query steps, approval gates, output policies, risk assessments, execution plans, execution results, and safe projections.
 - `P1.2B-22A` defines the approval, sequencing, stop-criteria, and output-governance layer for any later read-only audit.
+- `P1.2B-23A` defines the staging-read-only scope and preconditions layer for any later staging audit assignment.
 
 None of those steps executes a DB read.
 
 ## Recommended Next Step
 
-Recommended next step: `P1.2B-23A Email Job Duplicate Staging Read-only Audit Scope / Approval Preconditions`
+`P1.2B-23A` is now the documented staging-read-only scope / preconditions step. It does not grant staging DB read approval, does not grant Production DB read approval, and does not allow SQL, query runners, reports, cleanup, backfill, or enforcement.
 
-Recommended scope for `P1.2B-23A`:
+Recommended next step: `P1.2B-23B EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`
 
-- document whether a staging read-only duplicate audit may be prepared
-- document which staging environment and read-only role would be required
-- document which future query classes are allowed only as categories
-- document which outputs are allowed
-- document which stop criteria are mandatory before any later staging read
-- keep the current approval status explicitly `not_granted`
+Recommended scope for `P1.2B-23B`:
 
-Still not allowed in `P1.2B-23A`:
+- pure `StagingAuditScope` data objects
+- `StagingEnvironmentRequirement` data objects
+- `StagingQueryClassAllowance` data objects
+- `StagingOutputPolicy` data objects
+- `StagingStopCriteria` data objects
+- result builders
+- safe projections
+- tests
+
+Still not allowed in `P1.2B-23B`:
 
 - DB reads
 - SQL
@@ -248,4 +253,4 @@ Still not allowed in `P1.2B-23A`:
 - backfill
 - runtime wiring
 - production wiring
-- any real approval grant by the boundary
+- enforcement
