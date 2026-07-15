@@ -274,15 +274,16 @@ The future DB-read-only execution task should not be considered complete unless 
 
 ## Recommended Next Step
 
-If this line continues, the next safe step is `P1.2B-22A` as an approval / execution decision gate only.
+`P1.2B-22A` is now the documented approval / execution decision gate for this line. It leaves `DB_READ_ONLY_AUDIT`, staging DB reads, and Production DB reads explicitly not approved, and it adds no SQL, query runner, query results, or report generation.
+
+If this line continues, the next safe step is `P1.2B-22B` as a pure approval-boundary modeling task only.
 
 Preferred next step:
 
-1. decide whether a real `DB_READ_ONLY_AUDIT` is approved at all
-2. decide which environment is allowed first
-3. decide which read-only role is required
-4. decide which query classes are allowed
-5. decide which outputs are allowed
-6. decide which stop criteria are mandatory
+1. model pure approval-decision data objects
+2. model pure approval-matrix data objects
+3. model pure environment-sequencing data objects
+4. model pure stop-criteria and output-policy data objects
+5. keep all DB reads, SQL, query runners, query-result handling, reports, cleanup, and backfill out of scope
 
-The main rule remains: `P1.2B-22A` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.
+The main rule remains: `P1.2B-22B` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.

@@ -4,6 +4,8 @@
 
 P1.2B-1 through P1.2B-21 are implemented, merged, and production-validated. P1.2B-20 added `EmailJobDuplicateReadOnlyQueryPlanBoundary` as a pure read-only-query-plan data-object layer, and P1.2B-21 added `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` as a pure read-only audit-execution data-object layer. P1.2B-21 was production-validated with an API-only deploy on `cf696042b68f463923e6f026a75658c563c51985`. The refactor remains intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
+`P1.2B-22A` is now documented as a pure approval / execution decision gate only. It does not grant any real `DB_READ_ONLY_AUDIT`, Production DB read, or staging DB read approval, and it does not introduce SQL, query runners, reports with data, or runtime wiring.
+
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` and the existing services remain the executors for database reads/writes, queue writes, audit writes, lead finalization, ticket finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
 Current production validation baseline:
@@ -1429,12 +1431,11 @@ Operational note:
 
 ## Recommended Next Steps
 
-1. `P1.2B-22A` should be an approval / execution decision gate only.
-2. `P1.2B-22A` should decide whether a real `DB_READ_ONLY_AUDIT` is approved at all.
-3. `P1.2B-22A` should decide the first allowed environment, the required read-only role, the allowed query classes, the allowed outputs, and the stop criteria only.
-4. `P1.2B-22A` must not run real DB reads, SQL, query runners, reports, cleanup, or backfill.
-5. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
-6. Do not activate the Conversation Engine in the public widget as part of this refactor line.
+1. `P1.2B-22B` should define pure approval-decision, approval-matrix, environment-sequencing, stop-criteria, and safe-output data objects only.
+2. `P1.2B-22B` must keep `DB_READ_ONLY_AUDIT`, staging DB read, and Production DB read approval out of runtime execution.
+3. `P1.2B-22B` must not run real DB reads, SQL, query runners, reports, cleanup, or backfill.
+4. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
+5. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
 `P1.2B-21A` through `P1.2B-21E` are complete:
 
@@ -1444,16 +1445,21 @@ Operational note:
 - merge to `main`
 - production-safe API deploy validation on squash commit `cf696042b68f463923e6f026a75658c563c51985`
 
-Recommended scope for `P1.2B-22A`:
+`P1.2B-22A` is complete as a docs-only decision gate:
 
-- Decision / approval only.
-- Decide whether a real `DB_READ_ONLY_AUDIT` will be approved.
-- Decide whether Production or another environment would be first.
-- Decide which read-only role is required.
-- Decide which query classes are allowed.
-- Decide which outputs are allowed.
-- Decide which stop criteria are mandatory.
-- No code changes.
+- `docs/architecture/email-job-duplicate-readonly-audit-approval-decision-gate.md`
+- no DB-read approval granted
+- no SQL, query runner, or report generation introduced
+- no runtime or Production wiring introduced
+
+Recommended scope for `P1.2B-22B`:
+
+- Approval-decision data objects only.
+- Approval-matrix data objects only.
+- Environment-sequence data objects only.
+- Stop-criteria data objects only.
+- Output-policy data objects only.
+- No code with DB access.
 - No SQL execution.
 - No production DB reads.
 - No staging DB reads.
@@ -1502,6 +1508,6 @@ Deferred runtime areas still include:
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-21` completed the EmailJobDuplicateReadOnlyDbAuditExecutionBoundary extraction and production validation on `cf696042b68f463923e6f026a75658c563c51985`. The boundary remains pure precondition, query-step, approval-gate, output-policy, risk-assessment, execution-plan, execution-result, validation, classification, and safe-projection data-object logic only.
+Status: `P1.2B-21` completed the EmailJobDuplicateReadOnlyDbAuditExecutionBoundary extraction and production validation on `cf696042b68f463923e6f026a75658c563c51985`. `P1.2B-22A` now documents the approval / execution decision gate and keeps real `DB_READ_ONLY_AUDIT`, staging DB reads, and Production DB reads explicitly not approved. The boundary and decision line remain pure precondition, query-step, approval-gate, output-policy, risk-assessment, execution-plan, execution-result, validation, classification, and safe-projection data-object logic only.
 
-Recommended next step: continue with `P1.2B-22A` as a pure approval / execution decision gate only. The production-health baseline is green, the synthetic widget-config signal is green, the Production DB drift guard remains green with sanitized target `chatbot`, and the remaining work is still approval and execution policy rather than live DB querying.
+Recommended next step: continue with `P1.2B-22B` as a pure approval-boundary modeling step only. The production-health baseline is green, the synthetic widget-config signal is green, the Production DB drift guard remains green with sanitized target `chatbot`, and the remaining work is still approval and execution policy rather than live DB querying.
