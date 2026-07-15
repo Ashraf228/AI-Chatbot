@@ -1,4 +1,4 @@
-import { SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth-core";
+import { getSessionCookieOptions, SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth-core";
 import { isViewerAllowedPath } from "@/lib/viewer-access";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
@@ -55,6 +55,16 @@ export default async function proxy(request: NextRequest) {
 
   if (PUBLIC_PATHS.has(pathname)) {
     if (pathname === LOGIN_PATH) {
+      if (request.nextUrl.searchParams.get("loggedOut") === "1") {
+        const response = NextResponse.next();
+        response.cookies.set(SESSION_COOKIE_NAME, "", {
+          ...getSessionCookieOptions(),
+          expires: new Date(0),
+          maxAge: 0,
+        });
+        return response;
+      }
+
       const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
       const session = await verifySessionToken(token);
       if (session) {
