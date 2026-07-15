@@ -2,11 +2,13 @@
 
 ## Summary
 
-`P1.2B-21A` is a documentation-only execution plan for a later explicit read-only duplicate audit against live `email_jobs` rows.
+`P1.2B-21A` started as a documentation-only execution plan for a later explicit read-only duplicate audit against live `email_jobs` rows.
 
 This step does not execute SQL, does not connect to a database, does not read `email_jobs`, does not write `email_jobs`, and does not change runtime code, production wiring, or production configuration.
 
 Its purpose is to define the exact safe order, preconditions, output rules, and stop criteria for a future dedicated DB-read-only audit task that operates on live data without drifting into cleanup, requeue, or idempotency enforcement work.
+
+`P1.2B-21B` through `P1.2B-21E` are now complete and production-validated. They added `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` as a pure data-object execution-boundary layer only and deployed it API-only on `cf696042b68f463923e6f026a75658c563c51985` without introducing real DB reads, SQL, query runners, reports, cleanup, or production wiring.
 
 ## Current Baseline
 
@@ -19,13 +21,64 @@ This execution plan builds on the already completed and production-validated pla
 
 Current main baseline for the planning line:
 
-- `origin/main` includes squash commit `9b6f1141995caff52784c222b359363bf55a7d4f`
+- `origin/main` includes squash commit `cf696042b68f463923e6f026a75658c563c51985`
 - `EmailJobDuplicateReadOnlyQueryPlanBoundary` is deployed as pure data-object logic only
+- `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` is deployed as pure data-object logic only
+- API runtime is production-validated on `cf696042b68f463923e6f026a75658c563c51985`
+- previous API runtime commit before the deploy was `9b6f1141995caff52784c222b359363bf55a7d4f`
+- Production health is green
+- `check-production-health.sh` returned exit code `0`
+- `production-health-synthetic` returned HTTP `200` with matching `siteKey`
+- the sanitized Production DB target remains `chatbot` and the earlier `soule_demo` drift did not recur
+- migration count remains `28`
+- latest migration remains `028_generic_webhook_signing_modes.sql`
+- database auto-migrations remained skipped
+- `db:migrate` was not executed
+- public widget remains on the legacy pipeline and public response shape remains unchanged
 - no productive runtime wiring was introduced
 - no SQL execution was introduced
 - no DB reads were introduced
 - no `email_jobs` reads, writes, or updates were introduced
 - no cleanup, backfill, unique index, constraint, or idempotency enforcement was introduced
+
+## P1.2B-21 Status Update
+
+`P1.2B-21B` through `P1.2B-21E` implemented and production-validated `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` as a pure execution-boundary layer only.
+
+Implemented data-object scope:
+
+- DB-audit preconditions
+- DB-audit query steps
+- DB-audit approval gates
+- DB-audit output policies
+- DB-audit risk assessments
+- DB-audit execution plans
+- DB-audit execution results
+- validation helpers
+- `ready` / `skipped` / `blocked` / `failed` result builders
+- result classification helpers
+- safe log and audit projections
+
+Still not introduced or approved:
+
+- a real `DB_READ_ONLY_AUDIT`
+- DB reads
+- SQL execution
+- SQL files
+- `email_jobs` reads, writes, or updates
+- `webhook_jobs` reads, writes, or updates
+- query runner implementation
+- query results
+- reports with data
+- CSV or JSON exports
+- duplicate cleanup
+- backfill
+- unique index or constraint work
+- idempotency enforcement
+- `EmailJobsService.enqueue` refactor
+- `processPendingJobs` refactor
+- Orchestrator wiring
+- Production wiring
 
 The live runtime still contains the same side-effecting paths as before:
 
@@ -184,6 +237,7 @@ If any stop criterion is hit, the correct result is `blocked`, not a risky fallb
 `P1.2B-21A` does not introduce or approve:
 
 - SQL execution
+- real `DB_READ_ONLY_AUDIT` execution
 - Production DB reads
 - staging DB reads
 - query runner implementation
@@ -220,12 +274,15 @@ The future DB-read-only execution task should not be considered complete unless 
 
 ## Recommended Next Step
 
-If this line continues, the next safe step is not immediate live execution by default.
+If this line continues, the next safe step is `P1.2B-22A` as an approval / execution decision gate only.
 
 Preferred next step:
 
-1. keep `P1.2B-21A` documentation-only
-2. require an explicit dedicated DB-read-only assignment before any live query
-3. if the team wants stronger local structure first, add a pure execution-plan boundary before any DB access
+1. decide whether a real `DB_READ_ONLY_AUDIT` is approved at all
+2. decide which environment is allowed first
+3. decide which read-only role is required
+4. decide which query classes are allowed
+5. decide which outputs are allowed
+6. decide which stop criteria are mandatory
 
-The main rule remains: actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.
+The main rule remains: `P1.2B-22A` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.

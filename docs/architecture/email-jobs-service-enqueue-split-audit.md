@@ -437,3 +437,9 @@ No DB migration, SQL, DB reads or writes, `email_jobs` reads/writes/updates, ide
 `EmailJobDuplicateAuditPlanBoundary` was implemented in P1.2B-19 as a pure duplicate-audit and cleanup-plan data-object layer and production-validated.
 
 DB reads, SQL, `email_jobs` reads/writes/updates, duplicate cleanup, backfill, unique index or constraint work, idempotency enforcement, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `processPendingJobs`, Orchestrator wiring, worker/SMTP execution, `report_runs` synchronization, webhooks, ToolExecutor/ToolDispatcher work, IntegrationDispatcher work, and Production wiring remain deferred.
+
+## P1.2B-21 Status Note
+
+`EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` was implemented in P1.2B-21 as a pure read-only audit-execution boundary and production-validated on API commit `cf696042b68f463923e6f026a75658c563c51985`.
+
+Real `DB_READ_ONLY_AUDIT` execution, DB reads, SQL, SQL files, `email_jobs` / `webhook_jobs` reads/writes/updates, query runners, query results, reports with data, CSV/JSON exports, duplicate cleanup, backfill, unique index or constraint work, idempotency enforcement, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, `processPendingJobs`, Orchestrator wiring, and Production wiring remain deferred.

@@ -2,7 +2,7 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-20 are implemented, merged, and production-validated. P1.2B-20 added `EmailJobDuplicateReadOnlyQueryPlanBoundary` as a pure read-only-query-plan data-object layer and production-validated it with an API-only deploy on `9b6f1141995caff52784c222b359363bf55a7d4f`. The refactor remains intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-21 are implemented, merged, and production-validated. P1.2B-20 added `EmailJobDuplicateReadOnlyQueryPlanBoundary` as a pure read-only-query-plan data-object layer, and P1.2B-21 added `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` as a pure read-only audit-execution data-object layer. P1.2B-21 was production-validated with an API-only deploy on `cf696042b68f463923e6f026a75658c563c51985`. The refactor remains intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` and the existing services remain the executors for database reads/writes, queue writes, audit writes, lead finalization, ticket finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
@@ -10,10 +10,10 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `9b6f1141995caff52784c222b359363bf55a7d4f` |
+| API | `cf696042b68f463923e6f026a75658c563c51985` |
 | Dashboard | `25480866a7bffab7007adf1495477b4e22c7380a` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
-| Main-CI / Docker gate | Green on run `29369455078`; exact-commit fallback gate used for P1.2B-20 |
+| Main-CI / Docker gate | Green on run `29409008824` for P1.2B-21 |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
 | Migration count | `28` |
 | Public widget | Legacy pipeline |
@@ -873,6 +873,86 @@ Not introduced or moved:
 - NOLIS-specific logic.
 - Municipality-specific hardcoding.
 
+### P1.2B-21 EmailJobDuplicateReadOnlyDbAuditExecutionBoundary
+
+Files:
+
+- `apps/api/src/chat/email-job-duplicate-readonly-db-audit-execution.boundary.ts`
+- `apps/api/test/email-job-duplicate-readonly-db-audit-execution-boundary.test.cjs`
+
+Extracted pure read-only DB-audit execution-boundary data objects, helpers, and projections:
+
+- `Precondition` data objects.
+- `QueryStep` data objects.
+- `ApprovalGate` data objects.
+- `OutputPolicy` data objects.
+- `RiskAssessment` data objects.
+- `ExecutionPlan` data objects.
+- `ExecutionResult` data objects.
+- Validation helpers.
+- `ready`, `skipped`, `blocked`, and `failed` result builders.
+- Result classification helpers.
+- Audit-/log-safe ReadOnlyDbAuditExecution projections.
+
+Productive use:
+
+- No productive runtime use was introduced.
+- No `ChatAgentOrchestratorService` rewiring was introduced.
+- The boundary is prepared but not connected to `EmailJobsService`, `processPendingJobs`, SQL, database reads, `email_jobs`, `webhook_jobs`, a query runner, repositories, reports, worker, SMTP, Orchestrator wiring, or Production wiring paths.
+- Preconditions, QuerySteps, ApprovalGates, OutputPolicies, RiskAssessments, ExecutionPlans, and ExecutionResults are data objects only and are not productively executed.
+- `ChatAgentOrchestratorService` and existing services remain the executors.
+- `EmailJobsService` remains unchanged.
+- `processPendingJobs` remains unchanged.
+
+Not introduced or moved:
+
+- A real `DB_READ_ONLY_AUDIT`.
+- Database reads.
+- SQL.
+- SQL files.
+- Database writes.
+- Queue writes.
+- `email_jobs` reads.
+- `email_jobs` writes.
+- `email_jobs` updates.
+- `webhook_jobs` reads.
+- `webhook_jobs` writes.
+- `webhook_jobs` updates.
+- Query runners.
+- Repositories.
+- Query results.
+- Reports with data.
+- CSV or JSON exports.
+- Duplicate cleanup.
+- Backfill.
+- Existing duplicate cleanup.
+- Hard delete.
+- Soft delete or mark duplicate.
+- Unique index.
+- Constraint.
+- Idempotency enforcement.
+- `EmailJobsService.enqueue`.
+- `EmailJobsService.processPendingJobs`.
+- `processPendingJobs` calls.
+- `webhook_jobs` writes.
+- Webhook execution.
+- A real `EmailDeliveryExecutor` with execution.
+- `DeliveryExecutor`.
+- Orchestrator wiring.
+- Worker or SMTP changes.
+- Retry, status, or locking changes.
+- Stale-processing recovery changes.
+- `report_runs` synchronization changes.
+- `ToolExecutorService`.
+- `ToolDispatcherService`.
+- `IntegrationDispatcher`.
+- `WebhookJobsService`.
+- External integrations.
+- Public Widget response shape.
+- Conversation Engine public activation.
+- NOLIS-specific logic.
+- Municipality-specific hardcoding.
+
 ## Remaining Responsibilities
 
 The following responsibilities deliberately remain in `ChatAgentOrchestratorService` or the existing runtime services:
@@ -923,7 +1003,10 @@ The following responsibilities deliberately remain in `ChatAgentOrchestratorServ
 - Email idempotency enforcement.
 - Email idempotency migration execution.
 - Email duplicate audit execution.
+- Email duplicate audit approval / execution decision gating.
 - Email duplicate cleanup execution.
+- Read-only role and environment selection for any future duplicate audit.
+- Allowed query-class and output-policy approval for any future duplicate audit.
 - IT-/ticket-side-effect execution.
 
 This is intentional. The extracted modules are pure helpers/builders only; they prepare values and decisions but do not execute side effects.
@@ -1024,7 +1107,9 @@ Validation summary:
 - API-only deploy to `b3e0c8e6718aa4985594b422ea8d645e82abbd62` completed successfully with a yellow operational note for P1.2B-18.
 - API-only deploy to `98de7282b1fa81f30b5ec273c5a381ab1ae8d4ee` completed successfully for P1.2B-19.
 - API-only deploy to `9b6f1141995caff52784c222b359363bf55a7d4f` completed successfully for P1.2B-20.
-- Main-CI and Docker gate were green on run `29369455078`.
+- API-only deploy to `cf696042b68f463923e6f026a75658c563c51985` completed successfully for P1.2B-21.
+- Main-CI and Docker gate were green on run `29409008824` for P1.2B-21.
+- P1.2B-20 exact-commit fallback was green before the P1.2B-20 deploy.
 - P1.2B-18 and P1.2B-20 deploy gates used a local equivalent API Docker build because Main-CI contexts for the Squash Commit were not visible.
 - The Docker fallback command was `docker compose --env-file .env.example build api`.
 - P1.2B-20 fallback validation confirmed a clean worktree on the exact target commit, green local full checks, green `docker compose config`, and a green exact-commit API image build before deploy.
@@ -1033,6 +1118,7 @@ Validation summary:
 - API `/healthz` green with `b3e0c8e6718aa4985594b422ea8d645e82abbd62` after P1.2B-18E.
 - API `/healthz` green with `98de7282b1fa81f30b5ec273c5a381ab1ae8d4ee` after P1.2B-19E.
 - API `/healthz` green with `9b6f1141995caff52784c222b359363bf55a7d4f` after P1.2B-20E.
+- API `/healthz` green with `cf696042b68f463923e6f026a75658c563c51985` after P1.2B-21E.
 - Database and Redis health green.
 - Migration remained `028_generic_webhook_signing_modes.sql` with 28 applied migrations.
 - Database auto-migrations skipped on API startup.
@@ -1042,6 +1128,9 @@ Validation summary:
 - `scripts/ops/check-production-health.sh` returned exit code 0 during P1.2B-20E.
 - `production-health-synthetic` widget config returned HTTP 200 during P1.2B-20E.
 - `production-health-synthetic` siteKey matched the expected value during P1.2B-20E.
+- `scripts/ops/check-production-health.sh` returned exit code 0 during P1.2B-21E.
+- `production-health-synthetic` widget config returned HTTP 200 during P1.2B-21E.
+- `production-health-synthetic` siteKey matched the expected value during P1.2B-21E.
 - Public widget loader, bundle, config, and chat smoke green.
 - Universal internal testsite smoke green.
 - Universal testsite response was neutral.
@@ -1056,13 +1145,21 @@ Validation summary:
 - No unexpected `widget_leads`, `email_jobs`, `webhook_jobs`, or `agent_tickets`.
 - One technical smoke conversation was created by the explicit production smoke test.
 - No unexpected `email_jobs` reads, writes, or updates occurred during P1.2B-20 validation.
+- No unexpected `email_jobs` reads, writes, or updates occurred during P1.2B-21 validation.
 - No query runner, query result, or report-with-data execution occurred during P1.2B-20 validation.
+- No query runner, query result, or report-with-data execution occurred during P1.2B-21 validation.
 - No duplicate cleanup, backfill, or idempotency-enforcement execution occurred during P1.2B-20 validation.
+- No duplicate cleanup, backfill, or idempotency-enforcement execution occurred during P1.2B-21 validation.
 - No delivery, integration, or processing execution occurred during P1.2B-20 validation.
+- No delivery, integration, or processing execution occurred during P1.2B-21 validation.
 - No boundary, delivery, notification, migration, or runtime error remained in the final P1.2B-20 log scan.
+- No boundary, delivery, notification, migration, or runtime error remained in the final P1.2B-21 log scan.
 - Previous API runtime commit before P1.2B-20 deploy was `98de7282b1fa81f30b5ec273c5a381ab1ae8d4ee`.
 - Previous API image before P1.2B-20 deploy was `sha256:df24d062415606f783127a627022e0da95cffb5a84c8aed43b4f0a8a026ea4a7`.
 - Current API image after P1.2B-20 deploy is `sha256:16fb3368f2b17d898b907044678fceb800d1a9eaad586c2d042bb8dd19ca46d1`.
+- Previous API runtime commit before P1.2B-21 deploy was `9b6f1141995caff52784c222b359363bf55a7d4f`.
+- Previous API image before P1.2B-21 deploy was `sha256:16fb3368f2b17d898b907044678fceb800d1a9eaad586c2d042bb8dd19ca46d1`.
+- Current API image after P1.2B-21 deploy is `sha256:e57bfa7cb7c20b1acb1a79579bac62be1c05b1c31b39589e6d7c6cb3ab579ed9`.
 - HandoffPolicy helper compatibility validated.
 - Required-field readiness validated.
 - Prepare/defer handoff decision compatibility validated.
@@ -1325,37 +1422,42 @@ Operational note:
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
 - Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, EmailJobProcessingTriggerBoundary, EmailJobWorkerBoundary, EmailJobStatusPolicyBoundary, EmailJobIdempotencyBoundary, and EmailJobIdempotencyMigrationPlanBoundary are extracted as pure helpers/builders, but Delivery execution, e-mail job persistence execution, e-mail processing execution, e-mail worker execution, e-mail status/retry/locking execution, DB schema changes, e-mail idempotency enforcement, and e-mail idempotency migration execution are not wired into a real executor.
 - Production DB config drift was corrected during P1.2B-17E and did not recur during P1.2B-18E, P1.2B-19E, or P1.2B-20E; the production DB target stayed sanitized to `chatbot`, but the deploy checklist should continue to verify that value explicitly.
-- Duplicate read-only query planning is now extracted and production-validated as pure boundary logic, and the later DB-read execution order is now documented as audit-only scope, but actual live DB duplicate audit execution, SQL approval, and cleanup decisions are still deferred; the current boundaries do not execute audit queries, query runners, repositories, cleanup, backfill, or enforcement.
+- Duplicate read-only query planning and duplicate read-only execution planning are now extracted and production-validated as pure boundary logic, but actual live DB duplicate audit approval, SQL approval, query execution, and cleanup decisions are still deferred; the current boundaries do not execute audit queries, query runners, repositories, cleanup, backfill, or enforcement.
 - Dashboard Server Action mismatch logs should be observed separately; they are not a P1.2B-18 blocker because Dashboard health stayed green and Dashboard was not redeployed.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
 ## Recommended Next Steps
 
-1. `P1.2B-21A` is now documented as execution-plan scope only.
-2. After merging PR `#81`, run `P1.2B-21A-E` as the post-merge check.
-3. Any later actual live duplicate audit must remain a separate explicit DB-read-only assignment.
-4. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
-5. Do not activate the Conversation Engine in the public widget as part of this refactor line.
+1. `P1.2B-22A` should be an approval / execution decision gate only.
+2. `P1.2B-22A` should decide whether a real `DB_READ_ONLY_AUDIT` is approved at all.
+3. `P1.2B-22A` should decide the first allowed environment, the required read-only role, the allowed query classes, the allowed outputs, and the stop criteria only.
+4. `P1.2B-22A` must not run real DB reads, SQL, query runners, reports, cleanup, or backfill.
+5. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
+6. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
-`P1.2B-20A` through `P1.2B-20E` are complete:
+`P1.2B-21A` through `P1.2B-21E` are complete:
 
-- `docs/architecture/email-job-duplicate-readonly-query-plan-audit.md`
-- `apps/api/src/chat/email-job-duplicate-readonly-query-plan.boundary.ts`
-- `apps/api/test/email-job-duplicate-readonly-query-plan-boundary.test.cjs`
+- `docs/architecture/email-job-duplicate-readonly-db-audit-execution-plan-audit.md`
+- `apps/api/src/chat/email-job-duplicate-readonly-db-audit-execution.boundary.ts`
+- `apps/api/test/email-job-duplicate-readonly-db-audit-execution-boundary.test.cjs`
 - merge to `main`
-- production-safe API deploy validation on squash commit `9b6f1141995caff52784c222b359363bf55a7d4f`
-`P1.2B-21A` scopes the next separate execution-planning audit in `docs/architecture/email-job-duplicate-readonly-db-audit-execution-plan-audit.md`.
+- production-safe API deploy validation on squash commit `cf696042b68f463923e6f026a75658c563c51985`
 
-Recommended scope for `P1.2B-21A`:
+Recommended scope for `P1.2B-22A`:
 
-- Audit / scope only.
-- Define the actual read-only DB duplicate audit execution order, preflight, output policy, and stop criteria only.
-- Keep the work out of runtime code, DB access, production wiring, and cleanup execution.
+- Decision / approval only.
+- Decide whether a real `DB_READ_ONLY_AUDIT` will be approved.
+- Decide whether Production or another environment would be first.
+- Decide which read-only role is required.
+- Decide which query classes are allowed.
+- Decide which outputs are allowed.
+- Decide which stop criteria are mandatory.
 - No code changes.
 - No SQL execution.
 - No production DB reads.
-- No `email_jobs` reads.
+- No staging DB reads.
+- No query runner.
 - No reports with live row data.
 - No duplicate cleanup.
 - No backfill.
@@ -1365,8 +1467,6 @@ Recommended scope for `P1.2B-21A`:
 - No migration.
 - No NOLIS-specific logic.
 - No municipality-specific hardcoding.
-
-After PR `#81` is merged, the next safe step is `P1.2B-21A-E` as a post-merge check only. Any later live duplicate audit must still stay separate from runtime code, production DB reads without explicit approval, cleanup execution, backfill, idempotency enforcement, `EmailJobsService.enqueue`, `processPendingJobs`, feature-flag changes, migration, and production wiring changes.
 
 Deferred runtime areas still include:
 
@@ -1389,6 +1489,10 @@ Deferred runtime areas still include:
 - Duplicate cleanup.
 - Rollback execution.
 - Queue writes.
+- Real `DB_READ_ONLY_AUDIT` execution.
+- Query runner implementation.
+- Query-result handling.
+- Report generation from live duplicate-audit data.
 - `EmailJobsService.enqueue` refactor.
 - `EmailJobsService.processPendingJobs` refactor.
 - ProcessPendingJobs worker-loop refactor.
@@ -1398,6 +1502,6 @@ Deferred runtime areas still include:
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-20` completed the EmailJobDuplicateReadOnlyQueryPlanBoundary extraction and production validation on `9b6f1141995caff52784c222b359363bf55a7d4f`. The boundary remains pure query-class-plan, query-safety-gate, query-output-policy, query-approval-requirement, query-risk-assessment, result-data, validation, classification, and safe-projection data-object logic only.
+Status: `P1.2B-21` completed the EmailJobDuplicateReadOnlyDbAuditExecutionBoundary extraction and production validation on `cf696042b68f463923e6f026a75658c563c51985`. The boundary remains pure precondition, query-step, approval-gate, output-policy, risk-assessment, execution-plan, execution-result, validation, classification, and safe-projection data-object logic only.
 
-Recommended next step: keep PR `#81` in Draft until the P1.2B-Status-17 merge flow is complete, then continue with `P1.2B-21A-D` to review, align with current `main`, and merge the separate actual read-only DB duplicate-audit execution-planning PR only. The production-health baseline is green, the synthetic widget-config signal is green, and the remaining work is query execution planning rather than monitoring stabilization.
+Recommended next step: continue with `P1.2B-22A` as a pure approval / execution decision gate only. The production-health baseline is green, the synthetic widget-config signal is green, the Production DB drift guard remains green with sanitized target `chatbot`, and the remaining work is still approval and execution policy rather than live DB querying.
