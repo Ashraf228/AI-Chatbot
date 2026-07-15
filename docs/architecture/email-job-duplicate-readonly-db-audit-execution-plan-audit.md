@@ -1,0 +1,231 @@
+# Email Job Duplicate Read-only DB Audit Execution Plan
+
+## Summary
+
+`P1.2B-21A` is a documentation-only execution plan for a later explicit read-only duplicate audit against live `email_jobs` rows.
+
+This step does not execute SQL, does not connect to a database, does not read `email_jobs`, does not write `email_jobs`, and does not change runtime code, production wiring, or production configuration.
+
+Its purpose is to define the exact safe order, preconditions, output rules, and stop criteria for a future dedicated DB-read-only audit task that operates on live data without drifting into cleanup, requeue, or idempotency enforcement work.
+
+## Current Baseline
+
+This execution plan builds on the already completed and production-validated planning layers:
+
+- `P1.2B-19` duplicate audit / cleanup scope
+- `P1.2B-19B` through `P1.2B-19E` pure `EmailJobDuplicateAuditPlanBoundary`
+- `P1.2B-20A` read-only duplicate query plan audit
+- `P1.2B-20B` through `P1.2B-20E` pure `EmailJobDuplicateReadOnlyQueryPlanBoundary` and production-safe deploy
+
+Current main baseline for the planning line:
+
+- `origin/main` includes squash commit `9b6f1141995caff52784c222b359363bf55a7d4f`
+- `EmailJobDuplicateReadOnlyQueryPlanBoundary` is deployed as pure data-object logic only
+- no productive runtime wiring was introduced
+- no SQL execution was introduced
+- no DB reads were introduced
+- no `email_jobs` reads, writes, or updates were introduced
+- no cleanup, backfill, unique index, constraint, or idempotency enforcement was introduced
+
+The live runtime still contains the same side-effecting paths as before:
+
+- `ChatAgentOrchestratorService.queueInternalLeadNotification`
+- `EmailJobsService.enqueue`
+- `EmailJobsService.processPendingJobs`
+- `WidgetLeadsService.capture`
+- `ToolDispatcherService.executeCaptureLead`
+- `WidgetAdminReportsService.runReport`
+
+Because those paths still mutate live queue state, any future duplicate audit must stay read-only and must not mix execution with cleanup or runtime refactoring.
+
+## Objective of the Future DB-read Task
+
+The future DB-read-only task should answer only these questions:
+
+- How large is the duplicate-risk surface by `status` and `kind`?
+- Do live rows show meaningful duplicate clusters around `metadata.reportRunId`?
+- Do live rows show meaningful duplicate clusters around source metadata such as `leadId`, `contactRequestId`, `conversationId`, or `sessionId`?
+- Are duplicate-risk clusters concentrated in specific time windows?
+- How much ambiguity exists between duplicate recreation and legitimate retry / stale-processing behavior?
+
+The future DB-read-only task must not answer these questions by mutating data:
+
+- which rows should be deleted
+- which rows should be retried
+- which rows should be marked duplicate
+- whether a unique index should be added immediately
+- whether idempotency enforcement can be switched on now
+
+Those remain later decisions after sanitized read-only evidence exists.
+
+## Required Preconditions for Any Later Execution
+
+The future DB-read-only execution must stop unless all of the following are true:
+
+- explicit separate approval exists for a live Production DB read
+- DB target is confirmed as sanitized `chatbot`
+- the chosen DB role is read-only
+- read-only transaction mode is enabled if technically available
+- Production health is green before the read starts
+- no production migration is pending
+- no production auto-migration path is active
+- the exact main commit being assessed is pinned and documented
+- bounded time window is documented before the query starts
+- bounded `LIMIT` is documented before the query starts
+- explicit query timeout is documented before the query starts
+- low-risk execution window is chosen
+- sanitized output rules are agreed before execution
+
+If any one of those preconditions is missing, the future task should be treated as blocked rather than improvised.
+
+## Planned Execution Order
+
+The future DB-read-only audit should execute query classes in the following order only. The order is intentionally low-risk to higher-risk and aggregate-first.
+
+| Phase | Query class | Purpose | Allowed output | Blockers |
+| --- | --- | --- | --- | --- |
+| 0 | Preflight only | Confirm DB target, read-only role, timeout, limit, and health gates | sanitized readiness checklist only | unclear target, no read-only role, unhealthy Production |
+| 1 | `aggregate_by_status_kind` | Size the duplicate-risk surface without identifier-level output | aggregate counts only | missing time window or missing limit |
+| 2 | `status_bucket_scan` | Split counts into safe operational buckets | status/risk bucket counts only | raw-row request, unbounded scan |
+| 3 | `time_window_scan` | Identify concentration windows and possible replay spikes | time-bucket counts only | unbounded time range |
+| 4 | `duplicate_by_report_run` | Measure strongest currently documented soft correlation path | aggregate cluster counts and pseudonymized grouping only | raw `reportRunId` output, no metadata-scan approval |
+| 5 | `duplicate_by_source_metadata` | Measure lead/contact/conversation/source clusters | aggregate counts by normalized source family only | raw metadata output, no load review |
+| 6 | `failed_retry_ambiguity` | Separate duplicate recreation from legitimate retry semantics | ambiguity bucket counts only | retry interpretation without status framing |
+| 7 | `processing_stale_ambiguity` | Measure `processing` ambiguity without cleanup claims | stale-risk bucket counts only | any cleanup action or stale-row mutation |
+| 8 | `duplicate_by_recipient_fingerprint` | Optional only after separate privacy approval | pseudonymized fingerprint bucket counts only | no approved hashing strategy |
+| blocked | `duplicate_by_content_fingerprint` | Explicitly not allowed yet | none | content fingerprinting remains blocked |
+
+Interpretation rules for the later execution:
+
+- The task must stop after any phase that already answers the question safely.
+- Identifier-bearing phases are never required if aggregate phases are sufficient.
+- Recipient fingerprinting is optional and separately gated.
+- Content fingerprinting stays blocked until a separate privacy decision exists.
+
+## Output and Handling Policy
+
+Allowed future outputs:
+
+- aggregate counts
+- status buckets
+- kind buckets
+- time-window counts
+- ambiguity bucket counts
+- pseudonymized identifier buckets only if separately approved
+- reason codes
+- query-class names
+- sanitized written summary in task output
+
+Forbidden future outputs:
+
+- raw row dumps
+- raw `recipient_email` / `recipientEmail`
+- raw `subject`
+- raw `html`
+- raw `text`
+- raw payload bodies
+- full `metadata`
+- raw provider or SMTP errors
+- raw `reportRunId`, `leadId`, `contactRequestId`, `conversationId`, or `sessionId` unless sensitivity is separately cleared
+- CSV exports
+- JSON exports
+- committed query results
+- customer screenshots
+- direct PR attachments containing live row data
+
+Handling rules:
+
+- results stay ephemeral and sanitized
+- no query results are committed into the repository
+- no customer data is copied into comments, PRs, or docs
+- any later written summary must stay aggregate-only unless a stronger approval explicitly exists
+
+## Performance and Safety Constraints
+
+The future DB-read-only task should assume:
+
+- `metadata` correlation scans are potentially expensive
+- `reportRunId` grouping is useful but still metadata-driven
+- full-table scans are unsafe without explicit bounded windows
+- `processing` rows are operationally ambiguous and high-risk to interpret
+- retry-related rows can be semantically ambiguous even if they look duplicated
+
+Required constraints for later execution:
+
+- always use a bounded time window
+- always use an explicit limit
+- always use an explicit timeout
+- run aggregate-first
+- stop before broadening scope if a safer phase already gives enough evidence
+- never use `SELECT *`
+- never request raw content columns
+- never pivot from read-only evidence into cleanup in the same task
+
+## Explicit Stop Criteria for the Later Execution
+
+The future DB-read-only execution must stop immediately if:
+
+- DB target is not clearly `chatbot`
+- a read-write role would be required
+- timeout or limit cannot be applied
+- query shape would emit raw PII
+- query shape would emit full metadata
+- query shape would emit message subject/body material
+- the read would require an unbounded scan
+- Production health is not green
+- the result consumer asks for CSV/JSON export
+- cleanup, retry, requeue, delete, or mark-duplicate work becomes necessary to "finish" the task
+- the evidence would need to be committed to the repo
+
+If any stop criterion is hit, the correct result is `blocked`, not a risky fallback.
+
+## Not in Scope
+
+`P1.2B-21A` does not introduce or approve:
+
+- SQL execution
+- Production DB reads
+- staging DB reads
+- query runner implementation
+- repository implementation
+- `email_jobs` reads, writes, or updates
+- duplicate cleanup
+- backfill
+- hard delete
+- soft delete or mark-duplicate paths
+- unique index or constraint work
+- idempotency enforcement
+- `EmailJobsService.enqueue` changes
+- `EmailJobsService.processPendingJobs` changes
+- Orchestrator wiring
+- worker or SMTP behavior changes
+- `report_runs` synchronization changes
+- webhook execution
+- feature flags
+- migration
+- deploy
+
+## Evidence Required to Close the Future Execution Task
+
+The future DB-read-only execution task should not be considered complete unless it documents:
+
+- exact commit / environment / DB target context
+- read-only role confirmation
+- preflight health status
+- executed query classes in order
+- bounded window, limit, and timeout used for each phase
+- sanitized aggregate findings only
+- whether later manual review, cleanup planning, or idempotency work is justified
+- whether performance or privacy blockers were encountered
+
+## Recommended Next Step
+
+If this line continues, the next safe step is not immediate live execution by default.
+
+Preferred next step:
+
+1. keep `P1.2B-21A` documentation-only
+2. require an explicit dedicated DB-read-only assignment before any live query
+3. if the team wants stronger local structure first, add a pure execution-plan boundary before any DB access
+
+The main rule remains: actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.
