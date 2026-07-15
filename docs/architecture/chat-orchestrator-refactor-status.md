@@ -1325,16 +1325,16 @@ Operational note:
 - `ItSupportTicketFlowService` is not yet a real service; P1.2B-5 only extracted pure helpers and builders.
 - Handoff policy, NotificationSafetyGuard, DeliveryPayloadBuilder, DeliverySideEffectCommandBuilder, DeliveryExecutionBoundary, EmailDeliveryExecutor Boundary, EmailQueueWriteBoundary, EmailJobPersistenceBoundary, EmailJobProcessingTriggerBoundary, EmailJobWorkerBoundary, EmailJobStatusPolicyBoundary, EmailJobIdempotencyBoundary, and EmailJobIdempotencyMigrationPlanBoundary are extracted as pure helpers/builders, but Delivery execution, e-mail job persistence execution, e-mail processing execution, e-mail worker execution, e-mail status/retry/locking execution, DB schema changes, e-mail idempotency enforcement, and e-mail idempotency migration execution are not wired into a real executor.
 - Production DB config drift was corrected during P1.2B-17E and did not recur during P1.2B-18E, P1.2B-19E, or P1.2B-20E; the production DB target stayed sanitized to `chatbot`, but the deploy checklist should continue to verify that value explicitly.
-- Duplicate read-only query planning is now extracted and production-validated as pure boundary logic, but actual live DB duplicate audit execution, SQL approval, and cleanup decisions are still deferred; the current boundaries do not execute audit queries, query runners, repositories, cleanup, backfill, or enforcement.
+- Duplicate read-only query planning is now extracted and production-validated as pure boundary logic, and the later DB-read execution order is now documented as audit-only scope, but actual live DB duplicate audit execution, SQL approval, and cleanup decisions are still deferred; the current boundaries do not execute audit queries, query runners, repositories, cleanup, backfill, or enforcement.
 - Dashboard Server Action mismatch logs should be observed separately; they are not a P1.2B-18 blocker because Dashboard health stayed green and Dashboard was not redeployed.
 - Contact, lead, ticket, and handoff logic still overlap in state and metadata.
 - Several regression tests are text-sensitive, so future wording changes need explicit review.
 
 ## Recommended Next Steps
 
-1. Complete the P1.2B-Status-17 PR / merge flow first.
-2. Keep PR `#81` as Draft until P1.2B-Status-17 is merged.
-3. After P1.2B-Status-17-E, proceed with `P1.2B-21A-D` to review, update, and merge PR `#81`.
+1. `P1.2B-21A` is now documented as execution-plan scope only.
+2. After merging PR `#81`, run `P1.2B-21A-E` as the post-merge check.
+3. Any later actual live duplicate audit must remain a separate explicit DB-read-only assignment.
 4. Do not consolidate `ToolExecutorService` and `ToolDispatcherService` without a dedicated audit.
 5. Do not activate the Conversation Engine in the public widget as part of this refactor line.
 
@@ -1345,8 +1345,28 @@ Operational note:
 - `apps/api/test/email-job-duplicate-readonly-query-plan-boundary.test.cjs`
 - merge to `main`
 - production-safe API deploy validation on squash commit `9b6f1141995caff52784c222b359363bf55a7d4f`
+`P1.2B-21A` scopes the next separate execution-planning audit in `docs/architecture/email-job-duplicate-readonly-db-audit-execution-plan-audit.md`.
 
-The next safe step for the duplicate-audit line remains the already prepared PR `#81`, but it should stay Draft until the current P1.2B-Status-17 documentation update is merged. After that sequencing point, `P1.2B-21A-D` should review and merge the execution-planning audit only. The scope must still exclude runtime code, production DB reads, cleanup execution, backfill, idempotency enforcement, `EmailJobsService.enqueue`, `processPendingJobs`, feature-flag changes, migration, and production wiring changes.
+Recommended scope for `P1.2B-21A`:
+
+- Audit / scope only.
+- Define the actual read-only DB duplicate audit execution order, preflight, output policy, and stop criteria only.
+- Keep the work out of runtime code, DB access, production wiring, and cleanup execution.
+- No code changes.
+- No SQL execution.
+- No production DB reads.
+- No `email_jobs` reads.
+- No reports with live row data.
+- No duplicate cleanup.
+- No backfill.
+- No idempotency enforcement.
+- No `EmailJobsService.enqueue` or `processPendingJobs` changes.
+- No feature flags.
+- No migration.
+- No NOLIS-specific logic.
+- No municipality-specific hardcoding.
+
+After PR `#81` is merged, the next safe step is `P1.2B-21A-E` as a post-merge check only. Any later live duplicate audit must still stay separate from runtime code, production DB reads without explicit approval, cleanup execution, backfill, idempotency enforcement, `EmailJobsService.enqueue`, `processPendingJobs`, feature-flag changes, migration, and production wiring changes.
 
 Deferred runtime areas still include:
 
