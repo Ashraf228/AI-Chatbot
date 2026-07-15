@@ -310,11 +310,11 @@ Proceed to P1.2B-18B only as a pure `EmailJobIdempotencyMigrationPlanBoundary` e
 
 ## P1.2B-18 Status Update
 
-P1.2B-18B through P1.2B-18E were implemented and production-validated with a yellow operational note. The safe scope was maintained: `EmailJobIdempotencyMigrationPlanBoundary` builds only `EnforcementPointPlan`, `IdempotencyMigrationPhase`, `UniqueIndexPlan`, `BackfillPlan`, `DuplicateConflictPolicy`, `RollbackPlan`, and `MigrationPlanResult` data objects plus validation helpers and safe projections.
+P1.2B-18B through P1.2B-18E were implemented and production-validated. The original monitoring-only yellow note is resolved in the current baseline. The safe scope was maintained: `EmailJobIdempotencyMigrationPlanBoundary` builds only `EnforcementPointPlan`, `IdempotencyMigrationPhase`, `UniqueIndexPlan`, `BackfillPlan`, `DuplicateConflictPolicy`, `RollbackPlan`, and `MigrationPlanResult` data objects plus validation helpers and safe projections.
 
 No runtime execution, SQL, DB reads, DB writes, `email_jobs` reads/writes/updates, idempotency enforcement, migration, backfill, unique index, constraint, existing duplicate cleanup, `EmailJobsService.enqueue`, `EmailJobsService.processPendingJobs`, Orchestrator wiring, worker/SMTP changes, `report_runs` changes, NOLIS-specific logic, or municipality-specific hardcoding was introduced.
 
-The production deploy remained yellow only because `production-health-synthetic` still returns widget config HTTP 404 in `scripts/ops/check-production-health.sh`. Manual internal testsite smokes were green. Deferred areas remain deferred, including real DB migration, `idempotency_key` column, unique index or constraint, duplicate cleanup, backfill, SQL/DB access, `email_jobs` access, `processPendingJobs`, `EmailJobsService.enqueue`, Orchestrator wiring, worker/SMTP execution, `report_runs` synchronization, webhooks, ToolExecutor/ToolDispatcher work, IntegrationDispatcher work, and Production wiring.
+The current production baseline is green: `production-health-synthetic` returns widget config HTTP 200 with matching `siteKey`, and later P1.2B-19 and P1.2B-20 validations stayed green. Deferred areas remain deferred, including real DB migration, `idempotency_key` column, unique index or constraint, duplicate cleanup, backfill, SQL/DB access, `email_jobs` access, `processPendingJobs`, `EmailJobsService.enqueue`, Orchestrator wiring, worker/SMTP execution, `report_runs` synchronization, webhooks, ToolExecutor/ToolDispatcher work, IntegrationDispatcher work, and Production wiring.
 
 ## P1.2B-19 Status Note
 

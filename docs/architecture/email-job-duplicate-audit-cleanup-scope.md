@@ -246,11 +246,11 @@ Non-goals for `P1.2B-19` at this stage:
 
 ## Recommended Next Step
 
-Proceed with `P1.2B-20A` as an Email Job Duplicate Read-only Query Plan Audit only.
+`P1.2B-20A` through `P1.2B-20E` are complete and production-validated.
 
-`P1.2B-20A` scopes Email Job Duplicate Read-only Query Plan boundaries in `docs/architecture/email-job-duplicate-readonly-query-plan-audit.md`.
+The next safe step is a separate actual read-only DB duplicate-audit execution-planning or execution-scope task.
 
-`P1.2B-20A` should remain audit/scope only and should still exclude:
+That next step should remain audit/scope only and should still exclude:
 
 - code changes
 - DB reads
