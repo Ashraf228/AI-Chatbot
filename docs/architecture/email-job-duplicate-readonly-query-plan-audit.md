@@ -14,7 +14,10 @@ Current documented baseline for this planning step:
 - `EmailJobDuplicateReadOnlyQueryPlanBoundary` is production-validated as pure data-object logic only.
 - `P1.2B-21B` through `P1.2B-21E` are complete and production-validated.
 - `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` is production-validated as pure data-object logic only.
-- API baseline is documented at commit `cf696042b68f463923e6f026a75658c563c51985`.
+- `P1.2B-22B` through `P1.2B-22E` are complete and production-validated.
+- `EmailJobDuplicateReadOnlyAuditApprovalBoundary` is production-validated as pure data-object logic only.
+- API baseline is documented at commit `cfa992b448016545d1fba1bdbaba3af3716991e6`.
+- Main-CI / Docker gate is documented as green on run `29446620828`.
 - Production health is documented as green.
 - `check-production-health.sh` is documented as green with exit code `0`.
 - `production-health-synthetic` is documented as HTTP `200` with matching `siteKey`.
@@ -441,7 +444,7 @@ Non-goals for `P1.2B-20A`:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E` and `P1.2B-21B` through `P1.2B-21E` are now complete. The next safe step is `P1.2B-22A` as an approval / execution decision gate only.
+`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, and `P1.2B-22A` through `P1.2B-22E` are now complete. The approval decision gate and the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` are production-validated, and the next safe step is `P1.2B-23A` as a docs-only staging-read scope / approval-preconditions task.
 
 That next step should decide only:
 
@@ -452,4 +455,4 @@ That next step should decide only:
 - which outputs are allowed
 - which stop criteria are mandatory
 
-`P1.2B-22A` must still remain outside runtime code, SQL execution, `email_jobs` reads or writes, query runners, reports with live data, cleanup, backfill, unique index or constraint work, and idempotency enforcement unless a later explicit DB-read-only audit assignment approves more.
+`P1.2B-23A` must still remain outside runtime code, SQL execution, `email_jobs` reads or writes, query runners, reports with live data, cleanup, backfill, unique index or constraint work, and idempotency enforcement unless a later explicit DB-read-only audit assignment approves more.

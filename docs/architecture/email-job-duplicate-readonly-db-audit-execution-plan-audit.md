@@ -21,11 +21,13 @@ This execution plan builds on the already completed and production-validated pla
 
 Current main baseline for the planning line:
 
-- `origin/main` includes squash commit `cf696042b68f463923e6f026a75658c563c51985`
+- `origin/main` includes squash commit `cfa992b448016545d1fba1bdbaba3af3716991e6`
 - `EmailJobDuplicateReadOnlyQueryPlanBoundary` is deployed as pure data-object logic only
 - `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` is deployed as pure data-object logic only
-- API runtime is production-validated on `cf696042b68f463923e6f026a75658c563c51985`
-- previous API runtime commit before the deploy was `9b6f1141995caff52784c222b359363bf55a7d4f`
+- `EmailJobDuplicateReadOnlyAuditApprovalBoundary` is deployed as pure data-object logic only
+- API runtime is production-validated on `cfa992b448016545d1fba1bdbaba3af3716991e6`
+- previous live API runtime commit before the deploy was `3a276e7f0ef898bae791638b964087780da80c4d`
+- Main-CI / Docker gate was green on run `29446620828`
 - Production health is green
 - `check-production-health.sh` returned exit code `0`
 - `production-health-synthetic` returned HTTP `200` with matching `siteKey`
@@ -274,16 +276,16 @@ The future DB-read-only execution task should not be considered complete unless 
 
 ## Recommended Next Step
 
-`P1.2B-22A` is now the documented approval / execution decision gate for this line. It leaves `DB_READ_ONLY_AUDIT`, staging DB reads, and Production DB reads explicitly not approved, and it adds no SQL, query runner, query results, or report generation.
+`P1.2B-22A` is now the documented approval / execution decision gate for this line, and `P1.2B-22B` through `P1.2B-22E` completed the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` plus production validation on `cfa992b448016545d1fba1bdbaba3af3716991e6`. The line still leaves `DB_READ_ONLY_AUDIT`, staging DB reads, and Production DB reads explicitly not approved, and it adds no SQL, query runner, query results, or report generation.
 
-If this line continues, the next safe step is `P1.2B-22B` as a pure approval-boundary modeling task only.
+If this line continues, the next safe step is `P1.2B-23A` as a docs-only staging-read scope / approval-preconditions task only.
 
 Preferred next step:
 
-1. model pure approval-decision data objects
-2. model pure approval-matrix data objects
-3. model pure environment-sequencing data objects
-4. model pure stop-criteria and output-policy data objects
+1. document whether staging read-only audit preparation is allowed
+2. document the required staging environment and read-only role
+3. document allowed future query classes as categories only
+4. document allowed outputs and mandatory stop criteria
 5. keep all DB reads, SQL, query runners, query-result handling, reports, cleanup, and backfill out of scope
 
-The main rule remains: `P1.2B-22B` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.
+The main rule remains: `P1.2B-23A` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.

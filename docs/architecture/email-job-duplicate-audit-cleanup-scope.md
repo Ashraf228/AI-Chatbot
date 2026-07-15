@@ -13,6 +13,7 @@ The main findings are:
 - Cleanup is materially safer only after duplicate classification is defined as a pure, read-only data model first.
 - `P1.2B-19B` through `P1.2B-19E` are now implemented and production-validated as a pure helper and type layer for duplicate classification, cleanup planning, and audit-safe projections only.
 - `P1.2B-20B` through `P1.2B-20E` and `P1.2B-21B` through `P1.2B-21E` are now implemented and production-validated as pure read-only query-plan and read-only audit-execution-boundary layers only.
+- `P1.2B-22A` through `P1.2B-22E` are now implemented and production-validated as a docs-only approval decision gate plus pure approval-boundary layer only.
 
 This document does not recommend any direct DB cleanup, SQL migration, worker refactor, or production behavior change in the current step.
 
@@ -253,9 +254,9 @@ Non-goals for `P1.2B-19` at this stage:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E` and `P1.2B-21B` through `P1.2B-21E` are complete and production-validated.
+`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, and `P1.2B-22A` through `P1.2B-22E` are complete and production-validated.
 
-The next safe step is `P1.2B-22A` as an approval / execution decision gate only.
+The next safe step is `P1.2B-23A` as a docs-only staging-read scope / approval-preconditions task.
 
 That next step should decide only:
 
@@ -266,7 +267,7 @@ That next step should decide only:
 - which outputs are allowed
 - which stop criteria are mandatory
 
-`P1.2B-22A` should still exclude:
+`P1.2B-23A` should still exclude:
 
 - code changes
 - DB reads
