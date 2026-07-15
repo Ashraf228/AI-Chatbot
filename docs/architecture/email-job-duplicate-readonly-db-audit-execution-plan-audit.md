@@ -276,16 +276,16 @@ The future DB-read-only execution task should not be considered complete unless 
 
 ## Recommended Next Step
 
-`P1.2B-22A` is now the documented approval / execution decision gate for this line, and `P1.2B-22B` through `P1.2B-22E` completed the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` plus production validation on `cfa992b448016545d1fba1bdbaba3af3716991e6`. The line still leaves `DB_READ_ONLY_AUDIT`, staging DB reads, and Production DB reads explicitly not approved, and it adds no SQL, query runner, query results, or report generation.
+`P1.2B-22A` is now the documented approval / execution decision gate for this line, `P1.2B-22B` through `P1.2B-22E` completed the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` plus production validation on `cfa992b448016545d1fba1bdbaba3af3716991e6`, and `P1.2B-23A` now documents the staging-read-only scope / approval-preconditions layer. The line still leaves `DB_READ_ONLY_AUDIT`, staging DB reads, and Production DB reads explicitly not approved, and it adds no SQL, query runner, query results, or report generation.
 
-If this line continues, the next safe step is `P1.2B-23A` as a docs-only staging-read scope / approval-preconditions task only.
+If this line continues, the next safe step is `P1.2B-23B` as a pure staging-scope-boundary modeling task only.
 
 Preferred next step:
 
-1. document whether staging read-only audit preparation is allowed
-2. document the required staging environment and read-only role
-3. document allowed future query classes as categories only
-4. document allowed outputs and mandatory stop criteria
+1. model pure staging-audit-scope data objects
+2. model staging-environment-requirement data objects
+3. model staging-query-class-allowance data objects
+4. model staging-output-policy and staging-stop-criteria data objects
 5. keep all DB reads, SQL, query runners, query-result handling, reports, cleanup, and backfill out of scope
 
-The main rule remains: `P1.2B-23A` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.
+The main rule remains: `P1.2B-23B` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.

@@ -254,9 +254,9 @@ Non-goals for `P1.2B-19` at this stage:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, and `P1.2B-22A` through `P1.2B-22E` are complete and production-validated.
+`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, and `P1.2B-23A` are complete and production-validated where applicable.
 
-The next safe step is `P1.2B-23A` as a docs-only staging-read scope / approval-preconditions task.
+The next safe step is `P1.2B-23B` as a pure staging-scope-boundary task.
 
 That next step should decide only:
 
@@ -267,7 +267,7 @@ That next step should decide only:
 - which outputs are allowed
 - which stop criteria are mandatory
 
-`P1.2B-23A` should still exclude:
+`P1.2B-23B` should still exclude:
 
 - code changes
 - DB reads
