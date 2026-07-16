@@ -21,6 +21,7 @@
 - `npm run test:security-boundaries`
 - `git diff --check`
 - Shortcut: `scripts/ops/codex-pure-api-boundary-gate.sh --focused-test "<command>" --regression-test "<command>"`
+- vor Deploy/Post-Merge: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
 
 ## `API_RUNTIME_UNWIRED`
 
@@ -34,6 +35,7 @@
 - `npm run security:check-authorization-matrix`
 - `npm run test:security-boundaries`
 - `git diff --check`
+- Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
 
 ## `API_RUNTIME_WIRED`
 
@@ -49,6 +51,7 @@
 - `git diff --check`
 - Main-CI-Gate
 - Docker-Gate auf exakt Squash Commit
+- Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
 
 ## `SCRIPT_CHANGE`
 
@@ -106,6 +109,7 @@
 - Docker-Gate
 - Rollback-Gate
 - Post-Deploy-Healthcheck
+- Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <target>`
 
 ## `MONITORING_FIX`
 

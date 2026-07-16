@@ -442,3 +442,8 @@ Ziel von `P0-CI-1B`:
 - den Codex-Gate-Abgleich für `main` auf Checks- und Push-Run-Sicht umstellen
 - PR-Head- und Main-Push-Auswertung sauber trennen
 - nur falls danach weiter Lücken bestehen, einen kleinen Workflow-Fix als separaten Folgeauftrag vorbereiten
+
+Status:
+
+- `P0-CI-1B` implementiert den lokalen Auswertepfad als `scripts/ops/codex-main-ci-gate.sh`.
+- Dabei wurden keine Workflow-Dateien und keine GitHub-Settings geändert.

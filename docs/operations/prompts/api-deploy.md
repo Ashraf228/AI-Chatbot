@@ -13,6 +13,7 @@ Inputs:
 
 Instructions:
 - do not deploy unless the exact target commit has already passed the required gate
+- prefer `scripts/ops/codex-main-ci-gate.sh --sha <target>` as the Main-CI proof path before any Docker fallback is considered
 - document the pre-deploy baseline
 - perform only the approved deploy scope
 - verify post-deploy health, synthetic checks, and drift guards
