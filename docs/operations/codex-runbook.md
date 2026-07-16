@@ -17,8 +17,9 @@
 - `scripts/ops/codex-doc-only-gate.sh`
 - `scripts/ops/codex-pure-api-boundary-gate.sh --focused-test "<command>" --regression-test "<command>"`
 - `scripts/ops/codex-sensitive-scan.sh`
+- `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
 
-Diese Skripte standardisieren nur lokale Repo-Gates. GitHub-Checks, Main-CI-Sichtbarkeit und Docker-Fallbacks bleiben separate Aufgaben.
+Diese Skripte standardisieren lokale Repo-Gates und den Main-CI-Nachweis fuer exakte Squash- oder Merge-Commits. Workflow-Dateien, GitHub-Settings und Docker-Fallbacks bleiben separate Aufgaben.
 
 ## Prompt-Templates
 
@@ -63,6 +64,14 @@ Kurze Aufgaben sollen nach Moeglichkeit auf eines dieser Templates verweisen sta
 - Main-CI pruefen
 - bei Runtime-Code Docker-Gate pruefen
 - bei roter CI sofort stoppen
+
+Empfohlener Main-CI-Pfad fuer Runtime-Post-Merge-Gates:
+
+1. `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
+2. bei `pass`: Main-CI-Gate erfuellt
+3. bei `waiting`: auf CI warten
+4. bei `failed`: blockiert
+5. bei `unavailable`: erst dann Docker-Fallback oder dokumentierter Hinweispfad
 
 ## Status-Matrix
 
