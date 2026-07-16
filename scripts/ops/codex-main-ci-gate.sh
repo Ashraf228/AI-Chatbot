@@ -199,7 +199,7 @@ if [[ -z "$workflow_runs_json" && "$gh_state" == "authenticated" ]]; then
   fi
 fi
 
-if [[ -s "$workflow_runs_file" && -z "$workflow_jobs_json" && "$gh_state" == "authenticated" ]]; then
+if [[ -z "$workflow_runs_json" && -s "$workflow_runs_file" && -z "$workflow_jobs_json" && "$gh_state" == "authenticated" ]]; then
   workflow_run_id="$(
     node -e '
       const fs = require("fs");
