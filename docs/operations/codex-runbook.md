@@ -11,6 +11,30 @@
 - genau eine Change-Klasse waehlen
 - Testmatrix und Gates aus `AGENTS.md` und `docs/operations/codex-test-matrix.md` ableiten
 
+## Skript-Shortcuts
+
+- `scripts/ops/codex-preflight.sh`
+- `scripts/ops/codex-doc-only-gate.sh`
+- `scripts/ops/codex-pure-api-boundary-gate.sh --focused-test "<command>" --regression-test "<command>"`
+- `scripts/ops/codex-sensitive-scan.sh`
+
+Diese Skripte standardisieren nur lokale Repo-Gates. GitHub-Checks, Main-CI-Sichtbarkeit und Docker-Fallbacks bleiben separate Aufgaben.
+
+## Prompt-Templates
+
+- `docs/operations/prompts/doku-only.md`
+- `docs/operations/prompts/pure-api-boundary.md`
+- `docs/operations/prompts/commit-pr.md`
+- `docs/operations/prompts/pr-review-merge.md`
+- `docs/operations/prompts/post-merge-check.md`
+- `docs/operations/prompts/api-deploy.md`
+- `docs/operations/prompts/db-readonly-decision-gate.md`
+- `docs/operations/prompts/security-diff-scan.md`
+- `docs/operations/prompts/doku-pr-merge.md`
+- `docs/operations/prompts/runtime-post-merge-gate.md`
+
+Kurze Aufgaben sollen nach Moeglichkeit auf eines dieser Templates verweisen statt den kompletten Ablauf jedes Mal neu auszuformulieren.
+
 ## Branch / Worktree Vorbereiten
 
 - eigener Branch pro Auftrag
@@ -39,6 +63,16 @@
 - Main-CI pruefen
 - bei Runtime-Code Docker-Gate pruefen
 - bei roter CI sofort stoppen
+
+## Status-Matrix
+
+- `DOKU_ONLY`: `A/C -> D -> E`
+- `PURE_API_BOUNDARY`: `B -> C -> D -> D-E -> E -> Status`
+- `API_RUNTIME_UNWIRED`: `B -> C -> D -> D-E -> E -> Status`
+- `DEPLOY_ONLY`: `D-E -> E -> Status`
+- `DB_READ_ONLY_AUDIT`: `Decision -> Approval -> Staging -> Report -> Production Decision`
+
+Runtime-Boundary-, Merge-, Gate- und Deploy-Schritte bleiben strikt linear. Doku-only- und Audit-only-Aufgaben koennen parallel laufen, solange sie keine gemeinsame Runtime-Freigabe oder Deploy-Abfolge beruehren.
 
 ## Merge Durchfuehren
 

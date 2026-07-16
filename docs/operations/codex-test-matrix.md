@@ -6,6 +6,7 @@
 - `npm run security:check-authorization-matrix`
 - `npm run test:security-boundaries`
 - `git diff --check`
+- Shortcut: `scripts/ops/codex-doc-only-gate.sh`
 
 ## `PURE_API_BOUNDARY`
 
@@ -19,6 +20,7 @@
 - `npm run security:check-authorization-matrix`
 - `npm run test:security-boundaries`
 - `git diff --check`
+- Shortcut: `scripts/ops/codex-pure-api-boundary-gate.sh --focused-test "<command>" --regression-test "<command>"`
 
 ## `API_RUNTIME_UNWIRED`
 
