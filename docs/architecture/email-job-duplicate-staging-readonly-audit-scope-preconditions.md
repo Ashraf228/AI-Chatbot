@@ -11,14 +11,17 @@ Its purpose is only to document the requirements, limits, allowed future query c
 Current documented baseline:
 
 - `P1.2B-22` is complete and production-validated.
+- `P1.2B-23` is complete and production-validated.
 - `P1.2B-Status-19` is complete.
-- `main` includes `9988d9db41cf8de876bbfae78bc1204067909a4e`.
-- API live baseline remains `cfa992b448016545d1fba1bdbaba3af3716991e6`.
+- API live baseline is `577518a29eac8a9553309f4aadaf6ac7e12479bc`.
+- Previous API baseline before `P1.2B-23E` was `cfa992b448016545d1fba1bdbaba3af3716991e6`.
 - Production health is green.
 - Production DB target remains sanitized to `chatbot`.
 - Migration count remains `28`.
 - Latest migration remains `028_generic_webhook_signing_modes.sql`.
 - Public widget remains unchanged on the legacy pipeline.
+- The initial `P1.2B-23E` Public-Widget smoke yellow was resolved in `P1.2B-23E-G` using the safe internal Origin `https://p04-internal-test-20260702102313.internal.test`.
+- No Site-Config mutation or DB write was needed for the safe-smoke revalidation.
 - No real `DB_READ_ONLY_AUDIT` has been approved or executed.
 
 ## Current Decision State
@@ -203,20 +206,18 @@ None of those steps executes a DB read.
 
 ## Recommended Next Step
 
-Recommended next step: `P1.2B-23B EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`
+Recommended next step: `P1.2B-24A Email Job Duplicate Staging Read-only Audit Operator Approval Decision`
 
-Recommended scope for `P1.2B-23B`:
+Recommended scope for `P1.2B-24A`:
 
-- pure `StagingAuditScope` data objects
-- `StagingEnvironmentRequirement` data objects
-- `StagingQueryClassAllowance` data objects
-- `StagingOutputPolicy` data objects
-- `StagingStopCriteria` data objects
-- result builders
-- safe projections
-- tests
+- operator approval decision only
+- required human approval
+- required staging role / environment
+- exact allowed query-class categories
+- exact allowed output classes
+- stop criteria and manual approval evidence
 
-Still not allowed in `P1.2B-23B`:
+Still not allowed in `P1.2B-24A`:
 
 - DB reads
 - SQL
@@ -226,6 +227,7 @@ Still not allowed in `P1.2B-23B`:
 - cleanup
 - backfill
 - enforcement
+- real `DB_READ_ONLY_AUDIT`
 
 ## Non-goals
 
