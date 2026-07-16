@@ -254,9 +254,9 @@ Non-goals for `P1.2B-19` at this stage:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, and `P1.2B-23A` are complete and production-validated where applicable.
+`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, and `P1.2B-23A` through `P1.2B-23E-G` are complete and production-validated where applicable.
 
-The next safe step is `P1.2B-23B` as a pure staging-scope-boundary task.
+The next safe step is `P1.2B-24A` as a docs-only operator approval decision for any future staging read-only duplicate audit.
 
 That next step should decide only:
 
@@ -267,7 +267,7 @@ That next step should decide only:
 - which outputs are allowed
 - which stop criteria are mandatory
 
-`P1.2B-23B` should still exclude:
+`P1.2B-24A` should still exclude:
 
 - code changes
 - DB reads
@@ -284,6 +284,8 @@ That next step should decide only:
 - `processPendingJobs` refactor
 - orchestrator wiring
 - production wiring
+
+The resolved `P1.2B-23E-G` safe Public-Widget smoke does not change this cleanup scope. It validated the deployed pure boundary and the existing safe testsite origin only; it did not introduce cleanup authority, live duplicate-audit execution, DB reads, or idempotency enforcement.
 
 ## Idempotency Enforcement Interaction
 

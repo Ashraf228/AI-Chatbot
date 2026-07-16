@@ -444,7 +444,7 @@ Non-goals for `P1.2B-20A`:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, and `P1.2B-23A` are now complete. The approval decision gate, the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary`, and the staging-read-only scope / preconditions document are in place, and the next safe step is `P1.2B-23B` as a pure staging-scope-boundary task.
+`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, and `P1.2B-23A` through `P1.2B-23E-G` are now complete. The approval decision gate, the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary`, the staging-read-only scope / preconditions document, the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the production-safe deploy, and the green safe-smoke revalidation are in place, and the next safe step is `P1.2B-24A` as a docs-only staging-operator-approval task.
 
 That next step should decide only:
 
@@ -455,4 +455,4 @@ That next step should decide only:
 - which outputs are allowed
 - which stop criteria are mandatory
 
-`P1.2B-23B` must still remain outside runtime code, SQL execution, `email_jobs` reads or writes, query runners, reports with live data, cleanup, backfill, unique index or constraint work, and idempotency enforcement unless a later explicit DB-read-only audit assignment approves more.
+`P1.2B-24A` must still remain outside runtime code, SQL execution, `email_jobs` reads or writes, query runners, reports with live data, cleanup, backfill, unique index or constraint work, and idempotency enforcement unless a later explicit DB-read-only audit assignment approves more.

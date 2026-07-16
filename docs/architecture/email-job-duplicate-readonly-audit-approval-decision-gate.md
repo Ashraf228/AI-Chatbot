@@ -227,20 +227,18 @@ None of those steps executes a DB read.
 
 `P1.2B-23A` is now the documented staging-read-only scope / preconditions step. It does not grant staging DB read approval, does not grant Production DB read approval, and does not allow SQL, query runners, reports, cleanup, backfill, or enforcement.
 
-Recommended next step: `P1.2B-23B EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`
+Recommended next step: `P1.2B-24A Email Job Duplicate Staging Read-only Audit Operator Approval Decision`
 
-Recommended scope for `P1.2B-23B`:
+Recommended scope for `P1.2B-24A`:
 
-- pure `StagingAuditScope` data objects
-- `StagingEnvironmentRequirement` data objects
-- `StagingQueryClassAllowance` data objects
-- `StagingOutputPolicy` data objects
-- `StagingStopCriteria` data objects
-- result builders
-- safe projections
-- tests
+- operator approval decision only
+- explicit human approval state
+- required staging role / environment
+- exact allowed query-class categories
+- exact allowed output classes
+- stop criteria and approval evidence
 
-Still not allowed in `P1.2B-23B`:
+Still not allowed in `P1.2B-24A`:
 
 - DB reads
 - SQL
@@ -254,3 +252,4 @@ Still not allowed in `P1.2B-23B`:
 - runtime wiring
 - production wiring
 - enforcement
+- real `DB_READ_ONLY_AUDIT`
