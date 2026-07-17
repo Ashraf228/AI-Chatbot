@@ -21,13 +21,15 @@ This execution plan builds on the already completed and production-validated pla
 
 Current main baseline for the planning line:
 
-- `origin/main` includes squash commit `cfa992b448016545d1fba1bdbaba3af3716991e6`
+- `origin/main` includes squash commit `92c78a607386fa73a44bed8b6ede8c87e52420cf`
 - `EmailJobDuplicateReadOnlyQueryPlanBoundary` is deployed as pure data-object logic only
 - `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` is deployed as pure data-object logic only
 - `EmailJobDuplicateReadOnlyAuditApprovalBoundary` is deployed as pure data-object logic only
-- API runtime is production-validated on `cfa992b448016545d1fba1bdbaba3af3716991e6`
-- previous live API runtime commit before the deploy was `3a276e7f0ef898bae791638b964087780da80c4d`
-- Main-CI / Docker gate was green on run `29446620828`
+- `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary` is deployed as pure data-object logic only
+- `EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary` is deployed as pure data-object logic only
+- API runtime is production-validated on `92c78a607386fa73a44bed8b6ede8c87e52420cf`
+- previous live API runtime commit before the deploy was `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`
+- Main-CI / Docker gate was green on exact Main-push run `29573799471`
 - Production health is green
 - `check-production-health.sh` returned exit code `0`
 - `production-health-synthetic` returned HTTP `200` with matching `siteKey`
@@ -42,6 +44,7 @@ Current main baseline for the planning line:
 - no DB reads were introduced
 - no `email_jobs` reads, writes, or updates were introduced
 - no cleanup, backfill, unique index, constraint, or idempotency enforcement was introduced
+- no human approval was granted
 
 ## P1.2B-21 Status Update
 
@@ -258,8 +261,27 @@ If any stop criterion is hit, the correct result is `blocked`, not a risky fallb
 - `report_runs` synchronization changes
 - webhook execution
 - feature flags
-- migration
-- deploy
+
+## Recommended Next Step
+
+`P1.2B-24A` through `P1.2B-25E` are now complete and production-validated where
+applicable. They add the staging-read-only scope layer, the operator approval
+decision layer, the staging runbook / explicit approval format layer, the pure
+`EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the pure
+`EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the pure
+`EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`, the exact Main-push CI
+gate on run `29573799471`, the API-only deploy on
+`92c78a607386fa73a44bed8b6ede8c87e52420cf`, and a green safe Public-Widget
+smoke revalidation.
+
+Recommended next step: `P1.2B-26A Staging DB_READ_ONLY_AUDIT Preflight Decision`
+
+Recommended scope for `P1.2B-26A`:
+
+- verify whether explicit human approval exists in the required format
+- return blocked when explicit approval is absent or malformed
+- preserve the read-only execution-order constraints as boundary inputs only
+- keep DB reads, SQL, query runners, reports, cleanup, backfill, and enforcement out of scope
 
 ## Evidence Required to Close the Future Execution Task
 
@@ -273,19 +295,3 @@ The future DB-read-only execution task should not be considered complete unless 
 - sanitized aggregate findings only
 - whether later manual review, cleanup planning, or idempotency work is justified
 - whether performance or privacy blockers were encountered
-
-## Recommended Next Step
-
-`P1.2B-22A` is now the documented approval / execution decision gate for this line, `P1.2B-22B` through `P1.2B-22E` completed the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` plus production validation on `cfa992b448016545d1fba1bdbaba3af3716991e6`, `P1.2B-23A` through `P1.2B-23E-G` completed the staging-read-only scope / approval-preconditions layer, the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the production-safe API-only deploy on `577518a29eac8a9553309f4aadaf6ac7e12479bc`, and the green safe-smoke revalidation with the existing internal testsite Origin, and `P1.2B-24A` through `P1.2B-24E` completed the docs-only operator approval decision layer, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker fallback on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, the API-only production-safe deploy, and the green safe-smoke revalidation on the same safe internal Origin. The line still leaves `DB_READ_ONLY_AUDIT`, staging DB reads, Production DB reads, SQL execution, query runners, query results, reports, cleanup, backfill, enforcement, and human approval explicitly not approved.
-
-If this line continues, the next safe step is `P1.2B-25A` as a docs-only staging runbook / explicit approval format task.
-
-Preferred next step:
-
-1. document whether a real staging `DB_READ_ONLY_AUDIT` is approved at all
-2. document the required human approval state
-3. document the required staging role / environment
-4. document the exact allowed query-class categories and outputs
-5. keep all DB reads, SQL, query runners, query-result handling, reports, cleanup, and backfill out of scope
-
-The main rule remains: `P1.2B-25A` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.

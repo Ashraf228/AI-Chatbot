@@ -258,6 +258,29 @@ Current pure boundaries:
 - `EmailJobStatusPolicyBoundary` defines status, retry, locking, and stale-processing policy data objects only
 - `EmailJobWorkerBoundary` defines worker selection, transition, retry, and result data objects only
 - `EmailQueueWriteBoundary` defines queue-write request and validation objects only
+
+## Recommended Next Step
+
+`P1.2B-24A` through `P1.2B-25E` are now complete and production-validated where
+applicable. They add the staging-read-only scope / preconditions layer, the
+operator approval decision layer, the staging runbook / explicit approval
+format layer, the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`,
+the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the
+pure `EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`, the exact
+Main-push CI gate on run `29573799471`, and the API-only deploy on
+`92c78a607386fa73a44bed8b6ede8c87e52420cf` with green production health and
+green safe widget smoke. Approval for `DB_READ_ONLY_AUDIT`, staging DB reads,
+Production DB reads, SQL, query runners, query results, reports, cleanup,
+backfill, enforcement, and human approval remains not granted.
+
+Recommended next step: `P1.2B-26A Staging DB_READ_ONLY_AUDIT Preflight Decision`
+
+Recommended scope for `P1.2B-26A`:
+
+- verify whether explicit human approval exists in the required documented format
+- keep the planned query classes conceptual only when approval is absent
+- preserve safe output and stop-criteria gates
+- block any real query execution when approval is missing
 - `EmailJobPersistenceBoundary` defines persistence request and validation objects only
 - `EmailJobProcessingTriggerBoundary` defines trigger request and validation objects only
 
@@ -444,15 +467,35 @@ Non-goals for `P1.2B-20A`:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, `P1.2B-23A` through `P1.2B-23E-G`, and `P1.2B-24A` through `P1.2B-24E` are now complete. The approval decision gate, the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary`, the staging-read-only scope / preconditions document, the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the docs-only operator-approval decision, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker-fallback gate, the production-safe API-only deploy on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, and the green safe-smoke revalidation are in place, and the next safe step is `P1.2B-25A` as a docs-only staging runbook / explicit approval format task.
+`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`,
+`P1.2B-22A` through `P1.2B-22E`, `P1.2B-23A` through `P1.2B-23E-G`,
+`P1.2B-24A` through `P1.2B-24E`, and `P1.2B-25A` through `P1.2B-25E` are now
+complete. The approval decision gate, the pure
+`EmailJobDuplicateReadOnlyAuditApprovalBoundary`, the staging-read-only scope /
+preconditions document, the pure
+`EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the docs-only
+operator-approval decision, the pure
+`EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the docs-only
+staging runbook / explicit approval format step, the pure
+`EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`, the exact Main-push CI
+gate on run `29573799471`, the production-safe API-only deploy on
+`92c78a607386fa73a44bed8b6ede8c87e52420cf`, and the green safe-smoke
+revalidation are in place.
+
+Recommended next step: `P1.2B-26A Staging DB_READ_ONLY_AUDIT Preflight Decision`
 
 That next step should decide only:
 
-- whether and how an explicit human approval would need to be written
+- whether valid explicit human approval exists in the documented format
+- whether the staging preflight remains blocked because approval is absent
 - which environment is allowed first
 - which read-only role is required
-- which query classes are allowed
+- which query classes remain only conceptual categories
 - which outputs are allowed
 - which stop criteria are mandatory
 
-`P1.2B-25A` must still remain outside runtime code, SQL execution, `email_jobs` reads or writes, query runners, reports with live data, cleanup, backfill, unique index or constraint work, idempotency enforcement, and any claim that human approval has already been granted unless a later explicit DB-read-only audit assignment approves more.
+`P1.2B-26A` must still remain outside runtime code, SQL execution,
+`email_jobs` reads or writes, query runners, reports with live data, cleanup,
+backfill, unique index or constraint work, idempotency enforcement, and any
+claim that human approval has already been granted unless a later explicit
+DB-read-only audit assignment approves more.
