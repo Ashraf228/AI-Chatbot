@@ -14,6 +14,8 @@ Inputs:
 Instructions:
 - do not deploy unless the exact target commit has already passed the required gate
 - prefer `scripts/ops/codex-main-ci-gate.sh --sha <target>` as the Main-CI proof path before any Docker fallback is considered
+- if Main-CI remains unavailable, the approved Docker fallback evidence path is `.github/workflows/docker-fallback-gate.yml` on the exact `target_sha`
+- Docker fallback evidence remains build-only and does not itself authorize or execute a deploy
 - document the pre-deploy baseline
 - perform only the approved deploy scope
 - verify post-deploy health, synthetic checks, and drift guards
