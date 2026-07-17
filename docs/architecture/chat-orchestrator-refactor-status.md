@@ -2,9 +2,9 @@
 
 ## Summary
 
-P1.2B-1 through P1.2B-24A are implemented, merged, and production-validated where applicable. P1.2B-20 added `EmailJobDuplicateReadOnlyQueryPlanBoundary` as a pure read-only-query-plan data-object layer, P1.2B-21 added `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` as a pure read-only audit-execution data-object layer, P1.2B-22 added `EmailJobDuplicateReadOnlyAuditApprovalBoundary` as a pure approval-decision, approval-matrix, environment-sequencing, stop-criteria, output-policy, result, validation, classification, and safe-projection data-object layer, P1.2B-23 added `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary` plus the staging-read-only audit scope / approval-preconditions line, and P1.2B-24A adds the docs-only operator-approval-decision layer for any later staging read-only duplicate audit. P1.2B-23 was production-validated with an API-only Docker build + recreate on `577518a29eac8a9553309f4aadaf6ac7e12479bc`. The refactor remains intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
+P1.2B-1 through P1.2B-24E are implemented, merged, and production-validated where applicable. P1.2B-20 added `EmailJobDuplicateReadOnlyQueryPlanBoundary` as a pure read-only-query-plan data-object layer, P1.2B-21 added `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` as a pure read-only audit-execution data-object layer, P1.2B-22 added `EmailJobDuplicateReadOnlyAuditApprovalBoundary` as a pure approval-decision, approval-matrix, environment-sequencing, stop-criteria, output-policy, result, validation, classification, and safe-projection data-object layer, P1.2B-23 added `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary` plus the staging-read-only audit scope / approval-preconditions line, and P1.2B-24 added the docs-only operator-approval-decision layer plus the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary` and its production validation on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`. The refactor remains intentionally behavior-neutral: public widget responses, response text, branch ordering, feature flags, and database schema remain unchanged.
 
-`P1.2B-22A` remains the docs-only approval / execution decision gate, `P1.2B-22B` through `P1.2B-22E` completed the pure runtime-unwired approval boundary and deploy validation, `P1.2B-23A` through `P1.2B-23E-G` completed the staging-read-only scope / preconditions, the pure staging-scope boundary, the API-only deploy validation, the initial yellow Public-Widget smoke diagnosis, and the green safe-smoke revalidation, and `P1.2B-24A` now documents the explicit operator-approval decision without granting any real staging or Production DB read approval. The line still does not introduce SQL, query runners, reports with data, or runtime wiring.
+`P1.2B-22A` remains the docs-only approval / execution decision gate, `P1.2B-22B` through `P1.2B-22E` completed the pure runtime-unwired approval boundary and deploy validation, `P1.2B-23A` through `P1.2B-23E-G` completed the staging-read-only scope / preconditions, the pure staging-scope boundary, the API-only deploy validation, the initial yellow Public-Widget smoke diagnosis, and the green safe-smoke revalidation, and `P1.2B-24A` through `P1.2B-24E` completed the operator-approval decision layer, the pure operator-approval boundary, the exact-commit Docker-fallback gate, the API-only production-safe deploy, and the green safe Public-Widget smoke revalidation on the existing internal testsite Origin without granting any real staging or Production DB read approval. The line still does not introduce SQL, query runners, reports with data, runtime wiring, or human approval for a live audit.
 
 The Conversation Engine is still not live for the public widget. AssistantProfile production migration has not been executed. Side effects were not hidden inside new helper modules; `ChatAgentOrchestratorService` and the existing services remain the executors for database reads/writes, queue writes, audit writes, lead finalization, ticket finalization, contact request creation, conversation metadata persistence, and public response assembly.
 
@@ -12,13 +12,13 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `577518a29eac8a9553309f4aadaf6ac7e12479bc` |
-| Previous live API baseline before P1.2B-23E | `cfa992b448016545d1fba1bdbaba3af3716991e6` |
-| API image | `sha256:90f230e2871f4591ecc1ec0931e1b22b54bf77b25ab23624cef57769f4be7b46` |
-| Previous API image | `sha256:ccbbfcaf21cb83746169c2e9407368bec9ba5f6f67120f401dab6de0559c664e` |
+| API | `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13` |
+| Previous live API baseline before P1.2B-24E | `577518a29eac8a9553309f4aadaf6ac7e12479bc` |
+| API image | `sha256:e79415fb4ead59b2b123bf657fc937c3cd26263522cbfbf86c1dff3f387716af` |
+| Previous API image | `sha256:90f230e2871f4591ecc1ec0931e1b22b54bf77b25ab23624cef57769f4be7b46` |
 | Dashboard | `3a276e7f0ef898bae791638b964087780da80c4d` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
-| Main-CI / Docker gate | Main-CI not visible on squash commit; Docker fallback green on exact `577518a29eac8a9553309f4aadaf6ac7e12479bc` for P1.2B-23 |
+| Main-CI / Docker gate | Main-CI not visible on squash commit; Docker fallback green on exact `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13` for P1.2B-24 |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
 | Migration count | `28` |
 | Public widget | Legacy pipeline |
@@ -1503,6 +1503,42 @@ Operational note:
   - unchanged public response shape
   - no delivery/secret fields
 
+`P1.2B-24A` is complete as a docs-only staging operator-approval decision step:
+
+- `docs/architecture/email-job-duplicate-staging-readonly-audit-operator-approval-decision.md`
+- no staging DB read approval granted
+- no Production DB read approval granted
+- no SQL, query runner, or report generation introduced
+- no runtime or Production wiring introduced
+- no human approval granted
+
+`P1.2B-24B` through `P1.2B-24E` are complete:
+
+- `docs/architecture/email-job-duplicate-staging-readonly-audit-operator-approval-decision.md`
+- `apps/api/src/chat/email-job-duplicate-staging-readonly-audit-operator-approval.boundary.ts`
+- `apps/api/test/email-job-duplicate-staging-readonly-audit-operator-approval-boundary.test.cjs`
+- Docker fallback gate green on exact `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`
+- `docker compose --env-file .env.example config -q` passed on the exact squash commit
+- `docker compose --env-file .env.example build api` passed on the exact squash commit
+- no `docker compose up` and no container start were used in the gate phase
+- production-safe API-only Docker build + recreate on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`
+- only `api` was rebuilt and recreated; `dashboard`, `widget`, `proxy`, `db`, and `redis` remained unchanged
+- Production DB drift guard remained green with sanitized target `chatbot`
+- migration safety remained green with count `28` and latest `028_generic_webhook_signing_modes.sql`
+- startup log confirmed `Database auto-migrations skipped`
+- post-deploy health stayed green with API `/healthz` HTTP `200`, `database=ok`, and `redis=ok`
+- `production-health-synthetic` stayed green with HTTP `200` and matching `siteKey`
+- safe Public-Widget smoke stayed green on `p04-internal-test-20260702102313` with:
+  - Loader `200`
+  - Bundle `200`
+  - Config `200`
+  - Session `201`
+  - Chat `201`
+  - neutral response
+  - unchanged response shape with top-level keys `sessionId`, `answer`, `parts`, `sources`, and `messages`
+  - no debug, preview, knowledge, delivery, or secret fields
+- no rollback was required
+
 Deferred runtime areas still include:
 
 - Actual read-only duplicate audit queries against live rows.
@@ -1537,6 +1573,6 @@ Deferred runtime areas still include:
 - No automatic `deliveryChannels` activation.
 - No webhook signing or header movement.
 
-Status: `P1.2B-21` completed the EmailJobDuplicateReadOnlyDbAuditExecutionBoundary extraction and production validation on `cf696042b68f463923e6f026a75658c563c51985`. `P1.2B-22` completed the docs-only approval / execution decision gate plus the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` extraction and production validation on `cfa992b448016545d1fba1bdbaba3af3716991e6`. `P1.2B-23` completed the staging-read-only scope / approval preconditions, the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the API-only production-safe deploy on `577518a29eac8a9553309f4aadaf6ac7e12479bc`, and the green safe Public-Widget smoke revalidation using the existing internal testsite Origin. `P1.2B-24A` now documents the operator-approval decision layer and explicitly keeps approval `not_granted` for real `DB_READ_ONLY_AUDIT`, staging DB reads, Production DB reads, SQL execution, query runners, reports with data, cleanup, backfill, and enforcement. The boundary and decision line remain pure approval-decision, approval-matrix, environment-sequencing, stop-criteria, output-policy, execution-result, validation, classification, safe-projection, staging-scope/preconditions, and operator-approval-decision data-object logic only.
+Status: `P1.2B-21` completed the EmailJobDuplicateReadOnlyDbAuditExecutionBoundary extraction and production validation on `cf696042b68f463923e6f026a75658c563c51985`. `P1.2B-22` completed the docs-only approval / execution decision gate plus the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` extraction and production validation on `cfa992b448016545d1fba1bdbaba3af3716991e6`. `P1.2B-23` completed the staging-read-only scope / approval preconditions, the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the API-only production-safe deploy on `577518a29eac8a9553309f4aadaf6ac7e12479bc`, and the green safe Public-Widget smoke revalidation using the existing internal testsite Origin. `P1.2B-24` completed the docs-only operator-approval decision gate, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker-fallback gate on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, the API-only production-safe deploy, and the green safe Public-Widget smoke revalidation using the same internal testsite Origin. Approval remains explicitly `not_granted` for real `DB_READ_ONLY_AUDIT`, staging DB reads, Production DB reads, SQL execution, query runners, reports with data, cleanup, backfill, enforcement, and human approval. The boundary and decision line remain pure approval-decision, approval-matrix, environment-sequencing, stop-criteria, output-policy, execution-result, validation, classification, safe-projection, staging-scope/preconditions, and operator-approval-decision data-object logic only.
 
-Recommended next step: continue with `P1.2B-24B EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary` as a pure data-object boundary step. The production-health baseline is green, the safe Public-Widget smoke is green, the Production DB drift guard remains green with sanitized target `chatbot`, and the remaining work is still approval and execution policy rather than live DB querying.
+Recommended next step: continue with `P1.2B-25A Email Job Duplicate Staging Read-only Audit Runbook / Explicit Approval Format` as a docs-only approval-format and preflight-definition step. The production-health baseline is green, the safe Public-Widget smoke is green, the Production DB drift guard remains green with sanitized target `chatbot`, and the remaining work is still explicit approval wording, staging preflight constraints, allowed query classes, output policy, and stop criteria rather than live DB querying.

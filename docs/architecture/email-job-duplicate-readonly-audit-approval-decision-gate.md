@@ -225,22 +225,20 @@ None of those steps executes a DB read.
 
 ## Recommended Next Step
 
-`P1.2B-23A` is now the documented staging-read-only scope / preconditions step, and `P1.2B-24A` is now the documented operator-approval-decision step. Neither grants staging DB read approval, Production DB read approval, SQL execution, query runners, reports, cleanup, backfill, or enforcement.
+`P1.2B-23A` is now the documented staging-read-only scope / preconditions step, and `P1.2B-24A` through `P1.2B-24E` now add the documented operator-approval-decision step, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker-fallback gate, the API-only production-safe deploy on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, and the green safe-smoke revalidation. None of these steps grants staging DB read approval, Production DB read approval, SQL execution, query runners, reports, cleanup, backfill, enforcement, or human approval.
 
-Recommended next step: `P1.2B-24B EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`
+Recommended next step: `P1.2B-25A Email Job Duplicate Staging Read-only Audit Runbook / Explicit Approval Format`
 
-Recommended scope for `P1.2B-24B`:
+Recommended scope for `P1.2B-25A`:
 
-- pure operator-approval-decision data objects
-- required-evidence data objects
-- decision-matrix data objects
-- non-approval-clause data objects
-- human-approval-format data objects
-- stop-criteria data objects
-- result builders
-- safe projections
+- explicit human approval wording only
+- staging read-only preflight checks
+- allowed future staging query classes as categories only
+- allowed sanitized output shapes
+- mandatory stop criteria
+- explicit confirmation that approval remains not granted
 
-Still not allowed in `P1.2B-24B`:
+Still not allowed in `P1.2B-25A`:
 
 - DB reads
 - SQL
@@ -253,5 +251,6 @@ Still not allowed in `P1.2B-24B`:
 - backfill
 - runtime wiring
 - production wiring
+- human approval as granted
 - enforcement
 - real `DB_READ_ONLY_AUDIT`
