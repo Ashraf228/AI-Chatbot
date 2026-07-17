@@ -23,6 +23,8 @@ Diese Skripte standardisieren lokale Repo-Gates und den Main-CI-Nachweis fuer ex
 
 Der dokumentierte Docker-Fallback fuer Runtime-Post-Merge-Gates ist jetzt als `.github/workflows/docker-fallback-gate.yml` vorhanden. Er bleibt ein build-only-Notpfad fuer exakte `target_sha`-Commits, nutzt nur `.env.example`, hat nur `contents: read` und ersetzt weder Main-CI noch den separaten Deploy-Schritt.
 
+Der erste kontrollierte Dry Run des Fallback-Workflows war erfolgreich. Fuer Runtime-Post-Merge-Gates ist der Workflow damit operativ nutzbar, wenn Main-CI nicht sichtbar ist und lokaler Docker nicht verfuegbar ist.
+
 ## Prompt-Templates
 
 - `docs/operations/prompts/doku-only.md`
@@ -70,10 +72,12 @@ Kurze Aufgaben sollen nach Moeglichkeit auf eines dieser Templates verweisen sta
 Empfohlener Main-CI-Pfad fuer Runtime-Post-Merge-Gates:
 
 1. `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
-2. bei `pass`: Main-CI-Gate erfuellt
-3. bei `waiting`: auf CI warten
-4. bei `failed`: blockiert
-5. bei `unavailable`: erst dann `.github/workflows/docker-fallback-gate.yml` oder dokumentierter Hinweispfad
+2. bei direkter GitHub-Main-Push-CI-Sichtbarkeit: diese ebenfalls dokumentieren
+3. bei `pass`: Main-CI-Gate erfuellt
+4. bei `waiting`: auf CI warten
+5. bei `failed`: blockiert
+6. bei `unavailable`: erst dann `.github/workflows/docker-fallback-gate.yml`
+7. falls weder Main-CI noch Fallback verfuegbar sind: `blockiert`
 
 ## Status-Matrix
 

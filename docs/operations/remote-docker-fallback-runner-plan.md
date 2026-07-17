@@ -22,6 +22,15 @@ Der Fallback bleibt strikt begrenzt:
 - kein Containerstart
 - keine Production-Secrets
 
+Der erste kontrollierte Dry Run ist jetzt erfolgreich dokumentiert:
+
+- Run ID: `29590305888`
+- Event: `workflow_dispatch`
+- `target_sha`: `3c26af03174e94ecfee60cf0f85941d2ce718349`
+- `build_scope`: `api`
+- Gesamtstatus: `success`
+- Output Contract: `pass`
+
 Nicht Bestandteil:
 
 - kein Runner-Setup

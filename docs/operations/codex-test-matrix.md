@@ -22,6 +22,7 @@
 - `git diff --check`
 - Shortcut: `scripts/ops/codex-pure-api-boundary-gate.sh --focused-test "<command>" --regression-test "<command>"`
 - vor Deploy/Post-Merge: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
+- falls Main-CI nicht sichtbar ist: direkte GitHub Main-Push-CI pruefen, dann `Docker fallback gate`
 
 ## `API_RUNTIME_UNWIRED`
 
@@ -36,6 +37,7 @@
 - `npm run test:security-boundaries`
 - `git diff --check`
 - Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
+- falls Main-CI nicht sichtbar ist: direkte GitHub Main-Push-CI pruefen, dann `Docker fallback gate`
 
 ## `API_RUNTIME_WIRED`
 
@@ -52,6 +54,7 @@
 - Main-CI-Gate
 - Docker-Gate auf exakt Squash Commit
 - Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
+- falls Main-CI nicht sichtbar ist: direkte GitHub Main-Push-CI pruefen, dann `Docker fallback gate`
 
 ## `SCRIPT_CHANGE`
 
@@ -110,6 +113,7 @@
 - Rollback-Gate
 - Post-Deploy-Healthcheck
 - Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <target>`
+- falls Main-CI nicht sichtbar ist: direkte GitHub Main-Push-CI pruefen, dann `Docker fallback gate`
 
 ## `MONITORING_FIX`
 

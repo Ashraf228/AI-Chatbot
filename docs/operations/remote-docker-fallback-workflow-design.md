@@ -11,6 +11,15 @@ Ziel ist ein reproduzierbarer Build-Nachweis fuer Runtime- und Post-Merge-Gates,
 
 Der dokumentierte Workflow ist jetzt als `.github/workflows/docker-fallback-gate.yml` umgesetzt.
 
+Der erste kontrollierte Dry Run ist erfolgreich gelaufen:
+
+- Run ID: `29590305888`
+- Event: `workflow_dispatch`
+- `target_sha`: `3c26af03174e94ecfee60cf0f85941d2ce718349`
+- `build_scope`: `api`
+- Job-Ergebnis: `validate-target`, `docker-config`, `docker-build`, `summary` jeweils `success`
+- `final_decision`: `pass`
+
 Der Workflow bleibt bewusst build-only:
 
 - kein Deploy
@@ -246,6 +255,13 @@ Der Workflow muss sofort stoppen bei:
 - Fallback-`PASS` ist kein Deploy
 
 Der Workflow soll sich damit in bestehende Runtime-Post-Merge-Gates einfuegen, statt einen parallelen Freigabemechanismus zu eroeffnen.
+
+Empfohlene Gate-Reihenfolge:
+
+1. `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
+2. direkte GitHub Main-Push-CI-Pruefung, falls verfuegbar
+3. `Docker fallback gate` per `workflow_dispatch`
+4. sonst `blockiert`
 
 ## Security Considerations
 
