@@ -21,6 +21,8 @@
 
 Diese Skripte standardisieren lokale Repo-Gates und den Main-CI-Nachweis fuer exakte Squash- oder Merge-Commits. Workflow-Dateien, GitHub-Settings und Docker-Fallbacks bleiben separate Aufgaben.
 
+Der dokumentierte Docker-Fallback fuer Runtime-Post-Merge-Gates ist jetzt als `.github/workflows/docker-fallback-gate.yml` vorhanden. Er bleibt ein build-only-Notpfad fuer exakte `target_sha`-Commits, nutzt nur `.env.example`, hat nur `contents: read` und ersetzt weder Main-CI noch den separaten Deploy-Schritt.
+
 ## Prompt-Templates
 
 - `docs/operations/prompts/doku-only.md`
@@ -71,7 +73,7 @@ Empfohlener Main-CI-Pfad fuer Runtime-Post-Merge-Gates:
 2. bei `pass`: Main-CI-Gate erfuellt
 3. bei `waiting`: auf CI warten
 4. bei `failed`: blockiert
-5. bei `unavailable`: erst dann Docker-Fallback oder dokumentierter Hinweispfad
+5. bei `unavailable`: erst dann `.github/workflows/docker-fallback-gate.yml` oder dokumentierter Hinweispfad
 
 ## Status-Matrix
 

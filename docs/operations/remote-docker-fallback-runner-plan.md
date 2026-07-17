@@ -11,12 +11,20 @@ Der aktuelle Blocker ist operativ, nicht fachlich:
 - lokaler Docker ist in mehreren Gates nicht verfuegbar gewesen
 - Runtime-Gates brauchen trotzdem einen belastbaren Docker-Build-Nachweis auf exakt dem Ziel-Commit
 
-Dieser Auftrag ist bewusst kein Implementierungsauftrag.
+Die bevorzugte Minimalvariante ist jetzt als `.github/workflows/docker-fallback-gate.yml` umgesetzt.
+
+Der Fallback bleibt strikt begrenzt:
+
+- build-only
+- `workflow_dispatch` mit exaktem `target_sha`
+- `.env.example` als einziger Konfigurationspfad
+- kein Deploy
+- kein Containerstart
+- keine Production-Secrets
 
 Nicht Bestandteil:
 
 - kein Runner-Setup
-- keine Workflow-Aenderung
 - kein Deploy
 - keine Secrets
 - kein Production-Zugriff
@@ -220,7 +228,7 @@ Begruendung:
 - keine Secrets im Codex-Kontext erforderlich
 - Ergebnis laesst sich sauber als Gate-Nachweis in einen Codex-Report uebernehmen
 
-Der bevorzugte Minimalpfad ist deshalb Option A. Sie liefert den saubersten Nachweis fuer exakt einen Ziel-Commit, bleibt GitHub-zentriert, vermeidet Operator-Zugangsdaten im Codex-Kontext und reduziert das Risiko, dass ein Fallback versehentlich in Richtung Deploy driftet.
+Der bevorzugte Minimalpfad ist deshalb Option A. Sie liefert den saubersten Nachweis fuer exakt einen Ziel-Commit, bleibt GitHub-zentriert, vermeidet Operator-Zugangsdaten im Codex-Kontext und reduziert das Risiko, dass ein Fallback versehentlich in Richtung Deploy driftet. Diese Option ist jetzt implementiert; Runner-Setup und Ausloesepraxis bleiben separate Betriebsaufgaben.
 
 Option B ist der sinnvollste zweite Pfad, falls ein `workflow_dispatch`-Ansatz organisatorisch oder technisch nicht bevorzugt wird.
 

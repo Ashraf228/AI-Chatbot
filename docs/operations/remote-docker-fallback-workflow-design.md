@@ -2,18 +2,26 @@
 
 ## Summary
 
-Dieses Dokument beschreibt das Design fuer einen spaeteren `workflow_dispatch`-basierten Remote-Docker-Fallback.
+Dieses Dokument beschreibt das Design fuer einen `workflow_dispatch`-basierten Remote-Docker-Fallback.
 
 Ziel ist ein reproduzierbarer Build-Nachweis fuer Runtime- und Post-Merge-Gates, wenn:
 
 - Main-CI fuer den exakten Squash- oder Merge-Commit nicht sichtbar ist
 - lokaler Docker nicht verfuegbar ist
 
-Dieses Dokument ist bewusst kein Implementierungsauftrag.
+Der dokumentierte Workflow ist jetzt als `.github/workflows/docker-fallback-gate.yml` umgesetzt.
+
+Der Workflow bleibt bewusst build-only:
+
+- kein Deploy
+- kein Containerstart
+- keine Production-Secrets
+- kein `pull_request_target`
+- nur `contents: read`
+- nur `.env.example` als Konfigurationspfad
 
 Nicht Bestandteil:
 
-- keine Workflow-Datei
 - kein Runner-Setup
 - kein Deploy
 - keine Secrets
@@ -21,7 +29,7 @@ Nicht Bestandteil:
 
 ## Design Goals
 
-Das spaetere Workflow-Design muss folgende Ziele erfuellen:
+Das Workflow-Design muss folgende Ziele erfuellen:
 
 - Build-Nachweis auf exakt angegebenem Squash- oder Merge-Commit
 - Fallback nur fuer Runtime- und Post-Merge-Gates, wenn Main-CI nicht sichtbar oder nicht verfuegbar ist
@@ -33,11 +41,11 @@ Das spaetere Workflow-Design muss folgende Ziele erfuellen:
 
 ## Workflow Trigger Design
 
-Geplanter Trigger:
+Implementierter Trigger:
 
 - `workflow_dispatch`
 
-Geplante Inputs:
+Implementierte Inputs:
 
 - `target_sha` required
 - `build_scope` optional, allowed values: `api`, `full`, default `api`
@@ -69,7 +77,7 @@ Explizit nicht noetig:
 - keine Production-Secrets
 - keine Ausgabe des GitHub-Tokens
 
-Der Workflow soll so ausgelegt sein, dass er auf GitHub-hosted Runnern ohne zusaetzliche Produktionsrechte lauffaehig bleibt.
+Der Workflow ist so ausgelegt, dass er auf GitHub-hosted Runnern ohne zusaetzliche Produktionsrechte lauffaehig bleibt.
 
 ## Job Design
 
@@ -162,7 +170,7 @@ Der Summary-Job soll sowohl fuer Menschen lesbar sein als auch einen kompakten s
 
 ## Required Command Shape
 
-Der spaetere Workflow darf nur einen eng begrenzten Befehlsrahmen verwenden:
+Der Workflow darf nur einen eng begrenzten Befehlsrahmen verwenden:
 
 - `git rev-parse HEAD`
 - `git status --short`
@@ -212,7 +220,7 @@ Anforderungen an den Output:
 
 ## Failure / Stop Criteria
 
-Der spaetere Workflow muss sofort stoppen bei:
+Der Workflow muss sofort stoppen bei:
 
 - ungueltiger Ziel-SHA
 - Ziel-SHA nicht in `origin/main`
@@ -241,7 +249,7 @@ Der Workflow soll sich damit in bestehende Runtime-Post-Merge-Gates einfuegen, s
 
 ## Security Considerations
 
-Der spaetere Workflow muss diese Sicherheitsprinzipien einhalten:
+Der Workflow muss diese Sicherheitsprinzipien einhalten:
 
 - keine Secrets
 - keine Production-Environment
@@ -257,7 +265,7 @@ Der spaetere Workflow muss diese Sicherheitsprinzipien einhalten:
 
 Empfohlener Folgeauftrag:
 
-- `P0-Docker-1C Remote Docker Fallback workflow_dispatch implementation`
+- `P0-Docker-1C-D PR pruefen, CI abwarten, Squash Merge`
 
 Mit hartem Stop-Rahmen:
 

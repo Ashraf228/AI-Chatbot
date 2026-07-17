@@ -1,0 +1,271 @@
+name: Docker fallback gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Exact 40-character commit SHA to validate and build
+        required: true
+        type: string
+      build_scope:
+        description: Build scope for the fallback gate
+        required: false
+        default: api
+        type: choice
+        options:
+          - api
+          - full
+      reason:
+        description: Why the fallback gate is needed
+        required: false
+        type: string
+      caller_task:
+        description: Calling task identifier
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-target:
+    name: Validate target
+    runs-on: ubuntu-latest
+    outputs:
+      target_sha: ${{ steps.capture.outputs.target_sha }}
+      build_scope: ${{ steps.capture.outputs.build_scope }}
+      clean_checkout: ${{ steps.verify.outputs.clean_checkout }}
+      target_is_ancestor_of_origin_main: ${{ steps.verify.outputs.target_is_ancestor_of_origin_main }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Capture requested inputs
+        id: capture
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+          BUILD_SCOPE: ${{ inputs.build_scope }}
+        run: |
+          set -euo pipefail
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "build_scope=$BUILD_SCOPE" >> "$GITHUB_OUTPUT"
+
+      - name: Validate target commit
+        id: verify
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$TARGET_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "target_sha must be an exact 40-character commit SHA" >&2
+            exit 1
+          fi
+
+          git fetch origin main --prune
+
+          if ! git cat-file -e "${TARGET_SHA}^{commit}"; then
+            echo "target_sha does not resolve to a commit" >&2
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$TARGET_SHA" origin/main; then
+            echo "target_sha is not reachable from origin/main" >&2
+            exit 1
+          fi
+
+          git checkout --detach "$TARGET_SHA"
+          git rev-parse HEAD
+
+          if [[ -n "$(git status --short)" ]]; then
+            echo "checkout is not clean for target_sha" >&2
+            exit 1
+          fi
+
+          echo "clean_checkout=true" >> "$GITHUB_OUTPUT"
+          echo "target_is_ancestor_of_origin_main=true" >> "$GITHUB_OUTPUT"
+
+  docker-config:
+    name: Docker config
+    runs-on: ubuntu-latest
+    needs: validate-target
+    outputs:
+      compose_config: ${{ steps.compose-config.outputs.compose_config }}
+      clean_checkout: ${{ steps.verify.outputs.clean_checkout }}
+    steps:
+      - name: Check out target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-target.outputs.target_sha }}
+          fetch-depth: 1
+
+      - name: Verify clean checkout
+        id: verify
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+
+          if [[ -n "$(git status --short)" ]]; then
+            echo "checkout is not clean for docker-config" >&2
+            exit 1
+          fi
+
+          echo "clean_checkout=true" >> "$GITHUB_OUTPUT"
+
+      - name: Validate compose config with .env.example
+        id: compose-config
+        run: |
+          set -euo pipefail
+          test -f .env.example
+          docker compose --env-file .env.example config -q
+          echo "compose_config=pass" >> "$GITHUB_OUTPUT"
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs:
+      - validate-target
+      - docker-config
+    outputs:
+      docker_build_api: ${{ steps.report.outputs.docker_build_api }}
+      docker_build_full: ${{ steps.report.outputs.docker_build_full }}
+    steps:
+      - name: Check out target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-target.outputs.target_sha }}
+          fetch-depth: 1
+
+      - name: Verify clean checkout
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+
+          if [[ -n "$(git status --short)" ]]; then
+            echo "checkout is not clean for docker-build" >&2
+            exit 1
+          fi
+
+      - name: Build Docker images
+        env:
+          BUILD_SCOPE: ${{ needs.validate-target.outputs.build_scope }}
+        run: |
+          set -euo pipefail
+          test -f .env.example
+
+          if [[ "$BUILD_SCOPE" == "api" ]]; then
+            docker compose --env-file .env.example build api
+          elif [[ "$BUILD_SCOPE" == "full" ]]; then
+            docker compose --env-file .env.example build
+          else
+            echo "unsupported build_scope: $BUILD_SCOPE" >&2
+            exit 1
+          fi
+
+      - name: Report build status
+        id: report
+        env:
+          BUILD_SCOPE: ${{ needs.validate-target.outputs.build_scope }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$BUILD_SCOPE" == "api" ]]; then
+            echo "docker_build_api=pass" >> "$GITHUB_OUTPUT"
+            echo "docker_build_full=not_run" >> "$GITHUB_OUTPUT"
+          else
+            echo "docker_build_api=pass" >> "$GITHUB_OUTPUT"
+            echo "docker_build_full=pass" >> "$GITHUB_OUTPUT"
+          fi
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - validate-target
+      - docker-config
+      - docker-build
+    steps:
+      - name: Write gate summary
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+          BUILD_SCOPE: ${{ inputs.build_scope }}
+          REASON: ${{ inputs.reason }}
+          CALLER_TASK: ${{ inputs.caller_task }}
+          VALIDATE_RESULT: ${{ needs.validate-target.result }}
+          DOCKER_CONFIG_RESULT: ${{ needs.docker-config.result }}
+          DOCKER_BUILD_RESULT: ${{ needs.docker-build.result }}
+          CLEAN_CHECKOUT: ${{ needs.docker-config.outputs.clean_checkout || needs.validate-target.outputs.clean_checkout }}
+          TARGET_IS_ANCESTOR: ${{ needs.validate-target.outputs.target_is_ancestor_of_origin_main }}
+          COMPOSE_CONFIG: ${{ needs.docker-config.outputs.compose_config }}
+          DOCKER_BUILD_API: ${{ needs.docker-build.outputs.docker_build_api }}
+          DOCKER_BUILD_FULL: ${{ needs.docker-build.outputs.docker_build_full }}
+        run: |
+          set -euo pipefail
+
+          clean_checkout="${CLEAN_CHECKOUT:-false}"
+          if [[ "$clean_checkout" != "true" ]]; then
+            clean_checkout="false"
+          fi
+
+          target_is_ancestor="${TARGET_IS_ANCESTOR:-false}"
+          if [[ "$target_is_ancestor" != "true" ]]; then
+            target_is_ancestor="false"
+          fi
+
+          compose_config="${COMPOSE_CONFIG:-not_run}"
+          docker_build_api="${DOCKER_BUILD_API:-not_run}"
+          docker_build_full="${DOCKER_BUILD_FULL:-not_run}"
+          final_decision="fail"
+
+          if [[ "$VALIDATE_RESULT" == "success" && "$DOCKER_CONFIG_RESULT" == "success" && "$DOCKER_BUILD_RESULT" == "success" ]]; then
+            final_decision="pass"
+          fi
+
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+          # Docker fallback gate
+
+          - target_sha: \`$TARGET_SHA\`
+          - build_scope: \`$BUILD_SCOPE\`
+          - branch: \`main\`
+          - event: \`workflow_dispatch\`
+          - validate-target: \`$VALIDATE_RESULT\`
+          - docker-config: \`$DOCKER_CONFIG_RESULT\`
+          - docker-build: \`$DOCKER_BUILD_RESULT\`
+          - compose_up_executed: \`false\`
+          - container_started: \`false\`
+          - deploy_executed: \`false\`
+          - production_secrets_used: \`false\`
+          EOF
+
+          if [[ -n "$REASON" ]]; then
+            echo "- reason: \`$REASON\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [[ -n "$CALLER_TASK" ]]; then
+            echo "- caller_task: \`$CALLER_TASK\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          cat <<EOF >> "$GITHUB_STEP_SUMMARY"
+
+          \`\`\`json
+          {
+            "target_sha": "$TARGET_SHA",
+            "branch": "main",
+            "event": "workflow_dispatch",
+            "build_scope": "$BUILD_SCOPE",
+            "clean_checkout": $clean_checkout,
+            "target_is_ancestor_of_origin_main": $target_is_ancestor,
+            "compose_config": "$compose_config",
+            "docker_build_api": "$docker_build_api",
+            "docker_build_full": "$docker_build_full",
+            "compose_up_executed": false,
+            "production_secrets_used": false,
+            "container_started": false,
+            "deploy_executed": false,
+            "final_decision": "$final_decision"
+          }
+          \`\`\`
+          EOF
