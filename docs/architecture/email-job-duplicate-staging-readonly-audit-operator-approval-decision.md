@@ -2,7 +2,7 @@
 
 ## Summary
 
-`P1.2B-24A` through `P1.2B-24E` now cover the docs-only operator-approval-decision step, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker-fallback gate, and the production-safe API-only deploy for a later possible staging `DB_READ_ONLY_AUDIT` concerning duplicate-risk review in `email_jobs`.
+`P1.2B-24A` through `P1.2B-25E` now cover the docs-only operator-approval-decision step, the docs-only runbook / explicit approval format step, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the pure `EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`, the exact-commit Main-push CI gate on run `29573799471`, and the production-safe API-only deploy for a later possible staging `DB_READ_ONLY_AUDIT` concerning duplicate-risk review in `email_jobs`.
 
 This step does not execute SQL, does not connect to a database, does not run a query runner, does not read `email_jobs`, does not read or write `webhook_jobs`, and does not produce query results or reports with live row data.
 
@@ -16,11 +16,14 @@ Current documented baseline:
 - `P1.2B-23E-G` completed the green safe Public-Widget smoke revalidation.
 - `P1.2B-24D-E2` resolved the blocked gate using the exact-commit Docker fallback on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
 - `P1.2B-24E` completed the API-only deploy on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
+- `P1.2B-25A` is complete as the docs-only staging read-only audit runbook and explicit approval format step.
+- `P1.2B-25B` through `P1.2B-25E` introduced and production-validated `EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`.
+- The exact Main-push CI gate is green on run `29573799471`.
 - `P1.2B-Status-20` is complete.
-- API live baseline is now `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
-- Previous live API baseline before `P1.2B-24E` was `577518a29eac8a9553309f4aadaf6ac7e12479bc`.
-- Previous API image before `P1.2B-24E` was `sha256:90f230e2871f4591ecc1ec0931e1b22b54bf77b25ab23624cef57769f4be7b46`.
-- Current API image is `sha256:e79415fb4ead59b2b123bf657fc937c3cd26263522cbfbf86c1dff3f387716af`.
+- API live baseline is now `92c78a607386fa73a44bed8b6ede8c87e52420cf`.
+- Previous live API baseline before `P1.2B-25E` was `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
+- Previous API image before `P1.2B-25E` was `sha256:e79415fb4ead59b2b123bf657fc937c3cd26263522cbfbf86c1dff3f387716af`.
+- Current API image is `sha256:37dc57843880051d6d2c7c339b13e320abb4c507137ab4fe7e68681bdb7a61e1`.
 - Production health is green.
 - Safe testsite smoke is green.
 - Production DB target remains sanitized to `chatbot`.
@@ -30,10 +33,10 @@ Current documented baseline:
 - Widget commit remains `7378ddb53bc3588cf35be3530fcbbf5d72e58b12`.
 - The API startup log shows `Database auto-migrations skipped`.
 
-Production validation now documented for `P1.2B-24E`:
+Production validation now documented for `P1.2B-25E`:
 
 - API `/healthz` returned HTTP `200`.
-- `apiCommit` matched `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
+- `apiCommit` matched `92c78a607386fa73a44bed8b6ede8c87e52420cf`.
 - `database=ok` and `redis=ok` remained green.
 - `scripts/ops/check-production-health.sh` returned exit code `0`.
 - `production-health-synthetic` stayed green with HTTP `200` and matching `siteKey`.
@@ -44,6 +47,7 @@ Production validation now documented for `P1.2B-24E`:
   - Session `201`
   - Chat `201`
   - neutral response
+  - answer text: `Klar, gerne. Wie heißt du und wie kann man dich am besten erreichen - per E-Mail oder Telefon?`
   - unchanged top-level response keys `sessionId`, `answer`, `parts`, `sources`, and `messages`
   - no debug, preview, knowledge, delivery, or secret fields
 
@@ -185,49 +189,43 @@ Current planning line:
 - `EmailJobDuplicateReadOnlyAuditApprovalBoundary` models approval state and approval constraints.
 - `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary` models staging scope and approval-preconditions data.
 - `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary` models operator approval decisions, required evidence, decision matrices, non-approval clauses, human approval formats, stop criteria, results, validation helpers, classifiers, and safe projections.
+- `EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary` models runbook, human approval format, preflight checklist, query envelope, safe output policy, stop criteria, abort model, result builders, validation helpers, classifiers, and safe projections.
 - `P1.2B-24A` documents the operator-approval decision layer.
 
 None of these steps executes a DB read.
 
 ## Recommended Next Step
 
-`P1.2B-25A` is now complete as the docs-only runbook and explicit approval
-format step. It documents:
+`P1.2B-25A` through `P1.2B-25E` are now complete. They document the explicit
+human approval format, the future staging-audit preflight checklist, the
+allowed future query classes as categories only, the forbidden query and output
+shapes, the safe output policy, the execution sequence, the stop criteria, and
+the abort / rollback model, and they production-validate the pure
+`EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary` on
+`92c78a607386fa73a44bed8b6ede8c87e52420cf`.
 
-- the explicit human approval example format
-- the future staging-audit preflight checklist
-- allowed future query classes as categories only
-- forbidden query and output shapes
-- the safe output policy
-- the future execution sequence
-- stop criteria
-- the abort / rollback model
+Recommended next step: `P1.2B-26A Staging DB_READ_ONLY_AUDIT Preflight Decision`
 
-Recommended next step: `P1.2B-25B EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`
+Recommended scope for `P1.2B-26A`:
 
-Recommended scope for `P1.2B-25B`:
+- verify whether explicit human approval exists in the documented required format
+- confirm that human approval is still absent if the required format is missing
+- block any attempted staging read-only audit when approval is missing
+- keep query classes, safe output policy, stop criteria, and abort model as documentation and boundary inputs only
 
-- pure `StagingAuditRunbook` data objects
-- `HumanApprovalFormat` data objects
-- `PreflightChecklist` data objects
-- `AllowedQueryClassEnvelope` data objects
-- `SafeOutputPolicy` data objects
-- `StopCriteria` data objects
-- `AbortModel` data objects
-- result builders
-- safe projections
-- tests
-
-Still not allowed in `P1.2B-25B`:
+Still not allowed in `P1.2B-26A`:
 
 - DB reads
 - SQL
 - query runner
 - `email_jobs` reads
+- `webhook_jobs` reads
+- query results
 - reports with data
 - cleanup
 - backfill
 - enforcement
+- human approval as granted
 
 ## Non-goals
 

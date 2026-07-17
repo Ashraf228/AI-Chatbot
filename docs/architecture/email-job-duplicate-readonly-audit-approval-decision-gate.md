@@ -225,20 +225,27 @@ None of those steps executes a DB read.
 
 ## Recommended Next Step
 
-`P1.2B-23A` is now the documented staging-read-only scope / preconditions step, and `P1.2B-24A` through `P1.2B-24E` now add the documented operator-approval-decision step, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker-fallback gate, the API-only production-safe deploy on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, and the green safe-smoke revalidation. None of these steps grants staging DB read approval, Production DB read approval, SQL execution, query runners, reports, cleanup, backfill, enforcement, or human approval.
+`P1.2B-23A` is now the documented staging-read-only scope / preconditions step,
+`P1.2B-24A` through `P1.2B-24E` add the documented operator-approval-decision
+step plus the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`,
+and `P1.2B-25A` through `P1.2B-25E` add the docs-only staging runbook /
+explicit approval format step plus the pure
+`EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`, validated on exact
+Main-push CI run `29573799471` and deployed API-only on
+`92c78a607386fa73a44bed8b6ede8c87e52420cf`. None of these steps grants staging
+DB read approval, Production DB read approval, SQL execution, query runners,
+reports, cleanup, backfill, enforcement, or human approval.
 
-Recommended next step: `P1.2B-25A Email Job Duplicate Staging Read-only Audit Runbook / Explicit Approval Format`
+Recommended next step: `P1.2B-26A Staging DB_READ_ONLY_AUDIT Preflight Decision`
 
-Recommended scope for `P1.2B-25A`:
+Recommended scope for `P1.2B-26A`:
 
-- explicit human approval wording only
-- staging read-only preflight checks
-- allowed future staging query classes as categories only
-- allowed sanitized output shapes
-- mandatory stop criteria
-- explicit confirmation that approval remains not granted
+- verify whether explicit human approval exists in the required documented format
+- confirm that missing approval keeps the preflight result blocked
+- reuse the documented staging preconditions, safe output policy, and stop criteria as inputs only
+- keep the decision layer separate from any real staging or Production read
 
-Still not allowed in `P1.2B-25A`:
+Still not allowed in `P1.2B-26A`:
 
 - DB reads
 - SQL

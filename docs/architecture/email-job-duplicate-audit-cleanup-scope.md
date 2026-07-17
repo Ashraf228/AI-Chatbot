@@ -256,7 +256,13 @@ Non-goals for `P1.2B-19` at this stage:
 
 `P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, `P1.2B-23A` through `P1.2B-23E-G`, and `P1.2B-24A` through `P1.2B-24E` are complete and production-validated where applicable.
 
-The next safe step is `P1.2B-25A` as a docs-only staging runbook / explicit approval format step for any future staging read-only duplicate audit.
+The later `P1.2B-24E` and `P1.2B-25E` API-only deploys did not change the
+cleanup scope. They production-validated additional pure documentation and
+boundary layers only and did not introduce DB reads, SQL, query runners,
+cleanup, backfill, or enforcement.
+
+The next safe step is `P1.2B-26A` as a staging `DB_READ_ONLY_AUDIT` preflight
+decision step for any future staging read-only duplicate audit.
 
 That next step should decide only:
 

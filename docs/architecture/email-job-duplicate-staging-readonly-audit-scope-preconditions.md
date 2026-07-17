@@ -206,38 +206,40 @@ None of those steps executes a DB read.
 
 ## Recommended Next Step
 
-`P1.2B-24A` through `P1.2B-24E` are now complete. They add the documented operator-approval-decision step, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker-fallback gate on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, the API-only production-safe deploy, and the green safe Public-Widget smoke revalidation on the existing internal Origin. The line keeps `DB_READ_ONLY_AUDIT`, staging DB reads, Production DB reads, SQL execution, query runners, query results, reports, cleanup, backfill, enforcement, and human approval explicitly not approved.
+`P1.2B-24A` through `P1.2B-25E` are now complete. They add the documented
+operator-approval-decision step, the pure
+`EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the docs-only
+runbook / explicit approval format step, the pure
+`EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`, the exact Main-push CI
+gate on run `29573799471`, the API-only production-safe deploy on
+`92c78a607386fa73a44bed8b6ede8c87e52420cf`, and the green safe Public-Widget
+smoke revalidation on the existing internal Origin. The line keeps
+`DB_READ_ONLY_AUDIT`, staging DB reads, Production DB reads, SQL execution,
+query runners, query results, reports, cleanup, backfill, enforcement, and
+human approval explicitly not approved.
 
-`P1.2B-25A` is now complete as the docs-only runbook and explicit approval
-format step. It keeps `DB_READ_ONLY_AUDIT`, staging DB reads, Production DB
-reads, SQL execution, query runners, query results, reports, cleanup,
-backfill, enforcement, and human approval explicitly not approved while adding
-the future preflight, safe-output, stop-criteria, and abort-model guidance.
+Recommended next step: `P1.2B-26A Staging DB_READ_ONLY_AUDIT Preflight Decision`
 
-Recommended next step: `P1.2B-25B EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`
+Recommended scope for `P1.2B-26A`:
 
-Recommended scope for `P1.2B-25B`:
+- verify whether explicit human approval exists in the required documented format
+- confirm whether the request remains blocked because no valid approval was granted
+- preserve the staging-before-Production sequencing rule
+- preserve the current safe-output, stop-criteria, and abort-model boundaries
 
-- pure `StagingAuditRunbook` data objects
-- `HumanApprovalFormat` data objects
-- `PreflightChecklist` data objects
-- `AllowedQueryClassEnvelope` data objects
-- `SafeOutputPolicy` data objects
-- `StopCriteria` data objects
-- `AbortModel` data objects
-- result builders
-- safe projections
-
-Still not allowed in `P1.2B-25B`:
+Still not allowed in `P1.2B-26A`:
 
 - DB reads
 - SQL
 - query runner
 - `email_jobs` reads
+- `webhook_jobs` reads
+- query results
 - reports with data
 - cleanup
 - backfill
 - enforcement
+- human approval as granted
 
 ## Non-goals
 

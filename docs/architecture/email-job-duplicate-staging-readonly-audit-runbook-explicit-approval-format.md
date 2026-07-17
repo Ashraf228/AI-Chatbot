@@ -2,8 +2,13 @@
 
 ## Summary
 
-`P1.2B-25A` is a docs-only runbook and approval-format step for a possible later
-staging `DB_READ_ONLY_AUDIT` concerning duplicate-risk review in `email_jobs`.
+`P1.2B-25A` is the docs-only runbook and approval-format step for a possible
+later staging `DB_READ_ONLY_AUDIT` concerning duplicate-risk review in
+`email_jobs`. `P1.2B-25B` through `P1.2B-25E` now add the pure
+`EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`, the exact-commit
+Main-push CI gate, the API-only production-safe deploy, and the green safe
+Public-Widget smoke revalidation on the deploy commit
+`92c78a607386fa73a44bed8b6ede8c87e52420cf`.
 
 This step does not grant a real DB-read approval, does not execute a staging DB
 query, does not execute SQL, does not add a query runner, and does not create
@@ -18,14 +23,26 @@ Current documented baseline:
 - `P1.2B-24B` through `P1.2B-24E` are complete as the pure
   `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary` plus the
   exact-commit Docker fallback gate and API-only production-safe deploy.
-- `P1.2B-Status-21` is complete.
-- `main` currently points to `3dbfe00b686ffcf15e60aa385106bccf3302146d`.
-- API live commit remains `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
+- `P1.2B-25B` through `P1.2B-25E` are complete as the pure
+  `EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`, the exact-commit
+  Main-push CI gate on run `29573799471`, and the API-only production-safe
+  deploy.
+- `main` currently points to `92c78a607386fa73a44bed8b6ede8c87e52420cf`.
+- API live commit is now `92c78a607386fa73a44bed8b6ede8c87e52420cf`.
+- Previous live API commit before `P1.2B-25E` was
+  `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
+- Previous API image before `P1.2B-25E` was
+  `sha256:e79415fb4ead59b2b123bf657fc937c3cd26263522cbfbf86c1dff3f387716af`.
+- Current API image is
+  `sha256:37dc57843880051d6d2c7c339b13e320abb4c507137ab4fe7e68681bdb7a61e1`.
 - Production health remains green.
 - Safe Public Widget smoke remains green.
 - Production DB target remains sanitized to `chatbot`.
 - Migration count remains `28`.
 - Latest migration remains `028_generic_webhook_signing_modes.sql`.
+- `RUN_MIGRATIONS_ON_STARTUP` remains unset.
+- `ALLOW_PRODUCTION_AUTO_MIGRATIONS` remains unset.
+- API startup log still shows migration skip.
 
 ## Current Approval State
 
@@ -208,34 +225,76 @@ Current planning line:
 - `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary` models staging scope.
 - `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary` models
   operator approval decisions.
+- `EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary` models runbooks,
+  human approval formats, preflight checklists, allowed query-class envelopes,
+  output policies, stop criteria, abort models, results, validation helpers,
+  classifiers, and safe projections without granting approval.
 - `P1.2B-25A` documents the runbook and explicit approval format.
 
 None of these steps executes a DB read.
 
+`P1.2B-25 Boundary` is now implemented and production-validated:
+
+- `apps/api/src/chat/email-job-duplicate-staging-readonly-audit-runbook.boundary.ts`
+- `apps/api/test/email-job-duplicate-staging-readonly-audit-runbook-boundary.test.cjs`
+- runbook data objects
+- human approval format data objects
+- preflight checklist data objects
+- allowed query class envelope data objects
+- safe output policy data objects
+- stop criteria data objects
+- abort model data objects
+- runbook result data objects
+- validation helper
+- ready / skipped / blocked / failed result builders
+- classifier helpers
+- safe log / audit projections
+
+Production validation documented for `P1.2B-25E`:
+
+- exact Main-push CI run `29573799471` green on
+  `92c78a607386fa73a44bed8b6ede8c87e52420cf`
+- API-only deploy only
+- API `/healthz` HTTP `200`
+- `apiCommit` matched `92c78a607386fa73a44bed8b6ede8c87e52420cf`
+- `database=ok` and `redis=ok`
+- `scripts/ops/check-production-health.sh` exit `0`
+- `production-health-synthetic` HTTP `200` with matching `siteKey`
+- safe Public-Widget smoke on `p04-internal-test-20260702102313` stayed green:
+  - Loader `200`
+  - Bundle `200`
+  - Config `200`
+  - Session `201`
+  - Chat `201`
+  - neutral answer text
+  - unchanged top-level response keys `sessionId`, `answer`, `parts`, `sources`,
+    and `messages`
+  - no debug, preview, knowledge, delivery, or secret fields
+
 ## Recommended Next Step
 
 Recommended next step:
-`P1.2B-25B EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`
+`P1.2B-26A Staging DB_READ_ONLY_AUDIT Preflight Decision`
 
-Recommended scope for `P1.2B-25B`:
+Recommended scope for `P1.2B-26A`:
 
-- pure `StagingAuditRunbook` data objects
-- `HumanApprovalFormat` data objects
-- `PreflightChecklist` data objects
-- `AllowedQueryClassEnvelope` data objects
-- `SafeOutputPolicy` data objects
-- `StopCriteria` data objects
-- `AbortModel` data objects
-- result builders
-- safe projections
-- tests
+- verify whether the explicit human approval exists in the required format
+- verify that approval remains staging-only and read-only-only
+- block if no explicit approval exists
+- keep all DB reads, SQL, query runners, query results, and reports out of
+  scope
+- document only the preflight decision state
 
-Still not allowed in `P1.2B-25B`:
+Still not allowed in `P1.2B-26A`:
 
 - DB reads
+- staging DB reads
+- Production DB reads
 - SQL
 - query runner
 - `email_jobs` reads
+- `webhook_jobs` reads
+- query results
 - reports with data
 - cleanup
 - backfill
@@ -265,3 +324,4 @@ Still not allowed in `P1.2B-25B`:
 - change Production config
 - change the public widget
 - add NOLIS-specific logic
+- grant a real human approval
