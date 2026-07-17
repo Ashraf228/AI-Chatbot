@@ -208,29 +208,36 @@ None of those steps executes a DB read.
 
 `P1.2B-24A` through `P1.2B-24E` are now complete. They add the documented operator-approval-decision step, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker-fallback gate on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, the API-only production-safe deploy, and the green safe Public-Widget smoke revalidation on the existing internal Origin. The line keeps `DB_READ_ONLY_AUDIT`, staging DB reads, Production DB reads, SQL execution, query runners, query results, reports, cleanup, backfill, enforcement, and human approval explicitly not approved.
 
-Recommended next step: `P1.2B-25A Email Job Duplicate Staging Read-only Audit Runbook / Explicit Approval Format`
+`P1.2B-25A` is now complete as the docs-only runbook and explicit approval
+format step. It keeps `DB_READ_ONLY_AUDIT`, staging DB reads, Production DB
+reads, SQL execution, query runners, query results, reports, cleanup,
+backfill, enforcement, and human approval explicitly not approved while adding
+the future preflight, safe-output, stop-criteria, and abort-model guidance.
 
-Recommended scope for `P1.2B-25A`:
+Recommended next step: `P1.2B-25B EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`
 
-- explicit human approval wording only
-- staging read-only preflight checks
-- allowed future query-class categories only
-- allowed sanitized output shapes
-- mandatory stop criteria
-- explicit confirmation that approval remains not granted
+Recommended scope for `P1.2B-25B`:
 
-Still not allowed in `P1.2B-25A`:
+- pure `StagingAuditRunbook` data objects
+- `HumanApprovalFormat` data objects
+- `PreflightChecklist` data objects
+- `AllowedQueryClassEnvelope` data objects
+- `SafeOutputPolicy` data objects
+- `StopCriteria` data objects
+- `AbortModel` data objects
+- result builders
+- safe projections
+
+Still not allowed in `P1.2B-25B`:
 
 - DB reads
 - SQL
 - query runner
 - `email_jobs` reads
-- reports with live data
+- reports with data
 - cleanup
 - backfill
 - enforcement
-- real `DB_READ_ONLY_AUDIT`
-- human approval as granted
 
 ## Non-goals
 

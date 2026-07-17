@@ -172,7 +172,7 @@ Any later real approval must be explicit and task-scoped. Example only, not gran
 
 > Example only, not granted in `P1.2B-24A`:
 >
-> "I approve `P1.2B-25A Staging DB_READ_ONLY_AUDIT Preflight`, staging only, read-only only, no SQL files in the repo, no reports with data, no `email_jobs` writes, no cleanup, no backfill, no enforcement."
+> "I approve `P1.2B-26A Staging DB_READ_ONLY_AUDIT Preflight`, staging only, read-only only, no SQL files in the repo, no reports with data, no `email_jobs` writes, no cleanup, no backfill, no enforcement."
 
 This example shows the minimum specificity required for a later approval task. It is not an approval in this task.
 
@@ -191,18 +191,34 @@ None of these steps executes a DB read.
 
 ## Recommended Next Step
 
-Recommended next step: `P1.2B-25A Email Job Duplicate Staging Read-only Audit Runbook / Explicit Approval Format`
+`P1.2B-25A` is now complete as the docs-only runbook and explicit approval
+format step. It documents:
 
-Recommended scope for `P1.2B-25A`:
+- the explicit human approval example format
+- the future staging-audit preflight checklist
+- allowed future query classes as categories only
+- forbidden query and output shapes
+- the safe output policy
+- the future execution sequence
+- stop criteria
+- the abort / rollback model
 
-- explicit human approval wording only
-- staging read-only preflight requirements
-- allowed future staging query classes as categories only
-- allowed sanitized output shapes
-- mandatory stop criteria
-- explicit confirmation that approval remains not granted until a later task says otherwise
+Recommended next step: `P1.2B-25B EmailJobDuplicateStagingReadOnlyAuditRunbookBoundary`
 
-Still not allowed in `P1.2B-25A`:
+Recommended scope for `P1.2B-25B`:
+
+- pure `StagingAuditRunbook` data objects
+- `HumanApprovalFormat` data objects
+- `PreflightChecklist` data objects
+- `AllowedQueryClassEnvelope` data objects
+- `SafeOutputPolicy` data objects
+- `StopCriteria` data objects
+- `AbortModel` data objects
+- result builders
+- safe projections
+- tests
+
+Still not allowed in `P1.2B-25B`:
 
 - DB reads
 - SQL
@@ -212,7 +228,6 @@ Still not allowed in `P1.2B-25A`:
 - cleanup
 - backfill
 - enforcement
-- human approval as granted
 
 ## Non-goals
 
