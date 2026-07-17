@@ -11,6 +11,7 @@ Historical resolution note:
 - `P1.2B-23E-F` captured the read-only yellow-state diagnosis.
 - `P1.2B-23E-G` later resolved the yellow state without any Site-Config mutation.
 - The successful safe-smoke Origin was the already allowed internal Origin `https://p04-internal-test-20260702102313.internal.test`.
+- `P1.2B-24E` later revalidated the same safe internal Origin during the API-only deploy of `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, again with Loader `200`, Bundle `200`, Config `200`, Session `201`, Chat `201`, neutral response text, and unchanged public response shape.
 
 ## Current P1.2B-23E Yellow Status
 

@@ -276,9 +276,9 @@ The future DB-read-only execution task should not be considered complete unless 
 
 ## Recommended Next Step
 
-`P1.2B-22A` is now the documented approval / execution decision gate for this line, `P1.2B-22B` through `P1.2B-22E` completed the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` plus production validation on `cfa992b448016545d1fba1bdbaba3af3716991e6`, and `P1.2B-23A` through `P1.2B-23E-G` completed the staging-read-only scope / approval-preconditions layer, the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the production-safe API-only deploy on `577518a29eac8a9553309f4aadaf6ac7e12479bc`, and the green safe-smoke revalidation with the existing internal testsite Origin. The line still leaves `DB_READ_ONLY_AUDIT`, staging DB reads, and Production DB reads explicitly not approved, and it adds no SQL, query runner, query results, or report generation.
+`P1.2B-22A` is now the documented approval / execution decision gate for this line, `P1.2B-22B` through `P1.2B-22E` completed the pure `EmailJobDuplicateReadOnlyAuditApprovalBoundary` plus production validation on `cfa992b448016545d1fba1bdbaba3af3716991e6`, `P1.2B-23A` through `P1.2B-23E-G` completed the staging-read-only scope / approval-preconditions layer, the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`, the production-safe API-only deploy on `577518a29eac8a9553309f4aadaf6ac7e12479bc`, and the green safe-smoke revalidation with the existing internal testsite Origin, and `P1.2B-24A` through `P1.2B-24E` completed the docs-only operator approval decision layer, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker fallback on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`, the API-only production-safe deploy, and the green safe-smoke revalidation on the same safe internal Origin. The line still leaves `DB_READ_ONLY_AUDIT`, staging DB reads, Production DB reads, SQL execution, query runners, query results, reports, cleanup, backfill, enforcement, and human approval explicitly not approved.
 
-If this line continues, the next safe step is `P1.2B-24A` as a docs-only staging operator approval decision task.
+If this line continues, the next safe step is `P1.2B-25A` as a docs-only staging runbook / explicit approval format task.
 
 Preferred next step:
 
@@ -288,4 +288,4 @@ Preferred next step:
 4. document the exact allowed query-class categories and outputs
 5. keep all DB reads, SQL, query runners, query-result handling, reports, cleanup, and backfill out of scope
 
-The main rule remains: `P1.2B-24A` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.
+The main rule remains: `P1.2B-25A` must still not run live DB queries, SQL, query runners, query-result handling, reports, cleanup, or backfill. Actual live duplicate audit execution must stay a separate read-only task with explicit approval, sanitized output, and no cleanup action in the same turn.

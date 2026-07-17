@@ -2,7 +2,7 @@
 
 ## Summary
 
-`P1.2B-24A` is a docs-only operator-approval-decision step for a later possible staging `DB_READ_ONLY_AUDIT` concerning duplicate-risk review in `email_jobs`.
+`P1.2B-24A` through `P1.2B-24E` now cover the docs-only operator-approval-decision step, the pure `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`, the exact-commit Docker-fallback gate, and the production-safe API-only deploy for a later possible staging `DB_READ_ONLY_AUDIT` concerning duplicate-risk review in `email_jobs`.
 
 This step does not execute SQL, does not connect to a database, does not run a query runner, does not read `email_jobs`, does not read or write `webhook_jobs`, and does not produce query results or reports with live row data.
 
@@ -14,14 +14,38 @@ Current documented baseline:
 - `P1.2B-23B` is complete as the pure `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary`.
 - `P1.2B-23E` completed the API-only deploy on `577518a29eac8a9553309f4aadaf6ac7e12479bc`.
 - `P1.2B-23E-G` completed the green safe Public-Widget smoke revalidation.
+- `P1.2B-24D-E2` resolved the blocked gate using the exact-commit Docker fallback on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
+- `P1.2B-24E` completed the API-only deploy on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
 - `P1.2B-Status-20` is complete.
-- `main` currently points to `c1a6a787ab4820dd86dd9700b13842053b25119c`.
-- API live baseline remains `577518a29eac8a9553309f4aadaf6ac7e12479bc`.
+- API live baseline is now `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
+- Previous live API baseline before `P1.2B-24E` was `577518a29eac8a9553309f4aadaf6ac7e12479bc`.
+- Previous API image before `P1.2B-24E` was `sha256:90f230e2871f4591ecc1ec0931e1b22b54bf77b25ab23624cef57769f4be7b46`.
+- Current API image is `sha256:e79415fb4ead59b2b123bf657fc937c3cd26263522cbfbf86c1dff3f387716af`.
 - Production health is green.
 - Safe testsite smoke is green.
 - Production DB target remains sanitized to `chatbot`.
 - Migration count remains `28`.
 - Latest migration remains `028_generic_webhook_signing_modes.sql`.
+- Dashboard commit remains `3a276e7f0ef898bae791638b964087780da80c4d`.
+- Widget commit remains `7378ddb53bc3588cf35be3530fcbbf5d72e58b12`.
+- The API startup log shows `Database auto-migrations skipped`.
+
+Production validation now documented for `P1.2B-24E`:
+
+- API `/healthz` returned HTTP `200`.
+- `apiCommit` matched `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13`.
+- `database=ok` and `redis=ok` remained green.
+- `scripts/ops/check-production-health.sh` returned exit code `0`.
+- `production-health-synthetic` stayed green with HTTP `200` and matching `siteKey`.
+- The safe Public-Widget smoke on `p04-internal-test-20260702102313` stayed green:
+  - Loader `200`
+  - Bundle `200`
+  - Config `200`
+  - Session `201`
+  - Chat `201`
+  - neutral response
+  - unchanged top-level response keys `sessionId`, `answer`, `parts`, `sources`, and `messages`
+  - no debug, preview, knowledge, delivery, or secret fields
 
 ## Current Approval Decision
 
@@ -160,27 +184,25 @@ Current planning line:
 - `EmailJobDuplicateReadOnlyDbAuditExecutionBoundary` plans execution preconditions and execution-order constraints.
 - `EmailJobDuplicateReadOnlyAuditApprovalBoundary` models approval state and approval constraints.
 - `EmailJobDuplicateStagingReadOnlyAuditScopeBoundary` models staging scope and approval-preconditions data.
+- `EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary` models operator approval decisions, required evidence, decision matrices, non-approval clauses, human approval formats, stop criteria, results, validation helpers, classifiers, and safe projections.
 - `P1.2B-24A` documents the operator-approval decision layer.
 
 None of these steps executes a DB read.
 
 ## Recommended Next Step
 
-Recommended next step: `P1.2B-24B EmailJobDuplicateStagingReadOnlyAuditOperatorApprovalBoundary`
+Recommended next step: `P1.2B-25A Email Job Duplicate Staging Read-only Audit Runbook / Explicit Approval Format`
 
-Recommended scope for `P1.2B-24B`:
+Recommended scope for `P1.2B-25A`:
 
-- pure `OperatorApprovalDecision` data objects
-- pure `RequiredEvidence` data objects
-- pure `DecisionMatrix` data objects
-- pure `NonApprovalClause` data objects
-- pure `HumanApprovalFormat` data objects
-- pure `StopCriteria` data objects
-- result builders
-- safe projections
-- tests
+- explicit human approval wording only
+- staging read-only preflight requirements
+- allowed future staging query classes as categories only
+- allowed sanitized output shapes
+- mandatory stop criteria
+- explicit confirmation that approval remains not granted until a later task says otherwise
 
-Still not allowed in `P1.2B-24B`:
+Still not allowed in `P1.2B-25A`:
 
 - DB reads
 - SQL
@@ -190,6 +212,7 @@ Still not allowed in `P1.2B-24B`:
 - cleanup
 - backfill
 - enforcement
+- human approval as granted
 
 ## Non-goals
 

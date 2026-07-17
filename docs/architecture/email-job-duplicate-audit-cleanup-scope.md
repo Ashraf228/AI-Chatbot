@@ -254,20 +254,20 @@ Non-goals for `P1.2B-19` at this stage:
 
 ## Recommended Next Step
 
-`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, and `P1.2B-23A` through `P1.2B-23E-G` are complete and production-validated where applicable.
+`P1.2B-20A` through `P1.2B-20E`, `P1.2B-21B` through `P1.2B-21E`, `P1.2B-22A` through `P1.2B-22E`, `P1.2B-23A` through `P1.2B-23E-G`, and `P1.2B-24A` through `P1.2B-24E` are complete and production-validated where applicable.
 
-The next safe step is `P1.2B-24A` as a docs-only operator approval decision for any future staging read-only duplicate audit.
+The next safe step is `P1.2B-25A` as a docs-only staging runbook / explicit approval format step for any future staging read-only duplicate audit.
 
 That next step should decide only:
 
-- whether a real `DB_READ_ONLY_AUDIT` is approved
+- whether and how an explicit human approval would need to be phrased
 - which environment is allowed first
 - which read-only role is required
 - which query classes are allowed
 - which outputs are allowed
 - which stop criteria are mandatory
 
-`P1.2B-24A` should still exclude:
+`P1.2B-25A` should still exclude:
 
 - code changes
 - DB reads
@@ -284,8 +284,11 @@ That next step should decide only:
 - `processPendingJobs` refactor
 - orchestrator wiring
 - production wiring
+- any claim that approval is already granted
 
 The resolved `P1.2B-23E-G` safe Public-Widget smoke does not change this cleanup scope. It validated the deployed pure boundary and the existing safe testsite origin only; it did not introduce cleanup authority, live duplicate-audit execution, DB reads, or idempotency enforcement.
+
+The later `P1.2B-24E` API-only deploy and green safe Public-Widget smoke revalidation on `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13` also do not change this cleanup scope. They validate the pure operator-approval boundary and the existing safe testsite origin only; they do not introduce cleanup authority, live duplicate-audit execution, DB reads, human approval, or idempotency enforcement.
 
 ## Idempotency Enforcement Interaction
 
