@@ -37,8 +37,11 @@ Der erste kontrollierte Dry Run des Fallback-Workflows war erfolgreich. Fuer Run
 - `docs/operations/prompts/security-diff-scan.md`
 - `docs/operations/prompts/doku-pr-merge.md`
 - `docs/operations/prompts/runtime-post-merge-gate.md`
+- `docs/operations/codex-review-security-diff-scan-policy.md`
 
 Kurze Aufgaben sollen nach Moeglichkeit auf eines dieser Templates verweisen statt den kompletten Ablauf jedes Mal neu auszuformulieren.
+
+Bei PR-Review-, Workflow-, Runtime-, Auth-, Tenant-, Widget-, Webhook-, Delivery-, Migration-, Cleanup- und Production-Config-Scope ist zusaetzlich die Review- und Security-Diff-Scan-Matrix aus `docs/operations/codex-review-security-diff-scan-policy.md` anzuwenden.
 
 ## Branch / Worktree Vorbereiten
 
