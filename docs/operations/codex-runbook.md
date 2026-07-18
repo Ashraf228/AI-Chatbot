@@ -60,17 +60,22 @@ Bei PR-Review-, Workflow-, Runtime-, Auth-, Tenant-, Widget-, Webhook-, Delivery
 - Pflichtchecks gemaess Change-Klasse
 - auftragsspezifische Zusatztests
 - `git diff --check`
+- Security Diff Scan nach Change-Klasse als zusaetzliches Review-Gate einplanen
+- Security Diff Scan niemals als Ersatz fuer Pflichtchecks, CI, Main-CI, Docker-Gate oder Deploy-Gate behandeln
 
 ## PR Erstellen
 
 - PR-Template vollstaendig ausfuellen
 - Scope, Risiken, Rollback und Non-goals dokumentieren
+- falls Security Diff Scan fuer die Change-Klasse verpflichtend ist: Ergebnis, Blocker-Status und etwaige Follow-ups im PR-Status dokumentieren
 
 ## CI Pruefen
 
 - Main-CI pruefen
 - bei Runtime-Code Docker-Gate pruefen
 - bei roter CI sofort stoppen
+- fuer `DOKU_ONLY` Security Diff Scan nur bei Risikoindikatoren erzwingen
+- fuer `CI_WORKFLOW_ONLY` und sicherheitskritische Runtime-, Auth-, Tenant-, Widget-, Webhook-, Delivery-, Migration-, Cleanup- und Production-Config-Scope Security Diff Scan vor Merge berichten
 
 Empfohlener Main-CI-Pfad fuer Runtime-Post-Merge-Gates:
 

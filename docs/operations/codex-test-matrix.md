@@ -7,6 +7,7 @@
 - `npm run test:security-boundaries`
 - `git diff --check`
 - Shortcut: `scripts/ops/codex-doc-only-gate.sh`
+- Security Diff Scan nur bei Risikoindikatoren wie Workflow-, Secret-, Auth-, Tenant-, Widget-, DB-, Webhook- oder Config-Bezug
 
 ## `PURE_API_BOUNDARY`
 
@@ -23,6 +24,7 @@
 - Shortcut: `scripts/ops/codex-pure-api-boundary-gate.sh --focused-test "<command>" --regression-test "<command>"`
 - vor Deploy/Post-Merge: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
 - falls Main-CI nicht sichtbar ist: direkte GitHub Main-Push-CI pruefen, dann `Docker fallback gate`
+- Security Diff Scan verpflichtend bei Auth-, Tenant-, DB-, Public-Output- oder Webhook-Bezug
 
 ## `API_RUNTIME_UNWIRED`
 
@@ -38,6 +40,7 @@
 - `git diff --check`
 - Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
 - falls Main-CI nicht sichtbar ist: direkte GitHub Main-Push-CI pruefen, dann `Docker fallback gate`
+- Security Diff Scan empfohlen; verpflichtend bei Auth-, Tenant-, DB-, Public-Output- oder Webhook-Bezug
 
 ## `API_RUNTIME_WIRED`
 
@@ -55,6 +58,7 @@
 - Docker-Gate auf exakt Squash Commit
 - Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <squash>`
 - falls Main-CI nicht sichtbar ist: direkte GitHub Main-Push-CI pruefen, dann `Docker fallback gate`
+- Security Diff Scan verpflichtend
 
 ## `SCRIPT_CHANGE`
 
@@ -64,6 +68,7 @@
 - `npm run security:check-authorization-matrix`
 - `npm run test:security-boundaries`
 - `git diff --check`
+- Security Diff Scan verpflichtend bei Prozess-Gates, Secret-Handling oder sicherheitsrelevanten Scripts
 
 ## `PUBLIC_WIDGET_CHANGE`
 
@@ -74,6 +79,7 @@
 - Chat Smoke
 - Response Shape Gate
 - Forbidden Field Scan
+- Security Diff Scan verpflichtend
 
 ## `DASHBOARD_CHANGE`
 
@@ -84,6 +90,7 @@
 - `npm run security:check-authorization-matrix`
 - `npm run test:security-boundaries`
 - `git diff --check`
+- Security Diff Scan bei Auth-, Tenant-, Secret- oder Public-Exposure-Bezug
 
 ## `DB_MIGRATION`
 
@@ -92,12 +99,16 @@
 - Rollback Plan
 - Backfill Plan
 - Staging/Dry Run
+- Security Diff Scan verpflichtend
+- Human Approval verpflichtend
 
 ## `DB_DATA_CHANGE`
 
 - expliziter Sonderauftrag
 - Dry Run oder Staging-Nachweis
 - Rollback/Restore-Plan
+- Security Diff Scan verpflichtend
+- Human Approval verpflichtend
 
 ## `PRODUCTION_CONFIG_CHANGE`
 
@@ -105,6 +116,8 @@
 - Config-Diff
 - Rollback-Nachweis
 - Post-Change-Healthcheck
+- Security Diff Scan verpflichtend
+- Human Approval verpflichtend
 
 ## `DEPLOY_ONLY`
 
@@ -114,6 +127,7 @@
 - Post-Deploy-Healthcheck
 - Main-CI-Shortcut: `scripts/ops/codex-main-ci-gate.sh --sha <target>`
 - falls Main-CI nicht sichtbar ist: direkte GitHub Main-Push-CI pruefen, dann `Docker fallback gate`
+- Security Diff Scan nur wenn der Deploy-Task Scope-Drift oder Config-/Runtime-Aenderungen enthaelt
 
 ## `MONITORING_FIX`
 
