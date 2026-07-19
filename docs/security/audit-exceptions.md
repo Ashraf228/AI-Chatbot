@@ -4,9 +4,9 @@
 
 Date: 2026-06-19
 
-Reviewed: 2026-07-04
+Reviewed: 2026-07-19
 
-Expires: 2026-07-18
+Expires: 2026-08-02
 
 Owner: Platform Owner
 
@@ -22,17 +22,18 @@ Finding:
 
 Reason:
 - The vulnerable package is nested under the stable Next.js release used by the dashboard.
-- `next@latest` was checked again on 2026-07-04 and resolves to `16.2.10`, which still depends on internal `postcss@8.4.31`.
+- `next@latest` was checked again on 2026-07-19 and resolves to `16.2.10`, which still depends on internal `postcss@8.4.31`.
 - A dashboard-local npm override pins `postcss@8.5.15` for the standalone dashboard Docker context and `apps/dashboard` standalone audit is clean.
 - The root workspace audit still reports Next's internal dependency path.
 - `npm audit fix --force` proposes an unsafe Next downgrade and is rejected.
 - Canary, beta, release-candidate or downgrade paths are not used for this demonstrator.
+- `npm run security:audit:production-contexts` still shows no high or critical production-context findings.
 
 Temporary decision:
-- This moderate finding remains accepted temporarily after review on 2026-07-04.
+- This moderate finding remains accepted temporarily after review on 2026-07-19.
 - High and critical findings still block deployment.
 - The audit report remains visible.
-- This exception expires on 2026-07-18 or earlier if a stable Next release fixes the nested postcss dependency.
+- This exception expires on 2026-08-02 or earlier if a stable Next release fixes the nested postcss dependency.
 
 Mitigation:
 - No force install.
@@ -42,7 +43,7 @@ Mitigation:
 - Branding remains limited to controlled fields and validated values.
 - Full build, E2E, API, widget, reporter and smoke test gate must pass.
 - Re-check Next stable releases before the exception expires.
-- Create follow-up ticket: update Next when nested postcss is fixed.
+- Create follow-up ticket: perform a separate dependency-fix review for Next/PostCSS once a stable Next release fixes the nested dependency path.
 
 Follow-up:
 - Monitor stable Next releases.
