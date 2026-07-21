@@ -33,6 +33,7 @@ The current pilot baseline is documented as follows:
 - the alert routing design exists
 - the incident response runbook exists
 - the external uptime monitor design exists
+- the backup restore drill plan exists
 - external uptime monitors are not yet technically configured
 - alert delivery is not yet technically configured
 - `DB_READ_ONLY_AUDIT` remains blocked without explicit human approval
@@ -223,6 +224,7 @@ Explicitly not allowed in this checklist:
 - `SRE-1C` = incident response runbook
 - `SRE-1D` = external uptime monitor design
 - `SRE-1E` = pilot health review checklist
+- `SRE-2A` = backup restore drill plan
 - Docker fallback gate is a build gate, not a deploy
 - security diff scan is a review gate, not a substitute for tests
 - deploy gates remain separate from this checklist
@@ -237,7 +239,7 @@ Explicitly not allowed in this checklist:
 
 ### Phase 2
 
-- `SRE-2A Backup Restore Drill Plan`
+- `SRE-2B Backup Inventory Audit`
 - `ENT-SEC-1A Enterprise Security Gap Audit`
 
 ### Phase 3
