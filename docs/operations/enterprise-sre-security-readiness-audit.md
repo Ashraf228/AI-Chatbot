@@ -2,7 +2,7 @@
 
 ## Summary
 
-Stand dieses Audits ist July 17, 2026.
+Stand dieses Audits ist July 21, 2026.
 
 Die aktuelle Plattform ist fuer die bereits production-validierten Boundary- und Dokumentationsschritte stabil genug, um weitere pure Boundary- und DOKU_ONLY-Arbeit sicher fortzusetzen. Fuer eine belastbare Enterprise-, SRE- und Security-Readiness fehlen aber noch mehrere formalisierte Betriebs-, Sicherheits- und Datenschutz-Bausteine.
 
@@ -29,8 +29,10 @@ Die groessten Enterprise-Luecken liegen aktuell nicht in fehlenden Refactor-Boun
 
 ## Current Baseline
 
-- `origin/main`: `301f3865bd35a3cf44e625dde3420ec2abedb29f`
-- zuletzt dokumentierter live-validierter API-Stand: `92c78a607386fa73a44bed8b6ede8c87e52420cf`
+- `origin/main`: `df4b2617ad27cab46c0f14c65f9acb08697940a1`
+- zuletzt dokumentierter live-validierter API-Stand: `df4b2617ad27cab46c0f14c65f9acb08697940a1`
+- vorheriger live-validierter API-Stand: `92c78a607386fa73a44bed8b6ede8c87e52420cf`
+- zuletzt dokumentiertes live-validiertes API-Image: `sha256:f5783a991f5c6a7ca5c89bceba1c58aaca266c80fdc1f14a5092997a770be03b`
 - Production Health: gruen dokumentiert
 - Public Widget Smoke: gruen dokumentiert
 - Public Widget Response Shape: unveraendert
@@ -40,6 +42,10 @@ Die groessten Enterprise-Luecken liegen aktuell nicht in fehlenden Refactor-Boun
 - Latest Migration: `028_generic_webhook_signing_modes.sql`
 - Auto-Migration: nein
 - `db:migrate`: nein
+- body-parser Produktionsdrift:
+  - Advisory `GHSA-v422-hmwv-36x6` dokumentiert behoben
+  - `body-parser@2.3.0` live im API-Container bestaetigt
+  - API-only-Deploy ohne Dashboard-/Widget-/DB-Aenderung erfolgreich
 - aktueller Email-Job-Duplicate-Track:
   - Runbook- und Approval-Format dokumentiert
   - Staging read-only audit runbook boundary production-safe deployed

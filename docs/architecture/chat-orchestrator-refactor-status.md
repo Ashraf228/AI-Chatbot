@@ -12,13 +12,13 @@ Current production validation baseline:
 
 | Component | Commit / State |
 | --- | --- |
-| API | `92c78a607386fa73a44bed8b6ede8c87e52420cf` |
-| Previous live API baseline before P1.2B-25E | `f315dc11b9caf175f3bfb5a302ee4a2b8ad9fa13` |
-| API image | `sha256:37dc57843880051d6d2c7c339b13e320abb4c507137ab4fe7e68681bdb7a61e1` |
-| Previous API image | `sha256:e79415fb4ead59b2b123bf657fc937c3cd26263522cbfbf86c1dff3f387716af` |
+| API | `df4b2617ad27cab46c0f14c65f9acb08697940a1` |
+| Previous live API baseline before body-parser security deploy | `92c78a607386fa73a44bed8b6ede8c87e52420cf` |
+| API image | `sha256:f5783a991f5c6a7ca5c89bceba1c58aaca266c80fdc1f14a5092997a770be03b` |
+| Previous API image | `sha256:37dc57843880051d6d2c7c339b13e320abb4c507137ab4fe7e68681bdb7a61e1` |
 | Dashboard | `3a276e7f0ef898bae791638b964087780da80c4d` |
 | Widget | `7378ddb53bc3588cf35be3530fcbbf5d72e58b12` |
-| Main-CI / Docker gate | Main-push CI green on exact `92c78a607386fa73a44bed8b6ede8c87e52420cf` via run `29573799471`; local `codex-main-ci-gate` was `unavailable` only because `gh` was absent |
+| Main-CI / Docker gate | Main-push CI green on exact `df4b2617ad27cab46c0f14c65f9acb08697940a1` via run `29822559542`; documented rerun job `88611756841` |
 | Last migration | `028_generic_webhook_signing_modes.sql` |
 | Migration count | `28` |
 | Public widget | Legacy pipeline |
@@ -30,6 +30,7 @@ Baseline correction note:
 - Earlier planning context expected older API / Dashboard baselines before `P1.2B-22E`.
 - The actual live basis before the P1.2B-22 API-only deploy was already `3a276e7f0ef898bae791638b964087780da80c4d` for the API runtime and Dashboard commit line.
 - `P1.2B-22E` rebuilt and recreated only the `api` service; Dashboard, Widget, Proxy, DB, and Redis remained unchanged.
+- A later security-only API deploy for the `body-parser@2.3.0` production-context drift moved the live API baseline from `92c78a607386fa73a44bed8b6ede8c87e52420cf` to `df4b2617ad27cab46c0f14c65f9acb08697940a1` without changing refactor behavior, Dashboard, Widget, Proxy, DB, Redis, migrations, or Public Widget response shape.
 
 ## Implemented Refactor Steps
 
