@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
 import { Button } from "../../components/shared/Button";
 import { Input } from "../../components/shared/Input";
@@ -66,13 +65,14 @@ export default function LoginPage() {
     <div className="dashboard-auth">
       <div className="dashboard-auth-card">
         <div className="dashboard-auth-logo">
-          <Image
+          <img
             src="/soule-logo.png"
             alt="SSB Soule"
             width={132}
             height={132}
             style={{ width: 132, height: 132, objectFit: "contain" }}
-            priority
+            loading="eager"
+            decoding="async"
           />
         </div>
 
