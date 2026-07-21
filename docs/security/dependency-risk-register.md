@@ -1,8 +1,33 @@
 # Dependency Risk Register
 
-Stand: 2026-07-19
+Stand: 2026-07-21
 
 Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produktionskandidaten. Es ersetzt keinen externen Security-Scan.
+
+## 2026-07-21 - Body-Parser Production Drift Fixed
+
+- Betroffene Dependency: `body-parser`
+- Pfad: `apps/api`
+- Advisory: `GHSA-v422-hmwv-36x6`
+- Severity: low
+- Ausgangslage: Produktionskontext-Audit fuer `apps/api` meldete einen offenen Drift auf `body-parser@2.2.2`.
+- Fix: `body-parser` wurde in den relevanten Lockfiles von `2.2.2` auf `2.3.0` aktualisiert.
+- geaenderte Dateien:
+  - `package-lock.json`
+  - `apps/api/package-lock.json`
+- nicht geaendert:
+  - `package.json`
+  - Runtime-Code
+  - Migrations-/SQL-Dateien
+  - Production-Config
+- Main-CI auf dem Merge-Commit `df4b2617ad27cab46c0f14c65f9acb08697940a1`: Source gate, Security audit, Docker build und Security PostgreSQL isolation jeweils success.
+- Produktionsstatus:
+  - API-only-Deploy erfolgreich.
+  - Live-API-Commit: `df4b2617ad27cab46c0f14c65f9acb08697940a1`
+  - Live-API-Image: `sha256:f5783a991f5c6a7ca5c89bceba1c58aaca266c80fdc1f14a5092997a770be03b`
+  - `body-parser` live im API-Container bestaetigt als `2.3.0`
+  - Production Health und Safe Public Widget Smoke blieben gruen.
+- Entscheidung: Finding ist produktiv behoben und benoetigt keine Ausnahme.
 
 ## 2026-05-27 - Next.js transitive PostCSS Finding
 
