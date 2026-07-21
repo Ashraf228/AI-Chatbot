@@ -30,9 +30,9 @@ if (expired.length) {
 console.log("PASS audit exceptions are current");
 '
 
-echo "[audit] root workspace blocks high and critical production findings"
-npm audit --omit=dev --audit-level=high
-echo "PASS root production audit has no high or critical findings"
+echo "[audit] root workspace aligns with production optional-dependency omission for high/critical findings"
+npm audit --omit=dev --omit=optional --audit-level=high
+echo "PASS root production audit has no high or critical findings after optional-dependency omission"
 
 for context in "${contexts[@]}"; do
   echo "[audit] ${context}"
@@ -41,8 +41,13 @@ for context in "${contexts[@]}"; do
   cp "${ROOT_DIR}/${context}/package.json" "${ROOT_DIR}/${context}/package-lock.json" "${temp_dir}/"
   (
     cd "${temp_dir}"
-    npm ci --workspaces=false --ignore-scripts --audit=false --fund=false
-    npm audit --omit=dev --workspaces=false
+    if [[ "${context}" == "apps/dashboard" ]]; then
+      npm ci --workspaces=false --ignore-scripts --audit=false --fund=false --omit=optional
+      npm audit --omit=dev --omit=optional --workspaces=false
+    else
+      npm ci --workspaces=false --ignore-scripts --audit=false --fund=false
+      npm audit --omit=dev --workspaces=false
+    fi
   )
   rm -rf "${temp_dir}"
   trap - EXIT

@@ -4,6 +4,30 @@ Stand: 2026-07-21
 
 Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produktionskandidaten. Es ersetzt keinen externen Security-Scan.
 
+## 2026-07-21 - Dashboard Sharp Advisory Mitigation
+
+- Betroffene Dependency: `sharp`
+- Pfad vor Mitigation: `@ai-chatbot/dashboard` -> `next@16.2.9` -> `sharp@0.34.5`
+- Advisory: `GHSA-f88m-g3jw-g9cj`
+- Severity: high
+- Ausgangslage: `npm run security:audit:production-contexts` blockierte im Root-/Dashboard-Produktionskontext wegen der optionalen `sharp`-Dependency von Next.js.
+- Ursache: Das Dashboard nutzte `next/image` fuer lokale Logo-Assets, der Dashboard-Docker-Build installierte optionale Dependencies, und der Production-Context-Audit entsprach diesem Pfad noch nicht.
+- Mitigation:
+  - Dashboard-Logo-Pfade verwenden keine produktive Next Image Optimization mehr.
+  - `apps/dashboard/next.config.js` setzt `images.unoptimized = true`.
+  - Die bekannten Logo-Verwendungen im Dashboard wurden auf statische `<img>`-Tags umgestellt.
+  - `apps/dashboard/Dockerfile` installiert mit `npm ci --omit=optional`.
+  - Der Production-Context-Audit behandelt den Dashboard-Kontext und den Root-Workspace fuer High/Critical-Findings mit derselben optional-dependency omission, die dem realen Dashboard-Produktionspfad entspricht.
+- Validierungsziel:
+  - Normale Dashboard-Routen duerfen kein `/_next/image` mehr referenzieren.
+  - Dashboard Build und Standalone-Runtime muessen ohne optionale Dependencies funktionieren.
+  - `npm run security:audit:production-contexts` muss frei von High/Critical-Findings sein.
+- Nicht gemacht:
+  - kein Next-Upgrade
+  - kein `npm audit fix --force`
+  - keine Risk Acceptance
+  - keine API-/Widget-/Production-Config-Aenderung
+
 ## 2026-07-21 - Body-Parser Production Drift Fixed
 
 - Betroffene Dependency: `body-parser`

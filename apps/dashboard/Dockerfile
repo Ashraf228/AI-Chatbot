@@ -4,7 +4,7 @@ ENV CI=true
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --omit=optional
 
 COPY . .
 RUN npm run build
