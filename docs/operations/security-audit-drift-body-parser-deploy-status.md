@@ -14,6 +14,7 @@ Der produktionsrelevante Security-Drift fuer `body-parser` aus dem API-Produktio
 - Advisory: `GHSA-v422-hmwv-36x6`
 - Severity: `low`
 - betroffener Produktionskontext: `apps/api`
+- Root-Cause-Chain: `@nestjs/platform-express` -> `express` -> `body-parser@2.2.2`
 - geaenderte Dateien im Fix-PR:
   - `package-lock.json`
   - `apps/api/package-lock.json`
@@ -75,6 +76,8 @@ Der produktionsrelevante Security-Drift fuer `body-parser` aus dem API-Produktio
 
 ## Safe Public Widget Verification
 
+- Safe Testsite ID: `p04-internal-test-20260702102313`
+- Safe Testsite Site-ID aus den bereits gelieferten sanitized Ergebnissen: `88f22a5a-35b9-4d38-a5b7-e5bd95f9c23f`
 - Safe Testsite Origin: `https://p04-internal-test-20260702102313.internal.test`
 - Loader: `200`
 - Bundle: `200`
@@ -108,6 +111,11 @@ Der produktionsrelevante Security-Drift fuer `body-parser` aus dem API-Produktio
 - Query Results / Reports erzeugt: nein
 - Cleanup / Backfill / Enforcement: nein
 - Delivery-/Integration-Execution: nein
+- kritische aktuelle API-Fehler: nein
+- relevante sanitized Logtreffer aus den bereits gelieferten Deploy-/Post-Deploy-Ergebnissen:
+  - Startup-Route-Mappings
+  - `Database auto-migrations skipped`
+  - erwarteter `assistant_profile_resolved` aus dem Safe-Smoke
 
 ## Security Interpretation
 
