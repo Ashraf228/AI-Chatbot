@@ -171,6 +171,7 @@ Implications:
 No later real drill should start unless all applicable preconditions are true:
 
 - owner roles are defined
+- the backup responsibility and access model is documented
 - incident runbook is available
 - rollback points are known
 - backup target is known
@@ -326,13 +327,13 @@ This plan explicitly does not:
 
 Recommended next step:
 
-- `SRE-2B Backup Inventory Audit`
+- `SRE-2D Non-production Restore Drill Design`
 
 Alternative:
 
-- `ENT-SEC-1A Enterprise Security Gap Audit`
+- `DSGVO-1A PII Data Map`
 
-`SRE-2B` is preferred because the repository already shows backup and restore building blocks, but ownership, live enablement, retention evidence, restore frequency, and secret/config recovery are still not fully inventoried.
+`SRE-2D` is preferred because the repository now has both the backup inventory baseline and the responsibility/access model, but the next safe gap is the non-production restore target, dummy-data policy, validation model, and stop criteria.
 
 ## 17. Non-goals
 
