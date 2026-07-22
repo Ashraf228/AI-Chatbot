@@ -6,19 +6,24 @@ Stand: 2026-07-22
 
 Diese Status-Doku dokumentiert den bereits abgeschlossenen Dashboard-only-Production-Deploy der `sharp`-Mitigation. Der vorherige High-Advisory `GHSA-f88m-g3jw-g9cj` im Dashboard-Production-Kontext blockiert nicht mehr, die Mitigation liegt auf `main`, und das laufende Production-Dashboard-Image enthaelt den Fix live.
 
-Der Schritt fuehrte keine neue Audit-Exception, keine Risk Acceptance, kein Next-/Framework-Upgrade und kein `npm audit fix --force` ein. Die Produktionsumstellung war auf das Dashboard begrenzt; API, Widget, Proxy, DB und Redis blieben unveraendert.
+Der Schritt fuehrte keine neue Audit-Exception, keine Risk Acceptance, kein Next-/Framework-Upgrade und kein `npm audit fix --force` ein. Die Produktionsumstellung war auf das Dashboard begrenzt; API, Widget, Proxy, DB und Redis blieben unveraendert. Es gab keinen API-/Widget-Deploy, kein DB-/SQL-Thema und keinen Rollback-Bedarf.
 
 ## Implemented Change
 
 - Package: `sharp`
 - Advisory: `GHSA-f88m-g3jw-g9cj`
 - Severity: `high`
+- betroffener Kontext: Root-/Dashboard-Production-Context
 - vorheriger Pfad: `@ai-chatbot/dashboard` -> `next@16.2.9` -> `sharp@0.34.5`
+- Ursache: Next Image Optimization und die optionale `sharp`-Dependency im Dashboard-Produktionspfad
+- Entscheidung: Runtime-/Build-/Audit-Kontext-Mitigation statt Risk Acceptance
 - Mitigation:
   - `apps/dashboard/next.config.js` setzt `images.unoptimized = true`
   - bekannte `next/image`-Logo-Nutzung wurde auf statische Assets umgestellt
   - `apps/dashboard/Dockerfile` nutzt `npm ci --omit=optional`
   - der Security-Audit-Kontext wurde an den Dashboard-Production-Installpfad angepasst
+  - keine globale unsachliche Optional-Dependency-Maskierung
+  - kein direkter `sharp`-Import
 - nicht gemacht:
   - keine neue Audit-Exception
   - keine Risk Acceptance
@@ -31,6 +36,13 @@ Der Schritt fuehrte keine neue Audit-Exception, keine Risk Acceptance, kein Next
 - PR-Status: merged
 - Head SHA vor Merge: `05dfa8d32e41e264a7b81585520666b77f7a623f`
 - Squash-Commit auf `main`: `9b74ee942215597215aaf77b23ee69d6139519ee`
+- geaenderte Dateien in PR `#126`:
+  - `apps/dashboard/Dockerfile`
+  - `apps/dashboard/app/login/page.tsx`
+  - `apps/dashboard/components/layout/BrandLogo.tsx`
+  - `apps/dashboard/next.config.js`
+  - `docs/security/dependency-risk-register.md`
+  - `scripts/security/audit-production-contexts.sh`
 - Main-CI-Run: `29877528025`
 - exakte Gate-Ergebnisse auf dem Merge-Commit:
   - Source gate: success
@@ -83,6 +95,7 @@ Der Schritt fuehrte keine neue Audit-Exception, keine Risk Acceptance, kein Next
 - `/soule-logo.png`: `200`
 - normale Dashboard-Routen brauchen `/_next/image`: nein
 - `sharp` / `Module sharp not found` im normalen Pfad: nein
+- Re-Evaluation noetig, falls Dashboard Image Optimization spaeter wieder aktiviert wird: ja
 
 ## Dependency And Audit Verification
 
@@ -92,6 +105,7 @@ Der Schritt fuehrte keine neue Audit-Exception, keine Risk Acceptance, kein Next
 - `postcss` moderate unveraendert: ja
 - neue Audit-Exception: nein
 - Risk Acceptance: nein
+- `npm audit fix --force`: nein
 
 ## Side-Effect Safety
 
