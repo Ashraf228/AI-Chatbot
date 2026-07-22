@@ -22,6 +22,14 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
   - Normale Dashboard-Routen duerfen kein `/_next/image` mehr referenzieren.
   - Dashboard Build und Standalone-Runtime muessen ohne optionale Dependencies funktionieren.
   - `npm run security:audit:production-contexts` muss frei von High/Critical-Findings sein.
+- Produktionsstatus am 2026-07-22:
+  - PR `#126` ist gemerged auf `main` via Squash-Commit `9b74ee942215597215aaf77b23ee69d6139519ee`.
+  - Main-CI auf dem Merge-Commit war gruen via Run `29877528025`.
+  - Dashboard-only-Deploy wurde erfolgreich durchgefuehrt.
+  - Dashboard-Live-Commit wechselte von `3a276e7f0ef898bae791638b964087780da80c4d` auf `9b74ee942215597215aaf77b23ee69d6139519ee`.
+  - Dashboard-Live-Image wechselte von `sha256:33f81c4173b41bff7db301ff79eb12fb241a5a9f2e3285ef98886d2779113f58` auf `sha256:7239c70845bc01d896aa9088977c9ff40538ad6867455433fca1f274bc32d9b8`.
+  - `check-production-health` blieb gruen, API und Widget blieben unveraendert.
+  - Das `sharp` High-Finding ist im Dashboard-Production-Kontext nicht mehr vorhanden.
 - Nicht gemacht:
   - kein Next-Upgrade
   - kein `npm audit fix --force`
