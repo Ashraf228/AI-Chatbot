@@ -2,7 +2,7 @@
 
 ## Summary
 
-Stand dieses Audits ist July 21, 2026.
+Stand dieses Audits ist July 22, 2026.
 
 Die aktuelle Plattform ist fuer die bereits production-validierten Boundary- und Dokumentationsschritte stabil genug, um weitere pure Boundary- und DOKU_ONLY-Arbeit sicher fortzusetzen. Fuer eine belastbare Enterprise-, SRE- und Security-Readiness fehlen aber noch mehrere formalisierte Betriebs-, Sicherheits- und Datenschutz-Bausteine.
 
@@ -29,10 +29,13 @@ Die groessten Enterprise-Luecken liegen aktuell nicht in fehlenden Refactor-Boun
 
 ## Current Baseline
 
-- `origin/main`: `df4b2617ad27cab46c0f14c65f9acb08697940a1`
+- `origin/main`: `9b74ee942215597215aaf77b23ee69d6139519ee`
 - zuletzt dokumentierter live-validierter API-Stand: `df4b2617ad27cab46c0f14c65f9acb08697940a1`
 - vorheriger live-validierter API-Stand: `92c78a607386fa73a44bed8b6ede8c87e52420cf`
 - zuletzt dokumentiertes live-validiertes API-Image: `sha256:f5783a991f5c6a7ca5c89bceba1c58aaca266c80fdc1f14a5092997a770be03b`
+- zuletzt dokumentierter live-validierter Dashboard-Stand: `9b74ee942215597215aaf77b23ee69d6139519ee`
+- vorheriger live-validierter Dashboard-Stand: `3a276e7f0ef898bae791638b964087780da80c4d`
+- zuletzt dokumentiertes live-validiertes Dashboard-Image: `sha256:7239c70845bc01d896aa9088977c9ff40538ad6867455433fca1f274bc32d9b8`
 - Production Health: gruen dokumentiert
 - Public Widget Smoke: gruen dokumentiert
 - Public Widget Response Shape: unveraendert
@@ -46,6 +49,11 @@ Die groessten Enterprise-Luecken liegen aktuell nicht in fehlenden Refactor-Boun
   - Advisory `GHSA-v422-hmwv-36x6` dokumentiert behoben
   - `body-parser@2.3.0` live im API-Container bestaetigt
   - API-only-Deploy ohne Dashboard-/Widget-/DB-Aenderung erfolgreich
+- sharp Produktionsdrift:
+  - Advisory `GHSA-f88m-g3jw-g9cj` dokumentiert mitigiert
+  - Dashboard-only-Deploy auf `9b74ee942215597215aaf77b23ee69d6139519ee` erfolgreich
+  - `sharp` High-Finding im Dashboard-Production-Kontext nicht mehr vorhanden
+  - keine neue Audit-Exception und keine Risk Acceptance
 - aktueller Email-Job-Duplicate-Track:
   - Runbook- und Approval-Format dokumentiert
   - Staging read-only audit runbook boundary production-safe deployed
