@@ -107,16 +107,31 @@ Why this is the current decision:
 | --- | --- | --- | --- | --- |
 | No open High/Critical security baseline finding | any pilot | satisfied in documented baseline | go | keep mandatory rechecks |
 | Main-CI / Docker / PostgreSQL isolation gate discipline | any production-affecting change | satisfied | go | keep exact-SHA gate process |
+| Dashboard / API / Widget baseline known | any limited pilot | documented from deploy, health, and dependency-drift baselines | supports conditional pilot | keep validating before relevant deploys |
+| Monitoring / Alerting operational | active enterprise outreach and real-customer pilot | documented baseline exists, not fully operationally proven | blocks broad rollout; P0 before active outreach | `SRE-1G` |
+| External Uptime Monitoring operational | active enterprise outreach and real-customer pilot | not operational; setup decision still pending | P0 gap | `SRE-1G` |
 | Real external monitoring operational | active enterprise outreach and real-customer pilot | not proven | no-go for unrestricted rollout | `SRE-1G` |
 | Real alert routing and owner path operational | active enterprise outreach and real-customer pilot | documented, not proven live | guarded only | `SRE-1G` |
 | Incident owner / on-call contact model operationalized | active enterprise outreach and real-customer pilot | role model exists, live owner chain not proven | guarded only | owner assignment follow-up |
+| Backup Owner defined | real-customer pilot and recoverability accountability | not confirmed; role placeholder only | blocks real-customer pilot unless explicitly accepted | name owner |
+| Restore Owner defined | real-customer pilot and restore accountability | not confirmed; role placeholder only | blocks real-customer pilot unless explicitly accepted | name owner |
 | Backup owner named | real-customer pilot confidence | not proven here | no-go for broad rollout | `SRE-2F` and owner assignment |
 | Restore owner named | recoverability confidence | not proven here | no-go for broad rollout | `SRE-2F` and owner assignment |
+| Production Backup Verification completed | unrestricted enterprise claim and real-customer pilot confidence | not completed | P0 gap | `SRE-2F` |
 | Production backup verification completed | enterprise-ready recoverability claim | not completed here | no-go | `SRE-2F` |
+| Restore Drill completed | recoverability confidence | design and decision-gate baseline only; no real approved execution completed | limited pilot stays guarded; unrestricted rollout blocked | synthetic/local dry run or separately approved restore path |
+| Processor / DPA Inventory completed | real-customer pilot and unrestricted enterprise claim | incomplete; requires follow-up | P0 before customer data | processor / DPA inventory |
 | Processor / DPA inventory completed | unrestricted enterprise claim and customer-data confidence | incomplete | no-go | processor/DPA follow-up |
+| Privacy Owner defined | real-customer pilot and privacy escalation path | not confirmed | P0 before real customer data | assign privacy owner |
 | Privacy owner confirmed | live privacy execution or real-customer escalation path | not proven here | guarded only | privacy owner decision |
+| DSAR Owner defined | real-customer pilot and subject-rights execution path | not confirmed | P0 before real customer data | assign DSAR owner |
 | DSAR owner confirmed | live subject-rights execution | not proven here | no-go | DSGVO owner follow-up |
+| DSAR / Export execution path approved | live DSAR or export execution | not granted; blocked by current decision gates | no-go for execution | explicit decision gate and implementation plan |
+| Retention / Deletion execution path approved | live retention or deletion execution | not granted; blocked by current decision gates | no-go for execution | explicit decision gate and implementation plan |
+| DB_READ_ONLY_AUDIT approved | production data audit or discovery | not granted | blocked | separate explicit human approval only |
+| Production Config Owner defined | real-customer pilot operational accountability | not confirmed; follow-up required | P0 for real-customer pilot | assign owner |
 | Production config owner defined | enterprise operational accountability | not proven here | no-go for unrestricted rollout | config owner follow-up |
+| Pilot Daily Health Review operationalized | active enterprise outreach and any sustained pilot operation | documented, not proven operational in practice | P0 before active outreach | operationalize daily review |
 | `DB_READ_ONLY_AUDIT` approved | production data audit or discovery | no | no-go | separate explicit human approval |
 | Query runner / data reports controlled and approved | production data analysis | no approval granted | no-go | separate approval path |
 | Public widget smoke and rollback discipline maintained | any limited pilot touching public surface | documented baseline exists | go with guardrails | keep required before/after relevant deploys |
