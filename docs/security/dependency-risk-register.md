@@ -4,6 +4,42 @@ Stand: 2026-07-23
 
 Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produktionskandidaten. Es ersetzt keinen externen Security-Scan.
 
+## 2026-07-23 - Scoped Next/PostCSS High Advisory Temporary Contextual Exception
+
+- Betroffene Dependency: `postcss`
+- Betroffener Kontext: Dashboard / Next.js production dependency path
+- Advisories:
+  - `GHSA-qx2v-qp2m-jg93`
+  - `GHSA-6g55-p6wh-862q`
+- Severity: high
+- Exakter Pfad: `node_modules/next/node_modules/postcss`
+- Parent: `next@16.2.11`
+- Affected version: `8.4.31`
+- Ausgangslage:
+  - `npm run security:audit:production-contexts` blockiert ohne Ausnahme auf dem exakten Next-internen PostCSS-Pfad.
+  - `apps/dashboard` standalone production audit bleibt clean.
+  - Kein stabiler Next-Release groesser als `16.2.11` mit gefixtem internem PostCSS ist derzeit verfuegbar.
+  - Override-Tests waren fuer den exakten Next-internen Pfad nicht wirksam.
+- Entscheidung:
+  - Status: `accepted_temporarily_with_context`
+  - Das Finding bleibt **nicht fixed**.
+  - `production-context audit` passiert nur, weil eine exakt gescopte Exception fuer diesen einen High-Befund existiert.
+  - Upgrade auf einen stabilen Next-Release mit gefixtem internem PostCSS bleibt erforderlich.
+  - Stable-Next-Watch bleibt aktiv.
+  - Keine Broad-Rollout-, Customer-Data- oder Enterprise-Readiness-Freigabe folgt aus dieser Exception.
+  - Diese Exception erteilt keine Deploy-Freigabe.
+  - Jeder Deploy benoetigt weiterhin ein separates Deploy-Decision-Gate.
+- Technische Begrenzung:
+  - `scripts/security/audit-production-contexts.sh` akzeptiert nur den exakten High-Finding-Pfad mit:
+    - Package `postcss`
+    - Advisories `GHSA-qx2v-qp2m-jg93` und `GHSA-6g55-p6wh-862q`
+    - Pfad `node_modules/next/node_modules/postcss`
+    - Parent `next@16.2.11`
+    - Affected version `8.4.31`
+    - gueltiger Expiry- und Owner-Angabe
+  - Alle anderen High-/Critical-Findings bleiben blocker.
+  - Critical Findings werden nie akzeptiert.
+
 ## 2026-07-23 - Next Dashboard High Advisory Fix Production-Live
 
 - Betroffene Dependency: `next`
