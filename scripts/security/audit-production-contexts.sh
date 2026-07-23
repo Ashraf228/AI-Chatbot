@@ -204,6 +204,7 @@ if (remaining.length > 0) {
 
 for (const entry of accepted) {
   console.log("[audit] accepted scoped production-context exception");
+  console.log("  warning: accepted temporarily, not fixed");
   console.log(`  advisory: ${entry.advisoryIds.join(", ")}`);
   console.log(`  package: ${entry.exception.package}`);
   console.log(`  path: ${entry.exception.dependencyPath}`);

@@ -10,6 +10,8 @@ Expires: 2026-08-06
 
 Owner: security_owner
 
+owner_role: security_owner
+
 Status: temporary_contextual_exception
 
 Finding:

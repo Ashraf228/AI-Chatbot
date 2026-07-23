@@ -27,6 +27,8 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
   - Upgrade auf einen stabilen Next-Release mit gefixtem internem PostCSS bleibt erforderlich.
   - Stable-Next-Watch bleibt aktiv.
   - Keine Broad-Rollout-, Customer-Data- oder Enterprise-Readiness-Freigabe folgt aus dieser Exception.
+  - Diese Exception erteilt keine Deploy-Freigabe.
+  - Jeder Deploy benoetigt weiterhin ein separates Deploy-Decision-Gate.
 - Technische Begrenzung:
   - `scripts/security/audit-production-contexts.sh` akzeptiert nur den exakten High-Finding-Pfad mit:
     - Package `postcss`
