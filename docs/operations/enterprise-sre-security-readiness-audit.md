@@ -123,7 +123,7 @@ Der Email-Job-Duplicate-Track ist deshalb fuer Enterprise-Readiness aktuell nur 
 
 ### Phase 2: Security Baseline
 
-- `ENT-SEC-1A Enterprise Security Gap Audit`
+- `ENT-SEC-1A Enterprise Security Gap Audit` completed as the consolidated pilot baseline inventory
 - `ENT-SEC-2A Tenant Isolation / RBAC Review`
 - `ENT-SEC-3A Admin Audit Log Scope`
 - `ENT-SEC-4A Secrets Inventory / Rotation Plan`
@@ -160,19 +160,19 @@ Der Email-Job-Duplicate-Track ist deshalb fuer Enterprise-Readiness aktuell nur 
 
 Empfohlener naechster Schritt:
 
-- `ENT-SEC-1A Retry`
+- `ENT-SEC-1B Enterprise Pilot Go/No-Go Decision`
 
 Begruendung:
 
-- die drei zuletzt production-relevanten Dependency-Drifts `body-parser`, `sharp` und `next` sind jetzt dokumentiert production-live geschlossen
-- der zuvor akute Security-Dependency-Blocker fuer einen belastbaren Enterprise-Sicherheitsbaseline-Track ist damit ausgeraeumt
-- der naechste sinnvolle Fokus ist deshalb wieder der zusammenhaengende Enterprise-Security-Gap-Audit fuer Admin-, RBAC-, Secret- und Prozessgrenzen
+- der konsolidierte Enterprise Security Gap Audit ist jetzt erstellt
+- der naechste sinnvolle Schritt ist deshalb die explizite Pilot-Go/No-Go-Entscheidung ueber Monitoring-, Backup-, Privacy-, Processor- und Owner-Luecken
+- damit kann sauber getrennt werden, was zwingend vor Pilotstart erledigt werden muss und was unter engen Guardrails in den Pilot geschoben werden darf
 
 Sinnvolle Alternative:
 
 - `SRE-1G Real External Monitor / Alert Setup Decision Gate`
 
-Diese Alternative ist dann sinnvoll, wenn vor dem naechsten Enterprise-Security-Audit zuerst die externe Monitoring-/Alerting-Haertung formalisiert werden soll.
+Diese Alternative ist dann sinnvoll, wenn vor der eigentlichen Pilot-Go/No-Go-Entscheidung zuerst die externe Monitoring-/Alerting-Haertung formalisiert werden soll.
 
 ## Non-goals
 
