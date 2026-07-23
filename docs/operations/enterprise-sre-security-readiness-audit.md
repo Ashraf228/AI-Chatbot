@@ -2,7 +2,7 @@
 
 ## Summary
 
-Stand dieses Audits ist July 22, 2026.
+Stand dieses Audits ist July 23, 2026.
 
 Die aktuelle Plattform ist fuer die bereits production-validierten Boundary- und Dokumentationsschritte stabil genug, um weitere pure Boundary- und DOKU_ONLY-Arbeit sicher fortzusetzen. Fuer eine belastbare Enterprise-, SRE- und Security-Readiness fehlen aber noch mehrere formalisierte Betriebs-, Sicherheits- und Datenschutz-Bausteine.
 
@@ -11,6 +11,9 @@ Positiv bestaetigt sind:
 - Main-CI-Workflow auf `pull_request` und `push` auf `main`
 - Docker-/Main-CI-Gate-Runbook und Gate-Skripte auf `main`
 - Production Health und Public Widget Smoke aktuell gruen dokumentiert
+- body-parser Produktionsdrift fixed / production-live dokumentiert
+- sharp Produktionsdrift mitigated / production-live dokumentiert
+- next Produktionsdrift fixed / production-live dokumentiert
 - Production-DB-Ziel weiter `chatbot`
 - Migrationsstand weiter `28`
 - letzte Migration weiter `028_generic_webhook_signing_modes.sql`
@@ -29,13 +32,13 @@ Die groessten Enterprise-Luecken liegen aktuell nicht in fehlenden Refactor-Boun
 
 ## Current Baseline
 
-- `origin/main`: `9b74ee942215597215aaf77b23ee69d6139519ee`
+- `origin/main`: `830faf45c73a3dc7765061fee45e19b5ca987386`
 - zuletzt dokumentierter live-validierter API-Stand: `df4b2617ad27cab46c0f14c65f9acb08697940a1`
 - vorheriger live-validierter API-Stand: `92c78a607386fa73a44bed8b6ede8c87e52420cf`
 - zuletzt dokumentiertes live-validiertes API-Image: `sha256:f5783a991f5c6a7ca5c89bceba1c58aaca266c80fdc1f14a5092997a770be03b`
-- zuletzt dokumentierter live-validierter Dashboard-Stand: `9b74ee942215597215aaf77b23ee69d6139519ee`
-- vorheriger live-validierter Dashboard-Stand: `3a276e7f0ef898bae791638b964087780da80c4d`
-- zuletzt dokumentiertes live-validiertes Dashboard-Image: `sha256:7239c70845bc01d896aa9088977c9ff40538ad6867455433fca1f274bc32d9b8`
+- zuletzt dokumentierter live-validierter Dashboard-Stand: `830faf45c73a3dc7765061fee45e19b5ca987386`
+- vorheriger live-validierter Dashboard-Stand: `9b74ee942215597215aaf77b23ee69d6139519ee`
+- zuletzt dokumentiertes live-validiertes Dashboard-Image: `sha256:c5d1d8bfa7f7117eda65214964e96e46730b76b8e6663c90629637a2fe81dac9`
 - Production Health: gruen dokumentiert
 - Public Widget Smoke: gruen dokumentiert
 - Public Widget Response Shape: unveraendert
@@ -53,6 +56,12 @@ Die groessten Enterprise-Luecken liegen aktuell nicht in fehlenden Refactor-Boun
   - Advisory `GHSA-f88m-g3jw-g9cj` dokumentiert mitigiert
   - Dashboard-only-Deploy auf `9b74ee942215597215aaf77b23ee69d6139519ee` erfolgreich
   - `sharp` High-Finding im Dashboard-Production-Kontext nicht mehr vorhanden
+  - keine neue Audit-Exception und keine Risk Acceptance
+- next Produktionsdrift:
+  - Advisory-Familie fuer Middleware / Proxy bypass, Server Actions DoS und SSRF / cache confusion / internal endpoint disclosure dokumentiert behoben
+  - Dashboard-only-Deploy auf `830faf45c73a3dc7765061fee45e19b5ca987386` erfolgreich
+  - Next High-Findings im Dashboard-Production-Kontext nicht mehr vorhanden
+  - `postcss` bleibt hoechstens `moderate` und nicht blockierend
   - keine neue Audit-Exception und keine Risk Acceptance
 - aktueller Email-Job-Duplicate-Track:
   - Runbook- und Approval-Format dokumentiert
@@ -151,18 +160,19 @@ Der Email-Job-Duplicate-Track ist deshalb fuer Enterprise-Readiness aktuell nur 
 
 Empfohlener naechster Schritt:
 
-- `P0-Docker-1A Remote Docker Fallback Runner Plan`
+- `ENT-SEC-1A Retry`
 
 Begruendung:
 
-- der haeufigste operative Blocker in den bisherigen Gates war nicht Fachlogik, sondern fehlende belastbare Docker-Fallback-Ausfuehrung auf einer Docker-faehigen Umgebung
-- dieser Punkt verbessert Runtime-Gates, Post-Merge-Pruefungen und Production-safe Deploy-Entscheidungen unmittelbar
+- die drei zuletzt production-relevanten Dependency-Drifts `body-parser`, `sharp` und `next` sind jetzt dokumentiert production-live geschlossen
+- der zuvor akute Security-Dependency-Blocker fuer einen belastbaren Enterprise-Sicherheitsbaseline-Track ist damit ausgeraeumt
+- der naechste sinnvolle Fokus ist deshalb wieder der zusammenhaengende Enterprise-Security-Gap-Audit fuer Admin-, RBAC-, Secret- und Prozessgrenzen
 
 Sinnvolle Alternative:
 
-- `P0-Review-1A Codex Review / Security Diff Scan Policy`
+- `SRE-1G Real External Monitor / Alert Setup Decision Gate`
 
-Diese Alternative ist dann sinnvoll, wenn zuerst die Review-Qualitaet und Security-Diff-Disziplin standardisiert werden soll, bevor weitere Betriebsmechanik ausgebaut wird.
+Diese Alternative ist dann sinnvoll, wenn vor dem naechsten Enterprise-Security-Audit zuerst die externe Monitoring-/Alerting-Haertung formalisiert werden soll.
 
 ## Non-goals
 
