@@ -1,8 +1,55 @@
 # Dependency Risk Register
 
-Stand: 2026-07-21
+Stand: 2026-07-23
 
 Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produktionskandidaten. Es ersetzt keinen externen Security-Scan.
+
+## 2026-07-23 - Next Dashboard High Advisory Fix Production-Live
+
+- Betroffene Dependency: `next`
+- betroffener Kontext: `apps/dashboard` production context
+- Advisory-Familie:
+  - Middleware / Proxy bypass
+  - Server Actions DoS
+  - SSRF / cache confusion / internal endpoint disclosure
+- Severity: high
+- Ausgangslage: `npm run security:audit:production-contexts` meldete vor dem Fix High-Findings im Dashboard-Produktionskontext.
+- Fix:
+  - `next` wurde minimal auf `16.2.11` gepatcht.
+  - geaendert wurden nur:
+    - `package.json`
+    - `package-lock.json`
+    - `apps/dashboard/package.json`
+    - `apps/dashboard/package-lock.json`
+  - kein Runtime-Code
+  - kein API-/Widget-Code
+  - kein `npm audit fix --force`
+  - kein `next@latest`
+  - kein `next@canary`
+  - kein Major-/Framework-Upgrade
+- Scope-Kontrolle:
+  - Lockfile-Churn blieb auf den direkten `next`-Patch und zugehoerige `@next/env` / `@next/swc-*`-Eintraege begrenzt.
+  - Dashboard Image Optimization wurde nicht wieder aktiviert.
+- Merge- und Gate-Nachweis:
+  - PR `#134` ist gemerged.
+  - Head SHA vor Merge: `f71ca38019c1a89c289081f77f24ba49fb098fde`
+  - Squash-Commit auf `main`: `830faf45c73a3dc7765061fee45e19b5ca987386`
+  - Main-CI auf dem Merge-Commit war gruen via Run `29990758984`.
+- Produktionsstatus am 2026-07-23:
+  - Dashboard-only-Deploy wurde erfolgreich durchgefuehrt.
+  - Dashboard-Live-Commit wechselte von `9b74ee942215597215aaf77b23ee69d6139519ee` auf `830faf45c73a3dc7765061fee45e19b5ca987386`.
+  - Dashboard-Live-Image wechselte von `sha256:7239c70845bc01d896aa9088977c9ff40538ad6867455433fca1f274bc32d9b8` auf `sha256:c5d1d8bfa7f7117eda65214964e96e46730b76b8e6663c90629637a2fe81dac9`.
+  - `check-production-health` blieb gruen, API und Widget blieben unveraendert.
+  - `/login` blieb `200`, enthaelt kein `/_next/image`, und `/soule-logo.png` blieb `200`.
+  - Next High Advisories sind im Production-Kontext nicht mehr vorhanden.
+  - `sharp` High blocker bleibt weiterhin verschwunden.
+  - High-/Critical-Findings: keine.
+- Verbleibendes Thema:
+  - `postcss` bleibt hoechstens `moderate` und wird nicht faelschlich als behoben dargestellt.
+- Entscheidung:
+  - Der produktionsrelevante Next.js-Drift ist behoben und production-live.
+  - Keine neue Audit-Exception.
+  - Keine Risk Acceptance.
 
 ## 2026-07-21 - Dashboard Sharp Advisory Mitigation
 
