@@ -105,6 +105,13 @@ Why this is the current decision:
 
 | Criterion | Required For | Current Status | Decision | Follow-up |
 | --- | --- | --- | --- | --- |
+| No High/Critical Findings | internal readiness work and limited pilot with guardrails | met | supports internal readiness and limited pilot with guardrails | keep `production-context audit` green before pilot-impacting changes |
+| Main-CI / PR-CI green | internal readiness work and limited pilot with guardrails | met | supports internal readiness and limited pilot with guardrails | maintain required gates for every PR and `main` change |
+| Production security audit green | conditional pilot readiness | met | supports conditional pilot readiness | continue `production-context audit` before merges and deploy decisions |
+| Authorization Matrix green | conditional pilot readiness | met | supports conditional pilot readiness | maintain and expand when roles or scopes change |
+| Security Boundary Tests green | conditional pilot readiness | met | supports conditional pilot readiness | keep security-boundary tests mandatory for relevant changes |
+| Dependency Drift fixed | conditional pilot readiness | met for known `body-parser`, `sharp`, and Next.js production blockers | supports conditional pilot readiness | keep drift process active; `postcss` remains moderate and non-blocking |
+| Incident Response documented | limited pilot readiness with guardrails | documented | supports readiness but does not replace real owner or on-call assignment | name incident owner and on-call path before active outreach |
 | No open High/Critical security baseline finding | any pilot | satisfied in documented baseline | go | keep mandatory rechecks |
 | Main-CI / Docker / PostgreSQL isolation gate discipline | any production-affecting change | satisfied | go | keep exact-SHA gate process |
 | Dashboard / API / Widget baseline known | any limited pilot | documented from deploy, health, and dependency-drift baselines | supports conditional pilot | keep validating before relevant deploys |
@@ -128,11 +135,13 @@ Why this is the current decision:
 | DSAR owner confirmed | live subject-rights execution | not proven here | no-go | DSGVO owner follow-up |
 | DSAR / Export execution path approved | live DSAR or export execution | not granted; blocked by current decision gates | no-go for execution | explicit decision gate and implementation plan |
 | Retention / Deletion execution path approved | live retention or deletion execution | not granted; blocked by current decision gates | no-go for execution | explicit decision gate and implementation plan |
+| Query Runner / Reports controlled | customer-data reporting and ad hoc data extraction | blocked and not granted | required guardrail; no customer-data reports or query results are allowed | separate approval and safety design only if needed |
 | DB_READ_ONLY_AUDIT approved | production data audit or discovery | not granted | blocked | separate explicit human approval only |
 | Production Config Owner defined | real-customer pilot operational accountability | not confirmed; follow-up required | P0 for real-customer pilot | assign owner |
 | Production config owner defined | enterprise operational accountability | not proven here | no-go for unrestricted rollout | config owner follow-up |
 | Pilot Daily Health Review operationalized | active enterprise outreach and any sustained pilot operation | documented, not proven operational in practice | P0 before active outreach | operationalize daily review |
 | `DB_READ_ONLY_AUDIT` approved | production data audit or discovery | no | no-go | separate explicit human approval |
+| Rollback point documented | guarded deploy readiness during pilot-impacting changes | documented for relevant deploys | supports guarded deploy readiness | keep rollback point mandatory before pilot-impacting deploys |
 | Query runner / data reports controlled and approved | production data analysis | no approval granted | no-go | separate approval path |
 | Public widget smoke and rollback discipline maintained | any limited pilot touching public surface | documented baseline exists | go with guardrails | keep required before/after relevant deploys |
 
