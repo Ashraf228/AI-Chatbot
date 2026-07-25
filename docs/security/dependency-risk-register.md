@@ -1,22 +1,24 @@
 # Dependency Risk Register
 
-Stand: 2026-07-23
+Stand: 2026-07-25
 
 Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produktionskandidaten. Es ersetzt keinen externen Security-Scan.
 
-## 2026-07-23 - Scoped Next/PostCSS High Advisory Temporary Contextual Exception
+## 2026-07-25 - Scoped Next/PostCSS High Advisory Temporary Contextual Exception
 
 - Betroffene Dependency: `postcss`
 - Betroffener Kontext: Dashboard / Next.js production dependency path
 - Advisories:
   - `GHSA-qx2v-qp2m-jg93`
   - `GHSA-6g55-p6wh-862q`
+  - `GHSA-r28c-9q8g-f849`
 - Severity: high
 - Exakter Pfad: `node_modules/next/node_modules/postcss`
 - Parent: `next@16.2.11`
 - Affected version: `8.4.31`
 - Ausgangslage:
-  - `npm run security:audit:production-contexts` blockiert ohne Ausnahme auf dem exakten Next-internen PostCSS-Pfad.
+  - `npm run security:audit:production-contexts` blockiert ohne Ausnahme nur noch auf dem exakten Next-internen PostCSS-Pfad.
+  - Der separate Root-/Dashboard-Pfad `node_modules/postcss` wurde technisch auf `8.5.23` angehoben und ist kein Exception-Fall mehr.
   - `apps/dashboard` standalone production audit bleibt clean.
   - Kein stabiler Next-Release groesser als `16.2.11` mit gefixtem internem PostCSS ist derzeit verfuegbar.
   - Override-Tests waren fuer den exakten Next-internen Pfad nicht wirksam.
@@ -32,11 +34,12 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
 - Technische Begrenzung:
   - `scripts/security/audit-production-contexts.sh` akzeptiert nur den exakten High-Finding-Pfad mit:
     - Package `postcss`
-    - Advisories `GHSA-qx2v-qp2m-jg93` und `GHSA-6g55-p6wh-862q`
+    - Advisories `GHSA-qx2v-qp2m-jg93`, `GHSA-6g55-p6wh-862q` und `GHSA-r28c-9q8g-f849`
     - Pfad `node_modules/next/node_modules/postcss`
     - Parent `next@16.2.11`
     - Affected version `8.4.31`
     - gueltiger Expiry- und Owner-Angabe
+    - Revalidation-Trigger inklusive `expiry reached`
   - Alle anderen High-/Critical-Findings bleiben blocker.
   - Critical Findings werden nie akzeptiert.
 
