@@ -6,7 +6,8 @@
       "package": "postcss",
       "acceptedAdvisories": [
         "GHSA-qx2v-qp2m-jg93",
-        "GHSA-6g55-p6wh-862q"
+        "GHSA-6g55-p6wh-862q",
+        "GHSA-r28c-9q8g-f849"
       ],
       "acceptedSeverity": "high",
       "dependencyPath": "node_modules/next/node_modules/postcss",
@@ -25,7 +26,8 @@
         "dashboard CSS/theme/branding/custom-CSS feature changes",
         "public widget styling pipeline changes",
         "before active enterprise outreach",
-        "before real-customer pilot"
+        "before real-customer pilot",
+        "expiry reached"
       ],
       "scopeRestrictions": {
         "allowedUntilFix": true,

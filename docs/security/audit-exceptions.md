@@ -4,7 +4,7 @@
 
 Date: 2026-07-23
 
-Reviewed: 2026-07-23
+Reviewed: 2026-07-25
 
 Expires: 2026-08-06
 
@@ -19,6 +19,7 @@ Finding:
 - Advisories:
   - GHSA-qx2v-qp2m-jg93
   - GHSA-6g55-p6wh-862q
+  - GHSA-r28c-9q8g-f849
 - Severity: high
 - Context: Dashboard / Next.js production dependency path
 - Dependency path: node_modules/next/node_modules/postcss
@@ -30,7 +31,7 @@ Reason:
 - No stable Next release greater than 16.2.11 is currently available with fixed internal PostCSS.
 - Canary, alpha, beta, release-candidate and downgrade paths are not accepted here.
 - The override path was tested and was ineffective for the exact Next-internal dependency path.
-- The dashboard standalone production audit is clean; the remaining production-context blocker is the root workspace view of the exact Next-internal dependency path.
+- The standalone/root Dashboard PostCSS path was technically moved to `postcss@8.5.23`; the remaining production-context blocker is the exact Next-internal dependency path only.
 - No direct application-level postcss processing of user-supplied CSS was identified in this review.
 - No approved custom-CSS, tenant-CSS or branding-CSS pipeline was identified in this review.
 
@@ -73,6 +74,7 @@ Revalidation triggers:
 - public widget styling pipeline changes
 - before active enterprise outreach
 - before real-customer pilot
+- expiry reached
 
 Follow-up:
 - Monitor stable Next releases.
