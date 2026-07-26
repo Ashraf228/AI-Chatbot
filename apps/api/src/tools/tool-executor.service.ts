@@ -789,7 +789,7 @@ function buildTicketCreatedPayload(input: {
   metadata: Record<string, unknown>;
   createdAt: string;
 }) {
-  return deepRedactSensitiveValues({
+  const payload = deepRedactSensitiveValues({
     ticketId: input.ticketId,
     subject: input.subject,
     description: input.description,
@@ -824,6 +824,11 @@ function buildTicketCreatedPayload(input: {
     status: 'new',
     createdAt: input.createdAt,
   }) as Record<string, unknown>;
+
+  // Stable internal identifiers must remain intact for downstream integrations.
+  payload.ticketId = input.ticketId;
+
+  return payload;
 }
 
 function sanitizeTicketText(value: string) {

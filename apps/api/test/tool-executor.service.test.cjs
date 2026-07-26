@@ -481,6 +481,7 @@ test('ToolExecutorService create_ticket redacts sensitive IT values from ticket,
   const serializedTicket = JSON.stringify(tickets[0]);
   const serializedPayload = JSON.stringify(dispatchedEvents[0].payload);
   const serializedAuditInput = JSON.stringify(toolInvocations[0].input);
+  assert.equal(dispatchedEvents[0].payload.ticketId, result.data.ticketId);
   assert.doesNotMatch(serializedTicket, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
   assert.doesNotMatch(serializedPayload, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
   assert.doesNotMatch(serializedAuditInput, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
