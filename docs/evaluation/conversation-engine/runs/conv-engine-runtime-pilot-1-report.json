@@ -1,0 +1,90 @@
+{
+  "run_id": "conv-engine-runtime-pilot-1",
+  "run_type": "local_runtime_pilot_no_side_effects",
+  "runtime_integration": "enabled_for_test_or_demo_path_only",
+  "engine_execution": "admin_test_only_api_runtime_adapter",
+  "run_date": "2026-07-26",
+  "public_widget_activation": false,
+  "production_activation": false,
+  "customer_data_used": false,
+  "production_data_used": false,
+  "db_access_used": false,
+  "sql_used": false,
+  "query_runner_used": false,
+  "provider_calls_used": false,
+  "ticket_delivery_used": false,
+  "email_delivery_used": false,
+  "webhook_delivery_used": false,
+  "deploy_used": false,
+  "security_owner_review_required": true,
+  "privacy_owner_review_required": true,
+  "tests": {
+    "build_api": "PASS",
+    "runtime_pilot_test": "PASS",
+    "preview_regression": "PASS",
+    "synthetic_routing_regression": "PASS"
+  },
+  "integration_point": {
+    "controller_route": "POST /admin/sites/:siteId/conversation-engine/runtime-pilot",
+    "admin_only": true,
+    "test_mode_only": true,
+    "knowledge_source": "synthetic request snippets only",
+    "db_reads_for_new_logic": false,
+    "provider_calls": false
+  },
+  "scenarios": [
+    {
+      "id": "support_dashboard_problem",
+      "outcome": "PASS",
+      "intent": "support",
+      "goal": "solve_problem",
+      "selectedAgentKey": "support-agent",
+      "sideEffects": false
+    },
+    {
+      "id": "explicit_human_request",
+      "outcome": "PASS",
+      "intent": "support",
+      "goal": "escalate_human",
+      "selectedAgentKey": "handoff-agent",
+      "simulatedTicketFieldCollection": true
+    },
+    {
+      "id": "complaint_route",
+      "outcome": "PASS",
+      "intent": "complaint",
+      "goal": "escalate_human",
+      "selectedAgentKey": "handoff-agent",
+      "sideEffects": false
+    },
+    {
+      "id": "blocked_query_runner_deploy_request",
+      "outcome": "PASS",
+      "intent": "support",
+      "goal": "escalate_human",
+      "nextActionKey": "block_request",
+      "sideEffects": false
+    },
+    {
+      "id": "identity_question",
+      "outcome": "PASS",
+      "intent": "unknown",
+      "nextActionKey": "fallback_to_safe_response",
+      "humanImpersonation": false
+    },
+    {
+      "id": "unknown_vague_request",
+      "outcome": "PASS",
+      "goal": "clarify_intent",
+      "safeFallback": true
+    },
+    {
+      "id": "simulated_ticket_field_collection",
+      "outcome": "PASS",
+      "simulatedTicketFieldCollection": true,
+      "ticketDelivery": false,
+      "emailDelivery": false,
+      "webhookDelivery": false
+    }
+  ]
+}

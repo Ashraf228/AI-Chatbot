@@ -11,6 +11,7 @@ const { NextActionService } = require('../dist/conversation-engine/next-action.s
 const { HandoffReadinessService } = require('../dist/conversation-engine/handoff-readiness.service.js');
 const { ConversationQualityService } = require('../dist/conversation-engine/conversation-quality.service.js');
 const { ConversationEngineController } = require('../dist/conversation-engine/conversation-engine.controller.js');
+const { ConversationEngineRuntimeService } = require('../dist/conversation-engine/conversation-engine-runtime.service.js');
 const { ResponseDraftService } = require('../dist/conversation-engine/response-draft.service.js');
 const { AssistantProfileResolverService } = require('../dist/assistant-profiles/assistant-profile-resolver.service.js');
 
@@ -262,7 +263,7 @@ test('conversation engine preview reports missing required fields and skips know
   assert.equal(decision.missingFields.includes('problem'), false);
 });
 
-function createController({ previewEnabled = true, siteConfig = {}, moduleConfig = {}, knowledgeCount = 1 } = {}) {
+function createController({ previewEnabled = true, siteConfig = {}, moduleConfig = {}, knowledgeCount = 1, testModuleSettings = {} } = {}) {
   const calls = [];
   const dbQueries = [];
   const knowledgePreviewCalls = [];
@@ -275,6 +276,7 @@ function createController({ previewEnabled = true, siteConfig = {}, moduleConfig
         responsePreviewEnabled: false,
         knowledgePreviewEnabled: false,
         adminTestOnly: true,
+        ...testModuleSettings,
       },
       testCases: [],
     },
@@ -309,6 +311,7 @@ function createController({ previewEnabled = true, siteConfig = {}, moduleConfig
   const resolver = new AssistantProfileResolverService();
   const compareService = createCompareService();
   const responseDrafts = new ResponseDraftService(new ConversationQualityService());
+  const runtimePilot = new ConversationEngineRuntimeService(createEngine(), responseDrafts);
   const knowledgePreview = {
     async retrieve(input) {
       knowledgePreviewCalls.push(input);
@@ -369,6 +372,7 @@ function createController({ previewEnabled = true, siteConfig = {}, moduleConfig
     },
     createEngine(),
     compareService,
+    runtimePilot,
     new ConversationEngineTestCasesService(db, sitesService, siteModulesService, resolver, compareService, knowledgePreview, responseDrafts),
     knowledgePreview,
     responseDrafts,

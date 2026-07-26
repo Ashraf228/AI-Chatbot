@@ -7,6 +7,7 @@ import { AgentSelectorService } from './agent-selector.service';
 import { ConversationContextService } from './conversation-context.service';
 import { ConversationEngineCompareService } from './conversation-engine-compare.service';
 import { ConversationEngineController } from './conversation-engine.controller';
+import { ConversationEngineRuntimeService } from './conversation-engine-runtime.service';
 import { ConversationEngineService } from './conversation-engine.service';
 import { ConversationEngineTestCasesService } from './conversation-engine-test-cases.service';
 import { ConversationQualityService } from './conversation-quality.service';
@@ -25,6 +26,7 @@ import { VectorService } from '../vector/vector.service';
   providers: [
     ConversationEngineService,
     ConversationEngineCompareService,
+    ConversationEngineRuntimeService,
     ConversationEngineTestCasesService,
     ConversationContextService,
     IntentClassifierService,
@@ -39,6 +41,6 @@ import { VectorService } from '../vector/vector.service';
     VectorService,
     PrismaService,
   ],
-  exports: [ConversationEngineService],
+  exports: [ConversationEngineService, ConversationEngineRuntimeService],
 })
 export class ConversationEngineModule {}
