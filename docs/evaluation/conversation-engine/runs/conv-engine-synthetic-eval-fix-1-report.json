@@ -38,12 +38,21 @@
       "docs/evaluation/conversation-engine/runs/conv-engine-synthetic-eval-fix-1-runner-notes.md"
     ]
   },
+  "baseline_summary": {
+    "total_cases": 50,
+    "pass": 1,
+    "partial": 26,
+    "fail": 23,
+    "critical_failures": 0,
+    "outcome": "PARTIAL_NEEDS_FIXES"
+  },
   "summary": {
     "total_cases": 50,
     "pass": 26,
     "partial": 24,
     "fail": 0,
-    "critical_failures": 0
+    "critical_failures": 0,
+    "outcome": "PASS_WITH_PARTIALS"
   },
   "evaluation_outcome": "PASS_WITH_PARTIALS",
   "dimension_summary": {

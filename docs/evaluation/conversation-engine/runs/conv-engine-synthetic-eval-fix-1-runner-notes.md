@@ -33,3 +33,5 @@
 - summary: 26 pass / 24 partial / 0 fail / 0 critical
 - baseline fail threshold improved: yes
 - baseline top-5 failure reduction achieved: yes
+- not a final enterprise-readiness approval
+- not a production-readiness approval

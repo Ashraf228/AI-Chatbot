@@ -61,6 +61,50 @@
 - no tickets, emails, webhooks, or deploys
 - no external provider calls
 
+## Changed Code Paths
+
+- `apps/api/src/conversation-engine/*`
+- Conversation Engine classification and routing logic only
+- Goal / agent / next-action mapping for support, complaint, handoff, appointment, sales, privacy, and guardrail cases
+- Response draft fallback behavior for blocked and identity-related cases
+- Focused conversation-engine tests only
+
+No changes were made to:
+
+- Dashboard code
+- Widget code
+- DB or SQL surfaces
+- Workflow files
+- Package or lockfiles
+- Deploy or provider integration code
+
+## Fixed Patterns
+
+- `goal:escalate_human->clarify_intent`: `13 -> 0`
+- `agent:handoff-agent->knowledge-agent`: `11 -> 0`
+- `agent:support-agent->knowledge-agent`: `9 -> 0`
+- `intent:support->unknown`: `9 -> 0`
+
+## Remaining Patterns
+
+- `goal:escalate_human->answer_from_knowledge`: `9 -> 2`
+- `24` cases remain `PARTIAL`
+- remaining partial cases require later refinement before broader pilot or runtime rollout claims
+
+## PASS_WITH_PARTIALS Interpretation
+
+`PASS_WITH_PARTIALS` means:
+
+- `0` failed cases
+- `0` critical failures
+- all `50` cases are at least `PARTIAL`
+- the engine is materially improved against the synthetic suite
+- this is not final enterprise readiness
+- this is not production readiness
+- this is not a deploy approval
+- this is not a customer-data approval
+- partial cases remain follow-up work
+
 ## Case Summary
 
 | case_id | grade | intent | goal | agent | next_action | handoff |
@@ -115,3 +159,31 @@
 | case_handoff_appointment_fields | PASS | appointment | escalate_human | appointment-agent | collect_ticket_fields | yes |
 | case_handoff_complaint_fields | PASS | complaint | escalate_human | handoff-agent | collect_ticket_fields | yes |
 | case_handoff_support_source_then_fields | PASS | support | solve_problem | support-agent | offer_handoff | yes |
+
+## Next Recommendation
+
+Recommended next step:
+
+- `CONV-ENGINE-SYNTHETIC-EVAL-FIX-1-D2` for PR review and merge retry
+
+After merge:
+
+- `CONV-ENGINE-SYNTHETIC-EVAL-FIX-1-E`
+
+Then choose:
+
+- `CONV-ENGINE-RUNTIME-PILOT-1` if `PASS_WITH_PARTIALS` is accepted for pilot-runtime integration planning
+- `CONV-ENGINE-SYNTHETIC-EVAL-FIX-2` if the `24` partial cases should be reduced first
+
+Still not granted:
+
+- no customer data
+- no production data
+- no DB access
+- no SQL
+- no Query Runner
+- no provider calls
+- no ticket/email/webhook delivery
+- no deploy
+- no enterprise approval
+- no production approval
