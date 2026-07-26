@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import { Button } from "../../shared/Button";
+
+const MAX_KNOWLEDGE_SNIPPETS = 5;
+const MAX_SNIPPET_EXCERPT_LENGTH = 320;
 
 type BuilderFormState = {
   assistantName: string;
@@ -12,10 +15,30 @@ type BuilderFormState = {
   allowedTasks: string;
   blockedTasks: string;
   requiredFields: string;
-  syntheticKnowledgeSnippets: string;
+  knowledgeSnippetTitle: string;
+  knowledgeSnippetDraft: string;
   testMessage: string;
   handoffAllowed: boolean;
   ticketAllowed: boolean;
+};
+
+type DemoKnowledgeSnippet = {
+  id: string;
+  title: string;
+  excerpt: string;
+  score: number;
+  sourceType: string;
+  scope: string;
+  fileName?: string;
+};
+
+type RuntimeKnowledgeRetrieval = {
+  enabled: boolean;
+  attempted: boolean;
+  status: string;
+  snippets: DemoKnowledgeSnippet[];
+  warnings?: string[];
+  reasons?: string[];
 };
 
 type RuntimePilotResponse = {
@@ -67,6 +90,7 @@ type RuntimePilotResponse = {
       sanitized: true;
     };
   } | null;
+  knowledgeRetrieval?: RuntimeKnowledgeRetrieval;
   warnings?: string[];
   reasons?: string[];
 };
@@ -81,6 +105,8 @@ type DemoWorkspaceChatTurn = {
   userMessage: string;
   assistantDraft: string;
   result: RuntimePilotResponse;
+  submittedKnowledgeSnippets: DemoKnowledgeSnippet[];
+  usedKnowledgeSnippets: DemoKnowledgeSnippet[];
 };
 
 const DEFAULT_FORM: BuilderFormState = {
@@ -92,7 +118,8 @@ const DEFAULT_FORM: BuilderFormState = {
   allowedTasks: "answer_questions\ncollect_requests\ntriage_support\nprepare_handoff",
   blockedTasks: "",
   requiredFields: "fullName\nemail\ndescription",
-  syntheticKnowledgeSnippets: "",
+  knowledgeSnippetTitle: "",
+  knowledgeSnippetDraft: "",
   testMessage: "",
   handoffAllowed: true,
   ticketAllowed: false,
@@ -106,30 +133,61 @@ function splitLines(value: string, limit = 16) {
     .slice(0, limit);
 }
 
-function buildKnowledgeSnippets(value: string) {
-  return splitLines(value, 5).map((excerpt, index) => ({
-    id: `demo-snippet-${index + 1}`,
-    title: `Demo Snippet ${index + 1}`,
+function compactJson(value: RuntimePilotResponse) {
+  return JSON.stringify(value, null, 2);
+}
+
+function sanitizeSnippetText(value: string) {
+  return value.replace(/\r\n/g, "\n").trim();
+}
+
+function buildDefaultSnippetTitle(index: number) {
+  return `Demo Snippet ${index}`;
+}
+
+function stripFileExtension(fileName: string) {
+  return fileName.replace(/\.[^.]+$/, "").trim();
+}
+
+function parseSnippetBlocks(value: string) {
+  return value
+    .split(/\n\s*\n/)
+    .map((entry) => sanitizeSnippetText(entry))
+    .filter((entry) => entry.length > 0);
+}
+
+function buildKnowledgeSnippet(params: {
+  id: string;
+  title: string;
+  text: string;
+  fileName?: string;
+}): DemoKnowledgeSnippet | null {
+  const excerpt = sanitizeSnippetText(params.text).slice(0, MAX_SNIPPET_EXCERPT_LENGTH);
+  if (!excerpt) {
+    return null;
+  }
+
+  return {
+    id: params.id,
+    title: params.title.trim().slice(0, 120) || "Demo Snippet",
     excerpt,
     score: 0.75,
     sourceType: "synthetic",
     scope: "demo-workspace",
-  }));
-}
-
-function compactJson(value: RuntimePilotResponse) {
-  return JSON.stringify(value, null, 2);
+    fileName: params.fileName,
+  };
 }
 
 function buildRuntimePilotPayload(
   form: BuilderFormState,
   message: string,
   history: TranscriptHistoryEntry[],
+  knowledgeSnippets: DemoKnowledgeSnippet[],
 ) {
   return {
     message,
     history,
-    knowledgeSnippets: buildKnowledgeSnippets(form.syntheticKnowledgeSnippets),
+    knowledgeSnippets,
     demoWorkspace: {
       assistantName: form.assistantName,
       companyContext: form.companyContext,
@@ -162,19 +220,120 @@ function buildTranscriptHistory(turns: DemoWorkspaceChatTurn[]): TranscriptHisto
   });
 }
 
+function buildSnippetListSummary(snippets: DemoKnowledgeSnippet[]) {
+  if (snippets.length === 0) {
+    return "keine";
+  }
+
+  return snippets.map((snippet) => snippet.title).join(", ");
+}
+
 type DemoWorkspaceAgentBuilderCardProps = {
   siteId: string;
 };
 
 export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuilderCardProps) {
   const [form, setForm] = useState<BuilderFormState>(DEFAULT_FORM);
+  const [knowledgeSnippets, setKnowledgeSnippets] = useState<DemoKnowledgeSnippet[]>([]);
   const [result, setResult] = useState<RuntimePilotResponse | null>(null);
   const [chatTurns, setChatTurns] = useState<DemoWorkspaceChatTurn[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
 
   function updateField<Key extends keyof BuilderFormState>(key: Key, value: BuilderFormState[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function appendKnowledgeSnippets(nextSnippets: DemoKnowledgeSnippet[]) {
+    setKnowledgeSnippets((current) => {
+      const remainingSlots = Math.max(0, MAX_KNOWLEDGE_SNIPPETS - current.length);
+      const accepted = nextSnippets.slice(0, remainingSlots);
+      if (accepted.length < nextSnippets.length) {
+        setKnowledgeError(`Maximal ${MAX_KNOWLEDGE_SNIPPETS} In-Memory-Snippets gleichzeitig erlaubt.`);
+      } else {
+        setKnowledgeError(null);
+      }
+      return [...current, ...accepted];
+    });
+  }
+
+  function handleAddSnippetDraft() {
+    const draft = form.knowledgeSnippetDraft.trim();
+    if (!draft) {
+      return;
+    }
+
+    const blocks = parseSnippetBlocks(draft);
+    if (blocks.length === 0) {
+      setKnowledgeError("Nur nicht-leere synthetische Demo-Inhalte koennen als Snippet hinzugefuegt werden.");
+      return;
+    }
+
+    const baseIndex = knowledgeSnippets.length + 1;
+    const nextSnippets = blocks
+      .map((block, index) =>
+        buildKnowledgeSnippet({
+          id: `demo-snippet-${baseIndex + index}`,
+          title:
+            form.knowledgeSnippetTitle.trim().length > 0
+              ? blocks.length === 1
+                ? form.knowledgeSnippetTitle.trim()
+                : `${form.knowledgeSnippetTitle.trim()} ${index + 1}`
+              : buildDefaultSnippetTitle(baseIndex + index),
+          text: block,
+        }),
+      )
+      .filter((entry): entry is DemoKnowledgeSnippet => Boolean(entry));
+
+    appendKnowledgeSnippets(nextSnippets);
+    setForm((current) => ({
+      ...current,
+      knowledgeSnippetTitle: "",
+      knowledgeSnippetDraft: "",
+    }));
+  }
+
+  async function handleKnowledgeFileUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) {
+      return;
+    }
+
+    const baseIndex = knowledgeSnippets.length + 1;
+    const supportedFiles = files.filter((file) => /\.(txt|md|markdown|json)$/i.test(file.name));
+    if (supportedFiles.length !== files.length) {
+      setKnowledgeError("Nur .txt, .md, .markdown oder .json als Plain-Text sind in diesem Schritt erlaubt.");
+    } else {
+      setKnowledgeError(null);
+    }
+
+    const uploadedSnippets: DemoKnowledgeSnippet[] = [];
+    for (const [index, file] of supportedFiles.entries()) {
+      const text = sanitizeSnippetText(await file.text());
+      const snippet = buildKnowledgeSnippet({
+        id: `demo-snippet-${baseIndex + index}`,
+        title: stripFileExtension(file.name) || buildDefaultSnippetTitle(baseIndex + index),
+        text,
+        fileName: file.name,
+      });
+      if (snippet) {
+        uploadedSnippets.push(snippet);
+      }
+    }
+
+    appendKnowledgeSnippets(uploadedSnippets);
+    event.target.value = "";
+  }
+
+  function removeKnowledgeSnippet(snippetId: string) {
+    setKnowledgeSnippets((current) => current.filter((snippet) => snippet.id !== snippetId));
+    setKnowledgeError(null);
+  }
+
+  function clearKnowledgeSnippets() {
+    setKnowledgeSnippets([]);
+    setKnowledgeError(null);
   }
 
   async function runBuilder() {
@@ -190,7 +349,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
       const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/conversation-engine/runtime-pilot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildRuntimePilotPayload(form, message, history)),
+        body: JSON.stringify(buildRuntimePilotPayload(form, message, history, knowledgeSnippets)),
       });
       const data = (await response.json().catch(() => ({}))) as RuntimePilotResponse & { message?: string };
       if (!response.ok) {
@@ -198,6 +357,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
       }
 
       const assistantDraft = data.engineResponsePreview?.draft?.text || "";
+      const usedKnowledgeSnippets = data.knowledgeRetrieval?.snippets || [];
       setResult(data);
       setChatTurns((current) => [
         ...current,
@@ -206,6 +366,8 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
           userMessage: message,
           assistantDraft,
           result: data,
+          submittedKnowledgeSnippets: knowledgeSnippets.map((snippet) => ({ ...snippet })),
+          usedKnowledgeSnippets,
         },
       ]);
       setForm((current) => ({ ...current, testMessage: "" }));
@@ -223,6 +385,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
   }
 
   const draftText = result?.engineResponsePreview?.draft?.text || "Noch keine Simulation ausgefuehrt.";
+  const resultKnowledgeSnippets = result?.knowledgeRetrieval?.snippets || [];
 
   return (
     <div className="setup-module-card dashboard-stack dashboard-stack--sm">
@@ -238,14 +401,15 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
         <strong>Sicherheitsgrenzen</strong>
         <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
           <li>Nur Admin-/Operator-Testpfad</li>
-          <li>Nur synthetische/in-memory Konfiguration</li>
+          <li>Nur synthetische/freigegebene Demo-Inhalte</li>
           <li>Keine Kundendaten</li>
           <li>Keine Production-Daten</li>
-          <li>Nicht gespeichert</li>
+          <li>Knowledge wird nicht gespeichert</li>
+          <li>Dateien werden nicht dauerhaft gespeichert</li>
+          <li>Keine Embeddings / kein RAG-Indexing</li>
           <li>Kein Deploy</li>
           <li>Keine Public-Widget-Aktivierung</li>
-          <li>Kein PDF-Upload</li>
-          <li>Kein Knowledge-Upload</li>
+          <li>PDF bleibt in diesem Task gesperrt/deferred</li>
           <li>Keine echten Tickets, E-Mails oder Webhooks</li>
         </ul>
       </div>
@@ -335,16 +499,111 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
         </label>
       </div>
 
-      <label className="dashboard-field">
-        <span className="dashboard-field-label">Synthetic Knowledge Snippets</span>
-        <textarea
-          className="dashboard-textarea wizard-textarea-compact"
-          rows={4}
-          value={form.syntheticKnowledgeSnippets}
-          onChange={(event) => updateField("syntheticKnowledgeSnippets", event.target.value)}
-          placeholder="Eine Zeile pro Snippet. Rein synthetisch, keine echten Kundendaten."
-        />
-      </label>
+      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+        <div>
+          <strong>In-Memory Knowledge Upload (MVP)</strong>
+          <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+            Text- und Markdown-Snippets bleiben ausschliesslich im Browser-State und werden pro Testchat-Turn an den
+            bestehenden Runtime-Pilot weitergegeben. Es gibt keine Persistenz, keinen File Storage und keine PDF-
+            Verarbeitung in diesem Schritt.
+          </p>
+        </div>
+
+        <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          <li>Unterstuetzt: Paste, .txt, .md, .markdown, .json als Plain-Text</li>
+          <li>PDF-Unterstuetzung ist in diesem Task bewusst deferred</li>
+          <li>Maximal {MAX_KNOWLEDGE_SNIPPETS} aktive Snippets gleichzeitig</li>
+        </ul>
+
+        <div className="dashboard-grid dashboard-grid--metrics-3">
+          <label className="dashboard-field">
+            <span className="dashboard-field-label">Snippet Title (optional)</span>
+            <input
+              className="dashboard-input"
+              value={form.knowledgeSnippetTitle}
+              onChange={(event) => updateField("knowledgeSnippetTitle", event.target.value)}
+              placeholder="z. B. Demo FAQ"
+            />
+          </label>
+        </div>
+
+        <label className="dashboard-field">
+          <span className="dashboard-field-label">Knowledge Snippet Text</span>
+          <textarea
+            className="dashboard-textarea wizard-textarea-compact"
+            rows={5}
+            value={form.knowledgeSnippetDraft}
+            onChange={(event) => updateField("knowledgeSnippetDraft", event.target.value)}
+            placeholder="Nur synthetische/freigegebene Demo-Inhalte. Mehrere Snippets koennen per Leerzeile getrennt eingefuegt werden."
+          />
+        </label>
+
+        <div className="dashboard-grid dashboard-grid--metrics-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleAddSnippetDraft}
+            disabled={!form.knowledgeSnippetDraft.trim()}
+          >
+            Snippet aus Text hinzufuegen
+          </Button>
+          <label className="dashboard-field">
+            <span className="dashboard-field-label">Text/Markdown-Datei laden</span>
+            <input
+              className="dashboard-input"
+              type="file"
+              accept=".txt,.md,.markdown,.json,text/plain,text/markdown,application/json"
+              multiple
+              onChange={handleKnowledgeFileUpload}
+            />
+          </label>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={clearKnowledgeSnippets}
+            disabled={knowledgeSnippets.length === 0}
+          >
+            Alle Snippets entfernen
+          </Button>
+        </div>
+
+        {knowledgeError ? <div className="dashboard-status dashboard-status--error">{knowledgeError}</div> : null}
+
+        <div className="dashboard-stack dashboard-stack--sm">
+          <strong>Aktive Knowledge Snippets ({knowledgeSnippets.length})</strong>
+          {knowledgeSnippets.length === 0 ? (
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              Noch keine In-Memory-Snippets aktiv. TXT/Markdown bleibt lokal im Browser und wird nicht gespeichert.
+            </p>
+          ) : (
+            <div className="dashboard-stack dashboard-stack--sm">
+              {knowledgeSnippets.map((snippet) => (
+                <div key={snippet.id} className="dashboard-card dashboard-card--compact dashboard-stack dashboard-stack--sm">
+                  <div className="dashboard-grid dashboard-grid--metrics-3">
+                    <div>
+                      <strong>{snippet.title}</strong>
+                      <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                        {snippet.fileName ? `Datei: ${snippet.fileName}` : "Quelle: Paste / In-Memory"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                        sourceType={snippet.sourceType} · scope={snippet.scope}
+                      </p>
+                    </div>
+                    <div>
+                      <Button type="button" variant="ghost" onClick={() => removeKnowledgeSnippet(snippet.id)}>
+                        Snippet entfernen
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="dashboard-copy dashboard-no-margin-bottom">{snippet.excerpt}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <label className="dashboard-field">
         <span className="dashboard-field-label">Test Message</span>
@@ -383,14 +642,13 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
         </p>
         <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
           <li>Nur Admin-/Operator-Testpfad</li>
-          <li>Nur synthetische/in-memory Daten</li>
+          <li>Nur synthetische/freigegebene Demo-Inhalte</li>
           <li>Chatverlauf wird nicht gespeichert</li>
           <li>Keine Kundendaten</li>
           <li>Keine Production-Daten</li>
           <li>Kein Deploy</li>
           <li>Keine Public-Widget-Aktivierung</li>
-          <li>Kein PDF-Upload</li>
-          <li>Kein Knowledge-Upload</li>
+          <li>PDF bleibt in diesem Task gesperrt/deferred</li>
           <li>Keine echten Tickets, E-Mails oder Webhooks</li>
         </ul>
       </div>
@@ -426,6 +684,12 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
                     {turn.assistantDraft || "Kein Draft zurueckgegeben."}
                   </p>
                 </div>
+                <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                  Knowledge Submitted: {buildSnippetListSummary(turn.submittedKnowledgeSnippets)}
+                </p>
+                <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                  Knowledge Used: {buildSnippetListSummary(turn.usedKnowledgeSnippets)}
+                </p>
                 <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
                   intent={turn.result.conversationEnginePreview?.intent || "unknown"} · goal=
                   {turn.result.conversationEnginePreview?.goal || "unknown"} · stage=
@@ -514,6 +778,19 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
           </div>
 
           <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+            <strong>Knowledge Usage</strong>
+            <p className="dashboard-copy dashboard-no-margin-bottom">
+              Active Snippets: {knowledgeSnippets.length} · Used By Runtime Pilot: {result.runtimeState?.sourcesUsed ?? 0}
+            </p>
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              Used Snippet Titles: {buildSnippetListSummary(resultKnowledgeSnippets)}
+            </p>
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              Retrieval Status: {result.knowledgeRetrieval?.status || "unknown"}
+            </p>
+          </div>
+
+          <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
             <strong>Activation Boundary</strong>
             <p className="dashboard-copy dashboard-no-margin-bottom">
               mode={result.activationBoundary?.mode || "unknown"} · publicWidgetActivation=
@@ -522,7 +799,15 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
               {String(result.activationBoundary?.deployRequired ?? false)}
             </p>
             <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-              sideEffects planned={String(result.sideEffects?.planned ?? false)} · ticket=
+              Der Runtime-Pilot bleibt ein reiner Admin-Testpfad ohne Persistenz, ohne Deploy, ohne Public-Widget-
+              Aktivierung.
+            </p>
+          </div>
+
+          <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+            <strong>Side Effects Boundary</strong>
+            <p className="dashboard-copy dashboard-no-margin-bottom">
+              planned={String(result.sideEffects?.planned ?? false)} · ticket=
               {String(result.sideEffects?.ticketDelivery ?? false)} · email=
               {String(result.sideEffects?.emailDelivery ?? false)} · webhook=
               {String(result.sideEffects?.webhookDelivery ?? false)} · provider=
@@ -531,20 +816,11 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
               {String(result.sideEffects?.sql ?? false)} · queryRunner=
               {String(result.sideEffects?.queryRunner ?? false)}
             </p>
-            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-              Runtime-Pilot bleibt ohne Persistenz, ohne Deploy, ohne Public-Widget-Aktivierung, ohne PDF-Upload und ohne Knowledge-Upload.
-            </p>
           </div>
 
-          {result.warnings?.length ? (
-            <div className="dashboard-status dashboard-status--warning">
-              Hinweise: {result.warnings.join(" · ")}
-            </div>
-          ) : null}
-
           <details className="dashboard-card dashboard-card--soft">
-            <summary className="dashboard-accordion__summary">Technische Runtime-Pilot-Antwort</summary>
-            <pre className="dashboard-code-block dashboard-mt-14">{compactJson(result)}</pre>
+            <summary className="dashboard-copy">Runtime-Pilot Raw JSON</summary>
+            <pre className="dashboard-pre">{compactJson(result)}</pre>
           </details>
         </div>
       ) : null}

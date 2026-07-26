@@ -14,17 +14,19 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
 
     expect(screen.getByText("Sicherheitsgrenzen")).toBeInTheDocument();
     expect(screen.getAllByText("Nur Admin-/Operator-Testpfad")).toHaveLength(2);
-    expect(screen.getByText("Nur synthetische/in-memory Konfiguration")).toBeInTheDocument();
     expect(screen.getAllByText("Keine Kundendaten")).toHaveLength(2);
     expect(screen.getAllByText("Keine Production-Daten")).toHaveLength(2);
-    expect(screen.getByText("Nicht gespeichert")).toBeInTheDocument();
+    expect(screen.getByText("Knowledge wird nicht gespeichert")).toBeInTheDocument();
+    expect(screen.getByText("Dateien werden nicht dauerhaft gespeichert")).toBeInTheDocument();
+    expect(screen.getByText("Keine Embeddings / kein RAG-Indexing")).toBeInTheDocument();
     expect(screen.getAllByText("Kein Deploy")).toHaveLength(2);
     expect(screen.getAllByText("Keine Public-Widget-Aktivierung")).toHaveLength(2);
-    expect(screen.getAllByText("Kein PDF-Upload")).toHaveLength(2);
-    expect(screen.getAllByText("Kein Knowledge-Upload")).toHaveLength(2);
+    expect(screen.getAllByText("PDF bleibt in diesem Task gesperrt/deferred")).toHaveLength(2);
     expect(screen.getAllByText("Keine echten Tickets, E-Mails oder Webhooks")).toHaveLength(2);
+    expect(screen.getByText("In-Memory Knowledge Upload (MVP)")).toBeInTheDocument();
     expect(screen.getByText("Demo Workspace Testchat (MVP)")).toBeInTheDocument();
-    expect(screen.getByText("Chatverlauf wird nicht gespeichert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Snippet aus Text hinzufuegen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Alle Snippets entfernen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Testnachricht senden" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "In-Memory-Chat leeren" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
@@ -35,7 +37,42 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     expect(screen.queryByRole("button", { name: /live schalten/i })).not.toBeInTheDocument();
   });
 
-  test("submits structured demo workspace context and renders runtime pilot result", async () => {
+  test("adds text and file snippets only in browser state and can remove or clear them", async () => {
+    render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
+
+    await userEvent.type(screen.getByLabelText("Snippet Title (optional)"), "Demo FAQ");
+    await userEvent.type(
+      screen.getByLabelText("Knowledge Snippet Text"),
+      "Nur synthetische Antworten im Demo-Workspace verwenden.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Snippet aus Text hinzufuegen" }));
+
+    expect(screen.getByText("Aktive Knowledge Snippets (1)")).toBeInTheDocument();
+    expect(screen.getByText("Demo FAQ")).toBeInTheDocument();
+    expect(screen.getByText("Quelle: Paste / In-Memory")).toBeInTheDocument();
+
+    const fileInput = screen.getByLabelText("Text/Markdown-Datei laden");
+    const file = new File(["# Demo Runbook\n\nNur fuer synthetische Tests."], "Demo Runbook.md", {
+      type: "text/markdown",
+    });
+    await userEvent.upload(fileInput, file);
+
+    expect(screen.getByText("Aktive Knowledge Snippets (2)")).toBeInTheDocument();
+    expect(screen.getByText("Demo Runbook")).toBeInTheDocument();
+    expect(screen.getByText("Datei: Demo Runbook.md")).toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Snippet entfernen" })[0]);
+    expect(screen.queryByText("Demo FAQ")).not.toBeInTheDocument();
+    expect(screen.getByText("Aktive Knowledge Snippets (1)")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Alle Snippets entfernen" }));
+    expect(screen.getByText("Aktive Knowledge Snippets (0)")).toBeInTheDocument();
+    expect(
+      screen.getByText("Noch keine In-Memory-Snippets aktiv. TXT/Markdown bleibt lokal im Browser und wird nicht gespeichert."),
+    ).toBeInTheDocument();
+  });
+
+  test("submits structured demo workspace context with active snippets and renders runtime pilot knowledge usage", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body || "{}"));
       expect(body.message).toBe("Bitte simuliere einen sicheren Demo-Supportfall.");
@@ -46,6 +83,8 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
       expect(body.demoWorkspace.blockedTasks).toEqual(["deploy"]);
       expect(body.demoWorkspace.requiredFields).toEqual(["fullName", "email"]);
       expect(body.knowledgeSnippets).toHaveLength(2);
+      expect(body.knowledgeSnippets[0].title).toBe("Demo FAQ");
+      expect(body.knowledgeSnippets[1].title).toBe("Demo Runbook");
       expect(body.history).toEqual([]);
       expect(body.existingConversationState.testChatMode).toBe("demo_workspace_in_memory_testchat_mvp");
       expect(body.existingConversationState.chatHistoryPersistence).toBe(false);
@@ -78,6 +117,31 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
             ticketFieldRequestSimulated: false,
             sourcesUsed: 2,
             sourceRequired: true,
+          },
+          knowledgeRetrieval: {
+            enabled: true,
+            attempted: true,
+            status: "available",
+            snippets: [
+              {
+                id: "demo-snippet-1",
+                title: "Demo FAQ",
+                excerpt: "Nur synthetische Antworten im Demo-Workspace verwenden.",
+                score: 0.75,
+                sourceType: "synthetic",
+                scope: "demo-workspace",
+              },
+              {
+                id: "demo-snippet-2",
+                title: "Demo Runbook",
+                excerpt: "# Demo Runbook\n\nNur fuer synthetische Tests.",
+                score: 0.75,
+                sourceType: "synthetic",
+                scope: "demo-workspace",
+              },
+            ],
+            warnings: [],
+            reasons: ["Nur synthetische, im Request uebergebene Wissens-Snippets wurden verwendet."],
           },
           conversationEnginePreview: {
             intent: "support",
@@ -122,10 +186,20 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     await userEvent.type(screen.getByLabelText("Blocked Tasks"), "deploy");
     await userEvent.clear(screen.getByLabelText("Required Fields"));
     await userEvent.type(screen.getByLabelText("Required Fields"), "fullName{enter}email");
+
+    await userEvent.type(screen.getByLabelText("Snippet Title (optional)"), "Demo FAQ");
     await userEvent.type(
-      screen.getByLabelText("Synthetic Knowledge Snippets"),
-      "Demo snippet eins{enter}Demo snippet zwei",
+      screen.getByLabelText("Knowledge Snippet Text"),
+      "Nur synthetische Antworten im Demo-Workspace verwenden.",
     );
+    await userEvent.click(screen.getByRole("button", { name: "Snippet aus Text hinzufuegen" }));
+
+    const fileInput = screen.getByLabelText("Text/Markdown-Datei laden");
+    const file = new File(["# Demo Runbook\n\nNur fuer synthetische Tests."], "Demo Runbook.md", {
+      type: "text/markdown",
+    });
+    await userEvent.upload(fileInput, file);
+
     await userEvent.type(
       screen.getByLabelText("Test Message"),
       "Bitte simuliere einen sicheren Demo-Supportfall.",
@@ -138,9 +212,11 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     expect(screen.getByText("support-agent")).toBeInTheDocument();
     expect(screen.getAllByText("Ich kann das als Demo-Supportfall sicher einordnen.")).toHaveLength(2);
     expect(screen.getAllByText(/publicWidgetActivation=false/)).toHaveLength(2);
-    expect(screen.getByText(/ohne Persistenz, ohne Deploy, ohne Public-Widget-Aktivierung/i)).toBeInTheDocument();
+    expect(screen.getByText(/reiner Admin-Testpfad ohne Persistenz/i)).toBeInTheDocument();
     expect(screen.getByText("Turn 1: User")).toBeInTheDocument();
     expect(screen.getByText("Bitte simuliere einen sicheren Demo-Supportfall.")).toBeInTheDocument();
+    expect(screen.getByText("Used Snippet Titles: Demo FAQ, Demo Runbook")).toBeInTheDocument();
+    expect(screen.getByText("Knowledge Used: Demo FAQ, Demo Runbook")).toBeInTheDocument();
   });
 
   test("keeps transcript only in memory across multiple turns and clears local state", async () => {
@@ -170,6 +246,14 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
               sql: false,
               queryRunner: false,
             },
+            knowledgeRetrieval: {
+              enabled: false,
+              attempted: false,
+              status: "disabled",
+              snippets: [],
+              warnings: [],
+              reasons: [],
+            },
             runtimeState: {
               selectedAgentKey: "support-agent",
               nextActionKey: "answer_from_knowledge",
@@ -177,8 +261,8 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
               shouldAskQuestion: false,
               handoffOfferSimulated: false,
               ticketFieldRequestSimulated: false,
-              sourcesUsed: 1,
-              sourceRequired: true,
+              sourcesUsed: 0,
+              sourceRequired: false,
             },
             conversationEnginePreview: {
               intent: "support",
@@ -233,6 +317,14 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
               dbAccessForNewLogic: false,
               sql: false,
               queryRunner: false,
+            },
+            knowledgeRetrieval: {
+              enabled: false,
+              attempted: false,
+              status: "disabled",
+              snippets: [],
+              warnings: [],
+              reasons: [],
             },
             runtimeState: {
               selectedAgentKey: "handoff-agent",
