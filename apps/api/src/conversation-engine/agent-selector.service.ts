@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConversationContext, ConversationGoal, ConversationIntent } from './conversation-engine.types';
+import { getRoutingSignals } from './routing-signals';
 
 type AgentSelection = {
   selectedAgentKey: string | null;
@@ -18,6 +19,7 @@ const AGENT_ALIASES: Record<string, string[]> = {
 export class AgentSelectorService {
   select(context: ConversationContext, intent: ConversationIntent, goal: ConversationGoal): AgentSelection {
     const enabledAgents = context.assistantProfile.enabledAgents;
+    const signals = getRoutingSignals(context.normalizedText);
     const choose = (suggestedAgentKey: string, fallbackAgentKeys: string[], reason: string): AgentSelection => {
       const candidates = [suggestedAgentKey, ...(AGENT_ALIASES[suggestedAgentKey] || []), ...fallbackAgentKeys];
       const selected = candidates.find((agentKey) => enabledAgents.includes(agentKey)) || null;
@@ -32,6 +34,22 @@ export class AgentSelectorService {
           : `${reason} Fachlich vorgeschlagen: ${suggestedAgentKey}; kein passender Agent ist aktiviert.`,
       };
     };
+
+    if (signals.humanIdentityQuestion) {
+      return choose('knowledge-agent', ['handoff-agent'], 'Identitaetsfragen bleiben bei einem sicheren Nicht-Mensch-Fallback.');
+    }
+
+    if (signals.legalFinalityRequest) {
+      return choose('knowledge-agent', ['handoff-agent'], 'Reine Legal-/Compliance-Finalitaet bleibt beim Knowledge-Agent mit Block-Grenze.');
+    }
+
+    if (intent === 'appointment' && goal === 'escalate_human') {
+      return choose('appointment-agent', ['handoff-agent', 'sales-agent', 'lead-sales-agent', 'knowledge-agent'], 'Terminbezogene Eskalation wird ueber den Termin-Agenten vorbereitet.');
+    }
+
+    if (intent === 'sales' && goal === 'escalate_human') {
+      return choose('sales-agent', ['lead-sales-agent', 'handoff-agent', 'knowledge-agent'], 'Kommerzielle Rueckfrage wird ueber den Sales-Agenten eingeordnet.');
+    }
 
     if (intent === 'complaint' || goal === 'escalate_human') {
       return choose('handoff-agent', ['support-agent', 'sales-agent', 'lead-sales-agent', 'knowledge-agent'], 'Übergabe-Agent passt zur Beschwerde oder Eskalation.');

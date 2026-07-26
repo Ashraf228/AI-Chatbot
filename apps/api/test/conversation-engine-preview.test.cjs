@@ -173,9 +173,11 @@ test('conversation engine preview prioritizes appointment-agent for appointments
   });
 
   assert.equal(decision.intent, 'appointment');
-  assert.equal(['prepare_contact', 'trigger_integration'].includes(decision.goal), true);
+  assert.equal(decision.goal, 'escalate_human');
   assert.notEqual(decision.selectedAgentKey, 'knowledge-agent');
-  assert.equal(['appointment-agent', 'handoff-agent'].includes(decision.selectedAgentKey), true);
+  assert.equal(decision.selectedAgentKey, 'appointment-agent');
+  assert.equal(decision.nextActionKey, 'offer_handoff');
+  assert.equal(decision.shouldHandoff, true);
 });
 
 test('conversation engine preview prioritizes handoff for complaints', () => {
