@@ -6,6 +6,7 @@ import { SitesService } from '../sites/sites.service';
 import { AdminScopeService } from '../utils/admin-scope.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { ConversationEngineCompareService } from './conversation-engine-compare.service';
+import { ConversationEngineRuntimeService } from './conversation-engine-runtime.service';
 import { ConversationEngineService } from './conversation-engine.service';
 import { ConversationEngineTestCasesService } from './conversation-engine-test-cases.service';
 import { ConversationHistoryEntry } from './conversation-engine.types';
@@ -65,6 +66,19 @@ function knowledgePreviewEnabled(siteConfig: Record<string, unknown>, moduleConf
     (siteEngine.adminTestOnly === true || moduleEngine.adminTestOnly === true || testsEngine.adminTestOnly === true);
 }
 
+function adminTestOnlyEnabled(siteConfig: Record<string, unknown>, moduleConfigs: Record<string, Record<string, unknown>>) {
+  const siteEngine = asRecord(siteConfig.conversationEngine);
+  const assistantModule = asRecord(moduleConfigs['assistant-profile']);
+  const moduleEngine = asRecord(assistantModule.conversationEngine);
+  const testsModule = asRecord(moduleConfigs['conversation-engine-tests']);
+  const testsEngine = asRecord(testsModule.conversationEngine);
+  return siteEngine.adminTestOnly === true || moduleEngine.adminTestOnly === true || testsEngine.adminTestOnly === true;
+}
+
+function runtimePilotEnabled(siteConfig: Record<string, unknown>, moduleConfigs: Record<string, Record<string, unknown>>) {
+  return responsePreviewEnabled(siteConfig, moduleConfigs) && adminTestOnlyEnabled(siteConfig, moduleConfigs);
+}
+
 function sanitizeHistory(value: unknown): ConversationHistoryEntry[] {
   if (!Array.isArray(value)) {
     return [];
@@ -99,6 +113,7 @@ export class ConversationEngineController {
     private readonly diagnostics: AssistantProfileDiagnosticsService,
     private readonly engine: ConversationEngineService,
     private readonly compareService: ConversationEngineCompareService,
+    private readonly runtimePilot: ConversationEngineRuntimeService,
     private readonly testCases: ConversationEngineTestCasesService,
     private readonly knowledgePreview: KnowledgePreviewRetrievalService,
     private readonly responseDrafts: ResponseDraftService,
@@ -351,6 +366,85 @@ export class ConversationEngineController {
       engineResponsePreview,
       legacy: comparison?.legacy || null,
       comparison: comparison?.comparison || null,
+    };
+  }
+
+  @Post('runtime-pilot')
+  async runtimePilotPreview(
+    @Param('siteId') siteId: string,
+    @Body() body: Record<string, unknown>,
+    @Req() req: { dashboardAuth?: unknown },
+  ) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+
+    const site = await this.sites.getSite(siteId);
+    const modules = await this.siteModules.listForSite(siteId) as SiteModulePreview[];
+    const siteConfig = asRecord(site?.config);
+    const moduleConfigs = Object.fromEntries(modules.map((module) => [module.key, module.config || {}]));
+    const assistantProfileDebug = (await this.diagnostics.getDiagnostics(siteId)).assistantProfileDebug;
+
+    if (!runtimePilotEnabled(siteConfig, moduleConfigs)) {
+      return {
+        runtimePilotEnabled: false,
+        activationBoundary: {
+          mode: 'admin_test_only',
+          publicWidgetActivation: false,
+          productionActivation: false,
+          deployRequired: false,
+        },
+        sideEffects: {
+          planned: false,
+          ticketDelivery: false,
+          emailDelivery: false,
+          webhookDelivery: false,
+          providerCalls: false,
+          dbAccessForNewLogic: false,
+          sql: false,
+          queryRunner: false,
+        },
+        knowledgeRetrieval: {
+          enabled: false,
+          attempted: false,
+          status: 'disabled',
+          snippets: [],
+          warnings: [],
+          reasons: ['Runtime-Pilot ist nur im expliziten Admin-Testmodus mit Antwortvorschau aktiv.'],
+        },
+        runtimeState: {
+          selectedAgentKey: null,
+          nextActionKey: null,
+          shouldHandoff: false,
+          shouldAskQuestion: false,
+          handoffOfferSimulated: false,
+          ticketFieldRequestSimulated: false,
+          sourcesUsed: 0,
+          sourceRequired: false,
+        },
+        conversationEnginePreview: null,
+        engineResponsePreview: null,
+        assistantProfileDebug,
+        warnings: [],
+        reasons: ['conversationEngine.responsePreviewEnabled und adminTestOnly muessen aktiv sein.'],
+      };
+    }
+
+    const message = typeof body.message === 'string' ? body.message.trim() : '';
+    const assistantProfile = this.resolver.resolve({ siteConfig, moduleConfigs });
+    const result = this.runtimePilot.preview({
+      assistantProfile,
+      latestUserMessage: message,
+      conversationHistory: sanitizeHistory(body.history),
+      existingConversationState: asRecord(body.existingConversationState),
+      syntheticKnowledgeSnippets: body.knowledgeSnippets,
+      testMode: true,
+    });
+
+    return {
+      runtimePilotEnabled: true,
+      assistantProfileDebug,
+      ...result,
     };
   }
 

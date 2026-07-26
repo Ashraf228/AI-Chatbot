@@ -4784,6 +4784,26 @@
       "exception": null
     },
     {
+      "id": "API-111A",
+      "layer": "api",
+      "method": "POST",
+      "path": "/admin/sites/:siteId/conversation-engine/runtime-pilot",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
       "id": "API-112",
       "layer": "api",
       "method": "GET",

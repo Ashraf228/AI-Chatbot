@@ -132,6 +132,47 @@ export type ConversationEngineResponsePreview = {
   reasons: string[];
 };
 
+export type ConversationEngineRuntimeActivationBoundary = {
+  mode: 'admin_test_only';
+  publicWidgetActivation: false;
+  productionActivation: false;
+  deployRequired: false;
+};
+
+export type ConversationEngineRuntimeSideEffectsBoundary = {
+  planned: false;
+  ticketDelivery: false;
+  emailDelivery: false;
+  webhookDelivery: false;
+  providerCalls: false;
+  dbAccessForNewLogic: false;
+  sql: false;
+  queryRunner: false;
+};
+
+export type ConversationEngineRuntimeState = {
+  selectedAgentKey: string | null;
+  nextActionKey: string | null;
+  shouldHandoff: boolean;
+  shouldAskQuestion: boolean;
+  handoffOfferSimulated: boolean;
+  ticketFieldRequestSimulated: boolean;
+  sourcesUsed: number;
+  sourceRequired: boolean;
+};
+
+export type ConversationEngineRuntimePilotResult = {
+  enabled: boolean;
+  activationBoundary: ConversationEngineRuntimeActivationBoundary;
+  sideEffects: ConversationEngineRuntimeSideEffectsBoundary;
+  knowledgeRetrieval: EngineKnowledgeRetrievalResult;
+  runtimeState: ConversationEngineRuntimeState;
+  conversationEnginePreview: ConversationDecision | null;
+  engineResponsePreview: ConversationEngineResponsePreview | null;
+  warnings: string[];
+  reasons: string[];
+};
+
 export type ConversationEnginePreviewInput = {
   assistantProfile: AssistantProfile;
   latestUserMessage: string;
@@ -141,6 +182,15 @@ export type ConversationEnginePreviewInput = {
   expectedIntent?: string;
   expectedGoal?: string;
   expectedAgentKey?: string;
+  testMode: true;
+};
+
+export type ConversationEngineRuntimePilotInput = {
+  assistantProfile: AssistantProfile;
+  latestUserMessage: string;
+  conversationHistory?: ConversationHistoryEntry[];
+  existingConversationState?: Record<string, unknown> | null;
+  syntheticKnowledgeSnippets?: unknown;
   testMode: true;
 };
 

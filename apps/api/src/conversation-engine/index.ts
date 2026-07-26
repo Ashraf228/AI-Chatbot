@@ -2,6 +2,7 @@ export * from './agent-selector.service';
 export * from './conversation-context.service';
 export * from './conversation-engine-compare.service';
 export * from './conversation-engine.module';
+export * from './conversation-engine-runtime.service';
 export * from './conversation-engine.service';
 export * from './conversation-engine-test-cases.service';
 export * from './conversation-engine.types';
