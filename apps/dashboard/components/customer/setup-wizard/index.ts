@@ -3,6 +3,7 @@ export * from "./ConversationEngineCompareCard";
 export * from "./ConversationEnginePreviewCard";
 export * from "./ConversationEngineResponsePreviewCard";
 export * from "./ConversationEngineTestCasesCard";
+export * from "./DemoWorkspaceAgentBuilderCard";
 export * from "./CustomerDataStep";
 export * from "./ConversationFlowStep";
 export * from "./DesignPrivacyStep";
