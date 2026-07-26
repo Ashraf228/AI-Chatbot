@@ -50,6 +50,7 @@ export type ConversationDecision = {
   missingFields: string[];
   knownFields: string[];
   nextAction: string;
+  nextActionKey?: string;
   shouldUseKnowledge: boolean;
   shouldHandoff: boolean;
   shouldAskQuestion: boolean;

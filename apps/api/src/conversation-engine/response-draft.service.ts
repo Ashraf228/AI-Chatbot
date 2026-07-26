@@ -75,21 +75,55 @@ function buildDraft(input: ResponseDraftInput): EngineResponseDraft {
     ? 'Dazu wurde in der freigegebenen Wissensbasis keine sichere Grundlage gefunden. Ich würde das transparent machen und eine Rückfrage oder Übergabe vorbereiten.'
     : 'Dazu wurde keine passende Wissensbasis gefunden. Ich kann allgemein einordnen und eine passende Rückfrage stellen, ohne eine Quelle zu behaupten.';
 
+  if (decision.nextActionKey === 'block_request') {
+    return {
+      ...base,
+      mode: 'clarification',
+      text:
+        'Diesen Schritt kann ich hier nicht ausfuehren. Ich wuerde bei der sicheren Grenze bleiben, keine Live-Aktion behaupten und den zulaessigen naechsten Schritt fuer eine menschliche Pruefung erklaeren.',
+      usedKnowledge: false,
+      nextActionLabel: 'Anfrage sicher blockieren',
+      shouldShowSources: false,
+      shouldAskQuestion: false,
+      shouldHandoff: decision.shouldHandoff,
+    };
+  }
+
+  if (decision.nextActionKey === 'fallback_to_safe_response') {
+    return {
+      ...base,
+      mode: 'clarification',
+      text:
+        'Ich bin ein digitaler Assistent und fuehre hier keine menschlichen oder Live-Aktionen aus. Ich kann aber den naechsten sicheren Schritt einordnen oder passende Optionen kurz gegenueberstellen.',
+      usedKnowledge: false,
+      nextActionLabel: 'Sicheren Fallback erklaeren',
+      shouldShowSources: false,
+      shouldAskQuestion: false,
+      shouldHandoff: false,
+    };
+  }
+
   if (decision.intent === 'support' || decision.goal === 'solve_problem') {
-    const askedQuestion = 'Welche Fehlermeldung sehen Sie?';
-    const text = hasSnippets
-      ? `${sourceSentence}\n\nAls nächsten Schritt würde ich eingrenzen, ob der Fehler beim Start, beim Login oder nur in einem bestimmten System auftritt. Welche Fehlermeldung sehen Sie?`
-      : 'Verstanden, das klingt nach einem Supportfall. Ich würde zuerst eingrenzen, ob der Zugriff gar nicht startet, ein Login-Fehler erscheint oder nur bestimmte Systeme betroffen sind. Welche Fehlermeldung sehen Sie?';
+    const askedQuestion = decision.nextActionKey === 'ask_clarifying_question' ? 'Welche Fehlermeldung sehen Sie?' : undefined;
+    const text = decision.nextActionKey === 'offer_handoff'
+      ? 'Verstanden, das klingt nach einem Supportfall. Ich wuerde erst eine sichere Ersteinschaetzung geben und, falls es so nicht direkt loesbar ist, die passende Weiterleitung vorbereiten.'
+      : decision.nextActionKey === 'answer_from_knowledge'
+        ? hasSnippets
+          ? `${sourceSentence}\n\nIch wuerde daraus eine kurze, sichere Troubleshooting-Einschaetzung ableiten und eine Eskalation nur anbieten, falls das Problem danach weiterbesteht.`
+          : 'Verstanden, das klingt nach einem Supportfall. Ich wuerde eine sichere erste Troubleshooting-Einschaetzung geben, keine Live-Pruefung behaupten und eine Eskalation nur anbieten, falls das Problem danach weiterbesteht.'
+        : hasSnippets
+          ? `${sourceSentence}\n\nAls naechsten Schritt wuerde ich eingrenzen, ob der Fehler beim Start, beim Login oder nur in einem bestimmten System auftritt. Welche Fehlermeldung sehen Sie?`
+          : 'Verstanden, das klingt nach einem Supportfall. Ich wuerde zuerst eingrenzen, ob der Zugriff gar nicht startet, ein Login-Fehler erscheint oder nur bestimmte Systeme betroffen sind. Welche Fehlermeldung sehen Sie?';
     return {
       ...(hasSnippets ? knowledgeBase : base),
       mode: 'support_guidance',
       text,
       usedKnowledge: hasSnippets,
       askedQuestion,
-      nextActionLabel: 'Supportproblem eingrenzen',
+      nextActionLabel: decision.nextActionKey === 'offer_handoff' ? 'Support-Weiterleitung vorbereiten' : 'Supportproblem eingrenzen',
       shouldShowSources: hasSnippets,
-      shouldAskQuestion: true,
-      shouldHandoff: false,
+      shouldAskQuestion: Boolean(askedQuestion),
+      shouldHandoff: decision.shouldHandoff,
     };
   }
 
@@ -129,17 +163,20 @@ function buildDraft(input: ResponseDraftInput): EngineResponseDraft {
   }
 
   if (decision.intent === 'complaint' || decision.goal === 'escalate_human') {
-    const askedQuestion = 'Worum ging es ursprünglich?';
+    const askedQuestion = decision.nextActionKey === 'collect_ticket_fields' && missing
+      ? `Bitte nennen Sie noch: ${missing}.`
+      : 'Worum ging es ursprünglich?';
     return {
       ...base,
       mode: 'complaint_escalation',
-      text:
-        'Das ist nachvollziehbar. Ich fasse den Fall gern für das Team zusammen, damit er gezielt geprüft werden kann. Worum ging es ursprünglich?',
+      text: decision.nextActionKey === 'collect_ticket_fields' && missing
+        ? `Das ist nachvollziehbar. Ich bereite die menschliche Uebergabe vor. Dafuer fehlt noch: ${missing}.`
+        : 'Das ist nachvollziehbar. Ich fasse den Fall gern fuer das Team zusammen, damit er gezielt geprueft werden kann. Worum ging es urspruenglich?',
       usedKnowledge: false,
       askedQuestion,
       nextActionLabel: 'Beschwerde für menschliche Prüfung vorbereiten',
       shouldShowSources: false,
-      shouldAskQuestion: true,
+      shouldAskQuestion: Boolean(askedQuestion),
       shouldHandoff: true,
     };
   }

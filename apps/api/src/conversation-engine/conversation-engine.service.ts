@@ -28,8 +28,8 @@ export class ConversationEngineService {
     const intent = this.intentClassifier.classify(context);
     const goal = this.goalDetector.detect(context, intent.intent);
     const agent = this.agentSelector.select(context, intent.intent, goal.goal);
-    const handoff = this.handoffReadiness.evaluate(context, goal.goal);
     const action = this.nextAction.decide(context, intent.intent, goal.goal);
+    const handoff = this.handoffReadiness.evaluate(context, intent.intent, goal.goal, action.nextActionKey);
     const shouldUseKnowledge = goal.goal === 'answer_from_knowledge' ||
       context.assistantProfile.knowledgeMode === 'strict' ||
       context.assistantProfile.enabledTasks.includes('answer_questions');
@@ -47,6 +47,7 @@ export class ConversationEngineService {
       missingFields: context.missingFields,
       knownFields: context.knownFields,
       nextAction: action.nextAction,
+      nextActionKey: action.nextActionKey,
       shouldUseKnowledge,
       shouldHandoff: handoff.shouldHandoff,
       shouldAskQuestion: action.shouldAskQuestion,
