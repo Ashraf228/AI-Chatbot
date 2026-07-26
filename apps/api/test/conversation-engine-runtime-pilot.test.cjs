@@ -257,6 +257,36 @@ test('runtime pilot blocks query-runner, production-data and deploy requests saf
   assert.equal(result.sideEffects.dbAccessForNewLogic, false);
 });
 
+test('runtime pilot applies demo workspace agent builder overrides in-memory only', async () => {
+  const controller = createController();
+
+  const result = await controller.runtimePilotPreview(
+    'site-1',
+    {
+      message: 'Ich brauche einen echten Menschen fuer diesen Fall.',
+      demoWorkspace: {
+        assistantName: 'Demo Workspace Agent',
+        companyContext: 'Nur fuer Admin-Demos, keine Produktionsfreigabe.',
+        assistantRole: 'Demo-Support-Assistent',
+        targetAudience: ['Ops-Team'],
+        tone: 'friendly',
+        allowedTasks: ['answer_questions', 'collect_requests', 'triage_support'],
+        blockedTasks: ['prepare_handoff'],
+        handoffAllowed: false,
+        ticketAllowed: false,
+        requiredFields: ['fullName', 'email'],
+      },
+    },
+    { dashboardAuth: {} },
+  );
+
+  assert.equal(result.runtimePilotEnabled, true);
+  assert.deepEqual(result.conversationEnginePreview.missingFields, ['fullName', 'email']);
+  assert.notEqual(result.runtimeState.selectedAgentKey, 'handoff-agent');
+  assert.equal(result.sideEffects.ticketDelivery, false);
+  assert.equal(result.sideEffects.providerCalls, false);
+});
+
 test('runtime pilot answers identity questions with a safe digital assistant fallback', async () => {
   const controller = createController();
 

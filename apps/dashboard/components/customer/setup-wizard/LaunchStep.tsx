@@ -3,6 +3,7 @@ import { ConversationEngineCompareCard } from "./ConversationEngineCompareCard";
 import { ConversationEnginePreviewCard } from "./ConversationEnginePreviewCard";
 import { ConversationEngineResponsePreviewCard } from "./ConversationEngineResponsePreviewCard";
 import { ConversationEngineTestCasesCard } from "./ConversationEngineTestCasesCard";
+import { DemoWorkspaceAgentBuilderCard } from "./DemoWorkspaceAgentBuilderCard";
 import type { DashboardSessionRole } from "../../../lib/auth";
 import type { CustomerApiStatus, CustomerOverallStatus, CustomerStatusTone } from "../customer-status";
 import { EmbedCodePanel } from "./EmbedCodePanel";
@@ -99,6 +100,7 @@ export function LaunchStep({
           <ConversationEnginePreviewCard siteId={site.id} />
           <ConversationEngineCompareCard siteId={site.id} />
           <ConversationEngineResponsePreviewCard siteId={site.id} />
+          <DemoWorkspaceAgentBuilderCard siteId={site.id} />
         </>
       ) : null}
 

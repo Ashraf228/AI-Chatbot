@@ -1,5 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
-import { AssistantProfileDiagnosticsService, AssistantProfileResolverService } from '../assistant-profiles';
+import {
+  AssistantProfile,
+  AssistantProfileDiagnosticsService,
+  AssistantProfileResolverService,
+  AssistantRequiredField,
+} from '../assistant-profiles';
 import { PrismaService } from '../db/prisma.service';
 import { SiteModulesService } from '../site-modules/site-modules.service';
 import { SitesService } from '../sites/sites.service';
@@ -99,6 +104,115 @@ function sanitizeHistory(value: unknown): ConversationHistoryEntry[] {
     })
     .filter((entry) => entry.content.trim().length > 0)
     .slice(-12);
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function sanitizeTextList(value: unknown, limit = 12) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((entry): entry is string => typeof entry === 'string')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .slice(0, limit);
+}
+
+function sanitizeTargetUsers(value: unknown) {
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n|,/)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .slice(0, 8);
+  }
+  return sanitizeTextList(value, 8);
+}
+
+function sanitizeRequiredFields(value: unknown): AssistantRequiredField[] {
+  const fields = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(/\r?\n|,/)
+      : [];
+
+  return fields
+    .map((entry) => typeof entry === 'string' ? entry.trim() : '')
+    .filter((entry) => entry.length > 0)
+    .slice(0, 8)
+    .map((entry) => ({
+      key: entry,
+      label: entry,
+      required: true,
+      source: 'default',
+    }));
+}
+
+function sanitizeTone(value: unknown): AssistantProfile['tone'] | null {
+  if (value === 'formal' || value === 'friendly' || value === 'professional' || value === 'consultative') {
+    return value;
+  }
+  return null;
+}
+
+function applyDemoWorkspaceProfileOverride(profile: AssistantProfile, body: Record<string, unknown>): AssistantProfile {
+  const demoWorkspace = asRecord(body.demoWorkspace);
+  if (Object.keys(demoWorkspace).length === 0) {
+    return profile;
+  }
+
+  const assistantName = asString(demoWorkspace.assistantName);
+  const companyContext = asString(demoWorkspace.companyContext);
+  const assistantRole = asString(demoWorkspace.assistantRole);
+  const targetUsers = sanitizeTargetUsers(demoWorkspace.targetAudience);
+  const tone = sanitizeTone(demoWorkspace.tone);
+  const allowedTasks = sanitizeTextList(demoWorkspace.allowedTasks, 16);
+  const blockedTasks = new Set(sanitizeTextList(demoWorkspace.blockedTasks, 16));
+  const requiredFields = sanitizeRequiredFields(demoWorkspace.requiredFields);
+  const handoffAllowed = typeof demoWorkspace.handoffAllowed === 'boolean'
+    ? demoWorkspace.handoffAllowed
+    : profile.handoffRules.enabled;
+  const ticketAllowed = typeof demoWorkspace.ticketAllowed === 'boolean'
+    ? demoWorkspace.ticketAllowed
+    : true;
+
+  const nextEnabledTasks = (allowedTasks.length > 0 ? allowedTasks : profile.enabledTasks)
+    .filter((task) => !blockedTasks.has(task));
+  const nextEnabledAgents = profile.enabledAgents.filter((agentKey) => {
+    if (!handoffAllowed && agentKey === 'handoff-agent') {
+      return false;
+    }
+    if (!ticketAllowed && ['ticket-agent', 'property-ticket-agent', 'it-support-agent'].includes(agentKey)) {
+      return false;
+    }
+    return true;
+  });
+
+  return {
+    ...profile,
+    assistantName: assistantName || profile.assistantName,
+    businessDescription: companyContext || profile.businessDescription,
+    role: assistantRole || profile.role,
+    targetUsers: targetUsers.length > 0 ? targetUsers : profile.targetUsers,
+    tone: tone || profile.tone,
+    enabledTasks: nextEnabledTasks.length > 0 ? nextEnabledTasks : profile.enabledTasks,
+    requiredFields: requiredFields.length > 0 ? requiredFields : profile.requiredFields,
+    handoffRules: {
+      ...profile.handoffRules,
+      enabled: handoffAllowed,
+      handoffWhenUncertain: handoffAllowed ? profile.handoffRules.handoffWhenUncertain : false,
+    },
+    deliveryChannels: {
+      ...profile.deliveryChannels,
+      system: {
+        enabled: ticketAllowed,
+      },
+    },
+    enabledAgents: nextEnabledAgents.length > 0 ? nextEnabledAgents : profile.enabledAgents,
+  };
 }
 
 @UseGuards(AdminKeyGuard)
@@ -431,7 +545,10 @@ export class ConversationEngineController {
     }
 
     const message = typeof body.message === 'string' ? body.message.trim() : '';
-    const assistantProfile = this.resolver.resolve({ siteConfig, moduleConfigs });
+    const assistantProfile = applyDemoWorkspaceProfileOverride(
+      this.resolver.resolve({ siteConfig, moduleConfigs }),
+      body,
+    );
     const result = this.runtimePilot.preview({
       assistantProfile,
       latestUserMessage: message,
