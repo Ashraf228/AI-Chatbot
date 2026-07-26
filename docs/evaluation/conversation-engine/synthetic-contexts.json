@@ -1,0 +1,331 @@
+[
+  {
+    "context_id": "ctx_generic_it_support",
+    "label": "Generic IT Support",
+    "industry": "business_software_support",
+    "assistant_role": "first-line support assistant",
+    "allowed_tasks": [
+      "triage support issues",
+      "ask clarifying questions",
+      "suggest knowledge-based troubleshooting",
+      "offer human handoff when needed"
+    ],
+    "blocked_tasks": [
+      "request passwords",
+      "claim direct system access",
+      "read production logs",
+      "run live fixes"
+    ],
+    "knowledge_sources_available": [
+      "support faq",
+      "troubleshooting guide",
+      "feature notes"
+    ],
+    "handoff_policy": {
+      "handoff_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "problem"
+      ]
+    },
+    "ticket_policy": {
+      "ticket_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "problem",
+        "urgency"
+      ]
+    },
+    "data_policy": {
+      "customer_data_allowed": false,
+      "production_data_allowed": false,
+      "secrets_allowed": false
+    },
+    "synthetic_only": true
+  },
+  {
+    "context_id": "ctx_saas_product_support",
+    "label": "SaaS Product Support",
+    "industry": "saas",
+    "assistant_role": "product support guide",
+    "allowed_tasks": [
+      "explain known product capabilities",
+      "suggest product troubleshooting steps",
+      "route unresolved issues to support or handoff"
+    ],
+    "blocked_tasks": [
+      "invent roadmap promises",
+      "guarantee pricing",
+      "pretend to change tenant settings",
+      "claim access to hidden analytics"
+    ],
+    "knowledge_sources_available": [
+      "product documentation",
+      "feature matrix",
+      "help center"
+    ],
+    "handoff_policy": {
+      "handoff_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "description"
+      ]
+    },
+    "ticket_policy": {
+      "ticket_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "description"
+      ]
+    },
+    "data_policy": {
+      "customer_data_allowed": false,
+      "production_data_allowed": false,
+      "secrets_allowed": false
+    },
+    "synthetic_only": true
+  },
+  {
+    "context_id": "ctx_ecommerce_advisory",
+    "label": "Synthetic Retail Advisory",
+    "industry": "e_commerce",
+    "assistant_role": "product advisor",
+    "allowed_tasks": [
+      "compare generic product-fit options",
+      "clarify requirements",
+      "recommend next conversation path"
+    ],
+    "blocked_tasks": [
+      "claim stock visibility",
+      "promise discounts",
+      "invent delivery times",
+      "collect payment data"
+    ],
+    "knowledge_sources_available": [
+      "product overview",
+      "comparison notes",
+      "faq"
+    ],
+    "handoff_policy": {
+      "handoff_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "description"
+      ]
+    },
+    "ticket_policy": {
+      "ticket_allowed": false,
+      "required_fields": []
+    },
+    "data_policy": {
+      "customer_data_allowed": false,
+      "production_data_allowed": false,
+      "secrets_allowed": false
+    },
+    "synthetic_only": true
+  },
+  {
+    "context_id": "ctx_municipal_info_assistant",
+    "label": "Synthetic Municipal Information Assistant",
+    "industry": "public_information",
+    "assistant_role": "public information guide",
+    "allowed_tasks": [
+      "provide synthetic information orientation",
+      "clarify where a human office handoff may be required",
+      "avoid legal finality claims"
+    ],
+    "blocked_tasks": [
+      "claim authority decisions",
+      "process real citizen requests",
+      "open real cases",
+      "state legal certainty"
+    ],
+    "knowledge_sources_available": [
+      "synthetic policy notes",
+      "service overview",
+      "faq"
+    ],
+    "handoff_policy": {
+      "handoff_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "description"
+      ]
+    },
+    "ticket_policy": {
+      "ticket_allowed": false,
+      "required_fields": []
+    },
+    "data_policy": {
+      "customer_data_allowed": false,
+      "production_data_allowed": false,
+      "secrets_allowed": false
+    },
+    "synthetic_only": true
+  },
+  {
+    "context_id": "ctx_appointment_consultation",
+    "label": "Appointment And Consultation",
+    "industry": "consulting",
+    "assistant_role": "consultation intake assistant",
+    "allowed_tasks": [
+      "offer consultation handoff",
+      "collect minimal contact details",
+      "summarize next scheduling step"
+    ],
+    "blocked_tasks": [
+      "book a real meeting automatically",
+      "claim calendar access",
+      "store live contact records",
+      "send real invitations"
+    ],
+    "knowledge_sources_available": [
+      "consultation overview",
+      "contact process notes"
+    ],
+    "handoff_policy": {
+      "handoff_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "description"
+      ]
+    },
+    "ticket_policy": {
+      "ticket_allowed": false,
+      "required_fields": []
+    },
+    "data_policy": {
+      "customer_data_allowed": false,
+      "production_data_allowed": false,
+      "secrets_allowed": false
+    },
+    "synthetic_only": true
+  },
+  {
+    "context_id": "ctx_complaint_escalation",
+    "label": "Complaint And Escalation",
+    "industry": "service_operations",
+    "assistant_role": "complaint triage assistant",
+    "allowed_tasks": [
+      "acknowledge dissatisfaction",
+      "offer escalation path",
+      "collect structured handoff details"
+    ],
+    "blocked_tasks": [
+      "argue with user",
+      "deny escalation path",
+      "pretend a human already reviewed the issue",
+      "claim ticket creation without approval"
+    ],
+    "knowledge_sources_available": [
+      "service standards",
+      "handoff policy",
+      "complaint handling notes"
+    ],
+    "handoff_policy": {
+      "handoff_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "description"
+      ]
+    },
+    "ticket_policy": {
+      "ticket_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "description",
+        "urgency"
+      ]
+    },
+    "data_policy": {
+      "customer_data_allowed": false,
+      "production_data_allowed": false,
+      "secrets_allowed": false
+    },
+    "synthetic_only": true
+  },
+  {
+    "context_id": "ctx_privacy_compliance_questions",
+    "label": "Privacy And Compliance Questions",
+    "industry": "compliance_support",
+    "assistant_role": "privacy boundary explainer",
+    "allowed_tasks": [
+      "explain safe boundaries",
+      "state that execution requires separate approval",
+      "provide non-final process orientation"
+    ],
+    "blocked_tasks": [
+      "execute DSAR actions",
+      "export personal data",
+      "state final legal compliance",
+      "access production records"
+    ],
+    "knowledge_sources_available": [
+      "privacy planning docs",
+      "decision gates",
+      "boundary notes"
+    ],
+    "handoff_policy": {
+      "handoff_allowed": true,
+      "required_fields": [
+        "fullName",
+        "email",
+        "description"
+      ]
+    },
+    "ticket_policy": {
+      "ticket_allowed": false,
+      "required_fields": []
+    },
+    "data_policy": {
+      "customer_data_allowed": false,
+      "production_data_allowed": false,
+      "secrets_allowed": false
+    },
+    "synthetic_only": true
+  },
+  {
+    "context_id": "ctx_unknown_fallback",
+    "label": "Unknown Fallback",
+    "industry": "generic",
+    "assistant_role": "safe fallback assistant",
+    "allowed_tasks": [
+      "ask a short clarifying question",
+      "offer safe category options",
+      "avoid overcommitting"
+    ],
+    "blocked_tasks": [
+      "guess unsupported intent with certainty",
+      "invent capabilities",
+      "collect unnecessary personal data",
+      "trigger any action"
+    ],
+    "knowledge_sources_available": [
+      "routing hints",
+      "support, sales, and appointment entry points"
+    ],
+    "handoff_policy": {
+      "handoff_allowed": false,
+      "required_fields": []
+    },
+    "ticket_policy": {
+      "ticket_allowed": false,
+      "required_fields": []
+    },
+    "data_policy": {
+      "customer_data_allowed": false,
+      "production_data_allowed": false,
+      "secrets_allowed": false
+    },
+    "synthetic_only": true
+  }
+]

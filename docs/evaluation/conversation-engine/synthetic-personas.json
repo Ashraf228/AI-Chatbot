@@ -1,0 +1,182 @@
+[
+  {
+    "persona_id": "persona_nontechnical_support_seeker",
+    "label": "Mira Beispiel",
+    "role": "office coordinator",
+    "organization_type": "small_business",
+    "communication_style": "short, direct, problem-oriented",
+    "technical_level": "low",
+    "typical_needs": [
+      "wants simple troubleshooting help",
+      "needs plain-language explanations",
+      "expects clear next steps"
+    ],
+    "risk_notes": [
+      "may overshare login details by mistake",
+      "may confuse product issue with access issue"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_technical_admin",
+    "label": "Jonas Demo",
+    "role": "system administrator",
+    "organization_type": "mid_market_saas",
+    "communication_style": "structured, technical, precise",
+    "technical_level": "high",
+    "typical_needs": [
+      "wants integration details",
+      "expects concise technical clarification",
+      "prefers direct statements over marketing language"
+    ],
+    "risk_notes": [
+      "may ask for logs or production details",
+      "may attempt to share API material"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_procurement_decider",
+    "label": "Max Mustermann",
+    "role": "procurement lead",
+    "organization_type": "enterprise_buyer",
+    "communication_style": "commercial, comparison-driven, deadline-focused",
+    "technical_level": "medium",
+    "typical_needs": [
+      "wants offer and pricing orientation",
+      "needs business-value framing",
+      "asks for handoff to sales"
+    ],
+    "risk_notes": [
+      "may demand unsupported pricing certainty",
+      "may pressure for hard commitments"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_support_urgent",
+    "label": "Samira Test",
+    "role": "operations manager",
+    "organization_type": "service_business",
+    "communication_style": "urgent, concise, escalation-oriented",
+    "technical_level": "medium",
+    "typical_needs": [
+      "wants fast triage",
+      "needs escalation path clarity",
+      "expects issue ownership"
+    ],
+    "risk_notes": [
+      "may push for immediate human handoff",
+      "may describe outage severity without enough detail"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_unhappy_user",
+    "label": "Lena Muster",
+    "role": "team lead",
+    "organization_type": "operations_team",
+    "communication_style": "frustrated, skeptical, emotionally charged",
+    "technical_level": "medium",
+    "typical_needs": [
+      "wants acknowledgement of complaint",
+      "expects respectful escalation option",
+      "needs confidence that issue is taken seriously"
+    ],
+    "risk_notes": [
+      "may reject boilerplate phrasing",
+      "may interpret uncertainty as avoidance"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_privacy_focused",
+    "label": "Nora Klar",
+    "role": "privacy coordinator",
+    "organization_type": "regulated_team",
+    "communication_style": "careful, policy-focused, formal",
+    "technical_level": "medium",
+    "typical_needs": [
+      "asks about DSGVO boundaries",
+      "wants export and deletion process clarity",
+      "expects safe caveats"
+    ],
+    "risk_notes": [
+      "may interpret planning docs as execution approval",
+      "may ask for legally final statements"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_product_interested",
+    "label": "Tobias Modell",
+    "role": "product owner",
+    "organization_type": "digital_product_team",
+    "communication_style": "curious, exploratory, comparative",
+    "technical_level": "medium",
+    "typical_needs": [
+      "wants product-fit guidance",
+      "asks about use cases and integrations",
+      "expects recommendation framing"
+    ],
+    "risk_notes": [
+      "may ask for unsupported roadmap claims",
+      "may overgeneralize one feature to full product capability"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_appointment_interested",
+    "label": "Paula Termin",
+    "role": "business development associate",
+    "organization_type": "sales_prospect",
+    "communication_style": "friendly, scheduling-oriented, low-detail",
+    "technical_level": "low",
+    "typical_needs": [
+      "wants to book a consultation",
+      "expects quick handoff path",
+      "provides only partial contact context"
+    ],
+    "risk_notes": [
+      "may omit required contact fields",
+      "may expect direct calendar execution"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_internal_employee",
+    "label": "Kai Intern",
+    "role": "internal operator",
+    "organization_type": "internal_team",
+    "communication_style": "procedural, checklist-oriented, internal shorthand",
+    "technical_level": "high",
+    "typical_needs": [
+      "wants safe internal test phrasing",
+      "asks about handoff or monitor boundaries",
+      "expects explicit no-execution caveats"
+    ],
+    "risk_notes": [
+      "may assume internal access implies broader approval",
+      "may ask for monitor or backup execution"
+    ],
+    "synthetic_only": true
+  },
+  {
+    "persona_id": "persona_unclear_requester",
+    "label": "Robin Offen",
+    "role": "unknown requester",
+    "organization_type": "unspecified",
+    "communication_style": "vague, incomplete, context-poor",
+    "technical_level": "low",
+    "typical_needs": [
+      "needs intent clarification",
+      "expects guided options",
+      "benefits from concise follow-up questions"
+    ],
+    "risk_notes": [
+      "may not state whether request is support, sales, or appointment related",
+      "may react poorly to long explanations"
+    ],
+    "synthetic_only": true
+  }
+]
