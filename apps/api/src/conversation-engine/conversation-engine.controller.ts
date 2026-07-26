@@ -172,14 +172,20 @@ function applyDemoWorkspaceProfileOverride(profile: AssistantProfile, body: Reco
   const allowedTasks = sanitizeTextList(demoWorkspace.allowedTasks, 16);
   const blockedTasks = new Set(sanitizeTextList(demoWorkspace.blockedTasks, 16));
   const requiredFields = sanitizeRequiredFields(demoWorkspace.requiredFields);
-  const handoffAllowed = typeof demoWorkspace.handoffAllowed === 'boolean'
-    ? demoWorkspace.handoffAllowed
+  const hasAllowedTaskOverride = Array.isArray(demoWorkspace.allowedTasks);
+  const hasBlockedTaskOverride = Array.isArray(demoWorkspace.blockedTasks);
+  const hasHandoffOverride = typeof demoWorkspace.handoffAllowed === 'boolean';
+  const hasTicketOverride = typeof demoWorkspace.ticketAllowed === 'boolean';
+  const handoffAllowed = hasHandoffOverride
+    ? Boolean(demoWorkspace.handoffAllowed)
     : profile.handoffRules.enabled;
-  const ticketAllowed = typeof demoWorkspace.ticketAllowed === 'boolean'
-    ? demoWorkspace.ticketAllowed
+  const ticketAllowed = hasTicketOverride
+    ? Boolean(demoWorkspace.ticketAllowed)
     : true;
+  const hasTaskConstraint = hasAllowedTaskOverride || hasBlockedTaskOverride;
+  const hasAgentConstraint = hasHandoffOverride || hasTicketOverride;
 
-  const nextEnabledTasks = (allowedTasks.length > 0 ? allowedTasks : profile.enabledTasks)
+  const nextEnabledTasks = (hasAllowedTaskOverride ? allowedTasks : profile.enabledTasks)
     .filter((task) => !blockedTasks.has(task));
   const nextEnabledAgents = profile.enabledAgents.filter((agentKey) => {
     if (!handoffAllowed && agentKey === 'handoff-agent') {
@@ -198,7 +204,7 @@ function applyDemoWorkspaceProfileOverride(profile: AssistantProfile, body: Reco
     role: assistantRole || profile.role,
     targetUsers: targetUsers.length > 0 ? targetUsers : profile.targetUsers,
     tone: tone || profile.tone,
-    enabledTasks: nextEnabledTasks.length > 0 ? nextEnabledTasks : profile.enabledTasks,
+    enabledTasks: hasTaskConstraint ? nextEnabledTasks : profile.enabledTasks,
     requiredFields: requiredFields.length > 0 ? requiredFields : profile.requiredFields,
     handoffRules: {
       ...profile.handoffRules,
@@ -211,7 +217,7 @@ function applyDemoWorkspaceProfileOverride(profile: AssistantProfile, body: Reco
         enabled: ticketAllowed,
       },
     },
-    enabledAgents: nextEnabledAgents.length > 0 ? nextEnabledAgents : profile.enabledAgents,
+    enabledAgents: hasAgentConstraint ? nextEnabledAgents : profile.enabledAgents,
   };
 }
 

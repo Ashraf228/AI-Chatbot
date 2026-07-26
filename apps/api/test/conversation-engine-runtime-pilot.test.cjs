@@ -287,6 +287,43 @@ test('runtime pilot applies demo workspace agent builder overrides in-memory onl
   assert.equal(result.sideEffects.providerCalls, false);
 });
 
+test('runtime pilot does not fall back to original tasks or agents after explicit demo blocking', async () => {
+  const controller = createController({
+    assistantProfile: universalProfile({
+      enabledTasks: ['triage_support'],
+      enabledAgents: ['handoff-agent', 'ticket-agent'],
+    }),
+  });
+
+  const result = await controller.runtimePilotPreview(
+    'site-1',
+    {
+      message: 'Das Dashboard bleibt nach dem Login weiss.',
+      demoWorkspace: {
+        blockedTasks: ['triage_support'],
+        handoffAllowed: false,
+        ticketAllowed: false,
+      },
+    },
+    { dashboardAuth: {} },
+  );
+
+  assert.equal(result.runtimePilotEnabled, true);
+  assert.equal(result.runtimeState.selectedAgentKey, null);
+  assert.notEqual(result.conversationEnginePreview.selectedAgentKey, 'handoff-agent');
+  assert.equal(result.sideEffects.planned, false);
+  assert.equal(result.sideEffects.ticketDelivery, false);
+  assert.equal(result.sideEffects.emailDelivery, false);
+  assert.equal(result.sideEffects.webhookDelivery, false);
+  assert.equal(result.sideEffects.providerCalls, false);
+  assert.equal(result.sideEffects.dbAccessForNewLogic, false);
+  assert.ok(
+    result.conversationEnginePreview.reasons.every((reason) => !reason.includes('Support-Triage ist im Profil aktiviert.')),
+  );
+  assert.match(result.conversationEnginePreview.reasons.join(' | '), /Supportsignal erkannt/);
+  assert.ok(result.conversationEnginePreview.warnings.includes('Kein Agent aktiviert.'));
+});
+
 test('runtime pilot answers identity questions with a safe digital assistant fallback', async () => {
   const controller = createController();
 

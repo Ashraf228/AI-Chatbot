@@ -9,6 +9,29 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     vi.unstubAllGlobals();
   });
 
+  test("shows the required safety caveats and omits persistence or deployment actions", () => {
+    render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
+
+    expect(screen.getByText("Sicherheitsgrenzen")).toBeInTheDocument();
+    expect(screen.getByText("Nur Admin-/Operator-Testpfad")).toBeInTheDocument();
+    expect(screen.getByText("Nur synthetische/in-memory Konfiguration")).toBeInTheDocument();
+    expect(screen.getByText("Keine Kundendaten")).toBeInTheDocument();
+    expect(screen.getByText("Keine Production-Daten")).toBeInTheDocument();
+    expect(screen.getByText("Nicht gespeichert")).toBeInTheDocument();
+    expect(screen.getByText("Kein Deploy")).toBeInTheDocument();
+    expect(screen.getByText("Keine Public-Widget-Aktivierung")).toBeInTheDocument();
+    expect(screen.getByText("Kein PDF-Upload")).toBeInTheDocument();
+    expect(screen.getByText("Kein Knowledge-Upload")).toBeInTheDocument();
+    expect(screen.getByText("Keine echten Tickets, E-Mails oder Webhooks")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Demo-Agent simulieren" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /save/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /publish/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /deploy/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /upload pdf/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /knowledge upload/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /live schalten/i })).not.toBeInTheDocument();
+  });
+
   test("submits structured demo workspace context and renders runtime pilot result", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body || "{}"));
@@ -109,5 +132,6 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     expect(screen.getByText("support-agent")).toBeInTheDocument();
     expect(screen.getByText("Ich kann das als Demo-Supportfall sicher einordnen.")).toBeInTheDocument();
     expect(screen.getByText(/publicWidgetActivation=false/)).toBeInTheDocument();
+    expect(screen.getByText(/ohne Persistenz, ohne Deploy, ohne Public-Widget-Aktivierung/i)).toBeInTheDocument();
   });
 });

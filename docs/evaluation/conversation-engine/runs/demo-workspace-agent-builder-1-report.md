@@ -52,12 +52,13 @@ The MVP does not:
 - `apps/api/src/conversation-engine/conversation-engine.controller.ts`
 - `apps/api/test/conversation-engine-runtime-pilot.test.cjs`
 
-## API Boundary
+## Runtime Pilot Endpoint Usage
 
 The existing safe runtime-pilot endpoint remains the only execution path:
 
 - `POST /admin/sites/:siteId/conversation-engine/runtime-pilot`
 - admin/operator scoped only
+- synthetic/in-memory request payload only
 - test mode only
 - no public activation
 - no production activation
@@ -96,6 +97,25 @@ The response shows:
 - activationBoundary
 - sideEffects
 
+## Activation Boundary
+
+- `public_widget_activation: false`
+- `production_activation: false`
+- `deploy_used: false`
+- `persistence_enabled: false`
+- `pdf_upload_enabled: false`
+- `knowledge_upload_enabled: false`
+
+## Side Effects Boundary
+
+- `ticket_delivery_used: false`
+- `email_delivery_used: false`
+- `webhook_delivery_used: false`
+- `provider_calls_used: false`
+- `db_write_used: false`
+- `sql_used: false`
+- `query_runner_used: false`
+
 ## Safety Confirmation
 
 - no persistence
@@ -109,6 +129,27 @@ The response shows:
 - no public widget activation
 - no production activation
 - no deploy
+
+## Known Limitations
+
+- MVP only
+- in-memory / not persisted
+- no PDF upload
+- no Knowledge upload
+- no public widget activation
+- no production activation
+- no customer data
+- not Enterprise-ready
+- not Production-ready
+- `PASS_WITH_PARTIALS` remains a caveat
+
+## Relationship to Runtime Pilot
+
+- Builds on `CONV-ENGINE-RUNTIME-PILOT-1`
+- Uses the existing runtime-pilot endpoint
+- Does not expand runtime activation
+- Does not deploy
+- Does not publish to widget
 
 ## Required Follow-up
 
@@ -128,4 +169,11 @@ Validated locally:
 
 ## Recommended Next Step
 
-- `DEMO-WORKSPACE-AGENT-BUILDER-1-D`
+Recommended next step:
+
+- `DEMO-WORKSPACE-TESTCHAT-1`
+
+Alternatives:
+
+- `DEMO-WORKSPACE-KNOWLEDGE-UPLOAD-1`
+- `CONV-ENGINE-SYNTHETIC-EVAL-FIX-2`

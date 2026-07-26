@@ -172,9 +172,25 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
       <div>
         <h3 className="dashboard-card-title dashboard-card-title--sm">Demo Workspace Agent Builder (MVP)</h3>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Admin-/Operator-only Testpfad. Keine Persistenz, keine Public-Widget-Aktivierung, keine DB-Schreibvorgaenge,
-          keine Provider-Calls und keine realen Tickets, E-Mails oder Webhooks.
+          Admin-/Operator-only Testpfad fuer einen synthetischen Runtime-Pilot. Keine Persistenz, keine Public-Widget-
+          Aktivierung, keine DB-Schreibvorgaenge, keine Provider-Calls und keine realen Tickets, E-Mails oder Webhooks.
         </p>
+      </div>
+
+      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+        <strong>Sicherheitsgrenzen</strong>
+        <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          <li>Nur Admin-/Operator-Testpfad</li>
+          <li>Nur synthetische/in-memory Konfiguration</li>
+          <li>Keine Kundendaten</li>
+          <li>Keine Production-Daten</li>
+          <li>Nicht gespeichert</li>
+          <li>Kein Deploy</li>
+          <li>Keine Public-Widget-Aktivierung</li>
+          <li>Kein PDF-Upload</li>
+          <li>Kein Knowledge-Upload</li>
+          <li>Keine echten Tickets, E-Mails oder Webhooks</li>
+        </ul>
       </div>
 
       <div className="dashboard-grid dashboard-grid--metrics-3">
@@ -380,6 +396,9 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
               {String(result.sideEffects?.dbAccessForNewLogic ?? false)} · sql=
               {String(result.sideEffects?.sql ?? false)} · queryRunner=
               {String(result.sideEffects?.queryRunner ?? false)}
+            </p>
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              Runtime-Pilot bleibt ohne Persistenz, ohne Deploy, ohne Public-Widget-Aktivierung, ohne PDF-Upload und ohne Knowledge-Upload.
             </p>
           </div>
 
