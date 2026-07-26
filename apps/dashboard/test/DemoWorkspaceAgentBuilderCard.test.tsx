@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -21,7 +21,7 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     expect(screen.getByText("Keine Embeddings / kein RAG-Indexing")).toBeInTheDocument();
     expect(screen.getAllByText("Kein Deploy")).toHaveLength(2);
     expect(screen.getAllByText("Keine Public-Widget-Aktivierung")).toHaveLength(2);
-    expect(screen.getAllByText("PDF bleibt in diesem Task gesperrt/deferred")).toHaveLength(2);
+    expect(screen.getAllByText("PDF-Text wird nur in-memory extrahiert")).toHaveLength(2);
     expect(screen.getAllByText("Keine echten Tickets, E-Mails oder Webhooks")).toHaveLength(2);
     expect(screen.getByText("In-Memory Knowledge Upload (MVP)")).toBeInTheDocument();
     expect(screen.getByText("Demo Workspace Testchat (MVP)")).toBeInTheDocument();
@@ -68,7 +68,58 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Alle Snippets entfernen" }));
     expect(screen.getByText("Aktive Knowledge Snippets (0)")).toBeInTheDocument();
     expect(
-      screen.getByText("Noch keine In-Memory-Snippets aktiv. TXT/Markdown bleibt lokal im Browser und wird nicht gespeichert."),
+      screen.getByText("Noch keine In-Memory-Snippets aktiv. TXT/Markdown/PDF bleibt lokal oder request-lokal und wird nicht gespeichert."),
+    ).toBeInTheDocument();
+  });
+
+  test("extracts demo PDF text into an in-memory snippet without persistence actions", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toContain("/api/sites/site-1/conversation-engine/knowledge/pdf-extract");
+      return new Response(
+        JSON.stringify({
+          fileName: "Demo Upload.pdf",
+          extractedText: "Synthetischer Demo-PDF-Inhalt fuer den Builder.",
+          extractedChars: 45,
+          originalChars: 45,
+          truncated: false,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
+
+    const pdfInput = screen.getByLabelText("Demo-PDF laden");
+    const pdfFile = new File(["%PDF demo"], "Demo Upload.pdf", {
+      type: "application/pdf",
+    });
+    await userEvent.upload(pdfInput, pdfFile);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Aktive Knowledge Snippets (1)")).toBeInTheDocument();
+    expect(screen.getByText("Demo Upload")).toBeInTheDocument();
+    expect(screen.getByText("Datei: Demo Upload.pdf")).toBeInTheDocument();
+    expect(screen.getByText("sourceType=pdf_demo · scope=demo-workspace")).toBeInTheDocument();
+    expect(screen.getByText("Synthetischer Demo-PDF-Inhalt fuer den Builder.")).toBeInTheDocument();
+  });
+
+  test("rejects non-PDF uploads in the dedicated demo PDF input", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
+
+    const pdfInput = screen.getByLabelText("Demo-PDF laden");
+    const wrongFile = new File(["plain text"], "notes.txt", { type: "text/plain" });
+    fireEvent.change(pdfInput, {
+      target: { files: [wrongFile] },
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Nur .pdf-Dateien mit synthetischen/freigegebenen Demo-Inhalten sind in diesem Schritt erlaubt."),
     ).toBeInTheDocument();
   });
 
