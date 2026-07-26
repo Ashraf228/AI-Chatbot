@@ -71,6 +71,18 @@ type RuntimePilotResponse = {
   reasons?: string[];
 };
 
+type TranscriptHistoryEntry = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+type DemoWorkspaceChatTurn = {
+  id: string;
+  userMessage: string;
+  assistantDraft: string;
+  result: RuntimePilotResponse;
+};
+
 const DEFAULT_FORM: BuilderFormState = {
   assistantName: "Demo Workspace Agent",
   companyContext: "",
@@ -109,6 +121,47 @@ function compactJson(value: RuntimePilotResponse) {
   return JSON.stringify(value, null, 2);
 }
 
+function buildRuntimePilotPayload(
+  form: BuilderFormState,
+  message: string,
+  history: TranscriptHistoryEntry[],
+) {
+  return {
+    message,
+    history,
+    knowledgeSnippets: buildKnowledgeSnippets(form.syntheticKnowledgeSnippets),
+    demoWorkspace: {
+      assistantName: form.assistantName,
+      companyContext: form.companyContext,
+      assistantRole: form.assistantRole,
+      targetAudience: splitLines(form.targetAudience, 8),
+      tone: form.tone,
+      allowedTasks: splitLines(form.allowedTasks, 16),
+      blockedTasks: splitLines(form.blockedTasks, 16),
+      handoffAllowed: form.handoffAllowed,
+      ticketAllowed: form.ticketAllowed,
+      requiredFields: splitLines(form.requiredFields, 8),
+    },
+    existingConversationState: {
+      builderMode: "demo_workspace_agent_builder_mvp",
+      testChatMode: "demo_workspace_in_memory_testchat_mvp",
+      noPersistence: true,
+      adminOnly: true,
+      chatHistoryPersistence: false,
+    },
+  };
+}
+
+function buildTranscriptHistory(turns: DemoWorkspaceChatTurn[]): TranscriptHistoryEntry[] {
+  return turns.flatMap((turn) => {
+    const entries: TranscriptHistoryEntry[] = [{ role: "user", content: turn.userMessage }];
+    if (turn.assistantDraft.trim()) {
+      entries.push({ role: "assistant", content: turn.assistantDraft });
+    }
+    return entries;
+  });
+}
+
 type DemoWorkspaceAgentBuilderCardProps = {
   siteId: string;
 };
@@ -116,6 +169,7 @@ type DemoWorkspaceAgentBuilderCardProps = {
 export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuilderCardProps) {
   const [form, setForm] = useState<BuilderFormState>(DEFAULT_FORM);
   const [result, setResult] = useState<RuntimePilotResponse | null>(null);
+  const [chatTurns, setChatTurns] = useState<DemoWorkspaceChatTurn[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,45 +178,48 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
   }
 
   async function runBuilder() {
+    const message = form.testMessage.trim();
+    if (!message) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    setResult(null);
     try {
+      const history = buildTranscriptHistory(chatTurns);
       const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/conversation-engine/runtime-pilot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: form.testMessage,
-          knowledgeSnippets: buildKnowledgeSnippets(form.syntheticKnowledgeSnippets),
-          demoWorkspace: {
-            assistantName: form.assistantName,
-            companyContext: form.companyContext,
-            assistantRole: form.assistantRole,
-            targetAudience: splitLines(form.targetAudience, 8),
-            tone: form.tone,
-            allowedTasks: splitLines(form.allowedTasks, 16),
-            blockedTasks: splitLines(form.blockedTasks, 16),
-            handoffAllowed: form.handoffAllowed,
-            ticketAllowed: form.ticketAllowed,
-            requiredFields: splitLines(form.requiredFields, 8),
-          },
-          existingConversationState: {
-            builderMode: "demo_workspace_agent_builder_mvp",
-            noPersistence: true,
-            adminOnly: true,
-          },
-        }),
+        body: JSON.stringify(buildRuntimePilotPayload(form, message, history)),
       });
       const data = (await response.json().catch(() => ({}))) as RuntimePilotResponse & { message?: string };
       if (!response.ok) {
         throw new Error(data.message || "Demo-Workspace-Agent konnte nicht simuliert werden.");
       }
+
+      const assistantDraft = data.engineResponsePreview?.draft?.text || "";
       setResult(data);
+      setChatTurns((current) => [
+        ...current,
+        {
+          id: `demo-chat-turn-${current.length + 1}`,
+          userMessage: message,
+          assistantDraft,
+          result: data,
+        },
+      ]);
+      setForm((current) => ({ ...current, testMessage: "" }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Demo-Workspace-Agent konnte nicht simuliert werden.");
     } finally {
       setLoading(false);
     }
+  }
+
+  function clearChat() {
+    setChatTurns([]);
+    setResult(null);
+    setError(null);
   }
 
   const draftText = result?.engineResponsePreview?.draft?.text || "Noch keine Simulation ausgefuehrt.";
@@ -318,11 +375,88 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
         <span>Ticket-Vorbereitung im Demo-Kontext erlauben</span>
       </label>
 
-      <Button type="button" variant="secondary" onClick={runBuilder} disabled={loading || !form.testMessage.trim()}>
-        {loading ? "Builder simuliert..." : "Demo-Agent simulieren"}
-      </Button>
+      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+        <strong>Demo Workspace Testchat (MVP)</strong>
+        <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          Mehrstufiger Admin-/Operator-Testchat nur im Browser-State. Der Chatverlauf wird nicht gespeichert und jede
+          Testnachricht nutzt weiter ausschliesslich den bestehenden Runtime-Pilot-Endpunkt.
+        </p>
+        <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          <li>Nur Admin-/Operator-Testpfad</li>
+          <li>Nur synthetische/in-memory Daten</li>
+          <li>Chatverlauf wird nicht gespeichert</li>
+          <li>Keine Kundendaten</li>
+          <li>Keine Production-Daten</li>
+          <li>Kein Deploy</li>
+          <li>Keine Public-Widget-Aktivierung</li>
+          <li>Kein PDF-Upload</li>
+          <li>Kein Knowledge-Upload</li>
+          <li>Keine echten Tickets, E-Mails oder Webhooks</li>
+        </ul>
+      </div>
+
+      <div className="dashboard-grid dashboard-grid--metrics-3">
+        <Button type="button" variant="secondary" onClick={runBuilder} disabled={loading || !form.testMessage.trim()}>
+          {loading ? "Testchat simuliert..." : "Testnachricht senden"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={clearChat} disabled={loading || chatTurns.length === 0}>
+          In-Memory-Chat leeren
+        </Button>
+      </div>
 
       {error ? <div className="dashboard-status dashboard-status--error">{error}</div> : null}
+
+      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+        <strong>Chat-Transcript</strong>
+        {chatTurns.length === 0 ? (
+          <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+            Noch keine Testnachricht gesendet. Der Transcript lebt nur im Browser-State.
+          </p>
+        ) : (
+          <div className="dashboard-stack dashboard-stack--sm">
+            {chatTurns.map((turn, index) => (
+              <div key={turn.id} className="dashboard-card dashboard-card--compact dashboard-stack dashboard-stack--sm">
+                <div>
+                  <strong>Turn {index + 1}: User</strong>
+                  <p className="dashboard-copy dashboard-no-margin-bottom">{turn.userMessage}</p>
+                </div>
+                <div>
+                  <strong>Response Draft</strong>
+                  <p className="dashboard-copy dashboard-no-margin-bottom">
+                    {turn.assistantDraft || "Kein Draft zurueckgegeben."}
+                  </p>
+                </div>
+                <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                  intent={turn.result.conversationEnginePreview?.intent || "unknown"} · goal=
+                  {turn.result.conversationEnginePreview?.goal || "unknown"} · stage=
+                  {turn.result.conversationEnginePreview?.stage || "unknown"} · agent=
+                  {turn.result.runtimeState?.selectedAgentKey || turn.result.conversationEnginePreview?.selectedAgentKey || "kein Agent"} ·
+                  nextAction={turn.result.runtimeState?.nextActionKey || turn.result.conversationEnginePreview?.nextAction || "keine"}
+                </p>
+                <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                  Missing Fields: {turn.result.conversationEnginePreview?.missingFields?.length ? turn.result.conversationEnginePreview.missingFields.join(", ") : "keine"}
+                </p>
+                <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                  Activation Boundary: publicWidgetActivation=
+                  {String(turn.result.activationBoundary?.publicWidgetActivation ?? false)} · productionActivation=
+                  {String(turn.result.activationBoundary?.productionActivation ?? false)} · deployRequired=
+                  {String(turn.result.activationBoundary?.deployRequired ?? false)}
+                </p>
+                <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                  Side Effects: planned={String(turn.result.sideEffects?.planned ?? false)} · ticket=
+                  {String(turn.result.sideEffects?.ticketDelivery ?? false)} · email=
+                  {String(turn.result.sideEffects?.emailDelivery ?? false)} · webhook=
+                  {String(turn.result.sideEffects?.webhookDelivery ?? false)} · provider=
+                  {String(turn.result.sideEffects?.providerCalls ?? false)} · db=
+                  {String(turn.result.sideEffects?.dbAccessForNewLogic ?? false)} · sql=
+                  {String(turn.result.sideEffects?.sql ?? false)} · queryRunner=
+                  {String(turn.result.sideEffects?.queryRunner ?? false)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {result ? (
         <div className="dashboard-stack dashboard-stack--sm">
