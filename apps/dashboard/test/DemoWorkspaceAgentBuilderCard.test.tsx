@@ -12,20 +12,35 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
   test("shows the required safety caveats and omits persistence or deployment actions", () => {
     render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
 
-    expect(screen.getByText("Sicherheitsgrenzen")).toBeInTheDocument();
-    expect(screen.getAllByText("Nur Admin-/Operator-Testpfad")).toHaveLength(2);
-    expect(screen.getAllByText("Keine Kundendaten")).toHaveLength(2);
-    expect(screen.getAllByText("Keine Production-Daten")).toHaveLength(2);
-    expect(screen.getByText("Knowledge wird nicht gespeichert")).toBeInTheDocument();
+    expect(screen.getByText("Enterprise Agent Workspace / Pilot Workspace")).toBeInTheDocument();
+    expect(screen.getByText("Workspace Status / Boundary Card")).toBeInTheDocument();
+    expect(screen.getByText("Workspace Flow / Checklist")).toBeInTheDocument();
+    expect(screen.getByText("Pilot Workspace")).toBeInTheDocument();
+    expect(screen.getByText("Admin/operator only")).toBeInTheDocument();
+    expect(screen.getAllByText("No public widget activation").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("No deploy").length).toBeGreaterThan(0);
+    expect(screen.getByText("No customer data")).toBeInTheDocument();
+    expect(screen.getAllByText("Config only persisted").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Knowledge/PDF/Chat not persisted").length).toBeGreaterThan(0);
+    expect(screen.getByText("Production activation: no")).toBeInTheDocument();
+    expect(screen.getByText("Config persisted: yes")).toBeInTheDocument();
+    expect(screen.getByText("Knowledge/PDF/Chat persisted: no")).toBeInTheDocument();
+    expect(screen.getByText("Configure agent")).toBeInTheDocument();
+    expect(screen.getByText("Save/load config")).toBeInTheDocument();
+    expect(screen.getByText("Add demo knowledge")).toBeInTheDocument();
+    expect(screen.getByText("Test conversation")).toBeInTheDocument();
+    expect(screen.getByText("Review response and boundaries")).toBeInTheDocument();
+    expect(screen.getByText("Use pilot guide for structured feedback")).toBeInTheDocument();
+    expect(screen.getAllByText("Keine Production-Daten").length).toBeGreaterThan(0);
     expect(screen.getByText("Dateien werden nicht dauerhaft gespeichert")).toBeInTheDocument();
     expect(screen.getByText("Keine Embeddings / kein RAG-Indexing")).toBeInTheDocument();
-    expect(screen.getAllByText("Kein Deploy")).toHaveLength(2);
-    expect(screen.getAllByText("Keine Public-Widget-Aktivierung")).toHaveLength(2);
     expect(screen.getAllByText("PDF-Text wird nur in-memory extrahiert")).toHaveLength(2);
     expect(screen.getAllByText("Keine echten Tickets, E-Mails oder Webhooks")).toHaveLength(2);
-    expect(screen.getByText("In-Memory Knowledge Upload (MVP)")).toBeInTheDocument();
-    expect(screen.getByText("Demo Workspace Config Persistence (MVP)")).toBeInTheDocument();
-    expect(screen.getByText("Demo Workspace Testchat (MVP)")).toBeInTheDocument();
+    expect(screen.getByText("1. Configure agent")).toBeInTheDocument();
+    expect(screen.getByText("2. Save/load config")).toBeInTheDocument();
+    expect(screen.getByText("3. Add demo knowledge")).toBeInTheDocument();
+    expect(screen.getByText("4. Test conversation")).toBeInTheDocument();
+    expect(screen.getByText("6. Use pilot guide for structured feedback")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save demo config" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Load saved config" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reset saved config" })).toBeInTheDocument();
@@ -33,6 +48,11 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     expect(screen.getByRole("button", { name: "Alle Snippets entfernen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Testnachricht senden" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "In-Memory-Chat leeren" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /docs\/evaluation\/demo-workspace\/demo-workspace-pilot-guide\.md/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /save knowledge/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /save chat/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /save pdf/i })).not.toBeInTheDocument();

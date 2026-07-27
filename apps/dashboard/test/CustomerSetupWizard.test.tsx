@@ -1005,7 +1005,7 @@ describe("LaunchStep admin test tools", () => {
     expect(screen.getByText("KI-Mitarbeiter Profil")).toBeInTheDocument();
     expect(screen.getByText("Gesprächslogik Testfälle")).toBeInTheDocument();
     expect(screen.getByText("Gesprächslogik Vorschau")).toBeInTheDocument();
-    expect(screen.getByText("Demo Workspace Agent Builder (MVP)")).toBeInTheDocument();
+    expect(screen.getByText("Enterprise Agent Workspace / Pilot Workspace")).toBeInTheDocument();
   });
 
   test.each(["customer", null] as const)("%s does not render assistant profile test card", (role) => {
@@ -1014,6 +1014,6 @@ describe("LaunchStep admin test tools", () => {
     expect(screen.queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();
     expect(screen.queryByText("Gesprächslogik Testfälle")).not.toBeInTheDocument();
     expect(screen.queryByText("Gesprächslogik Vorschau")).not.toBeInTheDocument();
-    expect(screen.queryByText("Demo Workspace Agent Builder (MVP)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Enterprise Agent Workspace / Pilot Workspace")).not.toBeInTheDocument();
   });
 });
