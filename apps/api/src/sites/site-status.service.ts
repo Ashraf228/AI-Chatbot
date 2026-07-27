@@ -51,6 +51,8 @@ type SiteConfig = {
   templateId?: string;
   templateAppliedAt?: string;
   assistantProfile?: unknown;
+  conversationFlow?: unknown;
+  enabledTasks?: unknown;
   isActive?: boolean;
   privacyUrl?: string;
   lastTestedAt?: string;
@@ -95,6 +97,51 @@ function parseConfig(value: unknown): SiteConfig {
   return value as SiteConfig;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function asString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function asStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0).map((entry) => entry.trim())
+    : [];
+}
+
+function resolveAssistantProfile(config: SiteConfig, moduleConfig: unknown) {
+  const moduleAssistantProfile = asRecord(asRecord(moduleConfig).assistantProfile);
+  if (Object.keys(moduleAssistantProfile).length > 0) {
+    return moduleAssistantProfile;
+  }
+
+  return asRecord(config.assistantProfile);
+}
+
+function hasBehaviorGoal(config: SiteConfig, assistantProfile: Record<string, unknown>) {
+  return Boolean(
+    config.primaryGoal ||
+      config.setupGoal ||
+      asString(assistantProfile.primaryGoal) ||
+      asString(assistantProfile.role) ||
+      asStringArray(assistantProfile.enabledTasks).length > 0,
+  );
+}
+
+function withResolvedAssistantProfile(config: SiteConfig, moduleConfig: unknown): SiteConfig {
+  const assistantProfile = resolveAssistantProfile(config, moduleConfig);
+  if (Object.keys(assistantProfile).length === 0) {
+    return config;
+  }
+
+  return {
+    ...config,
+    assistantProfile,
+  };
+}
+
 function isDesignConfigured(config: SiteConfig) {
   return Boolean(
     config.logoUrl ||
@@ -116,7 +163,18 @@ export class SiteStatusService {
       throw new BadRequestException('site not found');
     }
 
-    const config = parseConfig(site.config);
+    const assistantModuleRes = await this.db.query<{ config: Record<string, unknown> | null }>(
+      `SELECT config
+       FROM site_modules
+       WHERE site_id = $1
+         AND module_key = 'assistant-profile'
+       LIMIT 1`,
+      [siteId],
+    );
+    const config = withResolvedAssistantProfile(
+      parseConfig(site.config),
+      assistantModuleRes.rows[0]?.config,
+    );
     const knowledge = await this.db.query<{ count: string }>(
       `SELECT count(*)::text AS count
        FROM documents d
@@ -168,8 +226,9 @@ export class SiteStatusService {
     );
     const knowledgeMode = input.config.knowledgeMode || 'flexible';
     const knowledgeDone = input.knowledgeCount > 0 || knowledgeMode !== 'strict';
+    const assistantProfile = asRecord(input.config.assistantProfile);
     const behaviorDone = Boolean(
-      (input.config.primaryGoal || input.config.setupGoal) &&
+      hasBehaviorGoal(input.config, assistantProfile) &&
         (input.config.systemPrompt || input.config.ctaText || input.config.welcomeMessage),
     );
     const leadDeliveryDone =
