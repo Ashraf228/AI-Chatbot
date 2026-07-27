@@ -4824,6 +4824,66 @@
       "exception": null
     },
     {
+      "id": "API-111C",
+      "layer": "api",
+      "method": "DELETE",
+      "path": "/admin/sites/:siteId/conversation-engine/demo-workspace/config",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-111D",
+      "layer": "api",
+      "method": "GET",
+      "path": "/admin/sites/:siteId/conversation-engine/demo-workspace/config",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-111E",
+      "layer": "api",
+      "method": "PUT",
+      "path": "/admin/sites/:siteId/conversation-engine/demo-workspace/config",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
       "id": "API-112",
       "layer": "api",
       "method": "GET",
@@ -5109,6 +5169,66 @@
       "method": "POST",
       "path": "/api/sites/:siteId/conversation-engine/knowledge/pdf-extract",
       "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/knowledge/pdf-extract/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-233AA",
+      "layer": "dashboard",
+      "method": "DELETE",
+      "path": "/api/sites/:siteId/conversation-engine/demo-workspace/config",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/demo-workspace/config/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-233AB",
+      "layer": "dashboard",
+      "method": "GET",
+      "path": "/api/sites/:siteId/conversation-engine/demo-workspace/config",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/demo-workspace/config/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-233AC",
+      "layer": "dashboard",
+      "method": "PUT",
+      "path": "/api/sites/:siteId/conversation-engine/demo-workspace/config",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/demo-workspace/config/route.ts",
       "authType": "dashboard-session",
       "allowedRoles": [
         "admin",
