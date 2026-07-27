@@ -5,6 +5,14 @@ import { Button } from "../../shared/Button";
 
 const MAX_KNOWLEDGE_SNIPPETS = 5;
 const MAX_SNIPPET_EXCERPT_LENGTH = 320;
+const MAX_PDF_UPLOAD_BYTES = 5 * 1024 * 1024;
+const PDF_EXTRACT_ROUTE_SUFFIX = "conversation-engine/knowledge/pdf-extract";
+
+const PDF_UPLOAD_ERROR_MESSAGES = {
+  invalidType: "Nur .pdf-Dateien mit synthetischen/freigegebenen Demo-Inhalten sind in diesem Schritt erlaubt.",
+  tooLarge: "PDF-Dateien duerfen maximal 5 MB gross sein.",
+  extractFailed: "PDF konnte nicht sicher extrahiert werden.",
+};
 
 type BuilderFormState = {
   assistantName: string;
@@ -30,6 +38,14 @@ type DemoKnowledgeSnippet = {
   sourceType: string;
   scope: string;
   fileName?: string;
+};
+
+type PdfExtractResponse = {
+  fileName: string;
+  extractedText: string;
+  extractedChars: number;
+  originalChars: number;
+  truncated: boolean;
 };
 
 type RuntimeKnowledgeRetrieval = {
@@ -149,6 +165,14 @@ function stripFileExtension(fileName: string) {
   return fileName.replace(/\.[^.]+$/, "").trim();
 }
 
+function sanitizeDisplayFileName(fileName: string) {
+  return fileName
+    .replace(/[\\/\u0000-\u001f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
 function parseSnippetBlocks(value: string) {
   return value
     .split(/\n\s*\n/)
@@ -161,6 +185,7 @@ function buildKnowledgeSnippet(params: {
   title: string;
   text: string;
   fileName?: string;
+  sourceType?: string;
 }): DemoKnowledgeSnippet | null {
   const excerpt = sanitizeSnippetText(params.text).slice(0, MAX_SNIPPET_EXCERPT_LENGTH);
   if (!excerpt) {
@@ -172,7 +197,7 @@ function buildKnowledgeSnippet(params: {
     title: params.title.trim().slice(0, 120) || "Demo Snippet",
     excerpt,
     score: 0.75,
-    sourceType: "synthetic",
+    sourceType: params.sourceType || "synthetic",
     scope: "demo-workspace",
     fileName: params.fileName,
   };
@@ -238,6 +263,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
   const [result, setResult] = useState<RuntimePilotResponse | null>(null);
   const [chatTurns, setChatTurns] = useState<DemoWorkspaceChatTurn[]>([]);
   const [loading, setLoading] = useState(false);
+  const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
 
@@ -326,6 +352,95 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
     event.target.value = "";
   }
 
+  async function handlePdfKnowledgeUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) {
+      return;
+    }
+
+    const remainingSlots = Math.max(0, MAX_KNOWLEDGE_SNIPPETS - knowledgeSnippets.length);
+    if (remainingSlots === 0) {
+      setKnowledgeError(`Maximal ${MAX_KNOWLEDGE_SNIPPETS} In-Memory-Snippets gleichzeitig erlaubt.`);
+      event.target.value = "";
+      return;
+    }
+
+    if (files.some((file) => !/\.pdf$/i.test(file.name) || (file.type && file.type !== "application/pdf"))) {
+      setKnowledgeError(PDF_UPLOAD_ERROR_MESSAGES.invalidType);
+      event.target.value = "";
+      return;
+    }
+
+    if (files.some((file) => file.size > MAX_PDF_UPLOAD_BYTES)) {
+      setKnowledgeError(PDF_UPLOAD_ERROR_MESSAGES.tooLarge);
+      event.target.value = "";
+      return;
+    }
+
+    setPdfUploadLoading(true);
+    setKnowledgeError(null);
+
+    try {
+      const uploadedSnippets: DemoKnowledgeSnippet[] = [];
+      const errors: string[] = [];
+      const baseIndex = knowledgeSnippets.length + 1;
+
+      for (const [index, file] of files.slice(0, remainingSlots).entries()) {
+        const formData = new FormData();
+        formData.append("file", file, file.name);
+
+        const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/${PDF_EXTRACT_ROUTE_SUFFIX}`, {
+          method: "POST",
+          body: formData,
+        });
+        const data = (await response.json().catch(() => ({}))) as Partial<PdfExtractResponse> & { message?: string };
+        if (!response.ok) {
+          errors.push(data.message || `${sanitizeDisplayFileName(file.name) || "PDF"} konnte nicht sicher extrahiert werden.`);
+          continue;
+        }
+
+        const safeFileName = sanitizeDisplayFileName(
+          typeof data.fileName === "string" && data.fileName.trim().length > 0 ? data.fileName : file.name,
+        );
+        const snippet = buildKnowledgeSnippet({
+          id: `demo-snippet-${baseIndex + index}`,
+          title: stripFileExtension(safeFileName) || buildDefaultSnippetTitle(baseIndex + index),
+          text: typeof data.extractedText === "string" ? data.extractedText : "",
+          fileName: safeFileName,
+          sourceType: "pdf_demo",
+        });
+
+        if (!snippet) {
+          errors.push(`"${safeFileName || file.name}" enthaelt keinen nutzbaren Textauszug.`);
+          continue;
+        }
+
+        uploadedSnippets.push(snippet);
+      }
+
+      if (files.length > remainingSlots) {
+        errors.push(`Maximal ${MAX_KNOWLEDGE_SNIPPETS} In-Memory-Snippets gleichzeitig erlaubt.`);
+      }
+
+      if (uploadedSnippets.length > 0) {
+        appendKnowledgeSnippets(uploadedSnippets);
+      }
+
+      if (uploadedSnippets.length === 0 && errors.length === 0) {
+        setKnowledgeError(PDF_UPLOAD_ERROR_MESSAGES.extractFailed);
+      } else if (errors.length > 0) {
+        setKnowledgeError(errors[0]);
+      }
+    } catch (uploadError) {
+      setKnowledgeError(
+        uploadError instanceof Error ? uploadError.message : PDF_UPLOAD_ERROR_MESSAGES.extractFailed,
+      );
+    } finally {
+      setPdfUploadLoading(false);
+      event.target.value = "";
+    }
+  }
+
   function removeKnowledgeSnippet(snippetId: string) {
     setKnowledgeSnippets((current) => current.filter((snippet) => snippet.id !== snippetId));
     setKnowledgeError(null);
@@ -409,7 +524,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
           <li>Keine Embeddings / kein RAG-Indexing</li>
           <li>Kein Deploy</li>
           <li>Keine Public-Widget-Aktivierung</li>
-          <li>PDF bleibt in diesem Task gesperrt/deferred</li>
+          <li>PDF-Text wird nur in-memory extrahiert</li>
           <li>Keine echten Tickets, E-Mails oder Webhooks</li>
         </ul>
       </div>
@@ -503,15 +618,15 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
         <div>
           <strong>In-Memory Knowledge Upload (MVP)</strong>
           <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-            Text- und Markdown-Snippets bleiben ausschliesslich im Browser-State und werden pro Testchat-Turn an den
-            bestehenden Runtime-Pilot weitergegeben. Es gibt keine Persistenz, keinen File Storage und keine PDF-
-            Verarbeitung in diesem Schritt.
+            Text-, Markdown- und PDF-Snippets bleiben ausschliesslich im Browser-State und werden pro Testchat-Turn an
+            den bestehenden Runtime-Pilot weitergegeben. PDF-Text wird serverseitig nur fuer diesen Request
+            extrahiert, nicht gespeichert und nicht indexiert.
           </p>
         </div>
 
         <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
           <li>Unterstuetzt: Paste, .txt, .md, .markdown, .json als Plain-Text</li>
-          <li>PDF-Unterstuetzung ist in diesem Task bewusst deferred</li>
+          <li>Unterstuetzt: .pdf bis 5 MB per sicherer In-Memory-Extraktion</li>
           <li>Maximal {MAX_KNOWLEDGE_SNIPPETS} aktive Snippets gleichzeitig</li>
         </ul>
 
@@ -557,23 +672,37 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
               onChange={handleKnowledgeFileUpload}
             />
           </label>
+          <label className="dashboard-field">
+            <span className="dashboard-field-label">Demo-PDF laden</span>
+            <input
+              className="dashboard-input"
+              type="file"
+              accept=".pdf,application/pdf"
+              multiple
+              disabled={pdfUploadLoading}
+              onChange={handlePdfKnowledgeUpload}
+            />
+          </label>
           <Button
             type="button"
             variant="ghost"
             onClick={clearKnowledgeSnippets}
-            disabled={knowledgeSnippets.length === 0}
+            disabled={pdfUploadLoading || knowledgeSnippets.length === 0}
           >
             Alle Snippets entfernen
           </Button>
         </div>
 
+        {pdfUploadLoading ? (
+          <div className="dashboard-status dashboard-status--info">PDF-Text wird sicher in-memory extrahiert...</div>
+        ) : null}
         {knowledgeError ? <div className="dashboard-status dashboard-status--error">{knowledgeError}</div> : null}
 
         <div className="dashboard-stack dashboard-stack--sm">
           <strong>Aktive Knowledge Snippets ({knowledgeSnippets.length})</strong>
           {knowledgeSnippets.length === 0 ? (
             <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-              Noch keine In-Memory-Snippets aktiv. TXT/Markdown bleibt lokal im Browser und wird nicht gespeichert.
+              Noch keine In-Memory-Snippets aktiv. TXT/Markdown/PDF bleibt lokal oder request-lokal und wird nicht gespeichert.
             </p>
           ) : (
             <div className="dashboard-stack dashboard-stack--sm">
@@ -648,7 +777,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
           <li>Keine Production-Daten</li>
           <li>Kein Deploy</li>
           <li>Keine Public-Widget-Aktivierung</li>
-          <li>PDF bleibt in diesem Task gesperrt/deferred</li>
+          <li>PDF-Text wird nur in-memory extrahiert</li>
           <li>Keine echten Tickets, E-Mails oder Webhooks</li>
         </ul>
       </div>

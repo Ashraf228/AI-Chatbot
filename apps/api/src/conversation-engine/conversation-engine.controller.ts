@@ -1,4 +1,21 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Req,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import type { Response } from 'express';
 import {
   AssistantProfile,
   AssistantProfileDiagnosticsService,
@@ -22,6 +39,64 @@ type SiteModulePreview = {
   key: string;
   config: Record<string, unknown>;
 };
+
+const MAX_DEMO_PDF_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_DEMO_PDF_EXTRACTED_CHARS = 20_000;
+
+type DemoPdfParseResult = {
+  text?: string;
+};
+
+type DemoPdfParseInstance = {
+  getText: () => Promise<DemoPdfParseResult>;
+  destroy: () => Promise<void>;
+};
+
+type DemoPdfParseClass = new (input: { data: Buffer }) => DemoPdfParseInstance;
+
+const DEMO_PDF_UPLOAD_OPTIONS = {
+  storage: memoryStorage(),
+  limits: {
+    fileSize: MAX_DEMO_PDF_UPLOAD_BYTES,
+  },
+  fileFilter: (
+    _req: unknown,
+    file: { mimetype?: string; originalname?: string },
+    cb: (error: Error | null, acceptFile: boolean) => void,
+  ) => {
+    const fileName = typeof file.originalname === 'string' ? file.originalname : '';
+    if (!/\.pdf$/i.test(fileName)) {
+      return cb(new BadRequestException('unsupported file type'), false);
+    }
+    if (file.mimetype && file.mimetype !== 'application/pdf') {
+      return cb(new BadRequestException('unsupported file type'), false);
+    }
+    cb(null, true);
+  },
+};
+
+function sanitizePdfDisplayFileName(fileName: string) {
+  return fileName
+    .replace(/[\\/\u0000-\u001f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function normalizeExtractedPdfText(value: string) {
+  return value.replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim();
+}
+
+function isPdfUpload(file: Express.Multer.File) {
+  if (!/\.pdf$/i.test(file.originalname || '')) {
+    return false;
+  }
+  return !file.mimetype || file.mimetype === 'application/pdf';
+}
+
+function loadDemoPdfParser() {
+  return require('pdf-parse') as { PDFParse: DemoPdfParseClass };
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -569,6 +644,78 @@ export class ConversationEngineController {
       assistantProfileDebug,
       ...result,
     };
+  }
+
+  @Post('knowledge/pdf-extract')
+  @UseInterceptors(FileInterceptor('file', DEMO_PDF_UPLOAD_OPTIONS))
+  async pdfExtract(
+    @Param('siteId') siteId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: { dashboardAuth?: unknown },
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+
+    response.setHeader('Cache-Control', 'no-store');
+
+    if (!file) {
+      throw new BadRequestException('file missing');
+    }
+
+    if (!file.buffer || file.buffer.length === 0) {
+      throw new BadRequestException('file missing');
+    }
+
+    if (file.size > MAX_DEMO_PDF_UPLOAD_BYTES) {
+      throw new BadRequestException('PDF too large');
+    }
+
+    if (!isPdfUpload(file)) {
+      throw new BadRequestException('unsupported file type');
+    }
+
+    const safeFileName = sanitizePdfDisplayFileName(file.originalname) || 'demo-upload.pdf';
+    let parser: DemoPdfParseInstance | null = null;
+
+    try {
+      const { PDFParse } = loadDemoPdfParser();
+      parser = new PDFParse({ data: file.buffer });
+      const parsed = await parser.getText();
+      const normalized = normalizeExtractedPdfText(parsed.text || '');
+
+      if (!normalized) {
+        throw new BadRequestException('PDF has no extractable text');
+      }
+
+      const extractedText = normalized.slice(0, MAX_DEMO_PDF_EXTRACTED_CHARS);
+      return {
+        fileName: safeFileName,
+        extractedText,
+        extractedChars: extractedText.length,
+        originalChars: normalized.length,
+        truncated: normalized.length > extractedText.length,
+        boundary: {
+          pdfStorageUsed: false,
+          fileStorageUsed: false,
+          dbWriteUsed: false,
+          embeddingGenerationUsed: false,
+          ragIndexingUsed: false,
+          providerCallsUsed: false,
+          ocrUsed: false,
+        },
+      };
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('PDF could not be parsed');
+    } finally {
+      if (parser) {
+        await parser.destroy().catch(() => undefined);
+      }
+    }
   }
 
   private async hasKnowledge(siteId: string) {
