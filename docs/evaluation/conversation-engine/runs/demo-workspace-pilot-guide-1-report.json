@@ -1,0 +1,29 @@
+{
+  "run_id": "demo-workspace-pilot-guide-1",
+  "run_type": "demo_workspace_pilot_guide_doku_only",
+  "pilot_guide_created": true,
+  "test_scenarios_created": true,
+  "evaluation_caveats_created": true,
+  "customer_data_used": false,
+  "production_data_used": false,
+  "credentials_included": false,
+  "real_contacts_included": false,
+  "screenshots_included": false,
+  "recordings_included": false,
+  "runtime_code_changed": false,
+  "dashboard_code_changed": false,
+  "api_code_changed": false,
+  "db_write_used": false,
+  "deploy_used": false,
+  "public_widget_activation": false,
+  "production_activation": false,
+  "enterprise_approval_claimed": false,
+  "customer_data_approval_claimed": false,
+  "tests": {
+    "doc_only_gate": "PASS",
+    "sensitive_scan": "PASS",
+    "production_context_audit": "PASS",
+    "authorization_matrix": "PASS",
+    "security_boundaries": "PASS"
+  }
+}
