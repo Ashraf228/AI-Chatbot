@@ -125,6 +125,43 @@ type DemoWorkspaceChatTurn = {
   usedKnowledgeSnippets: DemoKnowledgeSnippet[];
 };
 
+type PersistedDemoWorkspaceConfig = {
+  version: number;
+  assistantName: string;
+  companyContext: string;
+  assistantRole: string;
+  targetAudience: string[];
+  tone: BuilderFormState["tone"];
+  allowedTasks: string[];
+  blockedTasks: string[];
+  handoffAllowed: boolean;
+  ticketAllowed: boolean;
+  requiredFields: string[];
+  metadata: {
+    source: string;
+    updatedAt: string;
+    updatedByRole: "admin" | "operator";
+    customerDataAllowed: false;
+    knowledgePersistenceEnabled: false;
+    chatHistoryPersistenceEnabled: false;
+    publicWidgetActivation: false;
+    productionActivation: false;
+  };
+};
+
+type DemoWorkspaceConfigReadResponse = {
+  hasSavedConfig: boolean;
+  savedConfig: PersistedDemoWorkspaceConfig | null;
+};
+
+type DemoWorkspaceConfigWriteResponse = {
+  saved?: boolean;
+  deleted?: boolean;
+  hadSavedConfig?: boolean;
+  hasSavedConfig: boolean;
+  savedConfig: PersistedDemoWorkspaceConfig | null;
+};
+
 const DEFAULT_FORM: BuilderFormState = {
   assistantName: "Demo Workspace Agent",
   companyContext: "",
@@ -253,6 +290,40 @@ function buildSnippetListSummary(snippets: DemoKnowledgeSnippet[]) {
   return snippets.map((snippet) => snippet.title).join(", ");
 }
 
+function buildDemoWorkspaceConfigPayload(form: BuilderFormState) {
+  return {
+    assistantName: form.assistantName,
+    companyContext: form.companyContext,
+    assistantRole: form.assistantRole,
+    targetAudience: splitLines(form.targetAudience, 8),
+    tone: form.tone,
+    allowedTasks: splitLines(form.allowedTasks, 16),
+    blockedTasks: splitLines(form.blockedTasks, 16),
+    handoffAllowed: form.handoffAllowed,
+    ticketAllowed: form.ticketAllowed,
+    requiredFields: splitLines(form.requiredFields, 8),
+  };
+}
+
+function applyPersistedDemoWorkspaceConfig(
+  savedConfig: PersistedDemoWorkspaceConfig,
+  currentForm: BuilderFormState,
+): BuilderFormState {
+  return {
+    ...currentForm,
+    assistantName: savedConfig.assistantName,
+    companyContext: savedConfig.companyContext,
+    assistantRole: savedConfig.assistantRole,
+    targetAudience: savedConfig.targetAudience.join("\n"),
+    tone: savedConfig.tone,
+    allowedTasks: savedConfig.allowedTasks.join("\n"),
+    blockedTasks: savedConfig.blockedTasks.join("\n"),
+    handoffAllowed: savedConfig.handoffAllowed,
+    ticketAllowed: savedConfig.ticketAllowed,
+    requiredFields: savedConfig.requiredFields.join("\n"),
+  };
+}
+
 type DemoWorkspaceAgentBuilderCardProps = {
   siteId: string;
 };
@@ -264,8 +335,12 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
   const [chatTurns, setChatTurns] = useState<DemoWorkspaceChatTurn[]>([]);
   const [loading, setLoading] = useState(false);
   const [pdfUploadLoading, setPdfUploadLoading] = useState(false);
+  const [configLoading, setConfigLoading] = useState<"save" | "load" | "reset" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
+  const [configStatus, setConfigStatus] = useState<string | null>(null);
+  const [savedConfigMeta, setSavedConfigMeta] = useState<PersistedDemoWorkspaceConfig["metadata"] | null>(null);
 
   function updateField<Key extends keyof BuilderFormState>(key: Key, value: BuilderFormState[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -451,6 +526,111 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
     setKnowledgeError(null);
   }
 
+  async function loadSavedDemoConfig() {
+    setConfigLoading("load");
+    setConfigError(null);
+    setConfigStatus(null);
+    try {
+      const response = await fetch(
+        `/api/sites/${encodeURIComponent(siteId)}/conversation-engine/demo-workspace/config`,
+        {
+          method: "GET",
+          cache: "no-store",
+        },
+      );
+      const data = (await response.json().catch(() => ({}))) as DemoWorkspaceConfigReadResponse & { message?: string };
+      if (!response.ok) {
+        throw new Error(data.message || "Gespeicherte Demo-Konfiguration konnte nicht geladen werden.");
+      }
+      const savedConfig = data.savedConfig;
+      if (!data.hasSavedConfig || !savedConfig) {
+        setSavedConfigMeta(null);
+        setConfigStatus("Noch keine gespeicherte Demo-Konfiguration vorhanden.");
+        return;
+      }
+      setForm((current) => applyPersistedDemoWorkspaceConfig(savedConfig, current));
+      setSavedConfigMeta(savedConfig.metadata);
+      setConfigStatus("Gespeicherte Demo-Konfiguration geladen. Knowledge, PDFs und Chat bleiben unverändert.");
+    } catch (configLoadError) {
+      setConfigError(
+        configLoadError instanceof Error
+          ? configLoadError.message
+          : "Gespeicherte Demo-Konfiguration konnte nicht geladen werden.",
+      );
+    } finally {
+      setConfigLoading(null);
+    }
+  }
+
+  async function saveDemoConfig() {
+    setConfigLoading("save");
+    setConfigError(null);
+    setConfigStatus(null);
+    try {
+      const response = await fetch(
+        `/api/sites/${encodeURIComponent(siteId)}/conversation-engine/demo-workspace/config`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildDemoWorkspaceConfigPayload(form)),
+        },
+      );
+      const data = (await response.json().catch(() => ({}))) as DemoWorkspaceConfigWriteResponse & { message?: string };
+      if (!response.ok) {
+        throw new Error(data.message || "Demo-Konfiguration konnte nicht gespeichert werden.");
+      }
+      setSavedConfigMeta(data.savedConfig?.metadata || null);
+      setConfigStatus("Demo-Konfiguration gespeichert. Es wurden nur Agent-Felder gespeichert.");
+    } catch (configSaveError) {
+      setConfigError(
+        configSaveError instanceof Error
+          ? configSaveError.message
+          : "Demo-Konfiguration konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setConfigLoading(null);
+    }
+  }
+
+  async function resetSavedDemoConfig() {
+    setConfigLoading("reset");
+    setConfigError(null);
+    setConfigStatus(null);
+    try {
+      const response = await fetch(
+        `/api/sites/${encodeURIComponent(siteId)}/conversation-engine/demo-workspace/config`,
+        {
+          method: "DELETE",
+        },
+      );
+      const data = (await response.json().catch(() => ({}))) as DemoWorkspaceConfigWriteResponse & { message?: string };
+      if (!response.ok) {
+        throw new Error(data.message || "Gespeicherte Demo-Konfiguration konnte nicht zurückgesetzt werden.");
+      }
+      setForm((current) => ({
+        ...current,
+        ...DEFAULT_FORM,
+        knowledgeSnippetTitle: current.knowledgeSnippetTitle,
+        knowledgeSnippetDraft: current.knowledgeSnippetDraft,
+        testMessage: current.testMessage,
+      }));
+      setSavedConfigMeta(null);
+      setConfigStatus(
+        data.hadSavedConfig
+          ? "Gespeicherte Demo-Konfiguration gelöscht. Knowledge, PDFs und Chat wurden nicht gespeichert."
+          : "Es war keine gespeicherte Demo-Konfiguration vorhanden.",
+      );
+    } catch (configResetError) {
+      setConfigError(
+        configResetError instanceof Error
+          ? configResetError.message
+          : "Gespeicherte Demo-Konfiguration konnte nicht zurückgesetzt werden.",
+      );
+    } finally {
+      setConfigLoading(null);
+    }
+  }
+
   async function runBuilder() {
     const message = form.testMessage.trim();
     if (!message) {
@@ -612,6 +792,54 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
             onChange={(event) => updateField("requiredFields", event.target.value)}
           />
         </label>
+      </div>
+
+      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+        <div>
+          <strong>Demo Workspace Config Persistence (MVP)</strong>
+          <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+            Gespeichert wird nur die Agent-Konfiguration fuer diesen Admin-/Operator-Demo-Workspace. Knowledge,
+            PDFs und Chat bleiben in-memory und werden nicht gespeichert. Kein Deploy, keine Public-Widget-Aktivierung.
+          </p>
+        </div>
+        <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          <li>Only config is saved</li>
+          <li>Knowledge, PDFs und Chat werden nicht gespeichert</li>
+          <li>Kein Deploy / keine Public-Widget-Aktivierung</li>
+        </ul>
+        <div className="dashboard-grid dashboard-grid--metrics-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={saveDemoConfig}
+            disabled={configLoading !== null}
+          >
+            {configLoading === "save" ? "Speichert..." : "Save demo config"}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={loadSavedDemoConfig}
+            disabled={configLoading !== null}
+          >
+            {configLoading === "load" ? "Laedt..." : "Load saved config"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={resetSavedDemoConfig}
+            disabled={configLoading !== null}
+          >
+            {configLoading === "reset" ? "Setzt zurueck..." : "Reset saved config"}
+          </Button>
+        </div>
+        {savedConfigMeta ? (
+          <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+            Letzte gespeicherte Demo-Konfiguration: {savedConfigMeta.updatedAt} · Rolle: {savedConfigMeta.updatedByRole}
+          </p>
+        ) : null}
+        {configStatus ? <div className="dashboard-status dashboard-status--info">{configStatus}</div> : null}
+        {configError ? <div className="dashboard-status dashboard-status--error">{configError}</div> : null}
       </div>
 
       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">

@@ -39,10 +39,50 @@ type TestModuleConfig = {
     adminTestOnly: true;
   };
   testCases: TestCase[];
+  demoWorkspaceConfig?: DemoWorkspaceConfig | null;
   lastMetrics?: Record<string, unknown>;
 };
 
 const MODULE_KEY = 'conversation-engine-tests';
+const DEMO_WORKSPACE_CONFIG_VERSION = 1;
+const DEMO_WORKSPACE_ALLOWED_TONES = new Set(['professional', 'friendly', 'consultative', 'formal']);
+
+type DemoWorkspaceConfig = {
+  version: 1;
+  assistantName: string;
+  companyContext: string;
+  assistantRole: string;
+  targetAudience: string[];
+  tone: 'professional' | 'friendly' | 'consultative' | 'formal';
+  allowedTasks: string[];
+  blockedTasks: string[];
+  handoffAllowed: boolean;
+  ticketAllowed: boolean;
+  requiredFields: string[];
+  metadata: {
+    source: 'demo_workspace_agent_builder';
+    updatedAt: string;
+    updatedByRole: 'admin' | 'operator';
+    customerDataAllowed: false;
+    knowledgePersistenceEnabled: false;
+    chatHistoryPersistenceEnabled: false;
+    publicWidgetActivation: false;
+    productionActivation: false;
+  };
+};
+
+const DEFAULT_DEMO_WORKSPACE_CONFIG = {
+  assistantName: 'Demo Workspace Agent',
+  companyContext: '',
+  assistantRole: 'Digitaler Demo-Assistent fuer Admin-Tests',
+  targetAudience: [] as string[],
+  tone: 'professional' as const,
+  allowedTasks: ['answer_questions', 'collect_requests', 'triage_support', 'prepare_handoff'],
+  blockedTasks: [] as string[],
+  handoffAllowed: true,
+  ticketAllowed: false,
+  requiredFields: ['fullName', 'email', 'description'],
+};
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -56,6 +96,30 @@ function asBoolean(value: unknown, fallback = false) {
   return typeof value === 'boolean' ? value : fallback;
 }
 
+function dedupeTrimmedStrings(entries: unknown, limit: number) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const output: string[] = [];
+  for (const entry of entries) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const normalized = entry.trim();
+    const key = normalized.toLowerCase();
+    if (!normalized || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    output.push(normalized.slice(0, 160));
+    if (output.length >= limit) {
+      break;
+    }
+  }
+  return output;
+}
+
 function sanitizeStoredText(value: unknown, fallback: string) {
   const text = asString(value).slice(0, 500);
   const sanitized = text
@@ -67,6 +131,78 @@ function sanitizeStoredText(value: unknown, fallback: string) {
 
 function sanitizePreviewText(value: unknown, fallback = '') {
   return sanitizeStoredText(value, fallback).slice(0, 800);
+}
+
+function normalizeDemoWorkspaceConfig(value: unknown): DemoWorkspaceConfig | null {
+  const source = asRecord(value);
+  if (Object.keys(source).length === 0) {
+    return null;
+  }
+
+  const metadata = asRecord(source.metadata);
+  const tone = asString(source.tone);
+  const updatedByRole = asString(metadata.updatedByRole) === 'admin' ? 'admin' : 'operator';
+  const updatedAt = asString(metadata.updatedAt) || new Date().toISOString();
+
+  return {
+    version: DEMO_WORKSPACE_CONFIG_VERSION,
+    assistantName: sanitizeStoredText(source.assistantName, DEFAULT_DEMO_WORKSPACE_CONFIG.assistantName).slice(0, 120),
+    companyContext: sanitizeStoredText(source.companyContext, DEFAULT_DEMO_WORKSPACE_CONFIG.companyContext).slice(0, 1200),
+    assistantRole: sanitizeStoredText(source.assistantRole, DEFAULT_DEMO_WORKSPACE_CONFIG.assistantRole).slice(0, 160),
+    targetAudience: dedupeTrimmedStrings(source.targetAudience, 8),
+    tone: DEMO_WORKSPACE_ALLOWED_TONES.has(tone)
+      ? tone as DemoWorkspaceConfig['tone']
+      : DEFAULT_DEMO_WORKSPACE_CONFIG.tone,
+    allowedTasks: dedupeTrimmedStrings(source.allowedTasks, 16),
+    blockedTasks: dedupeTrimmedStrings(source.blockedTasks, 16),
+    handoffAllowed: asBoolean(source.handoffAllowed, DEFAULT_DEMO_WORKSPACE_CONFIG.handoffAllowed),
+    ticketAllowed: asBoolean(source.ticketAllowed, DEFAULT_DEMO_WORKSPACE_CONFIG.ticketAllowed),
+    requiredFields: dedupeTrimmedStrings(source.requiredFields, 8),
+    metadata: {
+      source: 'demo_workspace_agent_builder',
+      updatedAt,
+      updatedByRole,
+      customerDataAllowed: false,
+      knowledgePersistenceEnabled: false,
+      chatHistoryPersistenceEnabled: false,
+      publicWidgetActivation: false,
+      productionActivation: false,
+    },
+  };
+}
+
+function sanitizeDemoWorkspaceConfig(
+  value: unknown,
+  actorRole: string,
+): DemoWorkspaceConfig {
+  const source = asRecord(value);
+  const updatedByRole = actorRole === 'admin' ? 'admin' : 'operator';
+
+  return {
+    version: DEMO_WORKSPACE_CONFIG_VERSION,
+    assistantName: sanitizeStoredText(source.assistantName, DEFAULT_DEMO_WORKSPACE_CONFIG.assistantName).slice(0, 120),
+    companyContext: sanitizeStoredText(source.companyContext, DEFAULT_DEMO_WORKSPACE_CONFIG.companyContext).slice(0, 1200),
+    assistantRole: sanitizeStoredText(source.assistantRole, DEFAULT_DEMO_WORKSPACE_CONFIG.assistantRole).slice(0, 160),
+    targetAudience: dedupeTrimmedStrings(source.targetAudience, 8),
+    tone: DEMO_WORKSPACE_ALLOWED_TONES.has(asString(source.tone))
+      ? asString(source.tone) as DemoWorkspaceConfig['tone']
+      : DEFAULT_DEMO_WORKSPACE_CONFIG.tone,
+    allowedTasks: dedupeTrimmedStrings(source.allowedTasks, 16),
+    blockedTasks: dedupeTrimmedStrings(source.blockedTasks, 16),
+    handoffAllowed: asBoolean(source.handoffAllowed, DEFAULT_DEMO_WORKSPACE_CONFIG.handoffAllowed),
+    ticketAllowed: asBoolean(source.ticketAllowed, DEFAULT_DEMO_WORKSPACE_CONFIG.ticketAllowed),
+    requiredFields: dedupeTrimmedStrings(source.requiredFields, 8),
+    metadata: {
+      source: 'demo_workspace_agent_builder',
+      updatedAt: new Date().toISOString(),
+      updatedByRole,
+      customerDataAllowed: false,
+      knowledgePersistenceEnabled: false,
+      chatHistoryPersistenceEnabled: false,
+      publicWidgetActivation: false,
+      productionActivation: false,
+    },
+  };
 }
 
 function normalizeTestCase(value: unknown): TestCase | null {
@@ -114,6 +250,7 @@ function normalizeConfig(config: Record<string, unknown> | null | undefined): Te
     testCases: Array.isArray(source.testCases)
       ? source.testCases.map(normalizeTestCase).filter((entry): entry is TestCase => entry !== null)
       : [],
+    demoWorkspaceConfig: normalizeDemoWorkspaceConfig(source.demoWorkspaceConfig),
     lastMetrics: asRecord(source.lastMetrics),
   };
 }
@@ -293,6 +430,38 @@ export class ConversationEngineTestCasesService {
       responseQualitySummary: responseQualitySummaryFor(config.testCases),
       knowledgeSummary: knowledgeSummaryFor(config.testCases),
       starterTestCases: this.starterTestCases(),
+    };
+  }
+
+  async getDemoWorkspaceConfig(siteId: string) {
+    const config = await this.loadConfig(siteId);
+    return {
+      hasSavedConfig: config.demoWorkspaceConfig !== null,
+      savedConfig: config.demoWorkspaceConfig,
+    };
+  }
+
+  async updateDemoWorkspaceConfig(siteId: string, input: Record<string, unknown>, actorRole: string) {
+    const config = await this.loadConfig(siteId);
+    config.demoWorkspaceConfig = sanitizeDemoWorkspaceConfig(input, actorRole);
+    await this.saveConfig(siteId, config);
+    return {
+      saved: true,
+      savedConfig: config.demoWorkspaceConfig,
+      hasSavedConfig: true,
+    };
+  }
+
+  async deleteDemoWorkspaceConfig(siteId: string) {
+    const config = await this.loadConfig(siteId);
+    const hadSavedConfig = config.demoWorkspaceConfig !== null;
+    delete config.demoWorkspaceConfig;
+    await this.saveConfig(siteId, config);
+    return {
+      deleted: true,
+      hadSavedConfig,
+      hasSavedConfig: false,
+      savedConfig: null,
     };
   }
 

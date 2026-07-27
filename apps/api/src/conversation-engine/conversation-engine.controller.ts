@@ -333,6 +333,47 @@ export class ConversationEngineController {
     return this.testCases.updateSettings(siteId, body);
   }
 
+  @Get('demo-workspace/config')
+  async getDemoWorkspaceConfig(
+    @Param('siteId') siteId: string,
+    @Req() req: { dashboardAuth?: unknown },
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+    response.setHeader('Cache-Control', 'no-store');
+    return this.testCases.getDemoWorkspaceConfig(siteId);
+  }
+
+  @Put('demo-workspace/config')
+  async updateDemoWorkspaceConfig(
+    @Param('siteId') siteId: string,
+    @Body() body: Record<string, unknown>,
+    @Req() req: { dashboardAuth?: unknown },
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const auth = this.scope.getAuth(req);
+    await this.scope.assertSiteAccess(auth, siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+    response.setHeader('Cache-Control', 'no-store');
+    return this.testCases.updateDemoWorkspaceConfig(siteId, body, auth.role || 'operator');
+  }
+
+  @Delete('demo-workspace/config')
+  async deleteDemoWorkspaceConfig(
+    @Param('siteId') siteId: string,
+    @Req() req: { dashboardAuth?: unknown },
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+    response.setHeader('Cache-Control', 'no-store');
+    return this.testCases.deleteDemoWorkspaceConfig(siteId);
+  }
+
   @Get('test-cases')
   async listTestCases(
     @Param('siteId') siteId: string,
