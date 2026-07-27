@@ -17,7 +17,9 @@
       "parentName": "next",
       "parentVersion": "16.2.11",
       "ownerRole": "security_owner",
-      "expiryDate": "2026-08-06",
+      "expiryDate": "2026-08-20",
+      "revalidatedAt": "2026-07-27",
+      "revalidationReason": "No stable Next release fixes the internal postcss path; next@16.2.12 still depends on postcss@8.4.31. Accepted temporarily, not fixed.",
       "followUp": "monitor stable next release and upgrade immediately when available",
       "revalidationTriggers": [
         "new stable next release greater than 16.2.11",

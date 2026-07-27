@@ -1,6 +1,6 @@
 # Dependency Risk Register
 
-Stand: 2026-07-25
+Stand: 2026-07-27
 
 Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produktionskandidaten. Es ersetzt keinen externen Security-Scan.
 
@@ -24,13 +24,15 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
   - Override-Tests waren fuer den exakten Next-internen Pfad nicht wirksam.
 - Entscheidung:
   - Status: `accepted_temporarily_with_context`
-  - Das Finding bleibt **nicht fixed**.
+  - Das Finding bleibt **accepted temporarily, not fixed**.
   - `production-context audit` passiert nur, weil eine exakt gescopte Exception fuer diesen einen High-Befund existiert.
   - Upgrade auf einen stabilen Next-Release mit gefixtem internem PostCSS bleibt erforderlich.
   - Stable-Next-Watch bleibt aktiv.
   - Keine Broad-Rollout-, Customer-Data- oder Enterprise-Readiness-Freigabe folgt aus dieser Exception.
   - Diese Exception erteilt keine Deploy-Freigabe.
   - Jeder Deploy benoetigt weiterhin ein separates Deploy-Decision-Gate.
+  - Revalidation am `2026-07-27`: `next@16.2.12` geprueft und weiterhin intern `postcss@8.4.31`.
+  - Neue Expiry nach Revalidation: `2026-08-20`.
 - Technische Begrenzung:
   - `scripts/security/audit-production-contexts.sh` akzeptiert nur den exakten High-Finding-Pfad mit:
     - Package `postcss`
@@ -42,6 +44,12 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
     - Revalidation-Trigger inklusive `expiry reached`
   - Alle anderen High-/Critical-Findings bleiben blocker.
   - Critical Findings werden nie akzeptiert.
+  - Keine Broad-PostCSS-Exception.
+  - Keine globale High-Waiver.
+- Residual risk:
+  - low under current deployment assumptions
+  - not none
+  - revalidation bleibt erforderlich, falls Dashboard-/Widget-Branding, CSS-Theme oder Custom-CSS-Scope erweitert wird
 
 ## 2026-07-23 - Next Dashboard High Advisory Fix Production-Live
 

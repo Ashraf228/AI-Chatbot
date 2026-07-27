@@ -4,9 +4,9 @@
 
 Date: 2026-07-23
 
-Reviewed: 2026-07-25
+Reviewed: 2026-07-27
 
-Expires: 2026-08-06
+Expires: 2026-08-20
 
 Owner: security_owner
 
@@ -29,11 +29,13 @@ Finding:
 
 Reason:
 - No stable Next release greater than 16.2.11 is currently available with fixed internal PostCSS.
+- Revalidation on 2026-07-27 confirmed that `next@16.2.12` still depends internally on `postcss@8.4.31`.
 - Canary, alpha, beta, release-candidate and downgrade paths are not accepted here.
 - The override path was tested and was ineffective for the exact Next-internal dependency path.
 - The standalone/root Dashboard PostCSS path was technically moved to `postcss@8.5.23`; the remaining production-context blocker is the exact Next-internal dependency path only.
 - No direct application-level postcss processing of user-supplied CSS was identified in this review.
-- No approved custom-CSS, tenant-CSS or branding-CSS pipeline was identified in this review.
+- No approved custom-CSS or tenant-CSS pipeline was identified in this review.
+- Branding remains limited to validated hex-color fields and allowlisted font values; no free-form CSS input path was identified in this review.
 
 Residual risk:
 - Low under current deployment assumptions.
@@ -59,10 +61,13 @@ Impact analysis:
 - Revalidation is required if any CSS, theme, branding or custom-CSS feature is added.
 
 Temporary decision:
+- This is accepted temporarily, not fixed.
 - This is a temporary contextual risk acceptance, not a fix.
 - This is not a blanket high-severity waiver.
 - This is not a runtime approval.
 - This is not enterprise-readiness approval.
+- This is not deploy approval.
+- This is not customer-data approval.
 - High and critical findings remain blocking unless they match this exact accepted finding.
 - Critical findings are never accepted.
 
