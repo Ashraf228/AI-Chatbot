@@ -80,3 +80,30 @@ No new route, no new persistence layer, and no new runtime activation path were 
 - `npm run security:audit:production-contexts`: PASS
 - `npm run security:check-authorization-matrix`: PASS
 - `npm run test:security-boundaries`: PASS
+
+## Recommended Next Step
+
+Immediate review/merge gate:
+
+- `ENT-AGENT-WORKSPACE-PRODUCTIZATION-1-D2`
+
+After successful merge:
+
+- `ENT-AGENT-WORKSPACE-PRODUCTIZATION-1-E`
+
+Recommended follow-up options:
+
+- `ENT-PILOT-READINESS-GATE-1` for NOLIS / customer-facing pilot readiness.
+- `DEMO-WORKSPACE-KNOWLEDGE-PERSISTENCE-1` for deeper product maturity.
+
+Current restrictions remain unchanged:
+
+- No deploy.
+- No public widget activation.
+- No Enterprise approval.
+- No customer-data approval.
+- No production data.
+- No production secrets.
+- No `DB_READ_ONLY_AUDIT`.
+- No knowledge, PDF, or chat-history persistence without a separate approval.
+- No real execution tasks without a separate approval.
