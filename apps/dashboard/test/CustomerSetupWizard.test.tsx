@@ -971,6 +971,37 @@ describe("setup wizard status mapping", () => {
     expect(statusForWizardStep(status, "flow")).toBe("pending");
     expect(wizardStepStatusLabel(status, "flow")).toBe("Offen");
   });
+
+  test("renders a partially saved flow step as incomplete", () => {
+    const partialStatus = {
+      ...status,
+      steps: [
+        {
+          key: "behavior",
+          label: "Gesprächslogik",
+          status: "warning" as const,
+          missingReason: "Ziel oder Gesprächslogik fehlt.",
+        },
+      ],
+    };
+
+    expect(statusForWizardStep(partialStatus, "flow")).toBe("attention");
+    expect(wizardStepStatusLabel(partialStatus, "flow")).toBe("Unvollständig");
+  });
+
+  test("renders a blocked launch step as blocked instead of an error", () => {
+    const launchStatus = {
+      ...status,
+      steps: [
+        { key: "embed", label: "Einbindung", status: "complete" as const },
+        { key: "test", label: "Test", status: "incomplete" as const, missingReason: "Test-Chat wurde noch nicht durchgeführt." },
+        { key: "live", label: "Live-Schaltung", status: "blocked" as const, missingReason: "Vor Live-Schaltung fehlen noch Pflichtschritte." },
+      ],
+    };
+
+    expect(statusForWizardStep(launchStatus, "launch")).toBe("attention");
+    expect(wizardStepStatusLabel(launchStatus, "launch")).toBe("Blockiert");
+  });
 });
 
 function launchProps(role?: "admin" | "operator" | "customer" | "viewer" | null) {

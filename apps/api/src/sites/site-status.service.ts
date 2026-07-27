@@ -37,6 +37,7 @@ export type LifecycleStatus =
 
 type SiteConfig = {
   brandColor?: string;
+  accentColor?: string;
   welcomeMessage?: string;
   logoUrl?: string;
   industry?: string;
@@ -55,6 +56,11 @@ type SiteConfig = {
   enabledTasks?: unknown;
   isActive?: boolean;
   privacyUrl?: string;
+  placeholderText?: string;
+  widgetPosition?: string;
+  launcherLabel?: string;
+  privacyNoticeText?: string;
+  consentRequired?: boolean;
   lastTestedAt?: string;
   goLiveAt?: string;
 };
@@ -111,6 +117,22 @@ function asStringArray(value: unknown) {
     : [];
 }
 
+function countRequiredFields(value: unknown) {
+  if (!Array.isArray(value)) {
+    return 0;
+  }
+
+  return value
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return entry.trim();
+      }
+
+      return asString(asRecord(entry).key);
+    })
+    .filter(Boolean).length;
+}
+
 function resolveAssistantProfile(config: SiteConfig, moduleConfig: unknown) {
   const moduleAssistantProfile = asRecord(asRecord(moduleConfig).assistantProfile);
   if (Object.keys(moduleAssistantProfile).length > 0) {
@@ -144,9 +166,8 @@ function withResolvedAssistantProfile(config: SiteConfig, moduleConfig: unknown)
 
 function isDesignConfigured(config: SiteConfig) {
   return Boolean(
-    config.logoUrl ||
-      (config.brandColor && config.brandColor !== '#b55400') ||
-      (config.welcomeMessage && config.welcomeMessage !== 'Hi! Wie kann ich helfen?'),
+    asString(config.brandColor) &&
+      asString(config.widgetPosition),
   );
 }
 
@@ -227,13 +248,35 @@ export class SiteStatusService {
     const knowledgeMode = input.config.knowledgeMode || 'flexible';
     const knowledgeDone = input.knowledgeCount > 0 || knowledgeMode !== 'strict';
     const assistantProfile = asRecord(input.config.assistantProfile);
-    const behaviorDone = Boolean(
-      hasBehaviorGoal(input.config, assistantProfile) &&
-        (input.config.systemPrompt || input.config.ctaText || input.config.welcomeMessage),
+    const assistantRequiredFieldCount = countRequiredFields(assistantProfile.requiredFields);
+    const legacyRequiredFieldCount = countRequiredFields(asRecord(input.config.conversationFlow).requiredFields);
+    const enabledTaskCount = Math.max(
+      asStringArray(assistantProfile.enabledTasks).length,
+      asStringArray(input.config.enabledTasks).length,
     );
+    const behaviorHasGoal = hasBehaviorGoal(input.config, assistantProfile);
+    const behaviorHasStructuredConfig = enabledTaskCount > 0 || assistantRequiredFieldCount > 0 || legacyRequiredFieldCount > 0;
+    const behaviorHasAnyPersistedData = Boolean(
+      behaviorHasGoal ||
+        behaviorHasStructuredConfig ||
+        asString(input.config.systemPrompt) ||
+        asString(input.config.ctaText),
+    );
+    const behaviorDone = Boolean(behaviorHasGoal && behaviorHasStructuredConfig);
     const leadDeliveryDone =
       input.config.leadCaptureEnabled === false || Boolean(input.config.leadNotificationEmail);
     const designVisualDone = isDesignConfigured(input.config);
+    const designStarted = Boolean(
+      asString(input.config.brandColor) ||
+        asString(input.config.accentColor) ||
+        asString(input.config.logoUrl) ||
+        asString(input.config.privacyUrl) ||
+        asString(input.config.placeholderText) ||
+        asString(input.config.widgetPosition) ||
+        asString(input.config.launcherLabel) ||
+        asString(input.config.privacyNoticeText) ||
+        typeof input.config.consentRequired === 'boolean',
+    );
     const privacyDone = Boolean(input.config.privacyUrl);
     const designDone = Boolean(designVisualDone && privacyDone);
     const embedDone = Boolean(input.siteKey && domainDone);
@@ -254,7 +297,9 @@ export class SiteStatusService {
       templateDone,
       knowledgeDone,
       behaviorDone,
+      behaviorStarted: behaviorHasAnyPersistedData,
       leadDeliveryDone,
+      designStarted,
       designVisualDone,
       privacyDone,
       designDone,
@@ -428,7 +473,9 @@ export class SiteStatusService {
       templateDone: boolean;
       knowledgeDone: boolean;
       behaviorDone: boolean;
+      behaviorStarted: boolean;
       leadDeliveryDone: boolean;
+      designStarted: boolean;
       designVisualDone: boolean;
       privacyDone: boolean;
       designDone: boolean;
@@ -473,7 +520,7 @@ export class SiteStatusService {
       this.buildStep({
         key: 'behavior',
         label: 'Gesprächslogik',
-        status: checks.behaviorDone ? 'complete' : 'incomplete',
+        status: checks.behaviorDone ? 'complete' : checks.behaviorStarted ? 'warning' : 'incomplete',
         missingReason: checks.behaviorDone ? undefined : 'Ziel oder Gesprächslogik fehlt.',
         nextAction: {
           label: 'Gesprächslogik prüfen',
@@ -493,12 +540,14 @@ export class SiteStatusService {
       this.buildStep({
         key: 'design',
         label: 'Design & Datenschutz',
-        status: checks.designDone ? 'complete' : checks.designVisualDone ? 'warning' : 'incomplete',
+        status: checks.designDone ? 'complete' : checks.designStarted ? 'warning' : 'incomplete',
         missingReason: checks.designDone
           ? undefined
           : checks.designVisualDone
             ? 'Datenschutz-URL fehlt.'
-            : 'Branding, Farbe oder Begrüßung fehlt.',
+            : checks.designStarted
+              ? 'Pflichtfelder im Design fehlen.'
+              : 'Design wurde noch nicht gespeichert.',
         nextAction: {
           label: checks.designVisualDone ? 'Datenschutz-URL setzen' : 'Design prüfen',
           href: `/sites/${siteId}/setup#setup-step-design`,
@@ -527,7 +576,7 @@ export class SiteStatusService {
       this.buildStep({
         key: 'live',
         label: 'Live-Schaltung',
-        status: checks.liveDone ? 'complete' : checks.isPaused ? 'warning' : checks.preLiveReady ? 'incomplete' : 'blocked',
+        status: checks.liveDone ? 'complete' : checks.isPaused ? 'warning' : checks.preLiveReady ? 'warning' : 'blocked',
         missingReason: checks.liveDone
           ? undefined
           : checks.isPaused

@@ -278,7 +278,7 @@ export function wizardStepStatusLabel(status: CustomerApiStatus | null, step: Wi
   const related = status?.steps?.filter((entry) => keys.includes(entry.key)) || [];
 
   if (related.some((entry) => entry.status === "blocked")) {
-    return "Fehler";
+    return "Blockiert";
   }
   if (related.some((entry) => entry.status === "warning")) {
     return "Unvollständig";
