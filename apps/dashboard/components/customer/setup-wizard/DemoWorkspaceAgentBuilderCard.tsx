@@ -685,28 +685,58 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
   return (
     <div className="setup-module-card dashboard-stack dashboard-stack--sm">
       <div>
-        <h3 className="dashboard-card-title dashboard-card-title--sm">Demo Workspace Agent Builder (MVP)</h3>
+        <h3 className="dashboard-card-title dashboard-card-title--sm">
+          Enterprise Agent Workspace / Pilot Workspace
+        </h3>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Admin-/Operator-only Testpfad fuer einen synthetischen Runtime-Pilot. Keine Persistenz, keine Public-Widget-
-          Aktivierung, keine DB-Schreibvorgaenge, keine Provider-Calls und keine realen Tickets, E-Mails oder Webhooks.
+          Klar strukturierter Admin-/Operator-Testpfad fuer einen synthetischen Runtime-Pilot. Bestehende Demo-
+          Workspace-Faehigkeiten bleiben erhalten, werden hier aber als kontrollierter Pilot Workspace ohne Public-
+          Widget-Aktivierung, ohne Deploy und ohne Kundendaten gebuendelt.
         </p>
       </div>
 
       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-        <strong>Sicherheitsgrenzen</strong>
+        <strong>Workspace Status / Boundary Card</strong>
         <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          <li>Nur Admin-/Operator-Testpfad</li>
+          <li>Pilot Workspace</li>
+          <li>Admin/operator only</li>
+          <li>Pilot/evaluation workspace</li>
+          <li>No public widget activation</li>
+          <li>No deploy</li>
+          <li>No customer data</li>
+          <li>Config only persisted</li>
+          <li>Knowledge/PDF/Chat not persisted</li>
+          <li>Production activation: no</li>
+          <li>Public widget activation: no</li>
+          <li>Config persisted: yes</li>
+          <li>Knowledge/PDF/Chat persisted: no</li>
           <li>Nur synthetische/freigegebene Demo-Inhalte</li>
-          <li>Keine Kundendaten</li>
           <li>Keine Production-Daten</li>
-          <li>Knowledge wird nicht gespeichert</li>
           <li>Dateien werden nicht dauerhaft gespeichert</li>
           <li>Keine Embeddings / kein RAG-Indexing</li>
-          <li>Kein Deploy</li>
-          <li>Keine Public-Widget-Aktivierung</li>
           <li>PDF-Text wird nur in-memory extrahiert</li>
           <li>Keine echten Tickets, E-Mails oder Webhooks</li>
         </ul>
+      </div>
+
+      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+        <strong>Workspace Flow / Checklist</strong>
+        <ol className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          <li>Configure agent</li>
+          <li>Save/load config</li>
+          <li>Add demo knowledge</li>
+          <li>Test conversation</li>
+          <li>Review response and boundaries</li>
+          <li>Use pilot guide for structured feedback</li>
+        </ol>
+      </div>
+
+      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+        <strong>1. Configure agent</strong>
+        <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          Definiere Rolle, Kontext, Zielgruppe, erlaubte Aufgaben und Blocker fuer den Pilot Workspace. Diese Felder
+          steuern nur den bestehenden Admin-Testpfad.
+        </p>
       </div>
 
       <div className="dashboard-grid dashboard-grid--metrics-3">
@@ -796,16 +826,17 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
 
       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
         <div>
-          <strong>Demo Workspace Config Persistence (MVP)</strong>
+          <strong>2. Save/load config</strong>
           <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-            Gespeichert wird nur die Agent-Konfiguration fuer diesen Admin-/Operator-Demo-Workspace. Knowledge,
-            PDFs und Chat bleiben in-memory und werden nicht gespeichert. Kein Deploy, keine Public-Widget-Aktivierung.
+            Gespeichert wird nur die Agent-Konfiguration fuer diesen Admin-/Operator-Pilot-Workspace. Knowledge, PDFs
+            und Chat bleiben in-memory und werden nicht gespeichert. Kein Deploy, keine Public-Widget-Aktivierung.
           </p>
         </div>
         <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          <li>Only config is saved</li>
-          <li>Knowledge, PDFs und Chat werden nicht gespeichert</li>
-          <li>Kein Deploy / keine Public-Widget-Aktivierung</li>
+          <li>Config only persisted</li>
+          <li>Knowledge/PDF/Chat not persisted</li>
+          <li>No public widget activation</li>
+          <li>No deploy</li>
         </ul>
         <div className="dashboard-grid dashboard-grid--metrics-3">
           <Button
@@ -844,7 +875,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
 
       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
         <div>
-          <strong>In-Memory Knowledge Upload (MVP)</strong>
+          <strong>3. Add demo knowledge</strong>
           <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
             Text-, Markdown- und PDF-Snippets bleiben ausschliesslich im Browser-State und werden pro Testchat-Turn an
             den bestehenden Runtime-Pilot weitergegeben. PDF-Text wird serverseitig nur fuer diesen Request
@@ -992,7 +1023,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
       </label>
 
       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
-        <strong>Demo Workspace Testchat (MVP)</strong>
+        <strong>4. Test conversation</strong>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
           Mehrstufiger Admin-/Operator-Testchat nur im Browser-State. Der Chatverlauf wird nicht gespeichert und jede
           Testnachricht nutzt weiter ausschliesslich den bestehenden Runtime-Pilot-Endpunkt.
@@ -1081,6 +1112,14 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
 
       {result ? (
         <div className="dashboard-stack dashboard-stack--sm">
+          <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+            <strong>5. Review response and boundaries</strong>
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              Pruefe Intent, Goal, Stage, Response Draft, Knowledge Usage sowie Activation- und Side-Effect-Boundaries
+              bevor du die Pilot-Bewertung dokumentierst.
+            </p>
+          </div>
+
           <div className="dashboard-grid dashboard-grid--metrics-3">
             <div className="dashboard-card dashboard-card--compact">
               <strong>Intent</strong>
@@ -1181,6 +1220,21 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
           </details>
         </div>
       ) : null}
+
+      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+        <strong>6. Use pilot guide for structured feedback</strong>
+        <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          Referenz fuer den strukturierten Bewertungsablauf: `docs/evaluation/demo-workspace/demo-workspace-pilot-guide.md`.
+          Verwende nur synthetische oder explizit freigegebene Demo-Inhalte und dokumentiere Feedback ohne Kunden- oder
+          Production-Daten.
+        </p>
+        <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+          <li>Review the recommended 15-minute or 30-minute walkthrough</li>
+          <li>Confirm that only config persistence is exercised</li>
+          <li>Confirm that knowledge, PDFs and chat remain in-memory only</li>
+          <li>Confirm that no deploy or public widget activation is implied</li>
+        </ul>
+      </div>
     </div>
   );
 }
