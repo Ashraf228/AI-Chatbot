@@ -29,6 +29,7 @@
     "build_api": "PASS",
     "check_dashboard": "PASS",
     "build_dashboard": "PASS",
-    "pdf_knowledge_upload_component_test": "PASS"
+    "pdf_knowledge_upload_component_test": "PASS",
+    "pdf_extract_api_test": "PASS"
   }
 }

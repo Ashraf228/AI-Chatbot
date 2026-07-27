@@ -1,20 +1,8 @@
 import { NextResponse } from "next/server";
-import { assertSiteAccess } from "../../../../../../../lib/dashboard-api";
+import { assertSiteAccess, fetchDashboardBackend } from "../../../../../../../lib/dashboard-api";
 import { requireSession } from "../../../../../../../lib/require-auth";
 
 const MAX_PDF_UPLOAD_BYTES = 5 * 1024 * 1024;
-const MAX_EXTRACTED_CHARS = 20_000;
-
-type PdfParseResult = {
-  text?: string;
-};
-
-type PdfParseInstance = {
-  getText: () => Promise<PdfParseResult>;
-  destroy: () => Promise<void>;
-};
-
-type PdfParseClass = new (input: { data: Buffer }) => PdfParseInstance;
 
 function noStoreJson(body: unknown, status = 200) {
   return NextResponse.json(body, {
@@ -31,10 +19,6 @@ function sanitizeDisplayFileName(fileName: string) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
-}
-
-function normalizeExtractedText(value: string) {
-  return value.replace(/\r\n/g, "\n").replace(/\u0000/g, "").trim();
 }
 
 function isPdfFile(file: File) {
@@ -90,34 +74,29 @@ export async function POST(
     return noStoreJson({ message: "PDF too large" }, 413);
   }
 
-  const safeFileName = sanitizeDisplayFileName(file.name) || "demo-upload.pdf";
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  let parser: PdfParseInstance | null = null;
   try {
-    const { PDFParse } = (await import("pdf-parse")) as unknown as { PDFParse: PdfParseClass };
-    parser = new PDFParse({ data: buffer });
-    const parsed = await parser.getText();
-    const normalized = normalizeExtractedText(parsed.text || "");
+    const proxyFormData = new FormData();
+    proxyFormData.append("file", file, sanitizeDisplayFileName(file.name) || "demo-upload.pdf");
 
-    if (!normalized) {
-      return noStoreJson({ message: "PDF has no extractable text" }, 400);
-    }
+    const response = await fetchDashboardBackend(
+      `/admin/sites/${encodeURIComponent(siteId)}/conversation-engine/knowledge/pdf-extract`,
+      {
+        method: "POST",
+        cache: "no-store",
+        session: auth.session,
+        body: proxyFormData,
+      },
+    );
 
-    const extractedText = normalized.slice(0, MAX_EXTRACTED_CHARS);
-    return noStoreJson({
-      fileName: safeFileName,
-      extractedText,
-      extractedChars: extractedText.length,
-      originalChars: normalized.length,
-      truncated: normalized.length > extractedText.length,
+    const text = await response.text();
+    return new NextResponse(text || "{}", {
+      status: response.status,
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Type": "application/json",
+      },
     });
   } catch {
     return noStoreJson({ message: "PDF could not be parsed" }, 400);
-  } finally {
-    if (parser) {
-      await parser.destroy().catch(() => undefined);
-    }
   }
 }

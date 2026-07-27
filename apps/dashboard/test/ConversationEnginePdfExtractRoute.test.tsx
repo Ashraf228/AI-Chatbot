@@ -6,16 +6,12 @@ vi.mock("../lib/require-auth", () => ({
 
 vi.mock("../lib/dashboard-api", () => ({
   assertSiteAccess: vi.fn(),
-}));
-
-vi.mock("pdf-parse", () => ({
-  PDFParse: vi.fn(),
+  fetchDashboardBackend: vi.fn(),
 }));
 
 import { POST } from "../app/api/sites/[siteId]/conversation-engine/knowledge/pdf-extract/route";
-import { assertSiteAccess } from "../lib/dashboard-api";
+import { assertSiteAccess, fetchDashboardBackend } from "../lib/dashboard-api";
 import { requireSession } from "../lib/require-auth";
-import { PDFParse } from "pdf-parse";
 
 function createFormDataRequest(formData: FormData) {
   return {
@@ -28,18 +24,7 @@ describe("conversation engine pdf extract dashboard route", () => {
     vi.clearAllMocks();
   });
 
-  test("extracts PDF text only for admin/operator site-bound requests", async () => {
-    const destroy = vi.fn(async () => undefined);
-    vi.mocked(PDFParse).mockImplementation(
-      function MockPDFParse() {
-        return {
-          getText: async () => ({
-            text: "Synthetischer Demo-PDF-Inhalt fuer den in-memory Knowledge Upload.",
-          }),
-          destroy,
-        };
-      } as never,
-    );
+  test("proxies PDF extraction only for admin/operator site-bound requests", async () => {
     vi.mocked(requireSession).mockResolvedValue({
       response: null,
       session: {
@@ -49,6 +34,21 @@ describe("conversation engine pdf extract dashboard route", () => {
       },
     } as never);
     vi.mocked(assertSiteAccess).mockResolvedValue(undefined);
+    vi.mocked(fetchDashboardBackend).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          fileName: "Demo Upload.pdf",
+          extractedText: "Synthetischer Demo-PDF-Inhalt fuer den in-memory Knowledge Upload.",
+          extractedChars: 67,
+          originalChars: 67,
+          truncated: false,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
 
     const formData = new FormData();
     formData.append(
@@ -65,6 +65,15 @@ describe("conversation engine pdf extract dashboard route", () => {
       expect.objectContaining({ role: "admin" }),
       "site-1",
     );
+    expect(fetchDashboardBackend).toHaveBeenCalledWith(
+      "/admin/sites/site-1/conversation-engine/knowledge/pdf-extract",
+      expect.objectContaining({
+        method: "POST",
+        cache: "no-store",
+        session: expect.objectContaining({ role: "admin" }),
+        body: expect.any(FormData),
+      }),
+    );
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
@@ -72,7 +81,6 @@ describe("conversation engine pdf extract dashboard route", () => {
       extractedText: "Synthetischer Demo-PDF-Inhalt fuer den in-memory Knowledge Upload.",
       truncated: false,
     });
-    expect(destroy).toHaveBeenCalledTimes(1);
   });
 
   test("rejects customer sessions for the demo PDF extract route", async () => {
@@ -93,7 +101,7 @@ describe("conversation engine pdf extract dashboard route", () => {
     });
 
     expect(assertSiteAccess).not.toHaveBeenCalled();
-    expect(PDFParse).not.toHaveBeenCalled();
+    expect(fetchDashboardBackend).not.toHaveBeenCalled();
     expect(response.status).toBe(403);
   });
 
@@ -115,7 +123,7 @@ describe("conversation engine pdf extract dashboard route", () => {
       params: Promise.resolve({ siteId: "site-1" }),
     });
 
-    expect(PDFParse).not.toHaveBeenCalled();
+    expect(fetchDashboardBackend).not.toHaveBeenCalled();
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ message: "unsupported file type" });
   });
@@ -143,7 +151,7 @@ describe("conversation engine pdf extract dashboard route", () => {
       params: Promise.resolve({ siteId: "site-1" }),
     });
 
-    expect(PDFParse).not.toHaveBeenCalled();
+    expect(fetchDashboardBackend).not.toHaveBeenCalled();
     expect(response.status).toBe(413);
     await expect(response.json()).resolves.toEqual({ message: "PDF too large" });
   });

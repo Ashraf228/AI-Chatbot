@@ -12,7 +12,10 @@ Adds an admin/operator-only in-memory PDF knowledge upload MVP to the Demo Works
 
 ## PDF Extraction Path
 - Dashboard route: `POST /api/sites/:siteId/conversation-engine/knowledge/pdf-extract`
-- Existing extractor: `pdf-parse`
+- Dashboard route stays auth/site-bound proxy-only.
+- API route: `POST /admin/sites/:siteId/conversation-engine/knowledge/pdf-extract`
+- Existing extractor: `pdf-parse` in the API context only.
+- `apps/dashboard` does not import `pdf-parse`.
 - Processing model: request-memory only with `Cache-Control: no-store`
 
 ## Supported Input Types
@@ -24,7 +27,7 @@ Adds an admin/operator-only in-memory PDF knowledge upload MVP to the Demo Works
 - `.pdf` up to 5 MB
 
 ## In-Memory PDF Boundary
-- PDF file is parsed only in request memory.
+- PDF file is proxied by the dashboard route and parsed only in API request memory.
 - Extracted text becomes an in-memory knowledge snippet in browser state.
 - PDF file is not persisted.
 - Extracted text is not persisted.
@@ -67,7 +70,7 @@ Adds an admin/operator-only in-memory PDF knowledge upload MVP to the Demo Works
 ## Relationship to Knowledge Upload
 - Extends `DEMO-WORKSPACE-KNOWLEDGE-UPLOAD-1`
 - Reuses the existing in-memory snippet model.
-- Adds a guarded PDF extraction path without touching the production knowledge base.
+- Adds a guarded dashboard-proxy plus API-admin PDF extraction path without touching the production knowledge base.
 
 ## Recommended Next Step
 - `DEMO-WORKSPACE-KNOWLEDGE-PERSISTENCE-1`
