@@ -3,8 +3,18 @@ const assert = require('node:assert/strict');
 const { SiteStatusService } = require('../dist/sites/site-status.service.js');
 
 function createService(config) {
+  const assistantProfileModuleConfig = config.__assistantProfileModuleConfig || null;
+  const siteConfig = { ...config };
+  delete siteConfig.__assistantProfileModuleConfig;
+
   const db = {
-    async query() {
+    async query(sql) {
+      if (sql.includes('FROM site_modules')) {
+        return {
+          rows: assistantProfileModuleConfig ? [{ config: assistantProfileModuleConfig }] : [],
+        };
+      }
+
       return {
         rows: [{ count: '1' }],
       };
@@ -17,7 +27,7 @@ function createService(config) {
         name: 'Muster Handwerk',
         site_key: 'muster-handwerk',
         allowed_domains: ['kunde.de'],
-        config,
+        config: siteConfig,
       };
     },
   };
@@ -67,4 +77,33 @@ test('SiteStatusService allows go-live without lead recipient email when lead ca
   assert.equal(status.isLiveReady, true);
   assert.equal(status.code, 'ready_for_live');
   assert.equal(leadDelivery.status, 'complete');
+});
+
+test('SiteStatusService treats stored assistant-profile module data as the effective setup contract', async () => {
+  const service = createService(
+    readyConfig({
+      templateId: '',
+      templateAppliedAt: '',
+      industry: '',
+      primaryGoal: '',
+      setupGoal: '',
+      leadNotificationEmail: 'ops@example.test',
+      __assistantProfileModuleConfig: {
+        assistantProfile: {
+          profileKey: 'universal-assistant',
+          profileVersion: 1,
+          role: 'Anfragen aufnehmen und qualifizieren',
+          enabledTasks: ['answer_questions', 'collect_requests', 'prepare_handoff'],
+        },
+      },
+    }),
+  );
+
+  const status = await service.resolveStatus('site-1');
+  const template = status.steps.find((step) => step.key === 'template');
+  const behavior = status.steps.find((step) => step.key === 'behavior');
+
+  assert.equal(status.code, 'ready_for_live');
+  assert.equal(template.status, 'complete');
+  assert.equal(behavior.status, 'complete');
 });

@@ -4,6 +4,7 @@ import { vi } from "vitest";
 
 import { CustomerSetupWizard } from "../components/customer/CustomerSetupWizard";
 import { LaunchStep } from "../components/customer/setup-wizard/LaunchStep";
+import { statusForWizardStep, wizardStepStatusLabel } from "../components/customer/setup-wizard/setupWizardValidation";
 import { SetupReadinessChecklist } from "../components/sites/SetupReadinessChecklist";
 import { getSite, updateAssistantProfileConfig, updateSiteSettings } from "../lib/setup-wizard-api";
 
@@ -930,6 +931,45 @@ describe("SetupReadinessChecklist", () => {
     const conversationItem = screen.getByRole("link", { name: /Gesprächslogik/i });
     expect(within(conversationItem).queryByText(/Design fehlt/i)).not.toBeInTheDocument();
     expect(within(conversationItem).getByText(/Antworten, Rückfragen, Pflichtinformationen/i)).toBeInTheDocument();
+  });
+});
+
+describe("setup wizard status mapping", () => {
+  const status = {
+    siteId: "site-1",
+    code: "setup_incomplete",
+    label: "Setup unvollständig",
+    status: "Setup unvollständig",
+    severity: "warning" as const,
+    progress: 70,
+    lifecycleStatus: "setup_incomplete" as const,
+    isLiveReady: false,
+    missingSteps: ["behavior"],
+    nextAction: { key: "behavior", label: "Gesprächslogik prüfen" },
+    steps: [
+      { key: "template", label: "KI-Mitarbeiter Profil", status: "complete" as const },
+      {
+        key: "behavior",
+        label: "Gesprächslogik",
+        status: "incomplete" as const,
+        missingReason: "Ziel oder Gesprächslogik fehlt.",
+      },
+    ],
+    knowledgeCount: 0,
+    industry: "",
+    setupGoal: "lead_generation",
+    lastTestedAt: "",
+    goLiveAt: "",
+  };
+
+  test("maps the bot step only to the persisted profile/template contract", () => {
+    expect(statusForWizardStep(status, "bot")).toBe("done");
+    expect(wizardStepStatusLabel(status, "bot")).toBe("Abgeschlossen");
+  });
+
+  test("maps the flow step to the backend behavior status", () => {
+    expect(statusForWizardStep(status, "flow")).toBe("pending");
+    expect(wizardStepStatusLabel(status, "flow")).toBe("Offen");
   });
 });
 

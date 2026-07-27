@@ -74,9 +74,9 @@ export const FALLBACK_OPTIONS: Array<{ value: FallbackBehavior; label: string }>
 
 export const STATUS_STEP_GROUPS: Record<WizardStepKey, string[]> = {
   customer: ["basics"],
-  bot: ["template", "behavior"],
+  bot: ["template"],
   delivery: ["lead_delivery"],
-  flow: ["flow", "conversation_flow", "conversation_logic"],
+  flow: ["behavior"],
   knowledge: ["knowledge"],
   design: ["design"],
   launch: ["test", "embed", "live"],
