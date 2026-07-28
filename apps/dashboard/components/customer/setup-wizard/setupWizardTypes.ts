@@ -137,8 +137,82 @@ export type WizardStep = {
   description: string;
 };
 
-export type TestChatMessage = {
-  role: "user" | "assistant";
-  text: string;
-  sources?: Array<{ title?: string; url?: string; score?: number }>;
+export type InternalTestChatKnowledgeSnippet = {
+  id?: string;
+  title?: string;
+  url?: string;
+  score?: number;
+  excerpt?: string;
+  sourceType?: string;
+  scope?: string;
+};
+
+export type InternalTestChatRuntimePilotResult = {
+  runtimePilotEnabled?: boolean;
+  activationBoundary?: {
+    mode: string;
+    publicWidgetActivation: boolean;
+    productionActivation: boolean;
+    deployRequired: boolean;
+  };
+  sideEffects?: {
+    planned: boolean;
+    ticketDelivery: boolean;
+    emailDelivery: boolean;
+    webhookDelivery: boolean;
+    providerCalls: boolean;
+    dbAccessForNewLogic: boolean;
+    sql: boolean;
+    queryRunner: boolean;
+  };
+  runtimeState?: {
+    selectedAgentKey: string | null;
+    nextActionKey: string | null;
+    shouldHandoff: boolean;
+    shouldAskQuestion: boolean;
+    handoffOfferSimulated: boolean;
+    ticketFieldRequestSimulated: boolean;
+    sourcesUsed: number;
+    sourceRequired: boolean;
+  };
+  conversationEnginePreview?: {
+    intent: string;
+    goal: string;
+    stage: string;
+    selectedAgentKey: string | null;
+    nextAction: string;
+    shouldHandoff: boolean;
+    missingFields: string[];
+  } | null;
+  engineResponsePreview?: {
+    draft: null | {
+      text: string;
+      nextActionLabel?: string;
+    };
+    safety?: {
+      noSideEffects: true;
+      publicWidgetUnaffected: true;
+      integrationsSuppressed: true;
+      sanitized: true;
+    };
+  } | null;
+  knowledgeRetrieval?: {
+    enabled: boolean;
+    attempted: boolean;
+    status: string;
+    snippets: InternalTestChatKnowledgeSnippet[];
+    warnings?: string[];
+    reasons?: string[];
+  } | null;
+  warnings?: string[];
+  reasons?: string[];
+};
+
+export type InternalTestChatTurn = {
+  id: string;
+  testedAt: string;
+  userMessage: string;
+  assistantDraft: string;
+  result: InternalTestChatRuntimePilotResult;
+  usedKnowledgeSnippets: InternalTestChatKnowledgeSnippet[];
 };

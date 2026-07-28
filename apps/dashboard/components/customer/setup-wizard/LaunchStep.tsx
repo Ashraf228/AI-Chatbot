@@ -12,7 +12,7 @@ import { LaunchReadinessPanel } from "./LaunchReadinessPanel";
 import { SetupAdvancedDetails } from "./SetupAdvancedDetails";
 import { SetupStepHeader } from "./SetupStepHeader";
 import { TestChatPanel } from "./TestChatPanel";
-import type { SiteDetails, TestChatMessage } from "./setupWizardTypes";
+import type { InternalTestChatTurn, KnowledgeSource, SiteDetails } from "./setupWizardTypes";
 
 type LaunchStepProps = {
   site: SiteDetails;
@@ -21,15 +21,20 @@ type LaunchStepProps = {
   embedCode: string;
   copiedEmbedCode: boolean;
   testQuestion: string;
-  testMessages: TestChatMessage[];
+  testChatTurns: InternalTestChatTurn[];
   savingKey: string | null;
   canGoLive: boolean;
   isLive: boolean;
+  sources: KnowledgeSource[];
+  readyActiveSources: KnowledgeSource[];
+  processingSources: KnowledgeSource[];
+  failedSources: KnowledgeSource[];
   explanation?: string;
   status: CustomerStatusTone;
   statusLabel?: string;
   onChangeTestQuestion: (value: string) => void;
   onSendTestMessage: () => void;
+  onClearTestChat: () => void;
   onCopyEmbedCode: () => void;
   onGoLive: () => void;
   onJumpToStatusStep: (stepKey?: string) => void;
@@ -43,15 +48,20 @@ export function LaunchStep({
   embedCode,
   copiedEmbedCode,
   testQuestion,
-  testMessages,
+  testChatTurns,
   savingKey,
   canGoLive,
   isLive,
+  sources,
+  readyActiveSources,
+  processingSources,
+  failedSources,
   explanation,
   status,
   statusLabel,
   onChangeTestQuestion,
   onSendTestMessage,
+  onClearTestChat,
   onCopyEmbedCode,
   onGoLive,
   onJumpToStatusStep,
@@ -86,12 +96,18 @@ export function LaunchStep({
         </div>
         <div className="launch-step__grid">
           <TestChatPanel
-            messages={testMessages}
+            site={site}
+            sources={sources}
+            readyActiveSources={readyActiveSources}
+            processingSources={processingSources}
+            failedSources={failedSources}
+            turns={testChatTurns}
             input={testQuestion}
-            lastTestedAt={site.lastTestedAt}
             isLoading={savingKey === "test-chat"}
+            canUseTestTools={canUseAdminTestTools}
             onChangeInput={onChangeTestQuestion}
             onSend={onSendTestMessage}
+            onClear={onClearTestChat}
           />
           <EmbedCodePanel
             embedCode={embedCode}
