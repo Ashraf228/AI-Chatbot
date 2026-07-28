@@ -23,9 +23,9 @@ export function TestChatPanel({ messages, input, lastTestedAt, isLoading, onChan
   return (
     <div className="setup-module-card launch-step__panel launch-step__test-chat dashboard-stack dashboard-stack--sm" id="customer-test-chat">
       <div>
-        <h3 className="dashboard-card-title dashboard-card-title--sm">Testgespräch</h3>
+        <h3 className="dashboard-card-title dashboard-card-title--sm">Interner Testbereich</h3>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Teste den Assistenten, bevor du das Chatfenster live schaltest.
+          Teste den Assistenten nur intern. Kein Public Widget, kein Deploy und keine echten Tickets, E-Mails oder Webhooks.
         </p>
       </div>
 
@@ -56,7 +56,7 @@ export function TestChatPanel({ messages, input, lastTestedAt, isLoading, onChan
       </div>
 
       <label className="dashboard-field">
-        <span className="dashboard-field-label">Stelle eine Testfrage</span>
+        <span className="dashboard-field-label">Interne Testfrage</span>
         <textarea
           className="dashboard-textarea wizard-textarea-compact"
           rows={2}
@@ -66,7 +66,7 @@ export function TestChatPanel({ messages, input, lastTestedAt, isLoading, onChan
         />
       </label>
       <Button type="button" onClick={onSend} disabled={isLoading}>
-        {isLoading ? "Test läuft..." : "Testen"}
+        {isLoading ? "Test läuft..." : "Interne Testfrage senden"}
       </Button>
       <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">Letzter Test: {formatDate(lastTestedAt)}</p>
     </div>
