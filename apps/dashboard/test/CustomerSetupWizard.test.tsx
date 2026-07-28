@@ -1069,19 +1069,33 @@ function launchProps(role?: "admin" | "operator" | "customer" | "viewer" | null)
   };
 }
 
-describe("LaunchStep admin test tools", () => {
-  test.each(["admin", "operator"] as const)("%s sees assistant profile test card", (role) => {
+describe("LaunchStep review gate", () => {
+  const hasExactTextContent = (value: string) => (_content: string, node: Element | null) => node?.textContent === value;
+
+  test.each(["admin", "operator"] as const)("%s sees separated advanced diagnostics and no live activation CTA", (role) => {
     render(<LaunchStep {...launchProps(role)} />);
 
+    expect(screen.getByText("Setup-Review")).toBeInTheDocument();
+    expect(screen.getByText("Interner Testbereich")).toBeInTheDocument();
+    expect(screen.getByText("Aktivierungsgrenze")).toBeInTheDocument();
+    expect(screen.getByText("Advanced Diagnostics")).toBeInTheDocument();
+    expect(screen.getByText(hasExactTextContent("Deploy: nicht freigegeben"))).toBeInTheDocument();
+    expect(screen.getByText(hasExactTextContent("Public Widget: nicht aktiviert"))).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Live schalten" })).not.toBeInTheDocument();
     expect(screen.getByText("KI-Mitarbeiter Profil")).toBeInTheDocument();
     expect(screen.getByText("Gesprächslogik Testfälle")).toBeInTheDocument();
     expect(screen.getByText("Gesprächslogik Vorschau")).toBeInTheDocument();
     expect(screen.getByText("Enterprise Agent Workspace / Pilot Workspace")).toBeInTheDocument();
   });
 
-  test.each(["customer", null] as const)("%s does not render assistant profile test card", (role) => {
+  test.each(["customer", null] as const)("%s keeps the review gate but hides advanced diagnostics", (role) => {
     render(<LaunchStep {...launchProps(role)} />);
 
+    expect(screen.getByText("Setup-Review")).toBeInTheDocument();
+    expect(screen.getByText("Interner Testbereich")).toBeInTheDocument();
+    expect(screen.getByText("Aktivierungsgrenze")).toBeInTheDocument();
+    expect(screen.queryByText("Advanced Diagnostics")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Live schalten" })).not.toBeInTheDocument();
     expect(screen.queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();
     expect(screen.queryByText("Gesprächslogik Testfälle")).not.toBeInTheDocument();
     expect(screen.queryByText("Gesprächslogik Vorschau")).not.toBeInTheDocument();

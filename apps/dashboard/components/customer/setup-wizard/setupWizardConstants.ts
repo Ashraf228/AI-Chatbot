@@ -36,7 +36,7 @@ export const WIZARD_STEPS: WizardStep[] = [
   { key: "flow", label: "Gesprächslogik", description: "Antworten, Rückfragen, Übergabe und Pflichtinformationen" },
   { key: "knowledge", label: "Wissen", description: "PDF, Website, FAQ oder eigene Texte" },
   { key: "design", label: "Design & Datenschutz", description: "Button, Begrüßung, Farbe und Datenschutzhinweis" },
-  { key: "launch", label: "Test & Livegang", description: "Testfragen, Einbau-Code und Freigabe" },
+  { key: "launch", label: "Review & Livegang", description: "Interne Tests, Einbau-Code und Aktivierungsgrenzen" },
 ];
 
 export const GOAL_OPTIONS: Array<{ value: PrimaryGoal | ""; label: string; help: string }> = [
@@ -89,5 +89,5 @@ export const STEP_EXPLANATIONS: Record<WizardStepKey, string> = {
   flow: "Die Gesprächslogik bleibt universell: verstehen, mit Wissen antworten, Rückfragen stellen und Übergaben vorbereiten.",
   knowledge: "Die Wissensbasis sorgt dafür, dass Antworten verlässlich und kundenspezifisch bleiben.",
   design: "Ein passendes Design, Datenschutzlink und Datenschutzhinweis schaffen Vertrauen auf der Kundenwebsite.",
-  launch: "Zum Schluss werden Testfragen, Einbau-Code, Website und Live-Status geprüft.",
+  launch: "Zum Schluss werden Setup-Status, interne Tests, Einbau-Code und Aktivierungsgrenzen geprüft.",
 };
