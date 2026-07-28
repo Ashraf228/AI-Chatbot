@@ -18,7 +18,11 @@ type KnowledgeSourceCardProps = {
 
 export function KnowledgeSourceCard({ source, savingKey, onToggle, onRefresh, onRemove }: KnowledgeSourceCardProps) {
   const title = source.title || source.label || "Wissenseintrag";
-  const meta = [formatKnowledgeSourceType(source.type), source.url || source.sourceUrl || "Eigener Inhalt"].filter(Boolean);
+  const meta = [
+    formatKnowledgeSourceType(source.type),
+    source.url || source.sourceUrl || "Eigener Inhalt",
+    "Produktpfad gespeichert",
+  ].filter(Boolean);
   const statusText = formatKnowledgeSourceStatus(source.status || "pending", source.isActive);
 
   return (

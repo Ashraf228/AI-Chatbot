@@ -163,6 +163,20 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   const activeStep = WIZARD_STEPS[activeStepIndex];
   const selectedTemplate = profileForm.industry ? templateMap[profileForm.industry] : undefined;
   const readyActiveSources = sources.filter((source) => source.isActive && source.status === "ready");
+  const processingSources = sources.filter((source) => source.status === "pending" || source.status === "processing");
+  const failedSources = sources.filter((source) => source.status === "failed");
+  const knowledgeContinueBlockedReason =
+    failedSources.length > 0
+      ? "Wissensquellen mit Fehlern blockieren den Schritt. Bitte behebe, aktualisiere oder entferne die fehlerhaften Einträge, bevor du weitergehst."
+      : processingSources.length > 0
+        ? "Mindestens eine Wissensquelle wird noch verarbeitet. Speichern und weiter ist erst nach erfolgreicher Verarbeitung möglich."
+        : readyActiveSources.length === 0
+          ? "Speichere und aktiviere mindestens eine einsatzbereite Wissensquelle, bevor du zum internen Test oder Review weitergehst."
+          : "";
+  const knowledgeCanContinue = knowledgeContinueBlockedReason.length === 0;
+  const knowledgeContinueHint = knowledgeCanContinue
+    ? "Mindestens eine aktive Wissensquelle ist gespeichert und einsatzbereit. Der nächste Schritt ist Review & interner Test, nicht Deploy oder Public Widget."
+    : knowledgeContinueBlockedReason;
   const embedCode = site ? createEmbedCode(loaderUrl, site.siteKey) : "";
   const canGoLive = Boolean(serverStatus?.isLiveReady);
   const liveDone = serverStatus?.lifecycleStatus === "live" || Boolean(site?.goLiveAt);
@@ -784,6 +798,11 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   }
 
   async function nextStep() {
+    if (activeStep.key === "knowledge" && !knowledgeCanContinue) {
+      setError(knowledgeContinueBlockedReason);
+      return;
+    }
+
     const saved = await saveCurrentStep();
     if (saved) {
       setActiveStepIndex((current) => Math.min(current + 1, WIZARD_STEPS.length - 1));
@@ -878,6 +897,8 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
             explanation={STEP_EXPLANATIONS.knowledge}
             status={statusForWizardStep(serverStatus, "knowledge")}
             statusLabel={wizardStepStatusLabel(serverStatus, "knowledge")}
+            canContinue={knowledgeCanContinue}
+            continueHint={knowledgeContinueHint}
           />
         );
 
@@ -948,12 +969,18 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
         <SetupWizardActions
           onBack={() => setActiveStepIndex((current) => Math.max(current - 1, 0))}
           onSave={saveCurrentStep}
-          onSkip={activeStep.key !== "launch" ? () => setActiveStepIndex((current) => current + 1) : undefined}
+          onSkip={activeStep.key !== "launch" && activeStep.key !== "knowledge" ? () => setActiveStepIndex((current) => current + 1) : undefined}
           onPrimary={activeStep.key === "launch" ? goLive : nextStep}
           primaryLabel={activeStep.key === "launch" ? "Chatfenster live schalten" : "Speichern & weiter"}
           isSaving={Boolean(savingKey)}
           backDisabled={activeStepIndex === 0}
-          primaryDisabled={activeStep.key === "launch" && (!canGoLive || liveDone)}
+          primaryDisabled={
+            activeStep.key === "launch"
+              ? !canGoLive || liveDone
+              : activeStep.key === "knowledge"
+                ? !knowledgeCanContinue
+                : false
+          }
         />
       }
     >

@@ -246,7 +246,7 @@ export class SiteStatusService {
         input.config.botType,
     );
     const knowledgeMode = input.config.knowledgeMode || 'flexible';
-    const knowledgeDone = input.knowledgeCount > 0 || knowledgeMode !== 'strict';
+    const knowledgeDone = input.knowledgeCount > 0;
     const assistantProfile = asRecord(input.config.assistantProfile);
     const assistantRequiredFieldCount = countRequiredFields(assistantProfile.requiredFields);
     const legacyRequiredFieldCount = countRequiredFields(asRecord(input.config.conversationFlow).requiredFields);
