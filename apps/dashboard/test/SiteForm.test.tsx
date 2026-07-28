@@ -9,14 +9,8 @@ const baseForm = {
   tenantId: "t-default",
   name: "",
   domain: "localhost",
-  businessDescription: "",
-  targetUsers: "",
-  assistantRole: "customer_service",
-  assistantRoleCustom: "",
-  enabledTasks: ["answer_questions"],
   industry: "",
   botType: "universal-assistant",
-  leadNotificationEmail: "",
 };
 
 const templates = [
@@ -34,7 +28,7 @@ const templates = [
 ];
 
 describe("SiteForm", () => {
-  test("uses universal assistant fields in the normal create flow", () => {
+  test("keeps the normal create flow focused on metadata and setup handoff", () => {
     render(
       <SiteForm
         form={baseForm}
@@ -45,12 +39,17 @@ describe("SiteForm", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Unternehmensbeschreibung")).toBeInTheDocument();
-    expect(screen.getByLabelText("Zielgruppe / Nutzer")).toBeInTheDocument();
-    expect(screen.getByLabelText("KI-Mitarbeiter-Rolle")).toBeInTheDocument();
-    expect(screen.getByText("Hauptaufgaben der KI")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kundenname")).toBeInTheDocument();
+    expect(screen.getByLabelText("Website oder Hauptdomain")).toBeInTheDocument();
+    expect(screen.getByText("Agent-Konfiguration folgt im Setup")).toBeInTheDocument();
+    expect(screen.getByText(/Rolle, Zielgruppe, Aufgaben, Übergabe, Wissen, Tests und Livegang/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kunde anlegen" })).toBeInTheDocument();
 
+    expect(screen.queryByLabelText("Unternehmensbeschreibung")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Zielgruppe / Nutzer")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("KI-Mitarbeiter-Rolle")).not.toBeInTheDocument();
+    expect(screen.queryByText("Hauptaufgaben der KI")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Übergabe-E-Mail optional")).not.toBeInTheDocument();
     expect(screen.queryByText("Bitte Branche wählen")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Legacy Bot-Typ")).not.toBeVisible();
     expect(screen.queryByText("Kunde mit Vorlage anlegen")).not.toBeInTheDocument();
