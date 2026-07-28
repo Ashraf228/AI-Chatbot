@@ -2,10 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { SiteStatusService } = require('../dist/sites/site-status.service.js');
 
-function createService(config) {
+function createService(config, options = {}) {
   const assistantProfileModuleConfig = config.__assistantProfileModuleConfig || null;
   const siteConfig = { ...config };
   delete siteConfig.__assistantProfileModuleConfig;
+  const knowledgeCount = options.knowledgeCount ?? 1;
 
   const db = {
     async query(sql) {
@@ -16,7 +17,7 @@ function createService(config) {
       }
 
       return {
-        rows: [{ count: '1' }],
+        rows: [{ count: String(knowledgeCount) }],
       };
     },
   };
@@ -246,4 +247,23 @@ test('SiteStatusService keeps live state blocked for review until explicit go-li
   assert.equal(status.code, 'ready_for_live');
   assert.equal(live.status, 'warning');
   assert.equal(live.missingReason, 'Kunde ist bereit, aber noch nicht live geschaltet.');
+});
+
+test('SiteStatusService keeps the knowledge step incomplete until at least one active ready source exists', async () => {
+  const service = createService(
+    readyConfig({
+      leadNotificationEmail: 'ops@example.test',
+      knowledgeMode: 'flexible',
+    }),
+    { knowledgeCount: 0 },
+  );
+
+  const status = await service.resolveStatus('site-1');
+  const knowledge = expectStep(status, 'knowledge');
+
+  assert.equal(status.code, 'knowledge_missing');
+  assert.equal(status.label, 'Wissen fehlt');
+  assert.equal(status.isLiveReady, false);
+  assert.equal(knowledge.status, 'incomplete');
+  assert.equal(knowledge.missingReason, 'Mindestens eine Wissensquelle fehlt.');
 });

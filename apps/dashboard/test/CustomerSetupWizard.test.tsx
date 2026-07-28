@@ -6,7 +6,13 @@ import { CustomerSetupWizard } from "../components/customer/CustomerSetupWizard"
 import { LaunchStep } from "../components/customer/setup-wizard/LaunchStep";
 import { statusForWizardStep, wizardStepStatusLabel } from "../components/customer/setup-wizard/setupWizardValidation";
 import { SetupReadinessChecklist } from "../components/sites/SetupReadinessChecklist";
-import { getSite, updateAssistantProfileConfig, updateSiteSettings } from "../lib/setup-wizard-api";
+import {
+  createManualKnowledgeSource,
+  getKnowledgeSources,
+  getSite,
+  updateAssistantProfileConfig,
+  updateSiteSettings,
+} from "../lib/setup-wizard-api";
 
 vi.mock("../lib/setup-wizard-api", () => ({
   createManualKnowledgeSource: vi.fn(),
@@ -69,6 +75,28 @@ vi.mock("../lib/setup-wizard-api", () => ({
 
 describe("CustomerSetupWizard", () => {
   beforeEach(() => {
+    let mockedSources = [];
+
+    vi.mocked(getKnowledgeSources).mockImplementation(async () => mockedSources);
+    vi.mocked(createManualKnowledgeSource).mockImplementation(async () => {
+      mockedSources = [
+        {
+          id: "source-1",
+          type: "manual",
+          title: "Wissen",
+          label: "Wissen",
+          url: "",
+          sourceUrl: "",
+          status: "ready",
+          syncStatus: "ready",
+          isActive: true,
+          lastSyncedAt: "2026-07-27T10:00:00.000Z",
+          errorMessage: "",
+          createdAt: "2026-07-27T10:00:00.000Z",
+        },
+      ];
+      return mockedSources[0];
+    });
     vi.mocked(getSite).mockClear();
     vi.mocked(updateAssistantProfileConfig).mockClear();
     vi.mocked(updateSiteSettings).mockClear();
@@ -154,6 +182,32 @@ describe("CustomerSetupWizard", () => {
         leadNotificationEmail: "info@unternehmen.de",
       }),
     );
+  });
+
+  test("keeps save and continue blocked until at least one active ready knowledge source exists", async () => {
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /5WissenPDF, Website, FAQ oder eigene Texte/i }));
+
+    expect(screen.getByText("Noch keine persistente Wissensquelle gespeichert.")).toBeInTheDocument();
+    expect(screen.getByText(/Speichere und aktiviere mindestens eine einsatzbereite Wissensquelle/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Später erledigen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Speichern & weiter$/ })).toBeDisabled();
+  });
+
+  test("enables save and continue after manual knowledge is stored as an active ready source", async () => {
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /5WissenPDF, Website, FAQ oder eigene Texte/i }));
+
+    await userEvent.type(screen.getByPlaceholderText(/Antwort, FAQ oder Wissenstext/i), "Unsere Öffnungszeiten sind Montag bis Freitag.");
+    await userEvent.click(screen.getByRole("button", { name: /^In Wissen speichern$/ }));
+
+    await waitFor(() => expect(screen.getByText(/1 Wissensquelle ist im bestehenden Produktpfad gespeichert/i)).toBeInTheDocument());
+    expect(screen.getByText(/Der nächste Schritt ist Review & interner Test/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Speichern & weiter$/ })).toBeEnabled();
   });
 
   test("saves the KI-Mitarbeiter step with neutral defaults for a site without legacy industry", async () => {
