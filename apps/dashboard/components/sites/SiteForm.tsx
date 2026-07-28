@@ -9,14 +9,8 @@ type SiteFormValues = {
   tenantId: string;
   name: string;
   domain: string;
-  businessDescription: string;
-  targetUsers: string;
-  assistantRole: string;
-  assistantRoleCustom: string;
-  enabledTasks: string[];
   industry: string;
   botType: string;
-  leadNotificationEmail: string;
 };
 
 type SiteFormProps = {
@@ -44,29 +38,6 @@ export function SiteForm({
   const enabledModules =
     selectedTemplate?.modules.filter((module) => module.isEnabled).map((module) => module.key) || [];
   const recommendedQuestions = Object.values(selectedTemplate?.recommendedQuestions || {}).flat();
-  const roleOptions = [
-    { value: "customer_service", label: "Kundenservice-Mitarbeiter" },
-    { value: "support", label: "Support-Mitarbeiter" },
-    { value: "product_advisor", label: "Produktberater" },
-    { value: "reception", label: "Empfang / Erstkontakt" },
-    { value: "knowledge_assistant", label: "Interner Wissensassistent" },
-    { value: "custom", label: "Individuell" },
-  ];
-  const taskOptions = [
-    { value: "answer_questions", label: "Fragen beantworten" },
-    { value: "collect_requests", label: "Kundenanfragen aufnehmen" },
-    { value: "support", label: "Supportfälle vorbereiten" },
-    { value: "product_advice", label: "Produkte / Leistungen erklären" },
-    { value: "appointment", label: "Termine oder Rückrufe vorbereiten" },
-    { value: "prepare_handoff", label: "Daten an Systeme übergeben" },
-  ];
-
-  function toggleTask(task: string) {
-    const enabledTasks = form.enabledTasks.includes(task)
-      ? form.enabledTasks.filter((item) => item !== task)
-      : [...form.enabledTasks, task];
-    onChange({ ...form, enabledTasks });
-  }
 
   return (
     <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm">
@@ -94,100 +65,10 @@ export function SiteForm({
         />
       </div>
 
-      <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="site-business-description">
-          Unternehmensbeschreibung
-        </label>
-        <textarea
-          id="site-business-description"
-          className="dashboard-textarea"
-          rows={4}
-          placeholder="Was macht das Unternehmen? Welche Produkte, Leistungen oder Prozesse sind wichtig?"
-          value={form.businessDescription}
-          onChange={(event) => onChange({ ...form, businessDescription: event.target.value })}
-        />
-        <p className="dashboard-field-hint">Optional, aber empfohlen. Diese Information hilft später beim KI-Mitarbeiter-Profil.</p>
-      </div>
-
-      <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="site-target-users">
-          Zielgruppe / Nutzer
-        </label>
-        <Input
-          id="site-target-users"
-          placeholder="z. B. Kunden, Mitarbeiter, Kommunen, Patienten, Händler, interne Teams"
-          value={form.targetUsers}
-          onChange={(event) => onChange({ ...form, targetUsers: event.target.value })}
-        />
-      </div>
-
-      <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="site-assistant-role">
-          KI-Mitarbeiter-Rolle
-        </label>
-        <Select
-          id="site-assistant-role"
-          value={form.assistantRole}
-          onChange={(event) => onChange({ ...form, assistantRole: event.target.value })}
-        >
-          {roleOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      {form.assistantRole === "custom" ? (
-        <div className="dashboard-field">
-          <label className="dashboard-field-label" htmlFor="site-assistant-role-custom">
-            Individuelle Rolle
-          </label>
-          <Input
-            id="site-assistant-role-custom"
-            placeholder="z. B. Technischer Vorqualifizierer"
-            value={form.assistantRoleCustom}
-            onChange={(event) => onChange({ ...form, assistantRoleCustom: event.target.value })}
-          />
-        </div>
-      ) : null}
-
-      <fieldset className="dashboard-fieldset">
-        <legend className="dashboard-field-label">Hauptaufgaben der KI</legend>
-        <div className="dashboard-checkbox-grid">
-          {taskOptions.map((task) => (
-            <label key={task.value} className="dashboard-checkbox-card">
-              <input
-                type="checkbox"
-                checked={form.enabledTasks.includes(task.value)}
-                onChange={() => toggleTask(task.value)}
-              />
-              <span>{task.label}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
       <div className="dashboard-card dashboard-card--soft">
-        <strong>Universelles KI-Mitarbeiter-Profil</strong>
+        <strong>Agent-Konfiguration folgt im Setup</strong>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Der Kunde wird ohne Branchenzwang angelegt. Legacy-Felder bleiben kompatibel, die neue Konfiguration startet neutral.
-        </p>
-      </div>
-
-      <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="site-lead-email">
-          Übergabe-E-Mail optional
-        </label>
-        <Input
-          id="site-lead-email"
-          type="email"
-          placeholder="info@unternehmen.de"
-          value={form.leadNotificationEmail}
-          onChange={(event) => onChange({ ...form, leadNotificationEmail: event.target.value })}
-        />
-        <p className="dashboard-field-hint">
-          Wenn Kundenanfragen per E-Mail zugestellt werden sollen, wird diese Adresse später genutzt.
+          Nach dem Anlegen konfigurierst du Rolle, Zielgruppe, Aufgaben, Übergabe, Wissen, Tests und Livegang im Setup.
         </p>
       </div>
 

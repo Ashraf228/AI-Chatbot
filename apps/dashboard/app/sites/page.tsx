@@ -72,14 +72,8 @@ export default function SitesPage() {
     tenantId: "",
     name: "",
     domain: "localhost",
-    businessDescription: "",
-    targetUsers: "",
-    assistantRole: "customer_service",
-    assistantRoleCustom: "",
-    enabledTasks: ["answer_questions"],
     industry: "",
     botType: "universal-assistant",
-    leadNotificationEmail: "",
   });
   const [tenantForm, setTenantForm] = useState({
     id: "",
@@ -216,12 +210,6 @@ export default function SitesPage() {
       return;
     }
 
-    const leadNotificationEmail = form.leadNotificationEmail.trim();
-    if (leadNotificationEmail && !isValidEmail(leadNotificationEmail)) {
-      setErr("Bitte eine gültige Übergabe-E-Mail eintragen.");
-      return;
-    }
-
     const templateMap = templatesByKey(templates);
     const selectedLegacyTemplate = form.industry ? templateMap[form.industry] : null;
     const body = {
@@ -231,14 +219,8 @@ export default function SitesPage() {
       allowedDomains: [form.domain.trim()].filter(Boolean),
       config: buildUniversalSiteConfig({
         customerName: form.name,
-        businessDescription: form.businessDescription,
-        targetUsers: form.targetUsers,
-        assistantRole: form.assistantRole,
-        assistantRoleCustom: form.assistantRoleCustom,
-        enabledTasks: form.enabledTasks,
         industry: form.industry,
         botType: form.botType,
-        leadNotificationEmail,
       }),
     };
 
@@ -260,7 +242,7 @@ export default function SitesPage() {
     if (data?.id) {
       const template = selectedLegacyTemplate;
       if (!template) {
-        setMsg("Kunde erfolgreich angelegt. Das universelle KI-Mitarbeiter-Profil wurde vorbereitet.");
+        setMsg("Kunde erfolgreich angelegt. Die Agent-Konfiguration folgt im Setup.");
         window.location.href = `/sites/${encodeSiteId(data.id)}/setup`;
         return;
       }
@@ -287,14 +269,8 @@ export default function SitesPage() {
       tenantId,
       name: "",
       domain: "localhost",
-      businessDescription: "",
-      targetUsers: "",
-      assistantRole: "customer_service",
-      assistantRoleCustom: "",
-      enabledTasks: ["answer_questions"],
       industry: "",
       botType: "universal-assistant",
-      leadNotificationEmail: "",
     });
 
     await loadSites();
@@ -397,7 +373,7 @@ export default function SitesPage() {
           <div>
             <h2 className="dashboard-section-title">Neuen Kunden anlegen</h2>
             <p className="dashboard-copy dashboard-copy--muted">
-              Starte mit Kundenname, Website und einer kurzen Beschreibung. Die KI erkennt Kontext und Aufgaben später aus Wissen, Konfiguration und Gesprächsverlauf.
+              Starte mit Kundenname und Website. Rolle, Aufgaben, Übergabe, Wissen, Test und Livegang folgen danach im Setup.
             </p>
             {tenants.length === 0 ? (
               <p className="dashboard-status dashboard-status--neutral">
