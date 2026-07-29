@@ -1,4 +1,5 @@
 import type { DashboardSessionRole } from "../../../lib/auth";
+import { getDashboardRoleAccess } from "../../../lib/dashboard-role-access";
 import type { CustomerApiStatus, CustomerStatusStep } from "../customer-status";
 import { CompactMetricCard } from "../../shared/CompactMetricCard";
 import { SetupReadinessChecklist } from "../../sites/SetupReadinessChecklist";
@@ -15,13 +16,6 @@ type SetupWizardSidebarProps = {
   status: CustomerApiStatus | null;
   dashboardRole?: DashboardSessionRole | null;
   onStepChange: (index: number) => void;
-};
-
-const ROLE_LABELS: Record<DashboardSessionRole, string> = {
-  admin: "Admin",
-  operator: "Operator",
-  viewer: "Nur Ansicht",
-  customer: "Kunde",
 };
 
 function missingLabels(status: CustomerApiStatus | null, step: WizardStepKey) {
@@ -47,16 +41,18 @@ export function SetupWizardSidebar({
   dashboardRole = null,
   onStepChange,
 }: SetupWizardSidebarProps) {
+  const roleAccess = getDashboardRoleAccess(dashboardRole);
   const boundaryNotes = [
-    dashboardRole === "admin" || dashboardRole === "operator"
-      ? "Interner Testpfad nur für Admin und Operator."
-      : "Interner Test bleibt verborgen, bis eine interne Rolle aktiv ist.",
+    roleAccess.isInternalRole
+      ? "Interner Testpfad bleibt nur für Admin und Operator offen."
+      : "Kein interner Setup-/Testzugang bestätigt. Der Zustand bleibt konservativ.",
     status?.lifecycleStatus === "live"
       ? "Production ist bereits aktiv. Setup bleibt trotzdem Review-orientiert."
       : "Kein Public Widget und keine Production-Aktivierung aus dem Setup.",
     status?.isLiveReady
       ? "Go-Live ist fachlich vorbereitet, aber weiterhin ein Review-Gate."
       : "Go-Live bleibt blockiert, bis alle fehlenden Schritte sauber geschlossen sind.",
+    roleAccess.demoBoundaryCopy,
   ];
 
   return (
@@ -67,7 +63,7 @@ export function SetupWizardSidebar({
         </strong>
         <CompactMetricCard label="Startklar-Check" value={`${status?.progress ?? 0}%`} />
         <div className="setup-wizard__meta">
-          <span>Rolle: {dashboardRole ? ROLE_LABELS[dashboardRole] : "Nicht zugeordnet"}</span>
+          <span>Rolle: {roleAccess.roleLabel}</span>
           <span>Nächster Fokus: {status?.nextAction?.label || steps[activeStepIndex]?.label}</span>
         </div>
       </section>
@@ -103,7 +99,18 @@ export function SetupWizardSidebar({
       </section>
 
       <section className="dashboard-card dashboard-card--compact dashboard-stack dashboard-stack--sm">
-        <h3 className="dashboard-card-title dashboard-card-title--sm">Boundary</h3>
+        <h3 className="dashboard-card-title dashboard-card-title--sm">Rolle & Boundary</h3>
+        <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">{roleAccess.description}</p>
+        <div className="setup-wizard__capability-list" aria-label="Rollenfähigkeiten">
+          {roleAccess.capabilities.map((capability) => (
+            <span
+              key={capability.key}
+              className={capability.allowed ? "dashboard-status dashboard-status--success" : "dashboard-badge"}
+            >
+              {capability.label}: {capability.allowed ? "Ja" : "Nein"}
+            </span>
+          ))}
+        </div>
         <div className="setup-wizard__boundary-list">
           {boundaryNotes.map((note) => (
             <p key={note} className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">

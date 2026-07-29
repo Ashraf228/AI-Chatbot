@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { DashboardSessionRole } from "../../lib/auth";
 import { findSiteWorkspaceLocation, type SiteNavGroup } from "../../lib/dashboard-config";
+import { getDashboardRoleAccess } from "../../lib/dashboard-role-access";
 import { encodeSiteId } from "../../lib/site-id";
 import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
 import { Button } from "../shared/Button";
@@ -78,21 +79,11 @@ function primaryAction(siteId: string, status: CustomerApiStatus | null, site: S
   return { label: "Setup fortsetzen", href: localNextHref(siteId, status) };
 }
 
-const ROLE_LABELS: Record<DashboardSessionRole, string> = {
-  admin: "Admin",
-  operator: "Operator",
-  viewer: "Nur Ansicht",
-  customer: "Kunde",
-};
-
-function roleLabel(role: DashboardSessionRole | null | undefined) {
-  return role ? ROLE_LABELS[role] : "Nicht zugeordnet";
-}
-
 export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: CustomerStatusBarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const siteSlug = encodeSiteId(siteId);
+  const roleAccess = getDashboardRoleAccess(dashboardRole);
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [status, setStatus] = useState<CustomerApiStatus | null>(null);
   const [copied, setCopied] = useState(false);
@@ -166,7 +157,7 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
   const activeAreaLabel = activeItem?.label || activeGroup?.label || "Übersicht";
   const activeAreaDescription = activeItem?.description || activeGroup?.description || "Aktueller Workspace-Bereich.";
   const boundaryLabels = [
-    dashboardRole === "admin" || dashboardRole === "operator" ? "Interner Testpfad verfügbar" : "Interner Test bleibt intern",
+    ...roleAccess.boundaryBadges,
     isLive ? "Production aktiv" : "Production nicht aktiviert",
     isLive ? "Public Widget aktiv" : "Public Widget nicht aktiviert",
     isLive ? "Betrieb beobachten" : "Go-Live nur nach Review",
@@ -196,7 +187,7 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
         <div className="customer-status-bar__context">
           <span>Site: {siteId}</span>
           <span>Bereich: {activeAreaLabel}</span>
-          <span>Rolle: {roleLabel(dashboardRole)}</span>
+          <span>Rolle: {roleAccess.roleLabel}</span>
         </div>
         <span>{domain || "Keine Domain hinterlegt"}</span>
       </div>
@@ -224,6 +215,22 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
         <span>Nächster Schritt</span>
         <strong>{isLive ? "Betrieb prüfen" : status?.nextAction?.label || mainAction.label}</strong>
         <small>{isLive ? "Live-Betrieb beobachten und Testpfad sauber halten." : "Setup bleibt Source of Truth bis zum Review-Gate."}</small>
+      </div>
+
+      <div className="customer-status-bar__next customer-status-bar__segment">
+        <span>Zugriff</span>
+        <strong>{roleAccess.summary}</strong>
+        <small>{roleAccess.description}</small>
+        <div className="customer-status-bar__access-grid" aria-label="Zugriffsübersicht">
+          {roleAccess.capabilities.map((capability) => (
+            <span
+              key={capability.key}
+              className={capability.allowed ? "dashboard-status dashboard-status--success" : "dashboard-badge"}
+            >
+              {capability.label}: {capability.allowed ? "Ja" : "Nein"}
+            </span>
+          ))}
+        </div>
       </div>
 
       <div className="customer-status-bar__boundaries" aria-label="Workspace-Grenzen">
@@ -258,6 +265,8 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
           Analytics ansehen
         </Link>
       </div>
+
+      <p className="customer-status-bar__hint">{roleAccess.demoBoundaryCopy}</p>
 
       {liveBlockedReason ? (
         <p className="customer-status-bar__hint">

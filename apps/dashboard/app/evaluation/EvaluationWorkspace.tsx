@@ -323,6 +323,10 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
           <div className="evaluation-badges">
             <span>Kooperationsdemonstrator</span>
             <span>Nur-Lesezugang</span>
+            <span>Keine Konfiguration</span>
+            <span>Keine Kundendaten</span>
+            <span>Kein Public Widget</span>
+            <span>Keine Production</span>
             <span>
               Ablauf: <time dateTime={context.accountExpiresAt || undefined}>{formatDate(context.accountExpiresAt)}</time>
             </span>
@@ -333,6 +337,10 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
           <p className="evaluation-demo-note">
             Hinweis: Diese Ansicht ist ein Demonstrator. Ablauf, Inhalte, Fragen und Übergaben können für Kundenprojekte
             angepasst werden.
+          </p>
+          <p className="evaluation-demo-note">
+            Externe Demo-Zugänge bleiben guided/evaluation only. Keine Agent-Konfiguration, kein Knowledge-Upload, keine
+            Production-Systeme und keine echten NOLIS-Zugriffe.
           </p>
         </header>
 
