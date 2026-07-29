@@ -67,7 +67,7 @@ describe("CustomerStatusBar", () => {
 
     expect(screen.getByText("Bereich: Interner Test")).toBeInTheDocument();
     expect(screen.getByText("Rolle: Operator")).toBeInTheDocument();
-    expect(screen.getByText("Interner Testpfad verfügbar")).toBeInTheDocument();
+    expect(screen.getByText("Interner Setup-/Testzugang")).toBeInTheDocument();
     expect(screen.getByText("Production nicht aktiviert")).toBeInTheDocument();
     expect(screen.getByText("Public Widget nicht aktiviert")).toBeInTheDocument();
     expect(screen.getByText("Go-Live nur nach Review")).toBeInTheDocument();
@@ -76,5 +76,19 @@ describe("CustomerStatusBar", () => {
     expect(screen.queryByRole("button", { name: /live/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /live/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Public Widget aktivieren/i)).not.toBeInTheDocument();
+  });
+
+  test("shows conservative unknown role messaging when no trusted internal role is available", async () => {
+    render(<CustomerStatusBar siteId="site-1" dashboardRole={null} groups={siteNavGroups} />);
+
+    await screen.findByText("Muster Handwerk");
+
+    expect(screen.getByText("Rolle: Nicht eindeutig")).toBeInTheDocument();
+    expect(screen.getByText("Konservativer Zugriff ohne interne Freigabe")).toBeInTheDocument();
+    expect(screen.getByText("Konfigurieren: Nein")).toBeInTheDocument();
+    expect(screen.getByText("Interner Testchat: Nein")).toBeInTheDocument();
+    expect(screen.getByText("Wissen hinzufügen: Nein")).toBeInTheDocument();
+    expect(screen.getByText("Deploy / Public Widget: Nein")).toBeInTheDocument();
+    expect(screen.getByText(/keine Konfiguration, keine internen Testpfade, keine Kundendaten/i)).toBeInTheDocument();
   });
 });

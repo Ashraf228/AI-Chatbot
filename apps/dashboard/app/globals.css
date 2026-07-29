@@ -989,6 +989,13 @@ body:has(.dashboard-auth) .dashboard-surface {
   line-height: 1.5;
 }
 
+.customer-status-bar__access-grid,
+.setup-wizard__capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .customer-status-bar__boundaries,
 .customer-status-bar__actions {
   grid-column: 1 / -1;
