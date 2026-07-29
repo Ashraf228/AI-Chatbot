@@ -15,7 +15,7 @@ export async function SiteTabs({ siteId }: { siteId: string }) {
 
   return (
     <div className="customer-detail-shell">
-      <CustomerStatusBar siteId={siteId} />
+      <CustomerStatusBar siteId={siteId} dashboardRole={session?.role || null} groups={groups} />
       <CustomerNavGroups siteId={siteId} groups={groups} />
     </div>
   );

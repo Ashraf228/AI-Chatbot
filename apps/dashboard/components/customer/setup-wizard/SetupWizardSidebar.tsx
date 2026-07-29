@@ -1,3 +1,4 @@
+import type { DashboardSessionRole } from "../../../lib/auth";
 import type { CustomerApiStatus, CustomerStatusStep } from "../customer-status";
 import { CompactMetricCard } from "../../shared/CompactMetricCard";
 import { SetupReadinessChecklist } from "../../sites/SetupReadinessChecklist";
@@ -12,7 +13,15 @@ type SetupWizardSidebarProps = {
   steps: WizardStep[];
   activeStepIndex: number;
   status: CustomerApiStatus | null;
+  dashboardRole?: DashboardSessionRole | null;
   onStepChange: (index: number) => void;
+};
+
+const ROLE_LABELS: Record<DashboardSessionRole, string> = {
+  admin: "Admin",
+  operator: "Operator",
+  viewer: "Nur Ansicht",
+  customer: "Kunde",
 };
 
 function missingLabels(status: CustomerApiStatus | null, step: WizardStepKey) {
@@ -30,7 +39,26 @@ function missingLabels(status: CustomerApiStatus | null, step: WizardStepKey) {
     .filter(Boolean);
 }
 
-export function SetupWizardSidebar({ siteId, steps, activeStepIndex, status, onStepChange }: SetupWizardSidebarProps) {
+export function SetupWizardSidebar({
+  siteId,
+  steps,
+  activeStepIndex,
+  status,
+  dashboardRole = null,
+  onStepChange,
+}: SetupWizardSidebarProps) {
+  const boundaryNotes = [
+    dashboardRole === "admin" || dashboardRole === "operator"
+      ? "Interner Testpfad nur für Admin und Operator."
+      : "Interner Test bleibt verborgen, bis eine interne Rolle aktiv ist.",
+    status?.lifecycleStatus === "live"
+      ? "Production ist bereits aktiv. Setup bleibt trotzdem Review-orientiert."
+      : "Kein Public Widget und keine Production-Aktivierung aus dem Setup.",
+    status?.isLiveReady
+      ? "Go-Live ist fachlich vorbereitet, aber weiterhin ein Review-Gate."
+      : "Go-Live bleibt blockiert, bis alle fehlenden Schritte sauber geschlossen sind.",
+  ];
+
   return (
     <aside className="setup-wizard__sidebar dashboard-stack">
       <section className="dashboard-card dashboard-card--compact dashboard-stack dashboard-stack--sm">
@@ -38,6 +66,10 @@ export function SetupWizardSidebar({ siteId, steps, activeStepIndex, status, onS
           Schritt {activeStepIndex + 1} von {steps.length}
         </strong>
         <CompactMetricCard label="Startklar-Check" value={`${status?.progress ?? 0}%`} />
+        <div className="setup-wizard__meta">
+          <span>Rolle: {dashboardRole ? ROLE_LABELS[dashboardRole] : "Nicht zugeordnet"}</span>
+          <span>Nächster Fokus: {status?.nextAction?.label || steps[activeStepIndex]?.label}</span>
+        </div>
       </section>
 
       <section className="dashboard-card dashboard-card--compact dashboard-stack dashboard-stack--sm">
@@ -67,6 +99,17 @@ export function SetupWizardSidebar({ siteId, steps, activeStepIndex, status, onS
               </button>
             );
           })}
+        </div>
+      </section>
+
+      <section className="dashboard-card dashboard-card--compact dashboard-stack dashboard-stack--sm">
+        <h3 className="dashboard-card-title dashboard-card-title--sm">Boundary</h3>
+        <div className="setup-wizard__boundary-list">
+          {boundaryNotes.map((note) => (
+            <p key={note} className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              {note}
+            </p>
+          ))}
         </div>
       </section>
 

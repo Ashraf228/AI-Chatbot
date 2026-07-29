@@ -14,6 +14,10 @@ import {
   updateSiteSettings,
 } from "../lib/setup-wizard-api";
 
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 vi.mock("../lib/setup-wizard-api", () => ({
   createManualKnowledgeSource: vi.fn(),
   deleteKnowledgeSource: vi.fn(),
@@ -75,6 +79,8 @@ vi.mock("../lib/setup-wizard-api", () => ({
 
 describe("CustomerSetupWizard", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/sites/site-1/setup");
+
     let mockedSources = [];
 
     vi.mocked(getKnowledgeSources).mockImplementation(async () => mockedSources);
@@ -306,6 +312,55 @@ describe("CustomerSetupWizard", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Lokalen Transcript leeren" }));
     expect(await screen.findByText("Noch kein interner Test")).toBeInTheDocument();
+  });
+
+  test("opens the launch step when the setup route is linked with a launch query and hash", async () => {
+    window.history.replaceState({}, "", "/sites/site-1/setup?step=launch#customer-test-chat");
+
+    render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+
+    await screen.findByText("Setup-Assistent");
+    await screen.findByText("Interner Testchat");
+    expect(screen.getByText(/Schritt 7 von 7: Review & Livegang/i)).toBeInTheDocument();
+  });
+
+  test("checklist links point to setup step queries instead of loose anchors", () => {
+    render(
+      <SetupReadinessChecklist
+        siteId="site-1"
+        status={{
+          siteId: "site-1",
+          code: "setup_incomplete",
+          label: "Setup unvollständig",
+          status: "Setup unvollständig",
+          severity: "warning",
+          progress: 75,
+          lifecycleStatus: "ready_for_test",
+          isLiveReady: false,
+          missingSteps: ["lead_delivery"],
+          nextAction: { key: "lead_delivery", label: "Lead-Empfänger-E-Mail setzen" },
+          steps: [],
+          knowledgeCount: 0,
+          industry: "local-service-first-contact",
+          setupGoal: "lead_capture",
+          lastTestedAt: "",
+          goLiveAt: "",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: /Kundendaten/i })).toHaveAttribute(
+      "href",
+      "/sites/site-1/setup?step=customer#setup-step-basics",
+    );
+    expect(screen.getByRole("link", { name: /KI-Mitarbeiter Profil/i })).toHaveAttribute(
+      "href",
+      "/sites/site-1/setup?step=bot#setup-step-industry",
+    );
+    expect(screen.getByRole("link", { name: /Testfrage gesendet/i })).toHaveAttribute(
+      "href",
+      "/sites/site-1/setup?step=launch#customer-test-chat",
+    );
   });
 
   test("launch step shows ready knowledge awareness for admin when a usable source exists", async () => {

@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import type { DashboardSessionRole } from "../../lib/auth";
+import { findSiteWorkspaceLocation, type SiteNavGroup } from "../../lib/dashboard-config";
 import { encodeSiteId } from "../../lib/site-id";
 import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
 import { Button } from "../shared/Button";
@@ -10,6 +13,8 @@ import { mapStatusSeverityToTone, type CustomerApiStatus } from "./customer-stat
 
 type CustomerStatusBarProps = {
   siteId: string;
+  dashboardRole?: DashboardSessionRole | null;
+  groups: SiteNavGroup[];
 };
 
 type SiteDetails = {
@@ -36,26 +41,26 @@ function localNextHref(siteId: string, status: CustomerApiStatus | null) {
   const firstMissing = status?.missingSteps?.[0];
 
   if (firstMissing === "knowledge") {
-    return `/sites/${siteSlug}/knowledge`;
+    return `/sites/${siteSlug}/setup?step=knowledge#setup-step-knowledge`;
   }
 
   if (firstMissing === "behavior") {
-    return `/sites/${siteSlug}/widget`;
+    return `/sites/${siteSlug}/setup?step=flow#setup-step-flow`;
   }
 
   if (firstMissing === "design") {
-    return `/sites/${siteSlug}/branding`;
+    return `/sites/${siteSlug}/setup?step=design#setup-step-design`;
   }
 
   if (firstMissing === "embed") {
-    return `/sites/${siteSlug}/embedding`;
+    return `/sites/${siteSlug}/setup?step=launch#setup-step-live`;
   }
 
   if (firstMissing === "test") {
-    return `/sites/${siteSlug}#customer-test-chat`;
+    return `/sites/${siteSlug}/setup?step=launch#customer-test-chat`;
   }
 
-  return `/sites/${siteSlug}/setup`;
+  return `/sites/${siteSlug}/setup?step=customer#setup-step-basics`;
 }
 
 function primaryAction(siteId: string, status: CustomerApiStatus | null, site: SiteDetails | null) {
@@ -63,28 +68,54 @@ function primaryAction(siteId: string, status: CustomerApiStatus | null, site: S
   const isLive = Boolean(site?.goLiveAt || status?.lifecycleStatus === "live");
 
   if (isLive) {
-    return { label: "Chat testen", href: `/sites/${siteSlug}#customer-test-chat` };
+    return { label: "Chat testen", href: `/sites/${siteSlug}/setup?step=launch#customer-test-chat` };
   }
 
   if ((status?.knowledgeCount ?? 0) === 0 || status?.missingSteps?.includes("knowledge")) {
-    return { label: "Wissen hinzufügen", href: `/sites/${siteSlug}/knowledge` };
+    return { label: "Wissen hinzufügen", href: `/sites/${siteSlug}/setup?step=knowledge#setup-step-knowledge` };
   }
 
   return { label: "Setup fortsetzen", href: localNextHref(siteId, status) };
 }
 
-export function CustomerStatusBar({ siteId }: CustomerStatusBarProps) {
+const ROLE_LABELS: Record<DashboardSessionRole, string> = {
+  admin: "Admin",
+  operator: "Operator",
+  viewer: "Nur Ansicht",
+  customer: "Kunde",
+};
+
+function roleLabel(role: DashboardSessionRole | null | undefined) {
+  return role ? ROLE_LABELS[role] : "Nicht zugeordnet";
+}
+
+export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: CustomerStatusBarProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const siteSlug = encodeSiteId(siteId);
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [status, setStatus] = useState<CustomerApiStatus | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const [hash, setHash] = useState("");
   const [loaderUrl, setLoaderUrl] = useState(
     process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js",
   );
 
   useEffect(() => {
     setLoaderUrl(resolveWidgetLoaderUrl(process.env.NEXT_PUBLIC_WIDGET_LOADER_URL));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const syncHash = () => setHash(window.location.hash);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+
+    return () => window.removeEventListener("hashchange", syncHash);
   }, []);
 
   useEffect(() => {
@@ -125,6 +156,21 @@ export function CustomerStatusBar({ siteId }: CustomerStatusBarProps) {
   const isLive = Boolean(site?.goLiveAt || status?.lifecycleStatus === "live");
   const mainAction = primaryAction(siteId, status, site);
   const liveBlockedReason = status && !status.isLiveReady && !isLive ? status.nextAction?.label || status.label : "";
+  const { activeGroup, activeItem } = findSiteWorkspaceLocation(
+    groups,
+    siteSlug,
+    pathname,
+    searchParams.toString(),
+    hash,
+  );
+  const activeAreaLabel = activeItem?.label || activeGroup?.label || "Übersicht";
+  const activeAreaDescription = activeItem?.description || activeGroup?.description || "Aktueller Workspace-Bereich.";
+  const boundaryLabels = [
+    dashboardRole === "admin" || dashboardRole === "operator" ? "Interner Testpfad verfügbar" : "Interner Test bleibt intern",
+    isLive ? "Production aktiv" : "Production nicht aktiviert",
+    isLive ? "Public Widget aktiv" : "Public Widget nicht aktiviert",
+    isLive ? "Betrieb beobachten" : "Go-Live nur nach Review",
+  ];
 
   async function copyEmbedCode() {
     if (!embedCode) {
@@ -145,8 +191,13 @@ export function CustomerStatusBar({ siteId }: CustomerStatusBarProps) {
   return (
     <section className="customer-status-bar">
       <div className="customer-status-bar__identity">
-        <p>Kunde</p>
+        <p>Aktiver Workspace</p>
         <h2>{site?.name || siteId}</h2>
+        <div className="customer-status-bar__context">
+          <span>Site: {siteId}</span>
+          <span>Bereich: {activeAreaLabel}</span>
+          <span>Rolle: {roleLabel(dashboardRole)}</span>
+        </div>
         <span>{domain || "Keine Domain hinterlegt"}</span>
       </div>
 
@@ -164,8 +215,23 @@ export function CustomerStatusBar({ siteId }: CustomerStatusBarProps) {
       </div>
 
       <div className="customer-status-bar__next">
+        <span>Aktiver Fokus</span>
+        <strong>{activeAreaLabel}</strong>
+        <small>{activeAreaDescription}</small>
+      </div>
+
+      <div className="customer-status-bar__next">
         <span>Nächster Schritt</span>
         <strong>{isLive ? "Betrieb prüfen" : status?.nextAction?.label || mainAction.label}</strong>
+        <small>{isLive ? "Live-Betrieb beobachten und Testpfad sauber halten." : "Setup bleibt Source of Truth bis zum Review-Gate."}</small>
+      </div>
+
+      <div className="customer-status-bar__boundaries" aria-label="Workspace-Grenzen">
+        {boundaryLabels.map((label) => (
+          <span key={label} className="dashboard-badge">
+            {label}
+          </span>
+        ))}
       </div>
 
       <div className="customer-status-bar__actions">
@@ -185,7 +251,11 @@ export function CustomerStatusBar({ siteId }: CustomerStatusBarProps) {
         </Link>
       </div>
 
-      {liveBlockedReason ? <p className="customer-status-bar__hint">Noch nicht bereit für Go-Live: {liveBlockedReason}</p> : null}
+      {liveBlockedReason ? (
+        <p className="customer-status-bar__hint">
+          Noch nicht bereit für Go-Live: {liveBlockedReason}. Kein Public Widget, kein Self-Service und keine Production-Aktivierung aus diesem Stand.
+        </p>
+      ) : null}
       {copied ? <p className="dashboard-status dashboard-status--success">Einbindungscode kopiert.</p> : null}
       {error ? <p className="dashboard-status dashboard-status--error">{error}</p> : null}
     </section>

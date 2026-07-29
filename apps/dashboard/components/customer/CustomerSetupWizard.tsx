@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { type IndustryTemplate, templatesByKey } from "../../lib/industry-templates";
 import {
@@ -84,11 +85,37 @@ const ASSISTANT_TONE_BY_UI_TONE: Record<string, string> = {
   consultative: "consultative",
 };
 
+const HASH_TO_WIZARD_STEP_KEY: Record<string, (typeof WIZARD_STEPS)[number]["key"]> = {
+  "setup-step-basics": "customer",
+  "setup-step-industry": "bot",
+  "setup-step-delivery": "delivery",
+  "setup-step-flow": "flow",
+  "setup-step-knowledge": "knowledge",
+  "setup-step-design": "design",
+  "setup-step-live": "launch",
+  "customer-test-chat": "launch",
+};
+
+const WIZARD_STEP_HASH: Record<(typeof WIZARD_STEPS)[number]["key"], string> = {
+  customer: "setup-step-basics",
+  bot: "setup-step-industry",
+  delivery: "setup-step-delivery",
+  flow: "setup-step-flow",
+  knowledge: "setup-step-knowledge",
+  design: "setup-step-design",
+  launch: "setup-step-live",
+};
+
+function normalizeWizardStepKey(value: string | null) {
+  return WIZARD_STEPS.find((step) => step.key === value)?.key || null;
+}
+
 function requiredFieldLabel(key: string) {
   return REQUIRED_FIELD_OPTIONS.find((option) => option.key === key)?.label || key;
 }
 
 export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSetupWizardProps) {
+  const searchParams = useSearchParams();
   const siteSlug = encodeSiteId(siteId);
   const [site, setSite] = useState<SiteDetails | null>(null);
   const [templates, setTemplates] = useState<IndustryTemplate[]>([]);
@@ -104,6 +131,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   const [message, setMessage] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [locationHash, setLocationHash] = useState("");
   const [profileForm, setProfileForm] = useState({
     companyName: "",
     botName: "",
@@ -158,6 +186,35 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     setLoaderUrl(resolveWidgetLoaderUrl(process.env.NEXT_PUBLIC_WIDGET_LOADER_URL));
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const syncHash = () => setLocationHash(window.location.hash.replace(/^#/, ""));
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    window.addEventListener("popstate", syncHash);
+
+    return () => {
+      window.removeEventListener("hashchange", syncHash);
+      window.removeEventListener("popstate", syncHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    const targetStep =
+      normalizeWizardStepKey(searchParams.get("step")) || HASH_TO_WIZARD_STEP_KEY[locationHash] || null;
+    if (!targetStep) {
+      return;
+    }
+
+    const nextIndex = WIZARD_STEPS.findIndex((step) => step.key === targetStep);
+    if (nextIndex >= 0 && nextIndex !== activeStepIndex) {
+      setActiveStepIndex(nextIndex);
+    }
+  }, [activeStepIndex, locationHash, searchParams]);
+
   const templateMap = useMemo(() => templatesByKey(templates), [templates]);
   const activeStep = WIZARD_STEPS[activeStepIndex];
   const selectedTemplate = profileForm.industry ? templateMap[profileForm.industry] : undefined;
@@ -180,6 +237,26 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   const embedCode = site ? createEmbedCode(loaderUrl, site.siteKey) : "";
   const canGoLive = Boolean(serverStatus?.isLiveReady);
   const liveDone = serverStatus?.lifecycleStatus === "live" || Boolean(site?.goLiveAt);
+
+  function setWizardStep(index: number, hashOverride?: string) {
+    const boundedIndex = Math.max(0, Math.min(index, WIZARD_STEPS.length - 1));
+    const nextStep = WIZARD_STEPS[boundedIndex];
+    if (!nextStep) {
+      return;
+    }
+
+    setActiveStepIndex(boundedIndex);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("step", nextStep.key);
+    url.hash = `#${hashOverride || WIZARD_STEP_HASH[nextStep.key]}`;
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    setLocationHash(url.hash.replace(/^#/, ""));
+  }
 
   async function refreshStatus() {
     const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/status`, { cache: "no-store" });
@@ -828,14 +905,14 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
 
     const saved = await saveCurrentStep();
     if (saved) {
-      setActiveStepIndex((current) => Math.min(current + 1, WIZARD_STEPS.length - 1));
+      setWizardStep(activeStepIndex + 1);
     }
   }
 
   function jumpToStatusStep(stepKey?: string) {
     const index = WIZARD_STEPS.findIndex((step) => STATUS_STEP_GROUPS[step.key].includes(stepKey || ""));
     if (index >= 0) {
-      setActiveStepIndex(index);
+      setWizardStep(index);
     }
   }
 
@@ -990,14 +1067,15 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
           steps={WIZARD_STEPS}
           activeStepIndex={activeStepIndex}
           status={serverStatus}
-          onStepChange={setActiveStepIndex}
+          dashboardRole={dashboardRole}
+          onStepChange={setWizardStep}
         />
       }
       actions={
         <SetupWizardActions
-          onBack={() => setActiveStepIndex((current) => Math.max(current - 1, 0))}
+          onBack={() => setWizardStep(activeStepIndex - 1)}
           onSave={saveCurrentStep}
-          onSkip={activeStep.key !== "launch" && activeStep.key !== "knowledge" ? () => setActiveStepIndex((current) => current + 1) : undefined}
+          onSkip={activeStep.key !== "launch" && activeStep.key !== "knowledge" ? () => setWizardStep(activeStepIndex + 1) : undefined}
           onPrimary={activeStep.key === "launch" ? goLive : nextStep}
           primaryLabel={activeStep.key === "launch" ? "Chatfenster live schalten" : "Speichern & weiter"}
           isSaving={Boolean(savingKey)}
