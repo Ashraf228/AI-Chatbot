@@ -291,6 +291,8 @@ describe("CustomerSetupWizard", () => {
     expect(screen.getByText("Interner Testchat")).toBeInTheDocument();
     expect(screen.getByText(/Der Runtime-Pilot nutzt die gespeicherte Agent-Konfiguration/i)).toBeInTheDocument();
     expect(screen.getByText("Noch keine nutzbare Wissensquelle gespeichert.")).toBeInTheDocument();
+    expect(screen.getByText("Lokaler Transcript")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Chatfenster live schalten/i })).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Interne Testfrage"), "Bitte intern prüfen");
     await userEvent.click(screen.getByRole("button", { name: "Interne Testfrage senden" }));

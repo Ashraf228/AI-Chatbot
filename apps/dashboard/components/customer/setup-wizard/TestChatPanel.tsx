@@ -123,39 +123,45 @@ export function TestChatPanel({
         </div>
       ) : (
         <>
-          <div className="dashboard-inline dashboard-wrap">
-            {PRESET_QUESTIONS.map((question) => (
-              <Button key={question} type="button" variant="secondary" onClick={() => onChangeInput(question)}>
-                {question}
+          <div className="launch-step__composer">
+            <div className="dashboard-inline dashboard-wrap">
+              {PRESET_QUESTIONS.map((question) => (
+                <Button key={question} type="button" variant="secondary" onClick={() => onChangeInput(question)}>
+                  {question}
+                </Button>
+              ))}
+            </div>
+
+            <label className="dashboard-field">
+              <span className="dashboard-field-label">Interne Testfrage</span>
+              <textarea
+                className="dashboard-textarea wizard-textarea-compact"
+                rows={2}
+                value={input}
+                onChange={(event) => onChangeInput(event.target.value)}
+                placeholder="Frage eingeben, die intern gegen die aktuelle Setup-Konfiguration geprüft werden soll"
+              />
+            </label>
+
+            <div className="dashboard-inline dashboard-wrap">
+              <Button type="button" onClick={onSend} disabled={isLoading || !input.trim()}>
+                {isLoading ? "Interner Test läuft..." : "Interne Testfrage senden"}
               </Button>
-            ))}
+              <Button type="button" variant="ghost" onClick={onClear} disabled={isLoading || turns.length === 0}>
+                Lokalen Transcript leeren
+              </Button>
+            </div>
           </div>
 
-          <div className="dashboard-inline dashboard-wrap">
-            <Button type="button" onClick={onSend} disabled={isLoading || !input.trim()}>
-              {isLoading ? "Interner Test läuft..." : "Interne Testfrage senden"}
-            </Button>
-            <Button type="button" variant="ghost" onClick={onClear} disabled={isLoading || turns.length === 0}>
-              Lokalen Transcript leeren
-            </Button>
-          </div>
+          <div className="launch-step__transcript">
+            <div className="launch-step__transcript-header">
+              <strong>Lokaler Transcript</strong>
+              <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                Letzter lokaler Test: {formatDate(latestTestedAt)}
+              </p>
+            </div>
 
-          <label className="dashboard-field">
-            <span className="dashboard-field-label">Interne Testfrage</span>
-            <textarea
-              className="dashboard-textarea wizard-textarea-compact"
-              rows={2}
-              value={input}
-              onChange={(event) => onChangeInput(event.target.value)}
-              placeholder="Frage eingeben, die intern gegen die aktuelle Setup-Konfiguration geprüft werden soll"
-            />
-          </label>
-
-          <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-            Letzter lokaler Test: {formatDate(latestTestedAt)}
-          </p>
-
-          <div className="launch-step__messages dashboard-stack dashboard-stack--sm">
+            <div className="launch-step__messages dashboard-stack dashboard-stack--sm">
             {turns.length === 0 ? (
               <EmptyStateCard
                 title="Noch kein interner Test"
@@ -213,8 +219,9 @@ export function TestChatPanel({
                     </div>
                   </details>
                 </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
         </>
       )}

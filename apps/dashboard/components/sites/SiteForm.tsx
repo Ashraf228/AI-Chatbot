@@ -40,39 +40,41 @@ export function SiteForm({
   const recommendedQuestions = Object.values(selectedTemplate?.recommendedQuestions || {}).flat();
 
   return (
-    <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm">
-      <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="site-name">
-          Kundenname
-        </label>
-        <Input
-          id="site-name"
-          placeholder="Musterkunde GmbH"
-          value={form.name}
-          onChange={(event) => onChange({ ...form, name: event.target.value })}
-        />
+    <form onSubmit={onSubmit} className="dashboard-card dashboard-stack dashboard-stack--sm site-form">
+      <div className="dashboard-form-grid site-form__primary-grid">
+        <div className="dashboard-field">
+          <label className="dashboard-field-label" htmlFor="site-name">
+            Kundenname
+          </label>
+          <Input
+            id="site-name"
+            placeholder="Musterkunde GmbH"
+            value={form.name}
+            onChange={(event) => onChange({ ...form, name: event.target.value })}
+          />
+        </div>
+
+        <div className="dashboard-field">
+          <label className="dashboard-field-label" htmlFor="site-domain">
+            Website oder Hauptdomain
+          </label>
+          <Input
+            id="site-domain"
+            placeholder="kunde.de"
+            value={form.domain}
+            onChange={(event) => onChange({ ...form, domain: event.target.value })}
+          />
+        </div>
       </div>
 
-      <div className="dashboard-field">
-        <label className="dashboard-field-label" htmlFor="site-domain">
-          Website oder Hauptdomain
-        </label>
-        <Input
-          id="site-domain"
-          placeholder="kunde.de"
-          value={form.domain}
-          onChange={(event) => onChange({ ...form, domain: event.target.value })}
-        />
-      </div>
-
-      <div className="dashboard-card dashboard-card--soft">
+      <div className="dashboard-card dashboard-card--soft site-form__setup-handoff">
         <strong>Agent-Konfiguration folgt im Setup</strong>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
           Nach dem Anlegen konfigurierst du Rolle, Zielgruppe, Aufgaben, Übergabe, Wissen, Tests und Livegang im Setup.
         </p>
       </div>
 
-      <details className="dashboard-card dashboard-card--soft">
+      <details className="dashboard-accordion dashboard-accordion--subtle site-form__details">
         <summary className="dashboard-accordion__summary">
           Erweiterte Angaben
         </summary>
@@ -81,40 +83,42 @@ export function SiteForm({
             Diese Angaben werden nur selten direkt benötigt und können später angepasst werden.
           </p>
 
-          <div className="dashboard-field">
-            <label className="dashboard-field-label" htmlFor="site-key">
-              Einbindungscode
-            </label>
-            <Input
-              id="site-key"
-              placeholder="soule-smart-business"
-              value={form.siteKey}
-              onChange={(event) => onChange({ ...form, siteKey: event.target.value })}
-            />
+          <div className="dashboard-form-grid site-form__advanced-grid">
+            <div className="dashboard-field">
+              <label className="dashboard-field-label" htmlFor="site-key">
+                Einbindungscode
+              </label>
+              <Input
+                id="site-key"
+                placeholder="soule-smart-business"
+                value={form.siteKey}
+                onChange={(event) => onChange({ ...form, siteKey: event.target.value })}
+              />
+            </div>
+
+            <div className="dashboard-field">
+              <label className="dashboard-field-label" htmlFor="tenant-id">
+                Mandant (intern)
+              </label>
+              <Select
+                id="tenant-id"
+                value={form.tenantId}
+                onChange={(event) => onChange({ ...form, tenantId: event.target.value })}
+                disabled={tenantOptions.length === 0}
+              >
+                {tenantOptions.length === 0 ? (
+                  <option value="">Keine Mandanten vorhanden</option>
+                ) : null}
+                {tenantOptions.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
 
-          <div className="dashboard-field">
-            <label className="dashboard-field-label" htmlFor="tenant-id">
-              Mandant (intern)
-            </label>
-            <Select
-              id="tenant-id"
-              value={form.tenantId}
-              onChange={(event) => onChange({ ...form, tenantId: event.target.value })}
-              disabled={tenantOptions.length === 0}
-            >
-              {tenantOptions.length === 0 ? (
-                <option value="">Keine Mandanten vorhanden</option>
-              ) : null}
-              {tenantOptions.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <details className="dashboard-card dashboard-card--soft">
+          <details className="dashboard-accordion dashboard-accordion--subtle site-form__secondary-details">
             <summary className="dashboard-accordion__summary">
               Erweitert / Legacy-Branchenprofile
             </summary>
@@ -122,36 +126,38 @@ export function SiteForm({
               <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
                 Legacy-Branchenprofile nur für bestehende Vorlagen oder Alt-Konfigurationen verwenden.
               </p>
-              <div className="dashboard-field">
-                <label className="dashboard-field-label" htmlFor="site-industry">
-                  Legacy-Branchenprofil
-                </label>
-                <Select
-                  id="site-industry"
-                  value={form.industry}
-                  onChange={(event) => onChange({ ...form, industry: event.target.value })}
-                >
-                  <option value="">Keine Legacy-Vorlage</option>
-                  {industryOptions.map((industry) => (
-                    <option key={industry.key} value={industry.key}>
-                      {industry.label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+              <div className="dashboard-form-grid site-form__advanced-grid">
+                <div className="dashboard-field">
+                  <label className="dashboard-field-label" htmlFor="site-industry">
+                    Legacy-Branchenprofil
+                  </label>
+                  <Select
+                    id="site-industry"
+                    value={form.industry}
+                    onChange={(event) => onChange({ ...form, industry: event.target.value })}
+                  >
+                    <option value="">Keine Legacy-Vorlage</option>
+                    {industryOptions.map((industry) => (
+                      <option key={industry.key} value={industry.key}>
+                        {industry.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
 
-              <div className="dashboard-field">
-                <label className="dashboard-field-label" htmlFor="site-bot-type">
-                  Legacy Bot-Typ
-                </label>
-                <Select
-                  id="site-bot-type"
-                  value={form.botType}
-                  onChange={(event) => onChange({ ...form, botType: event.target.value })}
-                >
-                  <option value="universal-assistant">Universal Assistant</option>
-                  <option value="handwerker-first-contact">Handwerker-Erstkontakt</option>
-                </Select>
+                <div className="dashboard-field">
+                  <label className="dashboard-field-label" htmlFor="site-bot-type">
+                    Legacy Bot-Typ
+                  </label>
+                  <Select
+                    id="site-bot-type"
+                    value={form.botType}
+                    onChange={(event) => onChange({ ...form, botType: event.target.value })}
+                  >
+                    <option value="universal-assistant">Universal Assistant</option>
+                    <option value="handwerker-first-contact">Handwerker-Erstkontakt</option>
+                  </Select>
+                </div>
               </div>
 
               {selectedTemplate ? (
@@ -195,9 +201,14 @@ export function SiteForm({
         </div>
       ) : null}
 
-      <Button type="submit" disabled={submitDisabled}>
-        {submitDisabled ? "Limit erreicht" : "Kunde anlegen"}
-      </Button>
+      <div className="site-form__footer">
+        <p className="dashboard-field-hint dashboard-no-margin-bottom site-form__footer-copy">
+          Kundenanlage bleibt eine kompakte Metadatenfläche. Ziel, Wissen, interner Test und Review folgen erst im Setup.
+        </p>
+        <Button type="submit" disabled={submitDisabled}>
+          {submitDisabled ? "Limit erreicht" : "Kunde anlegen"}
+        </Button>
+      </div>
     </form>
   );
 }

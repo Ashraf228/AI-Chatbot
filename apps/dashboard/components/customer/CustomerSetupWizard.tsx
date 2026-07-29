@@ -1074,10 +1074,10 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       actions={
         <SetupWizardActions
           onBack={() => setWizardStep(activeStepIndex - 1)}
-          onSave={saveCurrentStep}
+          onSave={activeStep.key === "launch" ? undefined : saveCurrentStep}
           onSkip={activeStep.key !== "launch" && activeStep.key !== "knowledge" ? () => setWizardStep(activeStepIndex + 1) : undefined}
-          onPrimary={activeStep.key === "launch" ? goLive : nextStep}
-          primaryLabel={activeStep.key === "launch" ? "Chatfenster live schalten" : "Speichern & weiter"}
+          onPrimary={activeStep.key === "launch" ? undefined : nextStep}
+          primaryLabel="Speichern & weiter"
           isSaving={Boolean(savingKey)}
           backDisabled={activeStepIndex === 0}
           primaryDisabled={
