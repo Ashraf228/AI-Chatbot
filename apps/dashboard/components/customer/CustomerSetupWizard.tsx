@@ -63,8 +63,8 @@ import {
   type KnowledgeMethod,
   type KnowledgeMode,
   type KnowledgeSource,
+  type InternalTestChatTurn,
   type SiteDetails,
-  type TestChatMessage,
 } from "./setup-wizard";
 
 const PRIMARY_GOAL_ROLES: Record<string, string> = {
@@ -153,8 +153,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     consentRequired: true,
   });
   const [testQuestion, setTestQuestion] = useState("");
-  const [testSessionId, setTestSessionId] = useState("");
-  const [testMessages, setTestMessages] = useState<TestChatMessage[]>([]);
+  const [testChatTurns, setTestChatTurns] = useState<InternalTestChatTurn[]>([]);
   useEffect(() => {
     setLoaderUrl(resolveWidgetLoaderUrl(process.env.NEXT_PUBLIC_WIDGET_LOADER_URL));
   }, []);
@@ -165,6 +164,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   const readyActiveSources = sources.filter((source) => source.isActive && source.status === "ready");
   const processingSources = sources.filter((source) => source.status === "pending" || source.status === "processing");
   const failedSources = sources.filter((source) => source.status === "failed");
+  const canUseInternalTestTools = dashboardRole === "admin" || dashboardRole === "operator";
   const knowledgeContinueBlockedReason =
     failedSources.length > 0
       ? "Wissensquellen mit Fehlern blockieren den Schritt. Bitte behebe, aktualisiere oder entferne die fehlerhaften Einträge, bevor du weitergehst."
@@ -726,40 +726,63 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       setError("Bitte eine Testfrage eingeben.");
       return;
     }
+    if (!canUseInternalTestTools) {
+      setError("Der interne Testchat ist nur für Admins oder Operatoren verfügbar.");
+      return;
+    }
 
     setSavingKey("test-chat");
     setError(null);
-    setTestMessages((current) => [...current, { role: "user", text: messageText }]);
     setTestQuestion("");
 
     try {
-      const response = await fetch(`/api/widget/test-chat/${encodeURIComponent(siteId)}`, {
+      const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/conversation-engine/runtime-pilot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: messageText, sessionId: testSessionId }),
+        body: JSON.stringify({
+          message: messageText,
+          history: testChatTurns.flatMap((turn) => {
+            const history: Array<{ role: "user" | "assistant"; content: string }> = [
+              { role: "user", content: turn.userMessage },
+            ];
+            if (turn.assistantDraft.trim()) {
+              history.push({ role: "assistant", content: turn.assistantDraft });
+            }
+            return history;
+          }),
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(typeof data?.message === "string" ? data.message : "Test-Chat konnte nicht antworten.");
+        throw new Error(typeof data?.message === "string" ? data.message : "Interner Testchat konnte nicht antworten.");
       }
-      setTestSessionId(typeof data.sessionId === "string" ? data.sessionId : testSessionId);
-      const answer = typeof data.answer === "string" ? data.answer : "";
-      setTestMessages((current) => [
+      const testedAt = new Date().toISOString();
+      const answer =
+        typeof data?.engineResponsePreview?.draft?.text === "string" && data.engineResponsePreview.draft.text.trim().length > 0
+          ? data.engineResponsePreview.draft.text
+          : "Keine interne Testantwort verfügbar.";
+      setTestChatTurns((current) => [
         ...current,
-        { role: "assistant", text: answer, sources: Array.isArray(data.sources) ? data.sources : [] },
+        {
+          id: `${testedAt}-${current.length + 1}`,
+          testedAt,
+          userMessage: messageText,
+          assistantDraft: answer,
+          result: data,
+          usedKnowledgeSnippets: Array.isArray(data?.knowledgeRetrieval?.snippets) ? data.knowledgeRetrieval.snippets : [],
+        },
       ]);
-      await updateSiteSettings(siteId, {
-        lastTestedAt: new Date().toISOString(),
-        lastTestQuestion: messageText,
-        lastTestAnswer: answer,
-      });
-      await load();
-      setMessage("Test gespeichert.");
+      setMessage("Interner Test ausgeführt. Der Transcript bleibt nur lokal im Browser-State.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Test-Chat konnte nicht ausgeführt werden.");
+      setError(err instanceof Error ? err.message : "Interner Testchat konnte nicht ausgeführt werden.");
     } finally {
       setSavingKey(null);
     }
+  }
+
+  function clearTestChat() {
+    setTestChatTurns([]);
+    setMessage("Interner Testchat lokal geleert.");
   }
 
   async function copyEmbedCode() {
@@ -926,15 +949,20 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
             embedCode={embedCode}
             copiedEmbedCode={copied}
             testQuestion={testQuestion}
-            testMessages={testMessages}
+            testChatTurns={testChatTurns}
             savingKey={savingKey}
             canGoLive={canGoLive}
             isLive={liveDone}
+            sources={sources}
+            readyActiveSources={readyActiveSources}
+            processingSources={processingSources}
+            failedSources={failedSources}
             explanation={STEP_EXPLANATIONS.launch}
             status={statusForWizardStep(serverStatus, "launch")}
             statusLabel={wizardStepStatusLabel(serverStatus, "launch")}
             onChangeTestQuestion={setTestQuestion}
             onSendTestMessage={sendTestMessage}
+            onClearTestChat={clearTestChat}
             onCopyEmbedCode={copyEmbedCode}
             onGoLive={goLive}
             onJumpToStatusStep={jumpToStatusStep}

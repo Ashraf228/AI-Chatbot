@@ -158,6 +158,72 @@ describe("CustomerSetupWizard", () => {
           );
         }
 
+        if (url.includes("/api/sites/site-1/conversation-engine/runtime-pilot")) {
+          return new Response(
+            JSON.stringify({
+              runtimePilotEnabled: true,
+              activationBoundary: {
+                mode: "admin_test_only",
+                publicWidgetActivation: false,
+                productionActivation: false,
+                deployRequired: false,
+              },
+              sideEffects: {
+                planned: false,
+                ticketDelivery: false,
+                emailDelivery: false,
+                webhookDelivery: false,
+                providerCalls: false,
+                dbAccessForNewLogic: false,
+                sql: false,
+                queryRunner: false,
+              },
+              runtimeState: {
+                selectedAgentKey: "support-agent",
+                nextActionKey: "answer_from_knowledge",
+                shouldHandoff: false,
+                shouldAskQuestion: false,
+                handoffOfferSimulated: false,
+                ticketFieldRequestSimulated: false,
+                sourcesUsed: 0,
+                sourceRequired: false,
+              },
+              conversationEnginePreview: {
+                intent: "support",
+                goal: "answer_question",
+                stage: "answer",
+                selectedAgentKey: "support-agent",
+                nextAction: "Antwort geben",
+                shouldHandoff: false,
+                missingFields: [],
+              },
+              engineResponsePreview: {
+                draft: {
+                  text: "Antwort aus internem Runtime-Pilot.",
+                  nextActionLabel: "Antwort geben",
+                },
+                safety: {
+                  noSideEffects: true,
+                  publicWidgetUnaffected: true,
+                  integrationsSuppressed: true,
+                  sanitized: true,
+                },
+              },
+              knowledgeRetrieval: {
+                enabled: false,
+                attempted: false,
+                status: "disabled",
+                snippets: [],
+                warnings: [],
+                reasons: ["Keine synthetischen Wissens-Snippets übergeben."],
+              },
+              warnings: [],
+              reasons: ["Runtime-Pilot nur im Admin-Testpfad."],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        }
+
         return new Response(JSON.stringify({}), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -208,6 +274,64 @@ describe("CustomerSetupWizard", () => {
     await waitFor(() => expect(screen.getByText(/1 Wissensquelle ist im bestehenden Produktpfad gespeichert/i)).toBeInTheDocument());
     expect(screen.getByText(/Der nächste Schritt ist Review & interner Test/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Speichern & weiter$/ })).toBeEnabled();
+  });
+
+  test("admin uses the internal runtime-pilot testchat locally in the launch step", async () => {
+    render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /Review & Livegang/i }));
+
+    expect(screen.getByText("Interner Testchat")).toBeInTheDocument();
+    expect(screen.getByText(/Der Runtime-Pilot nutzt die gespeicherte Agent-Konfiguration/i)).toBeInTheDocument();
+    expect(screen.getByText("Noch keine nutzbare Wissensquelle gespeichert.")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Interne Testfrage"), "Bitte intern prüfen");
+    await userEvent.click(screen.getByRole("button", { name: "Interne Testfrage senden" }));
+
+    await screen.findByText("Antwort aus internem Runtime-Pilot.");
+    expect(screen.getByText("Testfrage 1")).toBeInTheDocument();
+    expect(screen.getByText(/Der Transcript bleibt nur lokal im Browser-State/i)).toBeInTheDocument();
+    expect(updateSiteSettings).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(fetch).mock.calls.some(
+        ([requestUrl]) => String(requestUrl).includes("/api/sites/site-1/conversation-engine/runtime-pilot"),
+      ),
+    ).toBe(true);
+    expect(
+      vi.mocked(fetch).mock.calls.some(
+        ([requestUrl]) => String(requestUrl).includes("/api/widget/test-chat/site-1"),
+      ),
+    ).toBe(false);
+
+    await userEvent.click(screen.getByRole("button", { name: "Lokalen Transcript leeren" }));
+    expect(await screen.findByText("Noch kein interner Test")).toBeInTheDocument();
+  });
+
+  test("launch step shows ready knowledge awareness for admin when a usable source exists", async () => {
+    vi.mocked(getKnowledgeSources).mockResolvedValueOnce([
+      {
+        id: "source-1",
+        type: "manual",
+        title: "Wissen",
+        label: "Wissen",
+        url: "",
+        sourceUrl: "",
+        status: "ready",
+        syncStatus: "ready",
+        isActive: true,
+        lastSyncedAt: "2026-07-27T10:00:00.000Z",
+        errorMessage: "",
+        createdAt: "2026-07-27T10:00:00.000Z",
+      },
+    ]);
+
+    render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /Review & Livegang/i }));
+
+    expect(screen.getByText("1 aktive ready-Quelle vorhanden.")).toBeInTheDocument();
   });
 
   test("saves the KI-Mitarbeiter step with neutral defaults for a site without legacy industry", async () => {
@@ -1109,13 +1233,48 @@ function launchProps(role?: "admin" | "operator" | "customer" | "viewer" | null)
     embedCode: "<script></script>",
     copiedEmbedCode: false,
     testQuestion: "",
-    testMessages: [],
+    testChatTurns: [],
     savingKey: null,
     canGoLive: false,
     isLive: false,
+    sources: [
+      {
+        id: "source-1",
+        type: "manual",
+        title: "Wissen",
+        label: "Wissen",
+        url: "",
+        sourceUrl: "",
+        status: "ready",
+        syncStatus: "ready",
+        isActive: true,
+        lastSyncedAt: "2026-07-27T10:00:00.000Z",
+        errorMessage: "",
+        createdAt: "2026-07-27T10:00:00.000Z",
+      },
+    ],
+    readyActiveSources: [
+      {
+        id: "source-1",
+        type: "manual",
+        title: "Wissen",
+        label: "Wissen",
+        url: "",
+        sourceUrl: "",
+        status: "ready",
+        syncStatus: "ready",
+        isActive: true,
+        lastSyncedAt: "2026-07-27T10:00:00.000Z",
+        errorMessage: "",
+        createdAt: "2026-07-27T10:00:00.000Z",
+      },
+    ],
+    processingSources: [],
+    failedSources: [],
     status: "warning" as const,
     onChangeTestQuestion: vi.fn(),
     onSendTestMessage: vi.fn(),
+    onClearTestChat: vi.fn(),
     onCopyEmbedCode: vi.fn(),
     onGoLive: vi.fn(),
     onJumpToStatusStep: vi.fn(),
@@ -1130,7 +1289,7 @@ describe("LaunchStep review gate", () => {
     render(<LaunchStep {...launchProps(role)} />);
 
     expect(screen.getByText("Setup-Review")).toBeInTheDocument();
-    expect(screen.getByText("Interner Testbereich")).toBeInTheDocument();
+    expect(screen.getByText("Interner Testchat")).toBeInTheDocument();
     expect(screen.getByText("Aktivierungsgrenze")).toBeInTheDocument();
     expect(screen.getByText("Advanced Diagnostics")).toBeInTheDocument();
     expect(screen.getByText(hasExactTextContent("Deploy: nicht freigegeben"))).toBeInTheDocument();
@@ -1146,9 +1305,11 @@ describe("LaunchStep review gate", () => {
     render(<LaunchStep {...launchProps(role)} />);
 
     expect(screen.getByText("Setup-Review")).toBeInTheDocument();
-    expect(screen.getByText("Interner Testbereich")).toBeInTheDocument();
+    expect(screen.getByText("Interner Testchat")).toBeInTheDocument();
     expect(screen.getByText("Aktivierungsgrenze")).toBeInTheDocument();
+    expect(screen.getByText(/nur für Admins und Operatoren sichtbar/i)).toBeInTheDocument();
     expect(screen.queryByText("Advanced Diagnostics")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Interne Testfrage senden" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live schalten" })).not.toBeInTheDocument();
     expect(screen.queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();
     expect(screen.queryByText("Gesprächslogik Testfälle")).not.toBeInTheDocument();
