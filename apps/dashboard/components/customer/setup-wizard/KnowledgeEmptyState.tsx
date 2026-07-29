@@ -9,7 +9,7 @@ export function KnowledgeEmptyState({ onAddClick }: KnowledgeEmptyStateProps) {
     <div className="knowledge-step__empty">
       <EmptyStateCard
         title="Wissen fehlt noch"
-        description="Füge Dokumente oder Website-Inhalte hinzu, damit der Assistent bessere Antworten geben kann."
+        description="Fuege Texte, PDFs oder einzelne Webseiten als Wissensquellen hinzu. Die Website aus dem Kundenprofil wird dabei nicht automatisch gecrawlt."
       />
       {onAddClick ? (
         <button type="button" className="dashboard-button dashboard-button--secondary" onClick={onAddClick}>

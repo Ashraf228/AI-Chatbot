@@ -55,9 +55,20 @@ export function KnowledgeStep({
   canContinue,
   continueHint,
 }: KnowledgeStepProps) {
-  const failedSources = sources.filter((source) => source.status === "failed");
-  const processingSources = sources.filter((source) => source.status === "pending" || source.status === "processing");
-  const inactiveSources = sources.filter((source) => !source.isActive || source.status === "disabled");
+  const normalizedStatus = (source: KnowledgeSource) => (source.status || "").toLowerCase();
+  const failedSources = sources.filter((source) => {
+    const value = normalizedStatus(source);
+    return value === "failed" || value === "error";
+  });
+  const processingSources = sources.filter((source) => {
+    const value = normalizedStatus(source);
+    return value === "pending" || value === "processing";
+  });
+  const inactiveSources = sources.filter((source) => !source.isActive || normalizedStatus(source) === "disabled");
+  const readyInactiveSources = sources.filter((source) => {
+    const value = normalizedStatus(source);
+    return !source.isActive && (value === "ready" || value === "indexed");
+  });
   const sourceLabel = (count: number) => `Wissensquelle${count === 1 ? "" : "n"}`;
   const sourceVerb = (count: number) => (count === 1 ? "ist" : "sind");
   const persistedLabel =
@@ -80,6 +91,19 @@ export function KnowledgeStep({
       : inactiveSources.length > 0 && sources.length === inactiveSources.length
         ? "Noch nicht. Aktiviere mindestens eine Quelle, damit der Testchat Kundenwissen verwenden kann."
         : "Noch nicht. Ohne aktive, einsatzbereite Quelle nutzt der Testchat kein Kundenwissen.";
+  const completionLabel = canContinue
+    ? "Wissensschritt ist fuer Review & internen Test freigegeben."
+    : continueHint;
+  const persistenceBoundaryLabel =
+    sources.length > 0
+      ? "Diese Liste zeigt nur persistent gespeicherte Quellen aus dem bestehenden Produktpfad. Demo-, In-Memory- oder request-lokale Testdaten zaehlen hier nicht."
+      : "Noch keine persistente Quelle vorhanden. Demo-, In-Memory- oder request-lokale Testdaten wuerden hier ebenfalls nicht als gespeichert erscheinen.";
+  const websiteBoundaryLabel =
+    "Die Website oder Domain aus dem Kundenprofil ist nur Stammdatum. Sie wird nicht automatisch als Wissensquelle gecrawlt oder aktiviert.";
+  const completionBreakdownLabel =
+    readyActiveSources.length > 0
+      ? `${readyActiveSources.length} aktive ready-Quelle${readyActiveSources.length === 1 ? "" : "n"} zaehlen aktuell fuer die Einrichtung.`
+      : "Noch keine aktive ready-Quelle zaehlt fuer die Einrichtung.";
 
   return (
     <section className="dashboard-card dashboard-stack knowledge-step" id="setup-step-knowledge">
@@ -101,13 +125,32 @@ export function KnowledgeStep({
           Dieser Einrichtungsschritt nutzt nur den bestehenden Produktpfad. Demo-/In-Memory-Wissen aus anderen
           Bereichen zaehlt hier nicht als Abschluss.
         </p>
-        <div className="dashboard-grid dashboard-grid--metrics-2">
+        <div className="dashboard-grid dashboard-grid--metrics-3">
           <CompactMetricCard label="Gespeichert" value={persistedLabel} />
+          <CompactMetricCard label="Bereit" value={`${readyActiveSources.length} aktiv einsatzbereit`} />
+          <CompactMetricCard label="In Verarbeitung" value={`${processingSources.length}`} />
+          <CompactMetricCard label="Fehlerhaft" value={`${failedSources.length}`} />
           <CompactMetricCard label="Verarbeitung" value={processingLabel} />
           <CompactMetricCard label="Testchat" value={testchatLabel} />
           <CompactMetricCard label="Weiter zum Review" value={canContinue ? "Freigegeben" : "Noch blockiert"} />
         </div>
+        <div className="dashboard-grid dashboard-grid--metrics-2">
+          <CompactMetricCard label="Persistenzgrenze" value={persistenceBoundaryLabel} />
+          <CompactMetricCard label="Completion-Regel" value={completionBreakdownLabel} />
+          <CompactMetricCard
+            label="Inaktive Quellen"
+            value={
+              readyInactiveSources.length > 0
+                ? `${readyInactiveSources.length} ready-Quelle${readyInactiveSources.length === 1 ? "" : "n"} ${readyInactiveSources.length === 1 ? "ist" : "sind"} gespeichert, aber nicht aktiv.`
+                : inactiveSources.length > 0
+                  ? `${inactiveSources.length} Quelle${inactiveSources.length === 1 ? "" : "n"} ${inactiveSources.length === 1 ? "ist" : "sind"} derzeit nicht aktiv.`
+                  : "Keine inaktive Quelle vorhanden."
+            }
+          />
+          <CompactMetricCard label="Website-Grenze" value={websiteBoundaryLabel} />
+        </div>
         <p className={`dashboard-status ${canContinue ? "dashboard-status--success" : "dashboard-status--info"}`}>{continueHint}</p>
+        <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">{completionLabel}</p>
       </div>
       <KnowledgeAddSourcePanel
         method={selectedMethod}
