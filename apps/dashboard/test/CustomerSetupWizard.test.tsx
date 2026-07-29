@@ -299,6 +299,12 @@ describe("CustomerSetupWizard", () => {
 
     await screen.findByText("Antwort aus internem Runtime-Pilot.");
     expect(screen.getByText("Testfrage 1")).toBeInTheDocument();
+    expect(screen.getByText("Hauptantwort")).toBeInTheDocument();
+    expect(screen.getByText("Operator-Auswertung")).toBeInTheDocument();
+    expect(screen.getByText("Antwortentwurf bereit")).toBeInTheDocument();
+    expect(screen.getByText(/Keine synthetischen Wissens-Snippets/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Runtime-Pilot nur im Admin-Testpfad/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Technische Diagnose (optional)")).toBeInTheDocument();
     expect(screen.getByText(/Der Transcript bleibt nur lokal im Browser-State/i)).toBeInTheDocument();
     expect(updateSiteSettings).not.toHaveBeenCalled();
     expect(

@@ -70,6 +70,139 @@ function usedKnowledgeLabel(turn: InternalTestChatTurn) {
     .join(", ");
 }
 
+function uniqueItems(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
+
+function resultTone(turn: InternalTestChatTurn) {
+  const shouldHandoff = turn.result.runtimeState?.shouldHandoff || turn.result.conversationEnginePreview?.shouldHandoff;
+  const shouldAskQuestion = turn.result.runtimeState?.shouldAskQuestion;
+  const missingFields = turn.result.conversationEnginePreview?.missingFields || [];
+  const sourceRequired = turn.result.runtimeState?.sourceRequired;
+  const snippetsUsed = turn.usedKnowledgeSnippets.length > 0;
+
+  if (!turn.assistantDraft.trim()) {
+    return "error";
+  }
+  if (shouldHandoff) {
+    return "warning";
+  }
+  if (shouldAskQuestion || missingFields.length > 0) {
+    return "pending";
+  }
+  if (sourceRequired && !snippetsUsed) {
+    return "warning";
+  }
+  return "success";
+}
+
+function resultLabel(turn: InternalTestChatTurn) {
+  const shouldHandoff = turn.result.runtimeState?.shouldHandoff || turn.result.conversationEnginePreview?.shouldHandoff;
+  const shouldAskQuestion = turn.result.runtimeState?.shouldAskQuestion;
+  const missingFields = turn.result.conversationEnginePreview?.missingFields || [];
+  const sourceRequired = turn.result.runtimeState?.sourceRequired;
+  const snippetsUsed = turn.usedKnowledgeSnippets.length > 0;
+
+  if (!turn.assistantDraft.trim()) {
+    return "Keine belastbare Testantwort";
+  }
+  if (shouldHandoff) {
+    return "Uebergabe empfohlen";
+  }
+  if (shouldAskQuestion || missingFields.length > 0) {
+    return "Rueckfrage erforderlich";
+  }
+  if (sourceRequired && !snippetsUsed) {
+    return "Wissen reicht fuer diese Frage noch nicht";
+  }
+  if (snippetsUsed) {
+    return "Antwort mit Wissensbezug";
+  }
+  return "Antwortentwurf bereit";
+}
+
+function knowledgeSummary(turn: InternalTestChatTurn) {
+  const retrieval = turn.result.knowledgeRetrieval;
+  const reasons = retrieval?.reasons || [];
+  const warnings = retrieval?.warnings || [];
+
+  if (turn.usedKnowledgeSnippets.length > 0) {
+    return `${turn.usedKnowledgeSnippets.length} Wissenshinweis${turn.usedKnowledgeSnippets.length === 1 ? "" : "e"} sichtbar.`;
+  }
+  if (retrieval?.status === "disabled") {
+    return reasons[0] || "Knowledge-Retrieval in diesem Testpfad deaktiviert.";
+  }
+  if (retrieval?.status === "blocked") {
+    return warnings[0] || reasons[0] || "Knowledge-Zugriff fuer diesen Testlauf blockiert.";
+  }
+  if (retrieval?.attempted) {
+    return warnings[0] || reasons[0] || "Knowledge wurde angefragt, aber ohne nutzbaren Hinweis beendet.";
+  }
+  if (turn.result.runtimeState?.sourceRequired) {
+    return "Diese Frage braucht Wissen, aber im Testlauf liegt kein nutzbarer Wissenshinweis vor.";
+  }
+  return "Kein Wissenshinweis fuer diesen Testlauf erforderlich oder geliefert.";
+}
+
+function conversationSummary(turn: InternalTestChatTurn) {
+  const preview = turn.result.conversationEnginePreview;
+  const runtime = turn.result.runtimeState;
+  const parts = [
+    preview?.intent ? `Intent: ${preview.intent}` : null,
+    preview?.goal ? `Ziel: ${preview.goal}` : null,
+    preview?.stage ? `Phase: ${preview.stage}` : null,
+    runtime?.selectedAgentKey || preview?.selectedAgentKey
+      ? `Agent: ${runtime?.selectedAgentKey || preview?.selectedAgentKey}`
+      : null,
+    turn.result.engineResponsePreview?.draft?.nextActionLabel || runtime?.nextActionKey || preview?.nextAction
+      ? `Naechster Schritt: ${
+          turn.result.engineResponsePreview?.draft?.nextActionLabel || runtime?.nextActionKey || preview?.nextAction
+        }`
+      : null,
+  ];
+  return uniqueItems(parts).join(" · ") || "Keine Gespraechslogik-Vorschau verfuegbar.";
+}
+
+function handoffSummary(turn: InternalTestChatTurn) {
+  const shouldHandoff = turn.result.runtimeState?.shouldHandoff || turn.result.conversationEnginePreview?.shouldHandoff;
+  const shouldAskQuestion = turn.result.runtimeState?.shouldAskQuestion;
+  const missingFields = turn.result.conversationEnginePreview?.missingFields || [];
+
+  if (shouldHandoff) {
+    return "Runtime-Pilot markiert diesen Verlauf als Uebergabe-Fall. Keine echte Weiterleitung wurde ausgeloest.";
+  }
+  if (shouldAskQuestion && missingFields.length > 0) {
+    return `Vor einer belastbaren Antwort fehlen noch Angaben: ${missingFields.join(", ")}.`;
+  }
+  if (shouldAskQuestion) {
+    return "Vor einer belastbaren Antwort ist noch eine Rueckfrage noetig.";
+  }
+  if (missingFields.length > 0) {
+    return `Fehlende Angaben erkannt: ${missingFields.join(", ")}.`;
+  }
+  return "Keine Uebergabe und keine fehlenden Pflichtangaben im aktuellen Testlauf.";
+}
+
+function safetySummary(turn: InternalTestChatTurn) {
+  const activation = turn.result.activationBoundary;
+  const sideEffects = turn.result.sideEffects;
+  const parts = [
+    activation?.publicWidgetActivation ? "oeffentliches Chatfenster aktiviert" : "oeffentliches Chatfenster aus",
+    activation?.productionActivation ? "Produktivbetrieb aktiviert" : "Produktivbetrieb aus",
+    activation?.deployRequired ? "Deploy waere noetig" : "kein Deploy noetig",
+    sideEffects?.ticketDelivery ? "Ticket-Auslieferung aktiv" : "keine Ticket-Auslieferung",
+    sideEffects?.emailDelivery ? "E-Mail-Auslieferung aktiv" : "keine E-Mail-Auslieferung",
+    sideEffects?.webhookDelivery ? "Webhook-Auslieferung aktiv" : "keine Webhook-Auslieferung",
+    sideEffects?.providerCalls ? "Provider Calls aktiv" : "keine Provider Calls",
+    sideEffects?.queryRunner ? "Query Runner aktiv" : "kein Query Runner",
+  ];
+  return parts.join(" · ");
+}
+
+function visibleWarnings(turn: InternalTestChatTurn) {
+  return uniqueItems([...(turn.result.warnings || []), ...(turn.result.reasons || []), ...(turn.result.knowledgeRetrieval?.warnings || [])]);
+}
+
 export function TestChatPanel({
   site,
   sources,
@@ -166,7 +299,7 @@ export function TestChatPanel({
             {turns.length === 0 ? (
               <EmptyStateCard
                 title="Noch kein interner Test"
-                description="Stelle eine Testfrage, um Antwortentwurf, Knowledge-Hinweise und Side-Effect-Grenzen gegen den gespeicherten Setup-Stand zu prüfen."
+                description="Stelle eine Testfrage, um Hauptantwort, Operator-Auswertung, Knowledge-Status und Side-Effect-Grenzen gegen den gespeicherten Setup-Stand zu pruefen."
               />
             ) : (
               turns.map((turn, index) => (
@@ -176,14 +309,50 @@ export function TestChatPanel({
                     <p className="dashboard-copy dashboard-no-margin-bottom">{turn.userMessage}</p>
                   </div>
                   <div>
-                    <strong>Antwortentwurf</strong>
+                    <div className="dashboard-inline dashboard-wrap">
+                      <span className={`dashboard-status dashboard-status--${resultTone(turn)}`}>{resultLabel(turn)}</span>
+                      <span className="dashboard-badge">Interner Test ohne Livegang</span>
+                    </div>
+                  </div>
+                  <div>
+                    <strong>Hauptantwort</strong>
                     <p className="dashboard-copy dashboard-no-margin-bottom">{safeMessageText(turn.assistantDraft)}</p>
                   </div>
-                  <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-                    Knowledge im Test genutzt: {usedKnowledgeLabel(turn)}
-                  </p>
+                  <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
+                    <strong>Operator-Auswertung</strong>
+                    <div className="dashboard-grid dashboard-grid--metrics-2">
+                      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
+                        <strong>Knowledge-Status</strong>
+                        <p className="dashboard-copy dashboard-no-margin-bottom">{knowledgeSummary(turn)}</p>
+                        <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+                          Knowledge im Test genutzt: {usedKnowledgeLabel(turn)}
+                        </p>
+                      </div>
+                      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
+                        <strong>Gespraechslogik</strong>
+                        <p className="dashboard-copy dashboard-no-margin-bottom">{conversationSummary(turn)}</p>
+                      </div>
+                      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
+                        <strong>Uebergabe & fehlende Angaben</strong>
+                        <p className="dashboard-copy dashboard-no-margin-bottom">{handoffSummary(turn)}</p>
+                      </div>
+                      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
+                        <strong>Side-Effect-Grenze</strong>
+                        <p className="dashboard-copy dashboard-no-margin-bottom">{safetySummary(turn)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  {visibleWarnings(turn).length ? (
+                    <div className="dashboard-stack dashboard-stack--xs">
+                      {visibleWarnings(turn).map((warning) => (
+                        <p key={warning} className="dashboard-status dashboard-status--warning">
+                          {warning}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
                   <details className="dashboard-card dashboard-card--soft">
-                    <summary className="dashboard-copy">Technische Details (optional)</summary>
+                    <summary className="dashboard-copy">Technische Diagnose (optional)</summary>
                     <div className="dashboard-stack dashboard-stack--xs">
                       <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
                         intent={turn.result.conversationEnginePreview?.intent || "unknown"} · goal=
@@ -212,9 +381,9 @@ export function TestChatPanel({
                         {String(turn.result.sideEffects?.providerCalls ?? false)} · queryRunner=
                         {String(turn.result.sideEffects?.queryRunner ?? false)}
                       </p>
-                      {turn.result.warnings?.length ? (
+                      {visibleWarnings(turn).length ? (
                         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-                          Hinweise: {turn.result.warnings.join(" | ")}
+                          Hinweise: {visibleWarnings(turn).join(" | ")}
                         </p>
                       ) : null}
                     </div>
