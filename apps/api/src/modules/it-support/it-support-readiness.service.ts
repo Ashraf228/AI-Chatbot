@@ -147,7 +147,7 @@ export class ItSupportReadinessService {
       `SELECT
          COUNT(*) FILTER (
            WHERE COALESCE(is_active, true) = true
-             AND sync_status = 'ready'
+             AND runtime_readiness = 'ready'
          ) AS active_count,
          COUNT(DISTINCT config->>'templateKey') FILTER (
            WHERE source_type = 'it_support_template'

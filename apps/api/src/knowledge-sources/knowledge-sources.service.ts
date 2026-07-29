@@ -2,9 +2,19 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../db/prisma.service';
 import { SitesService } from '../sites/sites.service';
+import {
+  deriveLegacySyncStatus,
+  normalizeKnowledgeSourceRuntimeReadiness,
+  normalizeKnowledgeSourceUrlMetadata,
+  resolveKnowledgeSourceLifecycle,
+  sanitizeKnowledgeSourceErrorMessage,
+  type KnowledgeSourceIngestStatus,
+  type KnowledgeSourceIndexStatus,
+  type KnowledgeSourceRuntimeReadiness,
+  type KnowledgeSourceStatus,
+} from './knowledge-source-readiness';
 
 export type KnowledgeSourceType = 'faq' | 'pdf' | 'url' | 'manual' | 'product' | 'it_support_template' | 'other';
-export type KnowledgeSourceStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'disabled';
 
 type KnowledgeSourceRow = {
   id: string;
@@ -17,7 +27,15 @@ type KnowledgeSourceRow = {
   sync_status: string;
   is_active?: boolean | null;
   last_synced_at?: string | null;
+  last_ingest_at?: string | null;
   error_message?: string | null;
+  ingest_status?: string | null;
+  index_status?: string | null;
+  runtime_readiness?: string | null;
+  ingest_error_code?: string | null;
+  ingest_error_message_sanitized?: string | null;
+  normalized_source_url?: string | null;
+  source_domain?: string | null;
   config: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
@@ -49,13 +67,6 @@ function normalizeSourceType(value: string): KnowledgeSourceType {
   }
 }
 
-function normalizeStatus(value: string): KnowledgeSourceStatus {
-  if (['pending', 'processing', 'ready', 'failed', 'disabled'].includes(value)) {
-    return value as KnowledgeSourceStatus;
-  }
-  return 'ready';
-}
-
 @Injectable()
 export class KnowledgeSourcesService {
   constructor(
@@ -65,11 +76,18 @@ export class KnowledgeSourcesService {
 
   private mapRow(row: KnowledgeSourceRow) {
     const config = normalizeRecord(row.config);
-    const status = normalizeStatus(row.sync_status);
     const isActive =
       typeof row.is_active === 'boolean'
         ? row.is_active
-        : status !== 'disabled' && config.isActive !== false;
+        : row.sync_status !== 'disabled' && config.isActive !== false;
+    const lifecycle = resolveKnowledgeSourceLifecycle({
+      syncStatus: row.sync_status,
+      ingestStatus: row.ingest_status,
+      indexStatus: row.index_status,
+      runtimeReadiness: row.runtime_readiness,
+      isActive,
+      lastSyncedAt: row.last_synced_at,
+    });
 
     return {
       id: row.id,
@@ -82,11 +100,20 @@ export class KnowledgeSourcesService {
       description: row.description || '',
       url: row.source_url || '',
       sourceUrl: row.source_url || '',
-      status,
-      syncStatus: status,
+      normalizedSourceUrl: row.normalized_source_url || row.source_url || '',
+      sourceDomain: row.source_domain || '',
+      status: lifecycle.syncStatus,
+      syncStatus: lifecycle.syncStatus,
+      ingestStatus: lifecycle.ingestStatus,
+      indexStatus: lifecycle.indexStatus,
+      runtimeReadiness: lifecycle.runtimeReadiness,
       isActive,
       lastSyncedAt: row.last_synced_at || null,
+      lastIngestAt: row.last_ingest_at || null,
       errorMessage: row.error_message || '',
+      ingestErrorCode: row.ingest_error_code || '',
+      ingestErrorMessageSanitized: row.ingest_error_message_sanitized || '',
+      isAnswerReady: isActive && normalizeKnowledgeSourceRuntimeReadiness(lifecycle.runtimeReadiness) === 'ready',
       metadata: config,
       config,
       createdAt: row.created_at,
@@ -112,7 +139,15 @@ export class KnowledgeSourcesService {
          sync_status,
          is_active,
          last_synced_at,
+         last_ingest_at,
          error_message,
+         ingest_status,
+         index_status,
+         runtime_readiness,
+         ingest_error_code,
+         ingest_error_message_sanitized,
+         normalized_source_url,
+         source_domain,
          config,
          created_at,
          updated_at
@@ -138,7 +173,15 @@ export class KnowledgeSourcesService {
          sync_status,
          is_active,
          last_synced_at,
+         last_ingest_at,
          error_message,
+         ingest_status,
+         index_status,
+         runtime_readiness,
+         ingest_error_code,
+         ingest_error_message_sanitized,
+         normalized_source_url,
+         source_domain,
          config,
          created_at,
          updated_at
@@ -161,8 +204,20 @@ export class KnowledgeSourcesService {
     config?: Record<string, unknown>;
     syncStatus?: KnowledgeSourceStatus;
     isActive?: boolean;
+    ingestStatus?: KnowledgeSourceIngestStatus;
+    indexStatus?: KnowledgeSourceIndexStatus;
+    runtimeReadiness?: KnowledgeSourceRuntimeReadiness;
   }) {
     const id = randomUUID();
+    const isActive = input.isActive !== false;
+    const lifecycle = resolveKnowledgeSourceLifecycle({
+      syncStatus: input.syncStatus,
+      ingestStatus: input.ingestStatus,
+      indexStatus: input.indexStatus,
+      runtimeReadiness: input.runtimeReadiness,
+      isActive,
+    });
+    const urlMetadata = normalizeKnowledgeSourceUrlMetadata(input.sourceUrl);
     await this.db.query(
       `INSERT INTO knowledge_sources(
          id,
@@ -174,12 +229,20 @@ export class KnowledgeSourcesService {
          source_url,
          sync_status,
          is_active,
+         ingest_status,
+         index_status,
+         runtime_readiness,
+         ingest_error_code,
+         ingest_error_message_sanitized,
+         normalized_source_url,
+         source_domain,
          config,
          last_synced_at,
+         last_ingest_at,
          error_message,
          created_at,
          updated_at
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, null, now(), now())`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, null, null, $13, $14, $15::jsonb, $16, $17, null, now(), now())`,
       [
         id,
         input.tenantId,
@@ -188,10 +251,16 @@ export class KnowledgeSourcesService {
         input.label,
         input.description || null,
         input.sourceUrl || null,
-        input.syncStatus || 'ready',
-        input.isActive !== false,
+        lifecycle.syncStatus,
+        isActive,
+        lifecycle.ingestStatus,
+        lifecycle.indexStatus,
+        lifecycle.runtimeReadiness,
+        urlMetadata.normalizedSourceUrl,
+        urlMetadata.sourceDomain,
         JSON.stringify(normalizeRecord(input.config)),
-        input.syncStatus === 'ready' ? new Date().toISOString() : null,
+        lifecycle.runtimeReadiness === 'ready' ? new Date().toISOString() : null,
+        lifecycle.ingestStatus !== 'created' ? new Date().toISOString() : null,
       ],
     );
 
@@ -199,29 +268,47 @@ export class KnowledgeSourcesService {
   }
 
   async setActive(sourceId: string, isActive: boolean) {
-    const status: KnowledgeSourceStatus = isActive ? 'ready' : 'disabled';
+    const existing = await this.getById(sourceId);
+    if (!existing) {
+      throw new NotFoundException('Knowledge source not found');
+    }
+
+    const status: KnowledgeSourceStatus = deriveLegacySyncStatus({
+      syncStatus: existing.syncStatus,
+      ingestStatus: existing.ingestStatus,
+      runtimeReadiness: existing.runtimeReadiness,
+      isActive,
+    });
     const res = await this.db.query<KnowledgeSourceRow>(
       `UPDATE knowledge_sources
        SET is_active = $2,
-           sync_status = CASE WHEN $2 = false THEN 'disabled' ELSE CASE WHEN sync_status = 'disabled' THEN 'ready' ELSE sync_status END END,
+           sync_status = $3,
            updated_at = now()
        WHERE id = $1
        RETURNING id, tenant_id, site_id, source_type, label, description, source_url, sync_status, is_active,
-                 last_synced_at, error_message, config, created_at, updated_at`,
-      [sourceId, isActive],
+                 last_synced_at, last_ingest_at, error_message, ingest_status, index_status, runtime_readiness,
+                 ingest_error_code, ingest_error_message_sanitized, normalized_source_url, source_domain,
+                 config, created_at, updated_at`,
+      [sourceId, isActive, status],
     );
     const row = res.rows[0];
     if (!row) {
       throw new NotFoundException('Knowledge source not found');
     }
-    return this.mapRow({ ...row, sync_status: status });
+    return this.mapRow({ ...row, sync_status: status, is_active: isActive });
   }
 
   async markProcessing(sourceId: string) {
     await this.db.query(
       `UPDATE knowledge_sources
        SET sync_status = 'processing',
+           ingest_status = 'processing',
+           index_status = 'pending',
+           runtime_readiness = 'not_ready',
+           ingest_error_code = null,
+           ingest_error_message_sanitized = null,
            error_message = null,
+           last_ingest_at = now(),
            updated_at = now()
        WHERE id = $1`,
       [sourceId],
@@ -232,8 +319,14 @@ export class KnowledgeSourcesService {
     await this.db.query(
       `UPDATE knowledge_sources
        SET sync_status = 'ready',
+           ingest_status = 'extracted',
+           index_status = 'indexed',
+           runtime_readiness = 'ready',
            is_active = true,
            last_synced_at = now(),
+           last_ingest_at = now(),
+           ingest_error_code = null,
+           ingest_error_message_sanitized = null,
            error_message = null,
            config = COALESCE(config, '{}'::jsonb) || $2::jsonb,
            updated_at = now()
@@ -242,14 +335,38 @@ export class KnowledgeSourcesService {
     );
   }
 
-  async markFailed(sourceId: string, message: string) {
+  async markExtracted(sourceId: string, metadataPatch?: Record<string, unknown>) {
+    await this.db.query(
+      `UPDATE knowledge_sources
+       SET sync_status = 'processing',
+           ingest_status = 'extracted',
+           index_status = 'not_requested',
+           runtime_readiness = 'not_ready',
+           ingest_error_code = null,
+           ingest_error_message_sanitized = null,
+           error_message = null,
+           last_ingest_at = now(),
+           config = COALESCE(config, '{}'::jsonb) || $2::jsonb,
+           updated_at = now()
+       WHERE id = $1`,
+      [sourceId, JSON.stringify(normalizeRecord(metadataPatch))],
+    );
+  }
+
+  async markFailed(sourceId: string, message: string, errorCode = 'ingest_failed') {
     await this.db.query(
       `UPDATE knowledge_sources
        SET sync_status = 'failed',
+           ingest_status = 'failed',
+           index_status = 'failed',
+           runtime_readiness = 'failed',
+           ingest_error_code = $3,
+           ingest_error_message_sanitized = $4,
            error_message = $2,
+           last_ingest_at = now(),
            updated_at = now()
        WHERE id = $1`,
-      [sourceId, message.slice(0, 1000)],
+      [sourceId, message.slice(0, 1000), errorCode, sanitizeKnowledgeSourceErrorMessage(message)],
     );
   }
 

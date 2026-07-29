@@ -33,7 +33,7 @@ test('VectorService.search filters active ready knowledge sources and scopes ten
 
   assert.equal(rows.length, 1);
   assert.match(captured.sql, /COALESCE\(ks\.is_active, true\) = true/);
-  assert.match(captured.sql, /COALESCE\(ks\.sync_status, 'ready'\) = 'ready'/);
+  assert.match(captured.sql, /COALESCE\(ks\.runtime_readiness, 'ready'\) = 'ready'/);
   assert.deepEqual(captured.params.slice(0, 2), ['tenant-1', 'site-1']);
   assert.equal(captured.params[4], 0.7);
 });

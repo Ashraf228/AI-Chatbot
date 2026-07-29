@@ -366,10 +366,10 @@ export class BusinessAnalyticsService {
     }>(
       `SELECT
          COUNT(*)::text AS total,
-         COUNT(*) FILTER (WHERE sync_status = 'ready')::text AS ready,
-         COUNT(*) FILTER (WHERE sync_status = 'processing')::text AS processing,
-         COUNT(*) FILTER (WHERE sync_status = 'failed')::text AS failed,
-         COUNT(*) FILTER (WHERE sync_status = 'ready' AND COALESCE(is_active, true) = true)::text AS active_ready
+         COUNT(*) FILTER (WHERE runtime_readiness = 'ready')::text AS ready,
+         COUNT(*) FILTER (WHERE runtime_readiness <> 'ready' AND ingest_status IN ('created', 'processing', 'extracted'))::text AS processing,
+         COUNT(*) FILTER (WHERE runtime_readiness = 'failed' OR ingest_status = 'failed')::text AS failed,
+         COUNT(*) FILTER (WHERE runtime_readiness = 'ready' AND COALESCE(is_active, true) = true)::text AS active_ready
        FROM knowledge_sources
        WHERE site_id = $1`,
       [siteId],
@@ -394,7 +394,7 @@ export class BusinessAnalyticsService {
       [siteIds],
     );
     const knowledge = await this.db.query<{ site_id: string; active_ready: string }>(
-      `SELECT site_id, COUNT(*) FILTER (WHERE sync_status = 'ready' AND COALESCE(is_active, true) = true)::text AS active_ready
+      `SELECT site_id, COUNT(*) FILTER (WHERE runtime_readiness = 'ready' AND COALESCE(is_active, true) = true)::text AS active_ready
        FROM knowledge_sources
        WHERE site_id = ANY($1::text[])
        GROUP BY site_id`,
