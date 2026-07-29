@@ -202,7 +202,7 @@ export class SiteStatusService {
        LEFT JOIN knowledge_sources ks ON ks.id = d.source_id
        WHERE d.site_id = $1
          AND COALESCE(ks.is_active, true) = true
-         AND COALESCE(ks.sync_status, 'ready') = 'ready'`,
+         AND COALESCE(ks.runtime_readiness, 'ready') = 'ready'`,
       [siteId],
     );
     const knowledgeCount = Number(knowledge.rows[0]?.count || 0);

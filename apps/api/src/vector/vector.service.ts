@@ -143,7 +143,7 @@ export class VectorService {
           AND c.site_id = $2
           AND c.embedding IS NOT NULL
           AND COALESCE(ks.is_active, true) = true
-          AND COALESCE(ks.sync_status, 'ready') = 'ready'
+          AND COALESCE(ks.runtime_readiness, 'ready') = 'ready'
           AND (
             $6::boolean = false
             OR (

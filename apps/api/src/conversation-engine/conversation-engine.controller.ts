@@ -765,7 +765,7 @@ export class ConversationEngineController {
        FROM knowledge_sources
        WHERE site_id = $1
          AND is_active IS DISTINCT FROM false
-         AND sync_status = 'ready'`,
+         AND runtime_readiness = 'ready'`,
       [siteId],
     );
     return Number(res.rows[0]?.count || 0) > 0;
