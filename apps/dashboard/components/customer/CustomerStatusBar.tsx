@@ -201,7 +201,7 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
         <span>{domain || "Keine Domain hinterlegt"}</span>
       </div>
 
-      <div className="customer-status-bar__states">
+      <div className="customer-status-bar__states customer-status-bar__segment">
         <CustomerStatusBadge
           status={status ? mapStatusSeverityToTone(status.severity) : "pending"}
           label={status?.label || "Status wird geladen"}
@@ -214,13 +214,13 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
         </span>
       </div>
 
-      <div className="customer-status-bar__next">
+      <div className="customer-status-bar__next customer-status-bar__segment">
         <span>Aktiver Fokus</span>
         <strong>{activeAreaLabel}</strong>
         <small>{activeAreaDescription}</small>
       </div>
 
-      <div className="customer-status-bar__next">
+      <div className="customer-status-bar__next customer-status-bar__segment">
         <span>Nächster Schritt</span>
         <strong>{isLive ? "Betrieb prüfen" : status?.nextAction?.label || mainAction.label}</strong>
         <small>{isLive ? "Live-Betrieb beobachten und Testpfad sauber halten." : "Setup bleibt Source of Truth bis zum Review-Gate."}</small>
@@ -235,18 +235,26 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
       </div>
 
       <div className="customer-status-bar__actions">
-        <Link href={mainAction.href} className="dashboard-button dashboard-button--primary">
+        <Link href={mainAction.href} className="dashboard-button dashboard-button--primary customer-status-bar__action">
           {mainAction.label}
         </Link>
-        <Button type="button" variant="secondary" onClick={copyEmbedCode}>
+        <Button type="button" variant="secondary" onClick={copyEmbedCode} className="customer-status-bar__action">
           Widget-Code kopieren
         </Button>
         {previewUrl ? (
-          <a href={previewUrl} target="_blank" rel="noreferrer" className="dashboard-button dashboard-button--secondary">
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="dashboard-button dashboard-button--secondary customer-status-bar__action"
+          >
             Vorschau öffnen
           </a>
         ) : null}
-        <Link href={`/sites/${siteSlug}/analytics`} className="dashboard-button dashboard-button--secondary">
+        <Link
+          href={`/sites/${siteSlug}/analytics`}
+          className="dashboard-button dashboard-button--secondary customer-status-bar__action"
+        >
           Analytics ansehen
         </Link>
       </div>

@@ -28,8 +28,8 @@ export function KnowledgeSourceCard({ source, savingKey, onToggle, onRefresh, on
   return (
     <div className="knowledge-step__source-card">
       <div className="knowledge-step__source-main">
-        <div>
-          <strong>{title}</strong>
+        <div className="knowledge-step__source-heading">
+          <strong className="knowledge-step__source-title">{title}</strong>
           <p className="knowledge-step__source-meta">{meta.join(" · ")}</p>
           <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
             {formatKnowledgeSourceUpdatedAt(source.lastSyncedAt || source.createdAt)}
