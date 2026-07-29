@@ -33,16 +33,25 @@ export function statusLabel(source: KnowledgeSource) {
 
 export function formatKnowledgeSourceType(type: string) {
   const normalized = type.toLowerCase();
-  if (normalized === "url" || normalized === "website") {
-    return "Website";
+  if (normalized === "url_metadata") {
+    return "Website-Metadatum";
   }
-  if (normalized === "pdf" || normalized === "document") {
+  if (normalized === "demo" || normalized === "test" || normalized === "synthetic") {
+    return "Demo-/Testwissen";
+  }
+  if (normalized === "url" || normalized === "website") {
+    return "Webseite (einzeln importiert)";
+  }
+  if (normalized === "pdf") {
+    return "PDF";
+  }
+  if (normalized === "document") {
     return "Dokument";
   }
   if (normalized === "manual" || normalized === "faq" || normalized === "text") {
     return "Text";
   }
-  return "Wissensquelle";
+  return "Nicht eindeutig";
 }
 
 export function formatKnowledgeSourceStatus(status: string, isActive: boolean) {
@@ -58,7 +67,7 @@ export function formatKnowledgeSourceStatus(status: string, isActive: boolean) {
   if (status === "failed" || status === "error") {
     return "Fehler";
   }
-  return "Offen";
+  return "Nicht eindeutig";
 }
 
 export function formatKnowledgeSourceUpdatedAt(value: string | null | undefined) {

@@ -263,7 +263,13 @@ describe("CustomerSetupWizard", () => {
     await userEvent.click(screen.getByRole("button", { name: /5WissenPDF, Website, FAQ oder eigene Texte/i }));
 
     expect(screen.getByText("Noch keine persistente Wissensquelle gespeichert.")).toBeInTheDocument();
-    expect(screen.getByText(/Speichere und aktiviere mindestens eine einsatzbereite Wissensquelle/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Demo-, In-Memory- oder request-lokale Testdaten wuerden hier ebenfalls nicht als gespeichert erscheinen/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Die Website oder Domain aus dem Kundenprofil ist nur Stammdatum/i),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Speichere und aktiviere mindestens eine einsatzbereite Wissensquelle/i).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Später erledigen" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Speichern & weiter$/ })).toBeDisabled();
   });
@@ -279,7 +285,84 @@ describe("CustomerSetupWizard", () => {
 
     await waitFor(() => expect(screen.getByText(/1 Wissensquelle ist im bestehenden Produktpfad gespeichert/i)).toBeInTheDocument());
     expect(screen.getByText(/Der nächste Schritt ist Review & interner Test/i)).toBeInTheDocument();
+    expect(screen.getByText("Persistent im bestehenden Produktpfad gespeichert.")).toBeInTheDocument();
+    expect(screen.getByText("Im internen Test nutzbar.")).toBeInTheDocument();
+    expect(screen.getByText("Zaehlt fuer Einrichtung und Save-and-Continue.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Speichern & weiter$/ })).toBeEnabled();
+  });
+
+  test("shows knowledge source status, website boundary, and completion relevance for mixed source states", async () => {
+    vi.mocked(getKnowledgeSources).mockImplementation(async () => [
+      {
+        id: "source-ready",
+        type: "manual",
+        title: "FAQ Öffnungszeiten",
+        label: "FAQ Öffnungszeiten",
+        url: "",
+        sourceUrl: "",
+        status: "ready",
+        syncStatus: "ready",
+        isActive: true,
+        lastSyncedAt: "2026-07-27T10:00:00.000Z",
+        errorMessage: "",
+        createdAt: "2026-07-27T10:00:00.000Z",
+      },
+      {
+        id: "source-processing",
+        type: "website",
+        title: "Startseite",
+        label: "Startseite",
+        url: "https://kunde.de",
+        sourceUrl: "https://kunde.de",
+        status: "processing",
+        syncStatus: "processing",
+        isActive: true,
+        lastSyncedAt: "2026-07-27T10:05:00.000Z",
+        errorMessage: "",
+        createdAt: "2026-07-27T10:05:00.000Z",
+      },
+      {
+        id: "source-failed",
+        type: "manual",
+        title: "Alte Notiz",
+        label: "Alte Notiz",
+        url: "",
+        sourceUrl: "",
+        status: "error",
+        syncStatus: "failed",
+        isActive: true,
+        lastSyncedAt: "2026-07-27T10:10:00.000Z",
+        errorMessage: "Import konnte nicht abgeschlossen werden.",
+        createdAt: "2026-07-27T10:10:00.000Z",
+      },
+      {
+        id: "source-inactive",
+        type: "manual",
+        title: "Interne Vorlage",
+        label: "Interne Vorlage",
+        url: "",
+        sourceUrl: "",
+        status: "ready",
+        syncStatus: "ready",
+        isActive: false,
+        lastSyncedAt: "2026-07-27T10:15:00.000Z",
+        errorMessage: "",
+        createdAt: "2026-07-27T10:15:00.000Z",
+      },
+    ]);
+
+    render(<CustomerSetupWizard siteId="site-1" />);
+
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /5WissenPDF, Website, FAQ oder eigene Texte/i }));
+
+    expect(screen.getByText(/4 Wissensquellen sind im bestehenden Produktpfad gespeichert/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 ready-Quelle ist gespeichert, aber nicht aktiv/i)).toBeInTheDocument();
+    expect(screen.getByText(/Einzelne importierte Webseite. Kein automatisches Website-Crawling/i)).toBeInTheDocument();
+    expect(screen.getByText(/Noch nicht im internen Test nutzbar, weil die Quelle noch verarbeitet wird/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Zaehlt aktuell nicht fuer Einrichtung und Save-and-Continue/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Import konnte nicht abgeschlossen werden/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Speichern & weiter$/ })).toBeDisabled();
   });
 
   test("admin uses the internal runtime-pilot testchat locally in the launch step", async () => {
