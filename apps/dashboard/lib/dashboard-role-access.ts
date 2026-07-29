@@ -34,7 +34,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
         roleLabel: "Admin",
         summary: "Interner Setup- und Testzugang",
         description:
-          "Admin darf Workspace, Wissen und interne Testpfade konfigurieren. Deploy, Public Widget, Production und Kundendaten bleiben weiterhin gesperrt.",
+          "Admin darf Einrichtung, Wissen und interne Testpfade konfigurieren. Deploy, oeffentliches Chatfenster, Produktivbetrieb und Kundendaten bleiben weiterhin gesperrt.",
         isInternalRole: true,
         isEvaluationOnly: false,
         capabilities: [
@@ -42,7 +42,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           capability("Interner Testchat", true, "internal_test"),
           capability("Wissen hinzufügen", true, "knowledge"),
           capability("Review sehen", true, "review"),
-          capability("Deploy / Public Widget", false, "deploy"),
+          capability("Deploy / Oeffentliches Chatfenster", false, "deploy"),
           capability("Kundendaten nutzen", false, "customer_data"),
         ],
         boundaryBadges: [
@@ -52,7 +52,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           "Keine Production-Aktivierung",
         ],
         demoBoundaryCopy:
-          "Interne Rollen bleiben test-only. Auch mit Admin-Zugang gibt es hier keine Public-Widget-, Deploy- oder Production-Freigabe und keine Nutzung von Kundendaten.",
+          "Interne Rollen bleiben test-only. Auch mit Admin-Zugang gibt es hier keine Freigabe fuer oeffentliches Chatfenster, Deploy oder Produktivbetrieb und keine Nutzung von Kundendaten.",
       };
     case "operator":
       return {
@@ -61,7 +61,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
         roleLabel: "Operator",
         summary: "Interner Setup- und Testzugang",
         description:
-          "Operator darf Workspace, Wissen und interne Testpfade konfigurieren. Deploy, Public Widget, Production und Kundendaten bleiben weiterhin gesperrt.",
+          "Operator darf Einrichtung, Wissen und interne Testpfade konfigurieren. Deploy, oeffentliches Chatfenster, Produktivbetrieb und Kundendaten bleiben weiterhin gesperrt.",
         isInternalRole: true,
         isEvaluationOnly: false,
         capabilities: [
@@ -69,7 +69,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           capability("Interner Testchat", true, "internal_test"),
           capability("Wissen hinzufügen", true, "knowledge"),
           capability("Review sehen", true, "review"),
-          capability("Deploy / Public Widget", false, "deploy"),
+          capability("Deploy / Oeffentliches Chatfenster", false, "deploy"),
           capability("Kundendaten nutzen", false, "customer_data"),
         ],
         boundaryBadges: [
@@ -79,16 +79,16 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           "Keine Production-Aktivierung",
         ],
         demoBoundaryCopy:
-          "Operator bleibt auf interne Setup-/Testflächen beschränkt. Kein Public Widget, kein Deploy, keine Production-Aktivierung und keine Nutzung von Kundendaten.",
+          "Operator bleibt auf interne Einrichtungs- und Testflaechen beschraenkt. Kein oeffentliches Chatfenster, kein Deploy, kein Produktivbetrieb und keine Nutzung von Kundendaten.",
       };
     case "viewer":
       return {
         role: "viewer",
         sourceRole: role,
         roleLabel: "Viewer",
-        summary: "Evaluation / Read-only",
+        summary: "Evaluation / Nur Lesen",
         description:
-          "Viewer ist ein externer Demonstrationszugang ohne Konfigurationsrechte. Keine Agent-Konfiguration, kein Knowledge-Upload, kein interner Testpfad.",
+          "Viewer ist ein externer Demo-Zugang ohne Konfigurationsrechte. Keine Einrichtung, kein Wissens-Upload und kein interner Testpfad.",
         isInternalRole: false,
         isEvaluationOnly: true,
         capabilities: [
@@ -96,17 +96,17 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           capability("Interner Testchat", false, "internal_test"),
           capability("Wissen hinzufügen", false, "knowledge"),
           capability("Review sehen", false, "review"),
-          capability("Deploy / Public Widget", false, "deploy"),
+          capability("Deploy / Oeffentliches Chatfenster", false, "deploy"),
           capability("Kundendaten nutzen", false, "customer_data"),
         ],
         boundaryBadges: [
-          "Evaluation / Read-only",
+          "Evaluation / Nur Lesen",
           "Keine Konfiguration",
           "Keine Kundendaten",
-          "Keine Production",
+          "Kein Produktivbetrieb",
         ],
         demoBoundaryCopy:
-          "Externe Demo-Zugänge bleiben guided/evaluation only. Keine Konfiguration, keine echten Zugangsdaten, keine Kundendaten und keine Production-Systeme.",
+          "Externe Demo-Zugaenge bleiben gefuehrt und nur zum Lesen. Keine Konfiguration, keine echten Zugangsdaten, keine Kundendaten und keine Produktivsysteme.",
       };
     case "customer":
       return {
@@ -115,7 +115,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
         roleLabel: "Kunde",
         summary: "Site-gebundener Zugang ohne internen Setup-Status",
         description:
-          "Dieser Zugang ist nicht als interner Admin-/Operator-Zugang markiert. Interne Testpfade, Public Widget, Deploy, Production und Kundendaten bleiben gesperrt.",
+          "Dieser Zugang ist nicht als interner Admin-/Operator-Zugang markiert. Interne Testpfade, oeffentliches Chatfenster, Deploy, Produktivbetrieb und Kundendaten bleiben gesperrt.",
         isInternalRole: false,
         isEvaluationOnly: false,
         capabilities: [
@@ -123,7 +123,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           capability("Interner Testchat", false, "internal_test"),
           capability("Wissen hinzufügen", false, "knowledge"),
           capability("Review sehen", true, "review"),
-          capability("Deploy / Public Widget", false, "deploy"),
+          capability("Deploy / Oeffentliches Chatfenster", false, "deploy"),
           capability("Kundendaten nutzen", false, "customer_data"),
         ],
         boundaryBadges: [
@@ -133,7 +133,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           "Keine Kundendaten",
         ],
         demoBoundaryCopy:
-          "Ohne internen Admin-/Operator-Status bleibt dieser Zugang auf einen konservativen Demo-/Review-Rahmen beschränkt. Keine Production-Freigabe und keine Nutzung von Kundendaten.",
+          "Ohne internen Admin-/Operator-Status bleibt dieser Zugang auf einen konservativen Demo- und Review-Rahmen beschraenkt. Keine Freigabe fuer Produktivbetrieb und keine Nutzung von Kundendaten.",
       };
     default:
       return {
@@ -142,7 +142,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
         roleLabel: "Nicht eindeutig",
         summary: "Konservativer Zugriff ohne interne Freigabe",
         description:
-          "Die Rolle konnte nicht sicher als Admin, Operator oder Viewer bestätigt werden. Deshalb wird kein interner Setup-, Test- oder Deploy-Zugang angenommen.",
+          "Die Rolle konnte nicht sicher als Admin, Operator oder Viewer bestaetigt werden. Deshalb wird kein interner Einrichtungs-, Test- oder Deploy-Zugang angenommen.",
         isInternalRole: false,
         isEvaluationOnly: false,
         capabilities: [
@@ -150,7 +150,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           capability("Interner Testchat", false, "internal_test"),
           capability("Wissen hinzufügen", false, "knowledge"),
           capability("Review sehen", false, "review"),
-          capability("Deploy / Public Widget", false, "deploy"),
+          capability("Deploy / Oeffentliches Chatfenster", false, "deploy"),
           capability("Kundendaten nutzen", false, "customer_data"),
         ],
         boundaryBadges: [
@@ -160,7 +160,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
           "Keine Kundendaten",
         ],
         demoBoundaryCopy:
-          "Wenn die Rolle nicht sicher verfügbar ist, bleibt das Dashboard konservativ: keine Konfiguration, keine internen Testpfade, keine Kundendaten und keine Production-Freigabe.",
+          "Wenn die Rolle nicht sicher verfuegbar ist, bleibt das Dashboard konservativ: keine Konfiguration, keine internen Testpfade, keine Kundendaten und keine Freigabe fuer Produktivbetrieb.",
       };
   }
 }

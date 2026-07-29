@@ -289,9 +289,9 @@ describe("CustomerSetupWizard", () => {
     await userEvent.click(screen.getByRole("button", { name: /Review & Livegang/i }));
 
     expect(screen.getByText("Interner Testchat")).toBeInTheDocument();
-    expect(screen.getByText(/Der Runtime-Pilot nutzt die gespeicherte Agent-Konfiguration/i)).toBeInTheDocument();
+    expect(screen.getByText(/Der interne Test nutzt die gespeicherte KI-Mitarbeiter-Konfiguration/i)).toBeInTheDocument();
     expect(screen.getByText("Noch keine nutzbare Wissensquelle gespeichert.")).toBeInTheDocument();
-    expect(screen.getByText("Lokaler Transcript")).toBeInTheDocument();
+    expect(screen.getByText("Lokaler Testverlauf")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Chatfenster live schalten/i })).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("Interne Testfrage"), "Bitte intern prüfen");
@@ -359,7 +359,7 @@ describe("CustomerSetupWizard", () => {
       "href",
       "/sites/site-1/setup?step=bot#setup-step-industry",
     );
-    expect(screen.getByRole("link", { name: /Testfrage gesendet/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Interner Test durchgeführt/i })).toHaveAttribute(
       "href",
       "/sites/site-1/setup?step=launch#customer-test-chat",
     );
@@ -1348,9 +1348,9 @@ describe("LaunchStep review gate", () => {
     expect(screen.getByText("Setup-Review")).toBeInTheDocument();
     expect(screen.getByText("Interner Testchat")).toBeInTheDocument();
     expect(screen.getByText("Aktivierungsgrenze")).toBeInTheDocument();
-    expect(screen.getByText("Advanced Diagnostics")).toBeInTheDocument();
+    expect(screen.getByText("Technische Diagnose")).toBeInTheDocument();
     expect(screen.getByText(hasExactTextContent("Deploy: nicht freigegeben"))).toBeInTheDocument();
-    expect(screen.getByText(hasExactTextContent("Public Widget: nicht aktiviert"))).toBeInTheDocument();
+    expect(screen.getByText(hasExactTextContent("Oeffentliches Chatfenster: nicht aktiviert"))).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live schalten" })).not.toBeInTheDocument();
     expect(screen.getByText("KI-Mitarbeiter Profil")).toBeInTheDocument();
     expect(screen.getByText("Gesprächslogik Testfälle")).toBeInTheDocument();
@@ -1365,7 +1365,7 @@ describe("LaunchStep review gate", () => {
     expect(screen.getByText("Interner Testchat")).toBeInTheDocument();
     expect(screen.getByText("Aktivierungsgrenze")).toBeInTheDocument();
     expect(screen.getByText(/nur für Admins und Operatoren sichtbar/i)).toBeInTheDocument();
-    expect(screen.queryByText("Advanced Diagnostics")).not.toBeInTheDocument();
+    expect(screen.queryByText("Technische Diagnose")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Interne Testfrage senden" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live schalten" })).not.toBeInTheDocument();
     expect(screen.queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();

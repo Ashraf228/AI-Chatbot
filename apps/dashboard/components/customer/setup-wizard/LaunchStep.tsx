@@ -73,7 +73,7 @@ export function LaunchStep({
     <section className="dashboard-card dashboard-stack launch-step" id="setup-step-live">
       <SetupStepHeader
         title="Review & Livegang"
-        description="Prüfe Setup-Stand, internen Testpfad und Aktivierungsgrenzen. Dieser Schritt schaltet nichts live."
+        description="Pruefe Einrichtungsstand, internen Testpfad und Aktivierungsgrenzen. Dieser Schritt schaltet nichts live."
         explanation={explanation}
         status={status}
         statusLabel={statusLabel}
@@ -91,7 +91,8 @@ export function LaunchStep({
         <div>
           <h3 className="dashboard-card-title dashboard-card-title--sm">Interne Prüfung</h3>
           <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-            Hier prüfst du Testchat und Einbau-Code intern. Kein Public Widget, kein Deploy und keine Production-Aktivierung.
+            Hier pruefst du internen Testchat und Chatfenster-Code. Kein oeffentliches Chatfenster, kein Deploy und
+            kein Produktivbetrieb.
           </p>
         </div>
         <div className="launch-step__grid">
@@ -120,8 +121,8 @@ export function LaunchStep({
 
       {canUseAdminTestTools ? (
         <SetupAdvancedDetails
-          title="Advanced Diagnostics"
-          description="Technische Diagnose bleibt verfügbar, ist aber nicht Teil des normalen Go-Live-Checks. Alle Bereiche sind intern, test-only und ohne Deploy-/Public-Widget-Freigabe."
+          title="Technische Diagnose"
+          description="Technische Diagnose bleibt verfuegbar, ist aber nicht Teil des normalen Review-&-Livegang-Checks. Alle Bereiche sind intern, test-only und ohne Deploy- oder Public-Widget-Freigabe."
         >
           <AssistantProfileDiagnosticsCard siteId={site.id} />
           <ConversationEngineTestCasesCard siteId={site.id} />

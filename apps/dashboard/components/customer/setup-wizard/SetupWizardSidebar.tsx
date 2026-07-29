@@ -47,11 +47,11 @@ export function SetupWizardSidebar({
       ? "Interner Testpfad bleibt nur für Admin und Operator offen."
       : "Kein interner Setup-/Testzugang bestätigt. Der Zustand bleibt konservativ.",
     status?.lifecycleStatus === "live"
-      ? "Production ist bereits aktiv. Setup bleibt trotzdem Review-orientiert."
-      : "Kein Public Widget und keine Production-Aktivierung aus dem Setup.",
+      ? "Der Produktivbetrieb ist bereits aktiv. Die Einrichtung bleibt trotzdem review-orientiert."
+      : "Kein oeffentliches Chatfenster und kein Produktivbetrieb aus der Einrichtung.",
     status?.isLiveReady
-      ? "Go-Live ist fachlich vorbereitet, aber weiterhin ein Review-Gate."
-      : "Go-Live bleibt blockiert, bis alle fehlenden Schritte sauber geschlossen sind.",
+      ? "Der Livegang ist fachlich vorbereitet, bleibt aber weiterhin ein Review-Gate."
+      : "Der Livegang bleibt blockiert, bis alle fehlenden Schritte sauber geschlossen sind.",
     roleAccess.demoBoundaryCopy,
   ];
 
@@ -99,7 +99,7 @@ export function SetupWizardSidebar({
       </section>
 
       <section className="dashboard-card dashboard-card--compact dashboard-stack dashboard-stack--sm">
-        <h3 className="dashboard-card-title dashboard-card-title--sm">Rolle & Boundary</h3>
+        <h3 className="dashboard-card-title dashboard-card-title--sm">Rolle & Grenzen</h3>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">{roleAccess.description}</p>
         <div className="setup-wizard__capability-list" aria-label="Rollenfähigkeiten">
           {roleAccess.capabilities.map((capability) => (

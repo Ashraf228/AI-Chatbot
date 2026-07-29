@@ -16,7 +16,7 @@ describe("CustomerNavGroups", () => {
     render(<CustomerNavGroups siteId="site-1" groups={siteNavGroups} />);
 
     expect(screen.getByRole("link", { name: "Einrichtung" })).toBeInTheDocument();
-    expect(screen.getByText(/Source of truth für Setup, Review, internen Test/i)).toBeInTheDocument();
+    expect(screen.getByText(/Verbindliche Einrichtung fuer Review, internen Test und Livegang-Grenzen/i)).toBeInTheDocument();
     expect(screen.getByText("Interner Test")).toBeInTheDocument();
     expect(screen.getByText("Intern")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review & Livegang/i })).toHaveAttribute("aria-current", "page");

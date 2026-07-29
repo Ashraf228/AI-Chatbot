@@ -41,8 +41,8 @@ describe("SiteForm", () => {
 
     expect(screen.getByLabelText("Kundenname")).toBeInTheDocument();
     expect(screen.getByLabelText("Website oder Hauptdomain")).toBeInTheDocument();
-    expect(screen.getByText("Agent-Konfiguration folgt im Setup")).toBeInTheDocument();
-    expect(screen.getByText(/Rolle, Zielgruppe, Aufgaben, Übergabe, Wissen, Tests und Livegang/i)).toBeInTheDocument();
+    expect(screen.getByText("KI-Mitarbeiter-Einrichtung folgt im Setup")).toBeInTheDocument();
+    expect(screen.getByText(/Rolle, Zielgruppe, Aufgaben, Uebergabe, Wissen, internen Test und Review/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kunde anlegen" })).toBeInTheDocument();
 
     expect(screen.queryByLabelText("Unternehmensbeschreibung")).not.toBeInTheDocument();
@@ -51,7 +51,7 @@ describe("SiteForm", () => {
     expect(screen.queryByText("Hauptaufgaben der KI")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Übergabe-E-Mail optional")).not.toBeInTheDocument();
     expect(screen.queryByText("Bitte Branche wählen")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Legacy Bot-Typ")).not.toBeVisible();
+    expect(screen.getByLabelText("Legacy-KI-Profil")).not.toBeVisible();
     expect(screen.queryByText("Kunde mit Vorlage anlegen")).not.toBeInTheDocument();
   });
 

@@ -198,7 +198,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
       ]);
       if (assistantContent && assistantContent !== lastAnnouncedAssistantRef.current) {
         lastAnnouncedAssistantRef.current = assistantContent;
-        setStatusAnnouncement(`Antwort des Assistenten: ${assistantContent}`);
+        setStatusAnnouncement(`Antwort des KI-Mitarbeiters: ${assistantContent}`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unbekannter Fehler.");
@@ -306,7 +306,7 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
         <header className="evaluation-hero">
           <div className="evaluation-hero__topline">
             <div>
-              <p className="evaluation-eyebrow">Evaluation Workspace</p>
+              <p className="evaluation-eyebrow">Evaluationsbereich</p>
               <h1>{context.workspaceTitle}</h1>
               <p className="evaluation-hero__subtitle">
                 {context.workspaceSubtitle ||
@@ -339,8 +339,8 @@ export function EvaluationWorkspace({ context }: { context: EvaluationContext })
             angepasst werden.
           </p>
           <p className="evaluation-demo-note">
-            Externe Demo-Zugänge bleiben guided/evaluation only. Keine Agent-Konfiguration, kein Knowledge-Upload, keine
-            Production-Systeme und keine echten NOLIS-Zugriffe.
+            Externe Demo-Zugaenge bleiben gefuehrt und nur zum Lesen. Keine Einrichtung, kein Wissens-Upload, keine
+            Produktivsysteme und keine echten NOLIS-Zugriffe.
           </p>
         </header>
 

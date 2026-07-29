@@ -21,7 +21,7 @@ export function KnowledgeSourceCard({ source, savingKey, onToggle, onRefresh, on
   const meta = [
     formatKnowledgeSourceType(source.type),
     source.url || source.sourceUrl || "Eigener Inhalt",
-    "Produktpfad gespeichert",
+    "Im bestehenden Wissenspfad gespeichert",
   ].filter(Boolean);
   const statusText = formatKnowledgeSourceStatus(source.status || "pending", source.isActive);
 

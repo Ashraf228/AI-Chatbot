@@ -63,7 +63,7 @@ function setupContextLabel(site: SiteDetails) {
 
 function usedKnowledgeLabel(turn: InternalTestChatTurn) {
   if (turn.usedKnowledgeSnippets.length === 0) {
-    return "Keine Knowledge-Snippets im Runtime-Pilot verwendet.";
+    return "Keine Wissenshinweise im internen Test verwendet.";
   }
   return turn.usedKnowledgeSnippets
     .map((snippet) => snippet.title || snippet.url || snippet.id || "Snippet")
@@ -93,8 +93,8 @@ export function TestChatPanel({
       <div>
         <h3 className="dashboard-card-title dashboard-card-title--sm">Interner Testchat</h3>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Admin-/Operator-Testmodus auf Basis des zuletzt gespeicherten Setup-Stands. Kein Public Widget, kein Deploy, keine
-          Production-Aktivierung und keine echten Tickets, E-Mails oder Webhooks.
+          Interner Admin-/Operator-Test auf Basis des zuletzt gespeicherten Einrichtungsstands. Kein oeffentliches
+          Chatfenster, kein Deploy, kein Produktivbetrieb und keine echten Tickets, E-Mails oder Webhooks.
         </p>
       </div>
 
@@ -102,19 +102,20 @@ export function TestChatPanel({
         <CompactMetricCard label="Getesteter Setup-Stand" value={setupContextLabel(site)} />
         <CompactMetricCard label="Wissensstatus" value={knowledgeLabel} />
         <CompactMetricCard
-          label="Side-Effect-Grenze"
+          label="Sicherheitsgrenze"
           value="Tickets, E-Mails, Webhooks, Provider Calls, Query Runner und Deploy bleiben ausgeschaltet."
         />
         <CompactMetricCard
-          label="Transcript"
+          label="Testverlauf"
           value="Der Test-Transcript bleibt lokal im Browser-State. Es wird keine produktive Chat-History gespeichert."
         />
       </div>
 
       <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-        Der Runtime-Pilot nutzt die gespeicherte Agent-Konfiguration und Gesprächslogik. Persistierte Wissensquellen werden
-        hier transparent als Bereitschaftsstatus gezeigt; ohne separaten Retrieval-Pfad werden keine Rohinhalte aus der
-        bestehenden Wissensbasis in diesen Testchat eingespeist.
+        Der interne Test nutzt die gespeicherte KI-Mitarbeiter-Konfiguration und Gespraechslogik. Im technischen
+        Diagnosepfad laeuft das ueber den Runtime-Pilot. Persistierte Wissensquellen werden hier transparent als
+        Bereitschaftsstatus gezeigt; ohne separaten Retrieval-Pfad werden keine Rohinhalte aus der bestehenden
+        Wissensbasis in diesen Testchat eingespeist.
       </p>
 
       {!canUseTestTools ? (
@@ -155,7 +156,7 @@ export function TestChatPanel({
 
           <div className="launch-step__transcript">
             <div className="launch-step__transcript-header">
-              <strong>Lokaler Transcript</strong>
+              <strong>Lokaler Testverlauf</strong>
               <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
                 Letzter lokaler Test: {formatDate(latestTestedAt)}
               </p>

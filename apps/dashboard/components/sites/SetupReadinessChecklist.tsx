@@ -97,22 +97,24 @@ export function SetupReadinessChecklist({
     },
     {
       key: "test",
-      label: "Testfrage gesendet",
-      hint: "Der Bot wurde intern geprüft.",
+      label: "Interner Test durchgeführt",
+      hint: "Der KI-Mitarbeiter wurde intern geprüft.",
       href: `/sites/${siteSlug}/setup?step=launch#customer-test-chat`,
       stepKeys: ["test"],
     },
     {
       key: "embed",
       label: "Einbindung",
-      hint: "Domain und Widget-Code sind bereit.",
+      hint: "Erlaubte Domains und Chatfenster-Code sind vorbereitet.",
       href: `/sites/${siteSlug}/embedding`,
       stepKeys: ["embed"],
     },
     {
       key: "live",
-      label: "Go-Live",
-      hint: status?.isLiveReady ? "Kunde kann live geschaltet werden." : "Noch nicht bereit für Go-Live.",
+      label: "Review & Livegang",
+      hint: status?.isLiveReady
+        ? "Review ist fachlich vorbereitet. Der Livegang bleibt ein separater Freigabeschritt."
+        : "Noch nicht bereit für Review und Livegang.",
       href: `/sites/${siteSlug}/setup?step=launch#setup-step-live`,
       stepKeys: ["live"],
     },
@@ -121,7 +123,7 @@ export function SetupReadinessChecklist({
   return (
     <section className="dashboard-card dashboard-card--compact dashboard-stack">
       <div>
-        <h2 className="dashboard-card-title">Einrichtung & Go-Live</h2>
+        <h2 className="dashboard-card-title">Einrichtung & Review</h2>
         <p className="dashboard-copy dashboard-copy--muted">Was für einen sauberen Start noch fehlt.</p>
       </div>
 

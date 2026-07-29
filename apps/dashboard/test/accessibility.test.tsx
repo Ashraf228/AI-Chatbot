@@ -111,7 +111,7 @@ describe("Dashboard accessibility baseline", () => {
     await waitFor(() => {
       expect(screen.getByText("Demo-Supportfall Vorschau").closest("[tabindex='-1']")).toHaveFocus();
     });
-    expect(screen.getByText(/Antwort des Assistenten: Die synthetische Antwort ist fertig/i)).toBeInTheDocument();
+    expect(screen.getByText(/Antwort des KI-Mitarbeiters: Die synthetische Antwort ist fertig/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Synthetische Quelle" })).toHaveAttribute("rel", expect.stringContaining("noopener"));
 
     await userEvent.click(screen.getByRole("button", { name: "Demo-Ticket erstellen" }));
