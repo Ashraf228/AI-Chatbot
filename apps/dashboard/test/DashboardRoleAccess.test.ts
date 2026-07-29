@@ -24,7 +24,8 @@ describe("getDashboardRoleAccess", () => {
     expect(access.capabilities.find((entry) => entry.key === "configure")?.allowed).toBe(false);
     expect(access.capabilities.find((entry) => entry.key === "internal_test")?.allowed).toBe(false);
     expect(access.capabilities.find((entry) => entry.key === "review")?.allowed).toBe(false);
-    expect(access.demoBoundaryCopy).toMatch(/guided\/evaluation only/i);
+    expect(access.summary).toBe("Evaluation / Nur Lesen");
+    expect(access.demoBoundaryCopy).toMatch(/gefuehrt und nur zum Lesen/i);
   });
 
   test("keeps unknown access conservative when no trusted role is available", () => {

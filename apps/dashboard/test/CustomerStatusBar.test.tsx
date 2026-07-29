@@ -68,9 +68,9 @@ describe("CustomerStatusBar", () => {
     expect(screen.getByText("Bereich: Interner Test")).toBeInTheDocument();
     expect(screen.getByText("Rolle: Operator")).toBeInTheDocument();
     expect(screen.getByText("Interner Setup-/Testzugang")).toBeInTheDocument();
-    expect(screen.getByText("Production nicht aktiviert")).toBeInTheDocument();
-    expect(screen.getByText("Public Widget nicht aktiviert")).toBeInTheDocument();
-    expect(screen.getByText("Go-Live nur nach Review")).toBeInTheDocument();
+    expect(screen.getByText("Produktivbetrieb nicht aktiviert")).toBeInTheDocument();
+    expect(screen.getByText("Oeffentliches Chatfenster nicht aktiviert")).toBeInTheDocument();
+    expect(screen.getByText("Livegang nur nach Review")).toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: "Wissen hinzufügen" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /live/i })).not.toBeInTheDocument();
@@ -88,7 +88,7 @@ describe("CustomerStatusBar", () => {
     expect(screen.getByText("Konfigurieren: Nein")).toBeInTheDocument();
     expect(screen.getByText("Interner Testchat: Nein")).toBeInTheDocument();
     expect(screen.getByText("Wissen hinzufügen: Nein")).toBeInTheDocument();
-    expect(screen.getByText("Deploy / Public Widget: Nein")).toBeInTheDocument();
+    expect(screen.getByText("Deploy / Oeffentliches Chatfenster: Nein")).toBeInTheDocument();
     expect(screen.getByText(/keine Konfiguration, keine internen Testpfade, keine Kundendaten/i)).toBeInTheDocument();
   });
 });

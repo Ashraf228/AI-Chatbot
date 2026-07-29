@@ -84,7 +84,7 @@ describe("EvaluationWorkspace", () => {
     expect(screen.getByText("Starten Sie mit einer Beispielkarte oder eigener Testfrage.")).toBeInTheDocument();
     expect(screen.getByText(/Bitte geben Sie keine Passwörter, MFA-Codes, API-Schlüssel/i)).toBeInTheDocument();
     expect(screen.getByText(/Diese Ansicht ist ein Demonstrator/i)).toBeInTheDocument();
-    expect(screen.getByText(/Externe Demo-Zugänge bleiben guided\/evaluation only/i)).toBeInTheDocument();
+    expect(screen.getByText(/Externe Demo-Zugaenge bleiben gefuehrt und nur zum Lesen/i)).toBeInTheDocument();
     expect(screen.getByText(/Ablauf, Inhalte, Fragen und Übergaben können für Kundenprojekte angepasst werden/i)).toBeInTheDocument();
   });
 

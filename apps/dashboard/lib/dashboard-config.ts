@@ -166,7 +166,7 @@ export const siteNavGroups: SiteNavGroup[] = [
     id: "setup",
     slug: "setup",
     label: "Einrichtung",
-    description: "Source of truth für Setup, Review, internen Test und Go-Live-Grenzen.",
+    description: "Verbindliche Einrichtung fuer Review, internen Test und Livegang-Grenzen.",
     items: [
       {
         id: "setup-bot",
@@ -186,7 +186,7 @@ export const siteNavGroups: SiteNavGroup[] = [
         id: "setup-test",
         href: "/sites/:siteSlug/setup?step=launch#customer-test-chat",
         label: "Interner Test",
-        description: "Testchat bleibt internal/test-only und nicht öffentlich freigegeben.",
+        description: "Interner Test im Chatfenster. Nur intern, nicht oeffentlich freigegeben.",
         badge: "Intern",
         hashTargets: ["customer-test-chat"],
       },
@@ -194,7 +194,7 @@ export const siteNavGroups: SiteNavGroup[] = [
         id: "setup-launch",
         href: "/sites/:siteSlug/setup?step=launch#setup-step-live",
         label: "Review & Livegang",
-        description: "Review-Gate ohne Deploy-, Public-Widget- oder Production-Freigabe.",
+        description: "Review-Gate ohne Deploy-, Public-Widget- oder Freigabe fuer den Produktivbetrieb.",
         badge: "Review",
         stepKeys: ["launch"],
       },

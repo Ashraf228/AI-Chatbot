@@ -76,7 +76,7 @@ function primaryAction(siteId: string, status: CustomerApiStatus | null, site: S
     return { label: "Wissen hinzufügen", href: `/sites/${siteSlug}/setup?step=knowledge#setup-step-knowledge` };
   }
 
-  return { label: "Setup fortsetzen", href: localNextHref(siteId, status) };
+  return { label: "Einrichtung fortsetzen", href: localNextHref(siteId, status) };
 }
 
 export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: CustomerStatusBarProps) {
@@ -158,9 +158,9 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
   const activeAreaDescription = activeItem?.description || activeGroup?.description || "Aktueller Workspace-Bereich.";
   const boundaryLabels = [
     ...roleAccess.boundaryBadges,
-    isLive ? "Production aktiv" : "Production nicht aktiviert",
-    isLive ? "Public Widget aktiv" : "Public Widget nicht aktiviert",
-    isLive ? "Betrieb beobachten" : "Go-Live nur nach Review",
+    isLive ? "Produktivbetrieb aktiv" : "Produktivbetrieb nicht aktiviert",
+    isLive ? "Oeffentliches Chatfenster aktiv" : "Oeffentliches Chatfenster nicht aktiviert",
+    isLive ? "Betrieb beobachten" : "Livegang nur nach Review",
   ];
 
   async function copyEmbedCode() {
@@ -214,7 +214,11 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
       <div className="customer-status-bar__next customer-status-bar__segment">
         <span>Nächster Schritt</span>
         <strong>{isLive ? "Betrieb prüfen" : status?.nextAction?.label || mainAction.label}</strong>
-        <small>{isLive ? "Live-Betrieb beobachten und Testpfad sauber halten." : "Setup bleibt Source of Truth bis zum Review-Gate."}</small>
+        <small>
+          {isLive
+            ? "Live-Betrieb beobachten und internen Testpfad sauber halten."
+            : "Die Einrichtung bleibt die verbindliche Arbeitsgrundlage bis zum Review-Gate."}
+        </small>
       </div>
 
       <div className="customer-status-bar__next customer-status-bar__segment">
@@ -270,7 +274,8 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
 
       {liveBlockedReason ? (
         <p className="customer-status-bar__hint">
-          Noch nicht bereit für Go-Live: {liveBlockedReason}. Kein Public Widget, kein Self-Service und keine Production-Aktivierung aus diesem Stand.
+          Noch nicht bereit fuer den Livegang: {liveBlockedReason}. Kein oeffentliches Chatfenster, kein Self-Service
+          und keine Aktivierung des Produktivbetriebs aus diesem Stand.
         </p>
       ) : null}
       {copied ? <p className="dashboard-status dashboard-status--success">Einbindungscode kopiert.</p> : null}

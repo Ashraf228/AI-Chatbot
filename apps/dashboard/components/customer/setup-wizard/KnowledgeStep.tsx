@@ -85,7 +85,7 @@ export function KnowledgeStep({
     <section className="dashboard-card dashboard-stack knowledge-step" id="setup-step-knowledge">
       <SetupStepHeader
         title="Wissen"
-        description="Füge Inhalte hinzu, damit der Assistent bessere Antworten formulieren kann."
+        description="Fuege Inhalte hinzu, damit der KI-Mitarbeiter verlaesslichere Antworten formulieren kann."
         explanation={explanation}
         status={status}
         statusLabel={statusLabel}
@@ -98,7 +98,8 @@ export function KnowledgeStep({
       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm">
         <h3 className="dashboard-card-title dashboard-card-title--sm">Save-and-Continue-Status</h3>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Dieser Setup-Schritt nutzt nur den bestehenden Produktpfad. Demo-/in-memory-Wissen aus anderen Bereichen zählt hier nicht als Abschluss.
+          Dieser Einrichtungsschritt nutzt nur den bestehenden Produktpfad. Demo-/In-Memory-Wissen aus anderen
+          Bereichen zaehlt hier nicht als Abschluss.
         </p>
         <div className="dashboard-grid dashboard-grid--metrics-2">
           <CompactMetricCard label="Gespeichert" value={persistedLabel} />

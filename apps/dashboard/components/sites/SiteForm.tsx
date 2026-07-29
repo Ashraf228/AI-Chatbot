@@ -68,9 +68,10 @@ export function SiteForm({
       </div>
 
       <div className="dashboard-card dashboard-card--soft site-form__setup-handoff">
-        <strong>Agent-Konfiguration folgt im Setup</strong>
+        <strong>KI-Mitarbeiter-Einrichtung folgt im Setup</strong>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Nach dem Anlegen konfigurierst du Rolle, Zielgruppe, Aufgaben, Übergabe, Wissen, Tests und Livegang im Setup.
+          Nach dem Anlegen konfigurierst du Rolle, Zielgruppe, Aufgaben, Uebergabe, Wissen, internen Test und Review in
+          der Einrichtung.
         </p>
       </div>
 
@@ -147,14 +148,14 @@ export function SiteForm({
 
                 <div className="dashboard-field">
                   <label className="dashboard-field-label" htmlFor="site-bot-type">
-                    Legacy Bot-Typ
+                    Legacy-KI-Profil
                   </label>
                   <Select
                     id="site-bot-type"
                     value={form.botType}
                     onChange={(event) => onChange({ ...form, botType: event.target.value })}
                   >
-                    <option value="universal-assistant">Universal Assistant</option>
+                    <option value="universal-assistant">Universeller KI-Mitarbeiter</option>
                     <option value="handwerker-first-contact">Handwerker-Erstkontakt</option>
                   </Select>
                 </div>
@@ -203,7 +204,8 @@ export function SiteForm({
 
       <div className="site-form__footer">
         <p className="dashboard-field-hint dashboard-no-margin-bottom site-form__footer-copy">
-          Kundenanlage bleibt eine kompakte Metadatenfläche. Ziel, Wissen, interner Test und Review folgen erst im Setup.
+          Kundenanlage bleibt eine kompakte Metadatenflaeche. Ziel, Wissen, interner Test und Review folgen erst in der
+          Einrichtung.
         </p>
         <Button type="submit" disabled={submitDisabled}>
           {submitDisabled ? "Limit erreicht" : "Kunde anlegen"}
