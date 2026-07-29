@@ -12,8 +12,12 @@ import { KnowledgeSourcesService } from '../knowledge-sources/knowledge-sources.
 import { chunkText } from '../utils/chunk';
 import { sha256 } from '../utils/hash';
 import { randomUUID } from 'crypto';
-import { lookup } from 'dns/promises';
-import { isIP } from 'net';
+import {
+  WebsiteFetchError,
+  WebsitePolicyError,
+  fetchWebsiteSource,
+  validatePublicWebsiteUrl,
+} from './website-ingest';
 
 const { PDFParse } = require('pdf-parse');
 
@@ -195,41 +199,107 @@ export class IngestService {
       throw new BadRequestException('Invalid siteId');
     }
 
-    const safeUrl = await validatePublicUrl(url);
+    const validatedUrl = await validatePublicWebsiteUrl(url);
     const sourceId = await this.knowledgeSources.createForSite({
       tenantId: site.tenant_id,
       siteId,
       sourceType: 'url',
-      label: title?.trim() || safeUrl,
-      sourceUrl: safeUrl,
-      syncStatus: 'processing',
+      label: title?.trim() || validatedUrl.normalizedUrl,
+      sourceUrl: validatedUrl.normalizedUrl,
+      syncStatus: 'pending',
+      ingestStatus: 'fetch_pending',
+      indexStatus: 'not_requested',
+      runtimeReadiness: 'not_ready',
       config: {
         documentType: 'url',
-        url: safeUrl,
+        url: validatedUrl.normalizedUrl,
         title: title?.trim() || null,
+        websiteIngestMode: 'single_url_only',
       },
     });
 
     try {
-      const text = await fetchUrlText(safeUrl);
-      const result = await this.ingestTextIntoSource({
+      await this.knowledgeSources.markFetchPending(sourceId, {
+        requestUrl: validatedUrl.normalizedUrl,
+        sourceDomain: validatedUrl.sourceDomain,
+      });
+      await this.knowledgeSources.markFetching(sourceId, {
+        requestUrl: validatedUrl.normalizedUrl,
+      });
+
+      const fetched = await fetchWebsiteSource(validatedUrl.normalizedUrl);
+      await this.knowledgeSources.markFetched(sourceId, {
+        normalizedSourceUrl: fetched.finalUrl,
+        sourceDomain: fetched.sourceDomain,
+        fetchStatusCode: fetched.statusCode,
+        fetchContentType: fetched.contentType,
+        fetchRedirects: fetched.redirectCount,
+        fetchBytes: fetched.responseBytes,
+      });
+
+      const result = await this.persistProviderFreeTextIntoSource({
         tenantId: site.tenant_id,
         siteId,
         sourceId,
         type: 'url',
-        title: title?.trim() || safeUrl,
-        sourceUrl: safeUrl,
-        text,
-        metadata: { kind: 'url', url: safeUrl },
+        title: title?.trim() || fetched.normalizedUrl,
+        sourceUrl: fetched.finalUrl,
+        text: fetched.extractedText,
+        metadata: {
+          kind: 'url',
+          url: fetched.finalUrl,
+          normalizedSourceUrl: fetched.finalUrl,
+          sourceDomain: fetched.sourceDomain,
+          providerFree: true,
+          websiteSingleUrlIngest: true,
+        },
       });
-      await this.knowledgeSources.markReady(sourceId, { textLength: text.length });
-      return result;
-    } catch (error) {
-      await this.knowledgeSources.markFailed(
+
+      await this.knowledgeSources.markExtracted(sourceId, {
+        normalizedSourceUrl: fetched.finalUrl,
+        sourceDomain: fetched.sourceDomain,
+        extractedChars: fetched.extractedChars,
+        extractedTextLength: fetched.extractedChars,
+        extractedTruncated: fetched.truncated,
+        persistedChunkCount: result.chunks,
+        providerFree: true,
+        runtimeReady: false,
+        websiteSingleUrlIngest: true,
+      });
+
+      const source = await this.knowledgeSources.getById(sourceId);
+      return {
         sourceId,
-        error instanceof Error ? error.message : 'URL import failed',
-      );
-      throw error;
+        siteId,
+        documentId: result.documentId,
+        chunks: result.chunks,
+        inserted: result.inserted,
+        normalizedUrl: fetched.finalUrl,
+        domain: fetched.sourceDomain,
+        ingestStatus: source?.ingestStatus || 'extracted',
+        indexStatus: source?.indexStatus || 'not_requested',
+        runtimeReadiness: source?.runtimeReadiness || 'not_ready',
+        extractedTextLength: fetched.extractedChars,
+        error: source?.ingestErrorMessageSanitized || null,
+      };
+    } catch (error) {
+      if (error instanceof WebsitePolicyError) {
+        await this.knowledgeSources.markBlocked(sourceId, error.message, error.code);
+        throw new BadRequestException(error.message);
+      }
+
+      const message = error instanceof WebsiteFetchError
+        ? error.message
+        : 'Website-Import fehlgeschlagen.';
+      const code = error instanceof WebsiteFetchError
+        ? error.code
+        : 'website_ingest_failed';
+      await this.knowledgeSources.markFailed(sourceId, message, code);
+
+      if (error instanceof BadRequestException || error instanceof BadGatewayException) {
+        throw error;
+      }
+      throw new BadGatewayException(message);
     }
   }
 
@@ -382,6 +452,59 @@ export class IngestService {
 
     await this.knowledgeSources.markReady(input.sourceId, { chunks: chunks.length });
     return { sourceId: input.sourceId, siteId: input.siteId, documentId: docId, chunks: chunks.length, inserted };
+  }
+
+  private async persistProviderFreeTextIntoSource(input: {
+    tenantId: string;
+    siteId: string;
+    sourceId: string;
+    type: string;
+    title: string;
+    text: string;
+    sourceUrl?: string;
+    metadata: Record<string, unknown>;
+  }) {
+    await this.db.query(`DELETE FROM documents WHERE source_id = $1`, [input.sourceId]);
+
+    const docId = randomUUID();
+    await this.db.query(
+      `INSERT INTO documents(id, source_id, tenant_id, site_id, type, title, source_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [docId, input.sourceId, input.tenantId, input.siteId, input.type, input.title, input.sourceUrl || null],
+    );
+
+    const chunks = chunkText(input.text, 1400, 250);
+    let inserted = 0;
+
+    for (let i = 0; i < chunks.length; i++) {
+      const content = chunks[i].trim();
+      if (!content) {
+        continue;
+      }
+
+      await this.db.query(
+        `INSERT INTO chunks(id, tenant_id, site_id, document_id, content, metadata, content_hash, embedding)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,NULL)`,
+        [
+          randomUUID(),
+          input.tenantId,
+          input.siteId,
+          docId,
+          content,
+          JSON.stringify({ ...input.metadata, chunkIndex: i, providerFree: true }),
+          sha256(content),
+        ],
+      );
+      inserted++;
+    }
+
+    return {
+      sourceId: input.sourceId,
+      siteId: input.siteId,
+      documentId: docId,
+      chunks: chunks.length,
+      inserted,
+    };
   }
 
   async listKnowledge(siteId: string) {
@@ -540,22 +663,52 @@ export class IngestService {
 
     const config = source.metadata || {};
     try {
-      await this.knowledgeSources.markProcessing(sourceId);
-
       if (source.type === 'url') {
+        await this.knowledgeSources.markFetching(sourceId, {
+          requestUrl: typeof config.url === 'string' ? config.url : source.url,
+        });
         const url = typeof config.url === 'string' ? config.url : source.url;
-        const text = await fetchUrlText(await validatePublicUrl(url));
-        return this.ingestTextIntoSource({
+        const fetched = await fetchWebsiteSource(url);
+        await this.knowledgeSources.markFetched(sourceId, {
+          normalizedSourceUrl: fetched.finalUrl,
+          sourceDomain: fetched.sourceDomain,
+          fetchStatusCode: fetched.statusCode,
+          fetchContentType: fetched.contentType,
+          fetchRedirects: fetched.redirectCount,
+          fetchBytes: fetched.responseBytes,
+        });
+        const result = await this.persistProviderFreeTextIntoSource({
           tenantId: source.tenantId || '',
           siteId: source.siteId,
           sourceId,
           type: 'url',
           title: source.title,
-          sourceUrl: url,
-          text,
-          metadata: { kind: 'url', url },
+          sourceUrl: fetched.finalUrl,
+          text: fetched.extractedText,
+          metadata: {
+            kind: 'url',
+            url: fetched.finalUrl,
+            normalizedSourceUrl: fetched.finalUrl,
+            sourceDomain: fetched.sourceDomain,
+            providerFree: true,
+            websiteSingleUrlIngest: true,
+          },
         });
+        await this.knowledgeSources.markExtracted(sourceId, {
+          normalizedSourceUrl: fetched.finalUrl,
+          sourceDomain: fetched.sourceDomain,
+          extractedChars: fetched.extractedChars,
+          extractedTextLength: fetched.extractedChars,
+          extractedTruncated: fetched.truncated,
+          persistedChunkCount: result.chunks,
+          providerFree: true,
+          runtimeReady: false,
+          websiteSingleUrlIngest: true,
+        });
+        return result;
       }
+
+      await this.knowledgeSources.markProcessing(sourceId);
 
       if (source.type === 'faq') {
         const items = Array.isArray(config.items) ? config.items : [];
@@ -623,11 +776,26 @@ export class IngestService {
 
       throw new BadRequestException('Re-sync for this source type requires re-upload');
     } catch (error) {
+      if (error instanceof WebsitePolicyError) {
+        await this.knowledgeSources.markBlocked(sourceId, error.message, error.code);
+        throw new BadRequestException(error.message);
+      }
+
+      const message = error instanceof WebsiteFetchError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Re-sync failed';
+      const code = error instanceof WebsiteFetchError ? error.code : 'ingest_failed';
       await this.knowledgeSources.markFailed(
         sourceId,
-        error instanceof Error ? error.message : 'Re-sync failed',
+        message,
+        code,
       );
-      throw error;
+      if (error instanceof BadRequestException || error instanceof BadGatewayException) {
+        throw error;
+      }
+      throw new BadGatewayException(message);
     }
   }
 
@@ -699,140 +867,6 @@ export class IngestService {
   async listSources(siteId: string) {
     return this.knowledgeSources.listForSite(siteId);
   }
-}
-
-async function validatePublicUrl(input: string) {
-  let parsed: URL;
-  try {
-    parsed = new URL(input);
-  } catch {
-    throw new BadRequestException('Invalid URL');
-  }
-
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    throw new BadRequestException('Only http/https URLs are allowed');
-  }
-
-  if (isBlockedHostname(parsed.hostname)) {
-    throw new BadRequestException('Private or local URLs are not allowed');
-  }
-
-  const records = await lookup(parsed.hostname, { all: true }).catch(() => []);
-  if (records.some((record) => isPrivateAddress(record.address))) {
-    throw new BadRequestException('Private or local URLs are not allowed');
-  }
-
-  return parsed.toString();
-}
-
-function isBlockedHostname(hostname: string) {
-  const value = hostname.toLowerCase();
-  return value === 'localhost' || value.endsWith('.localhost') || value === '0.0.0.0';
-}
-
-function isPrivateAddress(address: string) {
-  if (isIP(address) === 0) {
-    return true;
-  }
-  if (address === '127.0.0.1' || address === '::1') {
-    return true;
-  }
-  if (/^10\./.test(address) || /^192\.168\./.test(address)) {
-    return true;
-  }
-  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(address)) {
-    return true;
-  }
-  if (/^169\.254\./.test(address)) {
-    return true;
-  }
-  if (/^fc|^fd/i.test(address)) {
-    return true;
-  }
-  return false;
-}
-
-async function fetchUrlText(url: string) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    let currentUrl = url;
-    for (let redirects = 0; redirects <= 3; redirects++) {
-      const response = await fetch(currentUrl, {
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: {
-          'user-agent': 'SouleSmartBusinessBot/1.0',
-          accept: 'text/html,text/plain;q=0.9',
-        },
-      });
-
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
-        const location = response.headers.get('location');
-        if (!location) {
-          throw new BadGatewayException('Redirect without location');
-        }
-        currentUrl = await validatePublicUrl(new URL(location, currentUrl).toString());
-        continue;
-      }
-
-      if (!response.ok) {
-        throw new BadGatewayException(`URL returned ${response.status}`);
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (!/text\/html|text\/plain|application\/xhtml\+xml/i.test(contentType)) {
-        throw new BadRequestException('URL content type is not supported');
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new BadGatewayException('URL response body missing');
-      }
-      const chunks: Uint8Array[] = [];
-      let total = 0;
-      const maxBytes = 2 * 1024 * 1024;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        if (value) {
-          total += value.byteLength;
-          if (total > maxBytes) {
-            throw new BadRequestException('URL content too large');
-          }
-          chunks.push(value);
-        }
-      }
-      const html = Buffer.concat(chunks).toString('utf8');
-      const text = htmlToText(html).trim();
-      if (!text) {
-        throw new BadRequestException('URL has no extractable text');
-      }
-      return text;
-    }
-    throw new BadRequestException('Too many redirects');
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function htmlToText(html: string) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<nav[\s\S]*?<\/nav>/gi, ' ')
-    .replace(/<footer[\s\S]*?<\/footer>/gi, ' ')
-    .replace(/<header[\s\S]*?<\/header>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ');
 }
 
 function parseFaqChunk(content: string) {

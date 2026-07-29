@@ -315,6 +315,59 @@ export class KnowledgeSourcesService {
     );
   }
 
+  async markFetchPending(sourceId: string, metadataPatch?: Record<string, unknown>) {
+    await this.db.query(
+      `UPDATE knowledge_sources
+       SET sync_status = 'pending',
+           ingest_status = 'fetch_pending',
+           index_status = 'not_requested',
+           runtime_readiness = 'not_ready',
+           ingest_error_code = null,
+           ingest_error_message_sanitized = null,
+           error_message = null,
+           config = COALESCE(config, '{}'::jsonb) || $2::jsonb,
+           updated_at = now()
+       WHERE id = $1`,
+      [sourceId, JSON.stringify(normalizeRecord(metadataPatch))],
+    );
+  }
+
+  async markFetching(sourceId: string, metadataPatch?: Record<string, unknown>) {
+    await this.db.query(
+      `UPDATE knowledge_sources
+       SET sync_status = 'processing',
+           ingest_status = 'fetching',
+           index_status = 'not_requested',
+           runtime_readiness = 'not_ready',
+           ingest_error_code = null,
+           ingest_error_message_sanitized = null,
+           error_message = null,
+           last_ingest_at = now(),
+           config = COALESCE(config, '{}'::jsonb) || $2::jsonb,
+           updated_at = now()
+       WHERE id = $1`,
+      [sourceId, JSON.stringify(normalizeRecord(metadataPatch))],
+    );
+  }
+
+  async markFetched(sourceId: string, metadataPatch?: Record<string, unknown>) {
+    await this.db.query(
+      `UPDATE knowledge_sources
+       SET sync_status = 'processing',
+           ingest_status = 'fetched',
+           index_status = 'not_requested',
+           runtime_readiness = 'not_ready',
+           ingest_error_code = null,
+           ingest_error_message_sanitized = null,
+           error_message = null,
+           last_ingest_at = now(),
+           config = COALESCE(config, '{}'::jsonb) || $2::jsonb,
+           updated_at = now()
+       WHERE id = $1`,
+      [sourceId, JSON.stringify(normalizeRecord(metadataPatch))],
+    );
+  }
+
   async markReady(sourceId: string, metadataPatch?: Record<string, unknown>) {
     await this.db.query(
       `UPDATE knowledge_sources
@@ -360,6 +413,23 @@ export class KnowledgeSourcesService {
            ingest_status = 'failed',
            index_status = 'failed',
            runtime_readiness = 'failed',
+           ingest_error_code = $3,
+           ingest_error_message_sanitized = $4,
+           error_message = $2,
+           last_ingest_at = now(),
+           updated_at = now()
+       WHERE id = $1`,
+      [sourceId, message.slice(0, 1000), errorCode, sanitizeKnowledgeSourceErrorMessage(message)],
+    );
+  }
+
+  async markBlocked(sourceId: string, message: string, errorCode = 'ingest_blocked') {
+    await this.db.query(
+      `UPDATE knowledge_sources
+       SET sync_status = 'failed',
+           ingest_status = 'blocked',
+           index_status = 'blocked',
+           runtime_readiness = 'blocked',
            ingest_error_code = $3,
            ingest_error_message_sanitized = $4,
            error_message = $2,

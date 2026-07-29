@@ -120,11 +120,17 @@ export type KnowledgeSource = {
   label: string;
   url: string;
   sourceUrl: string;
+  normalizedSourceUrl?: string;
+  sourceDomain?: string;
   status: "pending" | "processing" | "ready" | "failed" | "disabled" | string;
   syncStatus: string;
+  ingestStatus?: string;
+  indexStatus?: string;
+  runtimeReadiness?: string;
   isActive: boolean;
   lastSyncedAt: string | null;
   errorMessage: string;
+  ingestErrorMessageSanitized?: string;
   createdAt: string;
 };
 

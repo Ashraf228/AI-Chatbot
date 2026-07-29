@@ -4,9 +4,15 @@ const { IngestService } = require('../dist/ingest/ingest.service.js');
 
 function createDeps() {
   const dbQueries = [];
+  const embedCalls = [];
+  const vectorCalls = [];
+  const knowledgeSourceCalls = [];
 
   return {
     dbQueries,
+    embedCalls,
+    vectorCalls,
+    knowledgeSourceCalls,
     db: {
       async query(sql, params) {
         dbQueries.push({ sql, params });
@@ -15,11 +21,13 @@ function createDeps() {
     },
     embedder: {
       async embed(content) {
+        embedCalls.push(content);
         return [content.length, 1, 2];
       },
     },
     vector: {
       async upsertChunk(params) {
+        vectorCalls.push(params);
         return { id: params.id, skipped: false };
       },
     },
@@ -33,6 +41,7 @@ function createDeps() {
     },
     knowledgeSources: {
       async createForSite() {
+        knowledgeSourceCalls.push({ method: 'createForSite', args: [...arguments] });
         return 'source-1';
       },
       async listForSite() {
@@ -50,8 +59,13 @@ function createDeps() {
         };
       },
       async markProcessing() {},
-      async markReady() {},
-      async markFailed() {},
+      async markReady() { knowledgeSourceCalls.push({ method: 'markReady', args: [...arguments] }); },
+      async markFailed() { knowledgeSourceCalls.push({ method: 'markFailed', args: [...arguments] }); },
+      async markFetchPending() { knowledgeSourceCalls.push({ method: 'markFetchPending', args: [...arguments] }); },
+      async markFetching() { knowledgeSourceCalls.push({ method: 'markFetching', args: [...arguments] }); },
+      async markFetched() { knowledgeSourceCalls.push({ method: 'markFetched', args: [...arguments] }); },
+      async markExtracted() { knowledgeSourceCalls.push({ method: 'markExtracted', args: [...arguments] }); },
+      async markBlocked() { knowledgeSourceCalls.push({ method: 'markBlocked', args: [...arguments] }); },
       async setActive(sourceId, isActive) {
         return { id: sourceId, siteId: 'site-1', isActive };
       },
@@ -223,4 +237,56 @@ test('IngestService.resyncSource supports IT support template sources', async ()
   assert.equal(chunkInput.metadata.kind, 'it_support_template');
   assert.equal(chunkInput.metadata.templateKey, 'vpn-not-connecting');
   assert.equal(chunkInput.metadata.industry, 'it-support');
+});
+
+test('IngestService.ingestUrl persists website text without embeddings or vector writes and keeps runtime not ready', async () => {
+  const deps = createDeps();
+  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+
+  global.fetch = async () => new Response('<main>FAQ Inhalt</main>', {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8' },
+  });
+
+  const result = await service.ingestUrl('site-1', 'https://93.184.216.34/faq', 'FAQ');
+
+  assert.equal(result.runtimeReadiness, 'not_ready');
+  assert.equal(result.ingestStatus, 'extracted');
+  assert.equal(result.indexStatus, 'not_requested');
+  assert.equal(result.extractedTextLength > 0, true);
+  assert.equal(deps.embedCalls.length, 0);
+  assert.equal(deps.vectorCalls.length, 0);
+  assert.equal(deps.dbQueries.some((entry) => /INSERT INTO chunks/i.test(entry.sql)), true);
+  assert.equal(
+    deps.dbQueries.some((entry) => /INSERT INTO chunks/i.test(entry.sql) && entry.params.length === 7),
+    true,
+  );
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markExtracted'),
+    true,
+  );
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markReady'),
+    false,
+  );
+});
+
+test('IngestService.ingestUrl blocks private redirect targets and records blocked status', async () => {
+  const deps = createDeps();
+  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+
+  global.fetch = async () => new Response(null, {
+    status: 302,
+    headers: { location: 'http://127.0.0.1/private' },
+  });
+
+  await assert.rejects(
+    () => service.ingestUrl('site-1', 'https://93.184.216.34/faq', 'FAQ'),
+    /Private oder interne Website-Ziele sind nicht erlaubt/,
+  );
+
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'),
+    true,
+  );
 });

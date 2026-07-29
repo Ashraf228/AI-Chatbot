@@ -78,6 +78,10 @@ export function KnowledgeAddSourcePanel({
         {method === "url" ? (
           <>
             <h3 className="dashboard-card-title dashboard-card-title--sm">Website-Seite einlesen</h3>
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              Importiert nur diese einzelne öffentlich erreichbare Seite. Kein automatisches Website- oder Domain-Crawling.
+              Die Quelle ist danach noch nicht automatisch für Antworten freigegeben.
+            </p>
             <Input
               value={draft.url}
               onChange={(event) => onDraftChange({ ...draft, url: event.target.value })}
