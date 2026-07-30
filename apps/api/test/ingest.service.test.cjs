@@ -66,6 +66,7 @@ function createDeps() {
       async markFetching() { knowledgeSourceCalls.push({ method: 'markFetching', args: [...arguments] }); },
       async markFetched() { knowledgeSourceCalls.push({ method: 'markFetched', args: [...arguments] }); },
       async markExtracted() { knowledgeSourceCalls.push({ method: 'markExtracted', args: [...arguments] }); },
+      async markRuntimeIndexPending() { knowledgeSourceCalls.push({ method: 'markRuntimeIndexPending', args: [...arguments] }); },
       async markBlocked() { knowledgeSourceCalls.push({ method: 'markBlocked', args: [...arguments] }); },
       async setActive(sourceId, isActive) {
         return { id: sourceId, siteId: 'site-1', isActive };
@@ -240,7 +241,7 @@ test('IngestService.resyncSource supports IT support template sources', async ()
   assert.equal(chunkInput.metadata.industry, 'it-support');
 });
 
-test('IngestService.ingestUrl persists website text without embeddings or vector writes and keeps runtime not ready', async () => {
+test('IngestService.ingestUrl persists website text without embeddings or vector writes and keeps runtime index pending', async () => {
   const deps = createDeps();
   const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
   const originalFetchWebsiteSource = websiteIngest.fetchWebsiteSource;
@@ -262,7 +263,7 @@ test('IngestService.ingestUrl persists website text without embeddings or vector
 
     assert.equal(result.runtimeReadiness, 'not_ready');
     assert.equal(result.ingestStatus, 'extracted');
-    assert.equal(result.indexStatus, 'not_requested');
+    assert.equal(result.indexStatus, 'pending');
     assert.equal(result.extractedTextLength > 0, true);
     assert.equal(deps.embedCalls.length, 0);
     assert.equal(deps.vectorCalls.length, 0);
@@ -272,13 +273,16 @@ test('IngestService.ingestUrl persists website text without embeddings or vector
       true,
     );
     assert.equal(
-      deps.knowledgeSourceCalls.some((entry) => entry.method === 'markExtracted'),
+      deps.knowledgeSourceCalls.some((entry) => entry.method === 'markRuntimeIndexPending'),
       true,
     );
     assert.equal(
       deps.knowledgeSourceCalls.some((entry) => entry.method === 'markReady'),
       false,
     );
+    const runtimeGateCall = deps.knowledgeSourceCalls.find((entry) => entry.method === 'markRuntimeIndexPending');
+    assert.equal(runtimeGateCall.args[1].runtimeIndexingRequired, true);
+    assert.equal(runtimeGateCall.args[1].runtimeIndexingMode, 'provider_or_embedding_gate_required');
   } finally {
     websiteIngest.fetchWebsiteSource = originalFetchWebsiteSource;
   }

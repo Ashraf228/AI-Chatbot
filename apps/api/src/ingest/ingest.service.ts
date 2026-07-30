@@ -255,7 +255,7 @@ export class IngestService {
         },
       });
 
-      await this.knowledgeSources.markExtracted(sourceId, {
+      await this.knowledgeSources.markRuntimeIndexPending(sourceId, {
         normalizedSourceUrl: fetched.finalUrl,
         sourceDomain: fetched.sourceDomain,
         extractedChars: fetched.extractedChars,
@@ -264,6 +264,9 @@ export class IngestService {
         persistedChunkCount: result.chunks,
         providerFree: true,
         runtimeReady: false,
+        runtimeIndexingRequired: true,
+        runtimeIndexingMode: 'provider_or_embedding_gate_required',
+        runtimeIndexingReason: 'website_provider_free_text_not_searchable_via_vector_path',
         websiteSingleUrlIngest: true,
       });
 
@@ -277,7 +280,7 @@ export class IngestService {
         normalizedUrl: fetched.finalUrl,
         domain: fetched.sourceDomain,
         ingestStatus: source?.ingestStatus || 'extracted',
-        indexStatus: source?.indexStatus || 'not_requested',
+        indexStatus: source?.indexStatus || 'pending',
         runtimeReadiness: source?.runtimeReadiness || 'not_ready',
         extractedTextLength: fetched.extractedChars,
         error: source?.ingestErrorMessageSanitized || null,
@@ -694,7 +697,7 @@ export class IngestService {
             websiteSingleUrlIngest: true,
           },
         });
-        await this.knowledgeSources.markExtracted(sourceId, {
+        await this.knowledgeSources.markRuntimeIndexPending(sourceId, {
           normalizedSourceUrl: fetched.finalUrl,
           sourceDomain: fetched.sourceDomain,
           extractedChars: fetched.extractedChars,
@@ -703,6 +706,9 @@ export class IngestService {
           persistedChunkCount: result.chunks,
           providerFree: true,
           runtimeReady: false,
+          runtimeIndexingRequired: true,
+          runtimeIndexingMode: 'provider_or_embedding_gate_required',
+          runtimeIndexingReason: 'website_provider_free_text_not_searchable_via_vector_path',
           websiteSingleUrlIngest: true,
         });
         return result;
