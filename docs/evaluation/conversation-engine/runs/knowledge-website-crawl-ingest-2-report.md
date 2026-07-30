@@ -2,7 +2,7 @@
 
 ## Summary
 
-- Date: Wednesday, July 29, 2026
+- Date: Thursday, July 30, 2026
 - Run ID: `knowledge-website-crawl-ingest-2`
 - Run type: `knowledge_website_single_url_ingest_safe_mvp`
 - Scope decision: `single_url_ingest_implemented`
@@ -28,6 +28,14 @@
 - Credentials in URLs are blocked.
 - Redirects to private/internal destinations are blocked.
 - No authenticated crawling or JavaScript rendering was added.
+
+## DNS Rebinding Protection
+
+- The ingest request path no longer depends on ambient DNS resolution inside global `fetch()`.
+- The hostname is resolved first, all returned addresses are validated, and the selected public address is pinned into the actual request.
+- Redirect targets are resolved, revalidated, and repinned before the next request is sent.
+- HTTPS keeps TLS verification enabled with the original hostname preserved for SNI and certificate checks.
+- The fix remains provider-free and does not enable crawling beyond the single requested page.
 
 ## Status Flow
 

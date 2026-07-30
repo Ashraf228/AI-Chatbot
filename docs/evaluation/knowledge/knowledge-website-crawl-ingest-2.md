@@ -2,7 +2,7 @@
 
 ## Summary
 
-- Audit date: Wednesday, July 29, 2026
+- Audit date: Thursday, July 30, 2026
 - Baseline: `2b5943997ec40febbbaeb769b691d93609e908d4`
 - Scope: implement a safe, provider-free single-URL website ingest MVP
 - Scope decision: `single_url_ingest_implemented`
@@ -60,6 +60,17 @@
 - DNS resolution must succeed for named hosts.
 - Direct IP targets are only allowed when the IP is public.
 - Policy violations move the source into `blocked` with a sanitized error.
+
+## DNS Rebinding Protection
+
+- The website ingest request path no longer relies on ambient DNS inside global `fetch()`.
+- Named hosts are resolved through a controlled resolver before the request is issued.
+- Every resolved A/AAAA result must be public; mixed public/private answers are blocked conservatively.
+- The selected validated address is pinned into the actual `http` / `https` request through a custom `lookup` function.
+- Redirect targets are normalized, resolved, revalidated, and repinned before the next request is sent.
+- HTTPS keeps TLS verification enabled.
+- `servername` stays on the original hostname so SNI and certificate validation remain intact.
+- The request path stays provider-free and still does not enable full-domain crawling, authenticated crawling, JavaScript rendering, or automatic answer-readiness.
 
 ## Fetch Limits
 

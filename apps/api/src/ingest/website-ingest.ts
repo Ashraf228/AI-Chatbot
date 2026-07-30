@@ -1,4 +1,8 @@
+import type { LookupAddress } from 'dns';
 import { lookup as defaultLookup } from 'dns/promises';
+import type { IncomingMessage, RequestOptions } from 'http';
+import { request as httpRequest } from 'http';
+import { request as httpsRequest } from 'https';
 import { isIP } from 'net';
 
 const MAX_REDIRECTS = 3;
@@ -49,6 +53,7 @@ export type WebsiteFetchFn = typeof fetch;
 export type ValidatedWebsiteUrl = {
   normalizedUrl: string;
   sourceDomain: string;
+  pinnedAddress: ResolvedPublicAddress;
 };
 
 export type WebsiteFetchResult = {
@@ -64,112 +69,130 @@ export type WebsiteFetchResult = {
   truncated: boolean;
 };
 
+export type ResolvedPublicAddress = {
+  address: string;
+  family: 4 | 6;
+};
+
+type WebsiteRequestHandle = {
+  end: () => void;
+  destroy: (error?: Error) => void;
+  on: (event: 'error', listener: (error: Error) => void) => WebsiteRequestHandle;
+  setTimeout?: (timeoutMs: number, listener?: () => void) => void;
+};
+
+type WebsiteRequestOptions = RequestOptions & {
+  servername?: string;
+  rejectUnauthorized?: boolean;
+};
+
+type WebsiteTransportFn = (
+  options: WebsiteRequestOptions,
+  callback: (response: IncomingMessage) => void,
+) => WebsiteRequestHandle;
+
+type WebsitePinnedRequestOptions = {
+  timeoutMs?: number;
+  headers?: Record<string, string>;
+  httpRequestImpl?: WebsiteTransportFn;
+  httpsRequestImpl?: WebsiteTransportFn;
+};
+
+export type WebsiteRequestFn = (
+  url: string,
+  pinnedAddress: ResolvedPublicAddress,
+  options?: WebsitePinnedRequestOptions,
+) => Promise<IncomingMessage>;
+
 export async function validatePublicWebsiteUrl(
   input: string,
   resolver: WebsiteLookupFn = defaultLookup,
 ): Promise<ValidatedWebsiteUrl> {
   const parsed = parseWebsiteUrl(input);
-  await validateResolvedHostname(parsed.hostname, resolver);
+  const pinnedAddress = await resolvePublicAddresses(parsed.hostname, resolver);
 
   return {
     normalizedUrl: parsed.toString(),
     sourceDomain: parsed.hostname.toLowerCase(),
+    pinnedAddress,
   };
 }
 
 export async function fetchWebsiteSource(
   input: string,
   options: {
-    fetchImpl?: WebsiteFetchFn;
+    requestImpl?: WebsiteRequestFn;
     resolver?: WebsiteLookupFn;
     timeoutMs?: number;
+    httpRequestImpl?: WebsiteTransportFn;
+    httpsRequestImpl?: WebsiteTransportFn;
   } = {},
 ): Promise<WebsiteFetchResult> {
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const requestImpl = options.requestImpl ?? fetchWithPinnedDns;
   const resolver = options.resolver ?? defaultLookup;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const initial = await validatePublicWebsiteUrl(input, resolver);
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    let currentUrl = initial.normalizedUrl;
+    let currentTarget = initial;
     let redirectCount = 0;
 
     for (;;) {
-      const response = await fetchImpl(currentUrl, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: controller.signal,
+      const response = await requestImpl(currentTarget.normalizedUrl, currentTarget.pinnedAddress, {
+        timeoutMs,
         headers: {
           accept: 'text/html,text/plain,application/xhtml+xml',
           'user-agent': WEBSITE_USER_AGENT,
         },
+        httpRequestImpl: options.httpRequestImpl,
+        httpsRequestImpl: options.httpsRequestImpl,
       });
+      const statusCode = response.statusCode ?? 0;
 
-      if ([301, 302, 303, 307, 308].includes(response.status)) {
+      if ([301, 302, 303, 307, 308].includes(statusCode)) {
         if (redirectCount >= MAX_REDIRECTS) {
           throw new WebsitePolicyError('Zu viele Weiterleitungen.', 'redirect_limit_exceeded');
         }
 
-        const location = response.headers.get('location');
+        response.resume();
+
+        const location = headerValue(response.headers.location);
         if (!location) {
           throw new WebsiteFetchError('Weiterleitung ohne Ziel.', 'redirect_missing_location');
         }
 
-        currentUrl = (await validatePublicWebsiteUrl(new URL(location, currentUrl).toString(), resolver)).normalizedUrl;
+        currentTarget = await validatePublicWebsiteUrl(
+          new URL(location, currentTarget.normalizedUrl).toString(),
+          resolver,
+        );
         redirectCount += 1;
         continue;
       }
 
-      if (!response.ok) {
-        throw new WebsiteFetchError(`Website antwortete mit HTTP ${response.status}.`, 'remote_http_error');
+      if (statusCode < 200 || statusCode >= 300) {
+        response.resume();
+        throw new WebsiteFetchError(`Website antwortete mit HTTP ${statusCode}.`, 'remote_http_error');
       }
 
-      const contentType = (response.headers.get('content-type') || '').trim();
+      const contentType = headerValue(response.headers['content-type']).trim();
       if (!ALLOWED_CONTENT_TYPES.some((pattern) => pattern.test(contentType))) {
+        response.resume();
         throw new WebsitePolicyError('Der Inhaltstyp der Website ist nicht erlaubt.', 'content_type_blocked');
       }
 
-      const body = response.body;
-      if (!body) {
-        throw new WebsiteFetchError('Die Website lieferte keinen lesbaren Inhalt.', 'response_body_missing');
-      }
-
-      const reader = body.getReader();
-      const chunks: Uint8Array[] = [];
-      let totalBytes = 0;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        if (!value) {
-          continue;
-        }
-
-        totalBytes += value.byteLength;
-        if (totalBytes > MAX_RESPONSE_BYTES) {
-          throw new WebsitePolicyError('Die Website-Antwort ist zu groß.', 'response_too_large');
-        }
-
-        chunks.push(value);
-      }
+      const { chunks, totalBytes } = await readResponseBody(response);
 
       const extraction = extractWebsiteText(Buffer.concat(chunks).toString('utf8'), contentType);
       if (!extraction.text) {
         throw new WebsitePolicyError('Die Website enthält keinen auswertbaren Text.', 'empty_extract');
       }
 
-      const finalValidation = await validatePublicWebsiteUrl(currentUrl, resolver);
       return {
         normalizedUrl: initial.normalizedUrl,
-        finalUrl: finalValidation.normalizedUrl,
-        sourceDomain: finalValidation.sourceDomain,
+        finalUrl: currentTarget.normalizedUrl,
+        sourceDomain: currentTarget.sourceDomain,
         contentType,
-        statusCode: response.status,
+        statusCode,
         redirectCount,
         responseBytes: totalBytes,
         extractedText: extraction.text,
@@ -181,13 +204,67 @@ export async function fetchWebsiteSource(
     if (error instanceof WebsitePolicyError || error instanceof WebsiteFetchError) {
       throw error;
     }
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (isTimeoutError(error)) {
       throw new WebsiteFetchError('Die Website hat nicht rechtzeitig geantwortet.', 'fetch_timeout');
     }
     throw new WebsiteFetchError('Die Website konnte nicht geladen werden.', 'fetch_failed');
-  } finally {
-    clearTimeout(timeout);
   }
+}
+
+export function createPinnedLookup(
+  pinnedAddress: ResolvedPublicAddress,
+): NonNullable<RequestOptions['lookup']> {
+  return ((_hostname: string, options: { all?: boolean }, callback: (...args: unknown[]) => void) => {
+    if (options?.all) {
+      callback(null, [{ address: pinnedAddress.address, family: pinnedAddress.family } satisfies LookupAddress]);
+      return;
+    }
+
+    callback(null, pinnedAddress.address, pinnedAddress.family);
+  }) as NonNullable<RequestOptions['lookup']>;
+}
+
+export async function fetchWithPinnedDns(
+  url: string,
+  pinnedAddress: ResolvedPublicAddress,
+  options: WebsitePinnedRequestOptions = {},
+): Promise<IncomingMessage> {
+  const target = new URL(url);
+  const requester = (
+    target.protocol === 'https:'
+      ? (options.httpsRequestImpl ?? (httpsRequest as unknown as WebsiteTransportFn))
+      : (options.httpRequestImpl ?? (httpRequest as unknown as WebsiteTransportFn))
+  );
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  return await new Promise<IncomingMessage>((resolve, reject) => {
+    const request = requester(
+      {
+        protocol: target.protocol,
+        hostname: target.hostname,
+        port: target.port ? Number(target.port) : undefined,
+        path: `${target.pathname}${target.search}`,
+        method: 'GET',
+        headers: options.headers,
+        lookup: createPinnedLookup(pinnedAddress),
+        servername: target.hostname,
+        rejectUnauthorized: true,
+      },
+      (response) => {
+        resolve(response);
+      },
+    );
+
+    request.on('error', (error) => {
+      reject(error);
+    });
+
+    request.setTimeout?.(timeoutMs, () => {
+      request.destroy(createTimeoutError());
+    });
+
+    request.end();
+  });
 }
 
 export function extractWebsiteText(input: string, contentType?: string) {
@@ -231,12 +308,15 @@ function parseWebsiteUrl(input: string) {
   return parsed;
 }
 
-async function validateResolvedHostname(hostname: string, resolver: WebsiteLookupFn) {
+async function resolvePublicAddresses(hostname: string, resolver: WebsiteLookupFn): Promise<ResolvedPublicAddress> {
   if (isIP(hostname)) {
     if (isPrivateAddress(hostname)) {
       throw new WebsitePolicyError('Private oder interne Website-Ziele sind nicht erlaubt.', 'ip_blocked');
     }
-    return;
+    return {
+      address: hostname,
+      family: (isIP(hostname) === 6 ? 6 : 4),
+    };
   }
 
   const records = await resolver(hostname, { all: true, verbatim: true }).catch(() => []);
@@ -244,11 +324,20 @@ async function validateResolvedHostname(hostname: string, resolver: WebsiteLooku
     throw new WebsiteFetchError('Der Hostname der Website konnte nicht aufgelöst werden.', 'dns_lookup_failed');
   }
 
+  const normalizedRecords: ResolvedPublicAddress[] = [];
+
   for (const record of records) {
     if (!record?.address || isPrivateAddress(record.address)) {
       throw new WebsitePolicyError('Private oder interne Website-Ziele sind nicht erlaubt.', 'resolved_ip_blocked');
     }
+
+    normalizedRecords.push({
+      address: record.address,
+      family: record.family === 6 ? 6 : 4,
+    });
   }
+
+  return normalizedRecords[0];
 }
 
 function isBlockedHostname(hostname: string) {
@@ -328,4 +417,53 @@ function decodeHtmlEntities(value: string) {
     .replace(/&quot;/gi, '"')
     .replace(/&#39;/gi, "'")
     .replace(/&#x27;/gi, "'");
+}
+
+function headerValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] || '';
+  }
+
+  return value || '';
+}
+
+async function readResponseBody(response: IncomingMessage) {
+  return await new Promise<{ chunks: Uint8Array[]; totalBytes: number }>((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    response.on('data', (chunk: Buffer | string) => {
+      const bufferChunk = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+      totalBytes += bufferChunk.byteLength;
+
+      if (totalBytes > MAX_RESPONSE_BYTES) {
+        response.destroy(createPolicyError('Die Website-Antwort ist zu groß.', 'response_too_large'));
+        return;
+      }
+
+      chunks.push(bufferChunk);
+    });
+
+    response.on('end', () => {
+      resolve({ chunks, totalBytes });
+    });
+
+    response.on('error', (error) => {
+      reject(error);
+    });
+  });
+}
+
+function createTimeoutError() {
+  return Object.assign(new Error('request_timeout'), { code: 'REQUEST_TIMEOUT' });
+}
+
+function createPolicyError(message: string, code: string) {
+  return new WebsitePolicyError(message, code);
+}
+
+function isTimeoutError(error: unknown) {
+  return error instanceof Error
+    && ((error as Error & { code?: string }).code === 'REQUEST_TIMEOUT'
+      || error.name === 'AbortError');
 }

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { IngestService } = require('../dist/ingest/ingest.service.js');
+const websiteIngest = require('../dist/ingest/website-ingest.js');
 
 function createDeps() {
   const dbQueries = [];
@@ -242,51 +243,66 @@ test('IngestService.resyncSource supports IT support template sources', async ()
 test('IngestService.ingestUrl persists website text without embeddings or vector writes and keeps runtime not ready', async () => {
   const deps = createDeps();
   const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
-
-  global.fetch = async () => new Response('<main>FAQ Inhalt</main>', {
-    status: 200,
-    headers: { 'content-type': 'text/html; charset=utf-8' },
+  const originalFetchWebsiteSource = websiteIngest.fetchWebsiteSource;
+  websiteIngest.fetchWebsiteSource = async () => ({
+    normalizedUrl: 'https://93.184.216.34/faq',
+    finalUrl: 'https://93.184.216.34/faq',
+    sourceDomain: '93.184.216.34',
+    contentType: 'text/html; charset=utf-8',
+    statusCode: 200,
+    redirectCount: 0,
+    responseBytes: 24,
+    extractedText: 'FAQ Inhalt',
+    extractedChars: 10,
+    truncated: false,
   });
 
-  const result = await service.ingestUrl('site-1', 'https://93.184.216.34/faq', 'FAQ');
+  try {
+    const result = await service.ingestUrl('site-1', 'https://93.184.216.34/faq', 'FAQ');
 
-  assert.equal(result.runtimeReadiness, 'not_ready');
-  assert.equal(result.ingestStatus, 'extracted');
-  assert.equal(result.indexStatus, 'not_requested');
-  assert.equal(result.extractedTextLength > 0, true);
-  assert.equal(deps.embedCalls.length, 0);
-  assert.equal(deps.vectorCalls.length, 0);
-  assert.equal(deps.dbQueries.some((entry) => /INSERT INTO chunks/i.test(entry.sql)), true);
-  assert.equal(
-    deps.dbQueries.some((entry) => /INSERT INTO chunks/i.test(entry.sql) && entry.params.length === 7),
-    true,
-  );
-  assert.equal(
-    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markExtracted'),
-    true,
-  );
-  assert.equal(
-    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markReady'),
-    false,
-  );
+    assert.equal(result.runtimeReadiness, 'not_ready');
+    assert.equal(result.ingestStatus, 'extracted');
+    assert.equal(result.indexStatus, 'not_requested');
+    assert.equal(result.extractedTextLength > 0, true);
+    assert.equal(deps.embedCalls.length, 0);
+    assert.equal(deps.vectorCalls.length, 0);
+    assert.equal(deps.dbQueries.some((entry) => /INSERT INTO chunks/i.test(entry.sql)), true);
+    assert.equal(
+      deps.dbQueries.some((entry) => /INSERT INTO chunks/i.test(entry.sql) && entry.params.length === 7),
+      true,
+    );
+    assert.equal(
+      deps.knowledgeSourceCalls.some((entry) => entry.method === 'markExtracted'),
+      true,
+    );
+    assert.equal(
+      deps.knowledgeSourceCalls.some((entry) => entry.method === 'markReady'),
+      false,
+    );
+  } finally {
+    websiteIngest.fetchWebsiteSource = originalFetchWebsiteSource;
+  }
 });
 
 test('IngestService.ingestUrl blocks private redirect targets and records blocked status', async () => {
   const deps = createDeps();
   const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const originalFetchWebsiteSource = websiteIngest.fetchWebsiteSource;
+  websiteIngest.fetchWebsiteSource = async () => {
+    throw new websiteIngest.WebsitePolicyError('Private oder interne Website-Ziele sind nicht erlaubt.', 'resolved_ip_blocked');
+  };
 
-  global.fetch = async () => new Response(null, {
-    status: 302,
-    headers: { location: 'http://127.0.0.1/private' },
-  });
+  try {
+    await assert.rejects(
+      () => service.ingestUrl('site-1', 'https://93.184.216.34/faq', 'FAQ'),
+      /Private oder interne Website-Ziele sind nicht erlaubt/,
+    );
 
-  await assert.rejects(
-    () => service.ingestUrl('site-1', 'https://93.184.216.34/faq', 'FAQ'),
-    /Private oder interne Website-Ziele sind nicht erlaubt/,
-  );
-
-  assert.equal(
-    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'),
-    true,
-  );
+    assert.equal(
+      deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'),
+      true,
+    );
+  } finally {
+    websiteIngest.fetchWebsiteSource = originalFetchWebsiteSource;
+  }
 });
