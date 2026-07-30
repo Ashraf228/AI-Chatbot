@@ -54,12 +54,29 @@ export function formatKnowledgeSourceType(type: string) {
   return "Nicht eindeutig";
 }
 
-export function formatKnowledgeSourceStatus(status: string, isActive: boolean) {
+export function formatKnowledgeSourceStatus(
+  status: string,
+  isActive: boolean,
+  ingestStatus?: string,
+  runtimeReadiness?: string,
+) {
   if (!isActive || status === "disabled") {
     return "Deaktiviert";
   }
-  if (status === "ready" || status === "indexed") {
+  if (runtimeReadiness === "ready" || status === "ready" || status === "indexed") {
     return "Einsatzbereit";
+  }
+  if (ingestStatus === "extracted" && runtimeReadiness !== "ready") {
+    return "Importiert, noch nicht antwortbereit";
+  }
+  if (ingestStatus === "fetched") {
+    return "Inhalt geladen, wird gespeichert";
+  }
+  if (ingestStatus === "fetch_pending" || ingestStatus === "fetching") {
+    return "Website wird geladen";
+  }
+  if (ingestStatus === "blocked" || runtimeReadiness === "blocked") {
+    return "Blockiert";
   }
   if (status === "processing" || status === "pending") {
     return "Wird verarbeitet";

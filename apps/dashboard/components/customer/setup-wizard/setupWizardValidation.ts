@@ -293,10 +293,14 @@ export function sourceTone(source: KnowledgeSource): CustomerStatusTone {
   if (!source.isActive || source.status === "disabled") {
     return "pending";
   }
-  if (source.status === "ready") {
+  if (source.runtimeReadiness === "ready" || source.status === "ready") {
     return "done";
   }
-  if (source.status === "failed") {
+  if (
+    source.status === "failed"
+    || source.ingestStatus === "blocked"
+    || source.runtimeReadiness === "blocked"
+  ) {
     return "attention";
   }
   return "pending";

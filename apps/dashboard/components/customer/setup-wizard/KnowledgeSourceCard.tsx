@@ -17,6 +17,15 @@ type KnowledgeSourceCardProps = {
 };
 
 function normalizedStatus(source: KnowledgeSource) {
+  if (source.runtimeReadiness === "ready") {
+    return "ready";
+  }
+  if (source.ingestStatus === "blocked" || source.runtimeReadiness === "blocked") {
+    return "failed";
+  }
+  if (source.ingestStatus === "extracted" && source.runtimeReadiness !== "ready") {
+    return "processing";
+  }
   const status = (source.status || "").toLowerCase();
   if (!source.isActive || status === "disabled") {
     return "disabled";
@@ -83,7 +92,9 @@ function completionLabel(source: KnowledgeSource) {
 function sourceBoundaryLabel(source: KnowledgeSource) {
   const normalizedType = source.type.toLowerCase();
   if (normalizedType === "url" || normalizedType === "website") {
-    return "Einzelne importierte Webseite. Kein automatisches Website-Crawling.";
+    return source.ingestStatus === "extracted" && source.runtimeReadiness !== "ready"
+      ? "Einzelne importierte Webseite. Inhalt extrahiert, aber noch nicht fuer Antworten freigegeben. Kein automatisches Website-Crawling."
+      : "Einzelne importierte Webseite. Kein automatisches Website-Crawling.";
   }
   if (normalizedType === "url_metadata") {
     return "Website-/Domain-Angabe allein wird nicht automatisch als Wissensquelle genutzt.";
@@ -98,7 +109,12 @@ export function KnowledgeSourceCard({ source, savingKey, onToggle, onRefresh, on
     source.url || source.sourceUrl || "Eigener Inhalt",
     "Im bestehenden Wissenspfad gespeichert",
   ].filter(Boolean);
-  const statusText = formatKnowledgeSourceStatus(source.status || "pending", source.isActive);
+  const statusText = formatKnowledgeSourceStatus(
+    source.status || "pending",
+    source.isActive,
+    source.ingestStatus,
+    source.runtimeReadiness,
+  );
 
   return (
     <div className="knowledge-step__source-card">
@@ -139,6 +155,12 @@ export function KnowledgeSourceCard({ source, savingKey, onToggle, onRefresh, on
         <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
           <strong>Status</strong>
           <p className="dashboard-copy dashboard-no-margin-bottom">{statusText}</p>
+        </div>
+        <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
+          <strong>Importstatus</strong>
+          <p className="dashboard-copy dashboard-no-margin-bottom">
+            {source.ingestStatus || "created"} · Index {source.indexStatus || "not_requested"} · Runtime {source.runtimeReadiness || "not_ready"}
+          </p>
         </div>
         <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
           <strong>Persistenz</strong>

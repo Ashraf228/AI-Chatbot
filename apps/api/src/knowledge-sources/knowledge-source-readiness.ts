@@ -1,5 +1,13 @@
 export type KnowledgeSourceStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'disabled';
-export type KnowledgeSourceIngestStatus = 'created' | 'processing' | 'extracted' | 'failed' | 'blocked';
+export type KnowledgeSourceIngestStatus =
+  | 'created'
+  | 'fetch_pending'
+  | 'fetching'
+  | 'fetched'
+  | 'processing'
+  | 'extracted'
+  | 'failed'
+  | 'blocked';
 export type KnowledgeSourceIndexStatus = 'not_requested' | 'pending' | 'indexed' | 'failed' | 'blocked';
 export type KnowledgeSourceRuntimeReadiness = 'not_ready' | 'ready' | 'failed' | 'blocked';
 
@@ -29,6 +37,9 @@ const KNOWN_SYNC_STATUSES = new Set<KnowledgeSourceStatus>([
 
 const KNOWN_INGEST_STATUSES = new Set<KnowledgeSourceIngestStatus>([
   'created',
+  'fetch_pending',
+  'fetching',
+  'fetched',
   'processing',
   'extracted',
   'failed',
@@ -171,11 +182,16 @@ export function deriveLegacySyncStatus(input: {
     return 'failed';
   }
 
-  if (ingestStatus === 'created') {
+  if (ingestStatus === 'created' || ingestStatus === 'fetch_pending') {
     return 'pending';
   }
 
-  if (ingestStatus === 'processing' || ingestStatus === 'extracted') {
+  if (
+    ingestStatus === 'fetching'
+    || ingestStatus === 'fetched'
+    || ingestStatus === 'processing'
+    || ingestStatus === 'extracted'
+  ) {
     return 'processing';
   }
 
