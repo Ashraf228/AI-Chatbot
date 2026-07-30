@@ -406,6 +406,24 @@ export class KnowledgeSourcesService {
     );
   }
 
+  async markRuntimeIndexPending(sourceId: string, metadataPatch?: Record<string, unknown>) {
+    await this.db.query(
+      `UPDATE knowledge_sources
+       SET sync_status = 'processing',
+           ingest_status = 'extracted',
+           index_status = 'pending',
+           runtime_readiness = 'not_ready',
+           ingest_error_code = null,
+           ingest_error_message_sanitized = null,
+           error_message = null,
+           last_ingest_at = now(),
+           config = COALESCE(config, '{}'::jsonb) || $2::jsonb,
+           updated_at = now()
+       WHERE id = $1`,
+      [sourceId, JSON.stringify(normalizeRecord(metadataPatch))],
+    );
+  }
+
   async markFailed(sourceId: string, message: string, errorCode = 'ingest_failed') {
     await this.db.query(
       `UPDATE knowledge_sources

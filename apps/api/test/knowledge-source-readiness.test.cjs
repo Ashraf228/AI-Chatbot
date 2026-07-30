@@ -37,6 +37,23 @@ test('knowledge source lifecycle keeps extracted-only sources out of completion 
   }), false);
 });
 
+test('knowledge source lifecycle keeps extracted website sources with pending runtime index out of completion readiness', () => {
+  const lifecycle = resolveKnowledgeSourceLifecycle({
+    syncStatus: 'processing',
+    ingestStatus: 'extracted',
+    indexStatus: 'pending',
+    runtimeReadiness: 'not_ready',
+    isActive: true,
+  });
+
+  assert.equal(lifecycle.syncStatus, 'processing');
+  assert.equal(lifecycle.indexStatus, 'pending');
+  assert.equal(isKnowledgeSourceCompletionReady({
+    isActive: true,
+    runtimeReadiness: lifecycle.runtimeReadiness,
+  }), false);
+});
+
 test('knowledge source lifecycle keeps fetch-pending and fetched website sources out of completion readiness', () => {
   const pending = resolveKnowledgeSourceLifecycle({
     syncStatus: 'pending',
