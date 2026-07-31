@@ -1,3 +1,8 @@
+import {
+  evaluateProviderApprovalPolicy,
+  type ProviderApprovalPolicy as ProviderEmbeddingApproval,
+} from './provider-approval-policy';
+
 export type ProviderEmbeddingUsageContext =
   | 'website_ingest_runtime_indexing'
   | 'knowledge_reindex'
@@ -9,24 +14,33 @@ export type ProviderEmbeddingEnvironment = 'production' | 'non_production';
 
 export type ProviderEmbeddingDecisionCode =
   | 'allowed'
+  | 'missing_policy'
   | 'not_granted'
   | 'unsupported_source_type'
+  | 'revoked'
+  | 'expired'
+  | 'not_yet_valid'
+  | 'tenant_mismatch'
+  | 'site_mismatch'
+  | 'source_type_not_allowed'
+  | 'usage_context_not_allowed'
+  | 'provider_not_allowed'
+  | 'model_not_allowed'
   | 'customer_data_not_approved'
   | 'provider_not_configured'
-  | 'production_not_approved';
+  | 'production_not_approved'
+  | 'dpa_not_approved'
+  | 'retention_policy_missing'
+  | 'logging_policy_missing'
+  | 'redaction_policy_missing'
+  | 'cost_limit_missing'
+  | 'rate_limit_missing';
 
-export type ProviderEmbeddingApproval = {
-  granted: boolean;
-  grantedBy?: string | null;
-  providerKey?: string | null;
-  model?: string | null;
-  approvedTenantId?: string | null;
-  approvedSiteId?: string | null;
-  allowedSourceTypes?: string[] | null;
-  allowedUsageContexts?: string[] | null;
-  productionApproved?: boolean;
-  customerDataApproved?: boolean;
-};
+export {
+  evaluateProviderApprovalPolicy,
+  validateProviderApprovalPolicy,
+  type ProviderApprovalPolicy as ProviderEmbeddingApproval,
+} from './provider-approval-policy';
 
 export type ProviderEmbeddingGateInput = {
   tenantId?: string | null;
@@ -36,6 +50,8 @@ export type ProviderEmbeddingGateInput = {
   usageContext?: string | null;
   actorRole?: ProviderEmbeddingActorRole | null;
   environment?: ProviderEmbeddingEnvironment | null;
+  providerKey?: string | null;
+  model?: string | null;
   explicitApproval?: ProviderEmbeddingApproval | null;
 };
 
@@ -82,7 +98,9 @@ export function evaluateProviderEmbeddingGate(
   const tenantId = (input.tenantId || '').trim();
   const siteId = (input.siteId || '').trim();
   const environment = input.environment || 'non_production';
-  const explicitApproval = input.explicitApproval || { granted: false };
+  const providerKey = (input.providerKey || '').trim();
+  const model = (input.model || '').trim();
+  const explicitApproval = input.explicitApproval || null;
 
   if (!KNOWN_USAGE_CONTEXTS.has(usageContext as ProviderEmbeddingUsageContext)) {
     return deny(
@@ -108,89 +126,24 @@ export function evaluateProviderEmbeddingGate(
     );
   }
 
-  if (!explicitApproval.granted) {
-    return deny(
-      'not_granted',
-      'explicit_approval_missing',
-      'Provider-/Embedding-Nutzung bleibt ohne explizite Freigabe gesperrt.',
-    );
-  }
-
-  if (
-    explicitApproval.approvedTenantId
-    && explicitApproval.approvedTenantId.trim()
-    && explicitApproval.approvedTenantId !== tenantId
-  ) {
-    return deny(
-      'not_granted',
-      'tenant_not_approved',
-      'Die Freigabe gilt nicht fuer diesen Tenant.',
-    );
-  }
-
-  if (
-    explicitApproval.approvedSiteId
-    && explicitApproval.approvedSiteId.trim()
-    && explicitApproval.approvedSiteId !== siteId
-  ) {
-    return deny(
-      'not_granted',
-      'site_not_approved',
-      'Die Freigabe gilt nicht fuer diese Site.',
-    );
-  }
-
-  if (
-    explicitApproval.allowedSourceTypes
-    && explicitApproval.allowedSourceTypes.length > 0
-    && !explicitApproval.allowedSourceTypes.includes(sourceType)
-  ) {
-    return deny(
-      'unsupported_source_type',
-      'source_type_not_approved',
-      'Der Quelltyp ist fuer diese Provider-/Embedding-Freigabe nicht erlaubt.',
-    );
-  }
-
-  if (
-    explicitApproval.allowedUsageContexts
-    && explicitApproval.allowedUsageContexts.length > 0
-    && !explicitApproval.allowedUsageContexts.includes(usageContext)
-  ) {
-    return deny(
-      'not_granted',
-      'usage_context_not_approved',
-      'Der Provider-/Embedding-Kontext ist durch die Freigabe nicht abgedeckt.',
-    );
-  }
-
-  if (environment === 'production' && explicitApproval.productionApproved !== true) {
-    return deny(
-      'production_not_approved',
-      'production_not_approved',
-      'Provider-/Embedding-Nutzung ist in Production ohne separate Freigabe gesperrt.',
-    );
-  }
-
-  if (explicitApproval.customerDataApproved !== true) {
-    return deny(
-      'customer_data_not_approved',
-      'customer_data_not_approved',
-      'Provider-/Embedding-Nutzung bleibt ohne Datenfreigabe gesperrt.',
-    );
-  }
-
-  if (!explicitApproval.providerKey?.trim() || !explicitApproval.model?.trim()) {
-    return deny(
-      'provider_not_configured',
-      'provider_or_model_missing',
-      'Provider und Modell muessen vor einer Embedding-Freigabe festgelegt werden.',
-    );
+  const policyDecision = evaluateProviderApprovalPolicy({
+    policy: explicitApproval,
+    tenantId,
+    siteId,
+    sourceId: input.sourceId,
+    sourceType,
+    usageContext,
+    environment,
+    provider: providerKey,
+    model,
+  });
+  if (!policyDecision.allowed) {
+    return deny(policyDecision.decisionCode, policyDecision.reason, policyDecision.sanitizedMessage);
   }
 
   return allow(
-    'explicit_provider_embedding_approval_present',
-    'Die Provider-/Embedding-Freigabe ist fuer diesen Kontext formal vorhanden.',
+    'provider_approval_policy_scope_matched',
+    'Die technische Provider-/Embedding-Policy ist fuer diesen Kontext formal vorhanden.',
   );
 }
 
