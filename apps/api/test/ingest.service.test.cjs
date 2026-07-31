@@ -310,3 +310,92 @@ test('IngestService.ingestUrl blocks private redirect targets and records blocke
     websiteIngest.fetchWebsiteSource = originalFetchWebsiteSource;
   }
 });
+
+test('IngestService.evaluateWebsiteRuntimeIndexingGate denies website embedding by default without provider calls', async () => {
+  const deps = createDeps();
+  deps.knowledgeSources.getById = async (sourceId) => ({
+    id: sourceId,
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    type: 'url',
+    title: 'Website',
+    metadata: { providerFree: true },
+    ingestStatus: 'extracted',
+    indexStatus: 'pending',
+    runtimeReadiness: 'not_ready',
+    url: 'https://example.com/faq',
+  });
+  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+
+  const result = await service.evaluateWebsiteRuntimeIndexingGate({
+    sourceId: 'source-1',
+  });
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.decisionCode, 'not_granted');
+  assert.equal(result.providerCallsUsed, false);
+  assert.equal(result.embeddingGenerationUsed, false);
+  assert.equal(result.readyTransitionAdded, false);
+  assert.equal(deps.embedCalls.length, 0);
+  assert.equal(deps.vectorCalls.length, 0);
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'),
+    true,
+  );
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markReady'),
+    false,
+  );
+});
+
+test('IngestService.evaluateWebsiteRuntimeIndexingGate can acknowledge explicit approval without executing provider work', async () => {
+  const deps = createDeps();
+  deps.knowledgeSources.getById = async (sourceId) => ({
+    id: sourceId,
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    type: 'url',
+    title: 'Website',
+    metadata: { providerFree: true },
+    ingestStatus: 'extracted',
+    indexStatus: 'pending',
+    runtimeReadiness: 'not_ready',
+    url: 'https://example.com/faq',
+  });
+  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+
+  const result = await service.evaluateWebsiteRuntimeIndexingGate({
+    sourceId: 'source-1',
+    actorRole: 'admin',
+    explicitApproval: {
+      granted: true,
+      grantedBy: 'security_owner',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+      approvedTenantId: 'tenant-1',
+      approvedSiteId: 'site-1',
+      allowedSourceTypes: ['url'],
+      allowedUsageContexts: ['website_ingest_runtime_indexing'],
+      customerDataApproved: true,
+      productionApproved: false,
+    },
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.decisionCode, 'allowed');
+  assert.equal(result.indexStatus, 'pending');
+  assert.equal(result.runtimeReadiness, 'not_ready');
+  assert.equal(result.providerCallsUsed, false);
+  assert.equal(result.embeddingGenerationUsed, false);
+  assert.equal(result.readyTransitionAdded, false);
+  assert.equal(deps.embedCalls.length, 0);
+  assert.equal(deps.vectorCalls.length, 0);
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'),
+    false,
+  );
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markReady'),
+    false,
+  );
+});

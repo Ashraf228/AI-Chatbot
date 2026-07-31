@@ -9,6 +9,11 @@ import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { SitesService } from '../sites/sites.service';
 import { KnowledgeSourcesService } from '../knowledge-sources/knowledge-sources.service';
+import {
+  evaluateProviderEmbeddingGate,
+  type ProviderEmbeddingApproval,
+  type ProviderEmbeddingEnvironment,
+} from '../knowledge-sources/provider-embedding-gate';
 import { chunkText } from '../utils/chunk';
 import { sha256 } from '../utils/hash';
 import { randomUUID } from 'crypto';
@@ -49,6 +54,20 @@ type FaqChunkDetailRow = {
   id: string;
   site_id: string;
   metadata: Record<string, unknown> | null;
+};
+
+type WebsiteRuntimeIndexingGateResult = {
+  sourceId: string;
+  allowed: boolean;
+  decisionCode: string;
+  reason: string;
+  sanitizedMessage: string;
+  ingestStatus: string;
+  indexStatus: string;
+  runtimeReadiness: string;
+  providerCallsUsed: false;
+  embeddingGenerationUsed: false;
+  readyTransitionAdded: false;
 };
 
 @Injectable()
@@ -656,6 +675,65 @@ export class IngestService {
       throw new BadRequestException('sourceId missing');
     }
     return this.knowledgeSources.setActive(sourceId, isActive);
+  }
+
+  async evaluateWebsiteRuntimeIndexingGate(input: {
+    sourceId: string;
+    explicitApproval?: ProviderEmbeddingApproval | null;
+    actorRole?: 'system' | 'admin' | 'operator' | 'viewer' | 'public';
+    environment?: ProviderEmbeddingEnvironment;
+  }): Promise<WebsiteRuntimeIndexingGateResult> {
+    if (!input.sourceId?.trim()) {
+      throw new BadRequestException('sourceId missing');
+    }
+
+    const source = await this.knowledgeSources.getById(input.sourceId);
+    if (!source) {
+      throw new BadRequestException('Invalid sourceId');
+    }
+
+    const decision = evaluateProviderEmbeddingGate({
+      tenantId: source.tenantId,
+      siteId: source.siteId,
+      sourceId: source.id,
+      sourceType: source.type,
+      usageContext: 'website_ingest_runtime_indexing',
+      actorRole: input.actorRole || 'system',
+      environment: input.environment || (process.env.NODE_ENV === 'production' ? 'production' : 'non_production'),
+      explicitApproval: input.explicitApproval || { granted: false },
+    });
+
+    if (!decision.allowed) {
+      await this.knowledgeSources.markBlocked(source.id, decision.sanitizedMessage, decision.decisionCode);
+      const blocked = await this.knowledgeSources.getById(source.id);
+      return {
+        sourceId: source.id,
+        allowed: false,
+        decisionCode: decision.decisionCode,
+        reason: decision.reason,
+        sanitizedMessage: decision.sanitizedMessage,
+        ingestStatus: blocked?.ingestStatus || 'blocked',
+        indexStatus: blocked?.indexStatus || 'blocked',
+        runtimeReadiness: blocked?.runtimeReadiness || 'blocked',
+        providerCallsUsed: false,
+        embeddingGenerationUsed: false,
+        readyTransitionAdded: false,
+      };
+    }
+
+    return {
+      sourceId: source.id,
+      allowed: true,
+      decisionCode: decision.decisionCode,
+      reason: decision.reason,
+      sanitizedMessage: decision.sanitizedMessage,
+      ingestStatus: source.ingestStatus,
+      indexStatus: source.indexStatus,
+      runtimeReadiness: source.runtimeReadiness,
+      providerCallsUsed: false,
+      embeddingGenerationUsed: false,
+      readyTransitionAdded: false,
+    };
   }
 
   async resyncSource(sourceId: string) {
