@@ -14,6 +14,7 @@ function createDeps() {
     embedCalls,
     vectorCalls,
     knowledgeSourceCalls,
+    approvalLookupCalls: [],
     db: {
       async query(sql, params) {
         dbQueries.push({ sql, params });
@@ -75,6 +76,11 @@ function createDeps() {
         return { ok: true, deletedId: sourceId, siteId: 'site-1' };
       },
       async deleteIfUnused() {},
+    },
+    approvalLookup: {
+      async findProviderApprovalGrant() {
+        return null;
+      },
     },
   };
 }
@@ -407,6 +413,85 @@ test('IngestService.evaluateWebsiteRuntimeIndexingGate can acknowledge explicit 
   assert.equal(result.readyTransitionAdded, false);
   assert.equal(deps.embedCalls.length, 0);
   assert.equal(deps.vectorCalls.length, 0);
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'),
+    false,
+  );
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markReady'),
+    false,
+  );
+});
+
+test('IngestService.evaluateWebsiteRuntimeIndexingGate can acknowledge a valid stored grant without provider work', async () => {
+  const deps = createDeps();
+  deps.knowledgeSources.getById = async (sourceId) => ({
+    id: sourceId,
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    type: 'url',
+    title: 'Website',
+    metadata: { providerFree: true },
+    ingestStatus: 'extracted',
+    indexStatus: 'pending',
+    runtimeReadiness: 'not_ready',
+    url: 'https://example.com/faq',
+  });
+  deps.approvalLookup.findProviderApprovalGrant = async (input) => {
+    deps.approvalLookupCalls.push(input);
+    return {
+      approvalId: 'approval-1',
+      tenantId: 'tenant-1',
+      siteId: 'site-1',
+      sourceId: 'source-1',
+      sourceTypes: ['url'],
+      usageContexts: ['website_ingest_runtime_indexing'],
+      environment: 'non_production',
+      provider: 'openai',
+      model: 'text-embedding-3-small',
+      dataCategories: ['website_content'],
+      customerDataApproved: true,
+      providerDpaApproved: true,
+      productionApproved: false,
+      purpose: 'website_runtime_indexing_validation',
+      retentionPolicy: 'no_persisted_provider_payloads',
+      redactionPolicy: 'strip_operator_secrets',
+      loggingPolicy: 'metadata_only',
+      deletionPolicy: 'source_delete_reindex_required',
+      reindexPolicy: 'manual_reindex_only',
+      rateLimit: '100 requests/day',
+      costLimit: '25 eur/month',
+      validFrom: '2026-07-01T00:00:00.000Z',
+      expiresAt: '2026-12-31T23:59:59.000Z',
+      approvedBy: 'security_owner',
+      approvalEvidenceRef: 'policy-test-1',
+    };
+  };
+  const service = new IngestService(
+    deps.db,
+    deps.embedder,
+    deps.vector,
+    deps.sites,
+    deps.knowledgeSources,
+    deps.approvalLookup,
+  );
+
+  const result = await service.evaluateWebsiteRuntimeIndexingGate({
+    sourceId: 'source-1',
+    actorRole: 'admin',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+  });
+
+  assert.equal(result.allowed, true);
+  assert.equal(result.decisionCode, 'allowed');
+  assert.equal(result.providerCallsUsed, false);
+  assert.equal(result.embeddingGenerationUsed, false);
+  assert.equal(result.readyTransitionAdded, false);
+  assert.equal(deps.embedCalls.length, 0);
+  assert.equal(deps.vectorCalls.length, 0);
+  assert.equal(deps.approvalLookupCalls.length, 1);
+  assert.equal(deps.approvalLookupCalls[0].tenantId, 'tenant-1');
   assert.equal(
     deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'),
     false,
