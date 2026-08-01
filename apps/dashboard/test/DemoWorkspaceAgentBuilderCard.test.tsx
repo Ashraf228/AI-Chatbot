@@ -4,6 +4,16 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { DemoWorkspaceAgentBuilderCard } from "../components/customer/setup-wizard/DemoWorkspaceAgentBuilderCard";
 
+function setFieldValue(label: string, value: string) {
+  fireEvent.change(screen.getByLabelText(label), {
+    target: { value },
+  });
+}
+
+function clickButton(name: string) {
+  fireEvent.click(screen.getByRole("button", { name }));
+}
+
 describe("DemoWorkspaceAgentBuilderCard", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -119,28 +129,23 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
 
     render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
 
-    await userEvent.clear(screen.getByLabelText("Assistant Name"));
-    await userEvent.type(screen.getByLabelText("Assistant Name"), "Persist Demo Agent");
-    await userEvent.clear(screen.getByLabelText("Assistant Role"));
-    await userEvent.type(screen.getByLabelText("Assistant Role"), "Demo-Support");
-    await userEvent.selectOptions(screen.getByLabelText("Tone"), "friendly");
-    await userEvent.clear(screen.getByLabelText("Company Context"));
-    await userEvent.type(screen.getByLabelText("Company Context"), "Nur fuer interne Admin-Demos.");
-    await userEvent.clear(screen.getByLabelText("Target Audience (eine Zeile oder CSV)"));
-    await userEvent.type(screen.getByLabelText("Target Audience (eine Zeile oder CSV)"), "Ops-Team\nSupport-Leads");
-    await userEvent.clear(screen.getByLabelText("Allowed Tasks"));
-    await userEvent.type(screen.getByLabelText("Allowed Tasks"), "answer_questions\nprepare_handoff");
-    await userEvent.clear(screen.getByLabelText("Blocked Tasks"));
-    await userEvent.type(screen.getByLabelText("Blocked Tasks"), "deploy");
-    await userEvent.clear(screen.getByLabelText("Required Fields"));
-    await userEvent.type(screen.getByLabelText("Required Fields"), "fullName\nemail");
-    await userEvent.type(screen.getByLabelText("Knowledge Snippet Text"), "Nur lokal.");
-    await userEvent.type(screen.getByLabelText("Test Message"), "Bitte nicht speichern.");
+    setFieldValue("Assistant Name", "Persist Demo Agent");
+    setFieldValue("Assistant Role", "Demo-Support");
+    fireEvent.change(screen.getByLabelText("Tone"), {
+      target: { value: "friendly" },
+    });
+    setFieldValue("Company Context", "Nur fuer interne Admin-Demos.");
+    setFieldValue("Target Audience (eine Zeile oder CSV)", "Ops-Team\nSupport-Leads");
+    setFieldValue("Allowed Tasks", "answer_questions\nprepare_handoff");
+    setFieldValue("Blocked Tasks", "deploy");
+    setFieldValue("Required Fields", "fullName\nemail");
+    setFieldValue("Knowledge Snippet Text", "Nur lokal.");
+    setFieldValue("Test Message", "Bitte nicht speichern.");
 
-    await userEvent.click(screen.getByRole("button", { name: "Save demo config" }));
+    clickButton("Save demo config");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByText("Demo-Konfiguration gespeichert. Es wurden nur Agent-Felder gespeichert.")).toBeInTheDocument();
+    await screen.findByText("Demo-Konfiguration gespeichert. Es wurden nur Agent-Felder gespeichert.");
     expect(screen.getByText(/Letzte gespeicherte Demo-Konfiguration: 2026-07-27T13:00:00.000Z · Rolle: admin/)).toBeInTheDocument();
   });
 
@@ -180,20 +185,22 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
-    await userEvent.type(screen.getByLabelText("Knowledge Snippet Text"), "Bleibt lokal.");
-    await userEvent.type(screen.getByLabelText("Test Message"), "Bleibt lokal.");
+    setFieldValue("Knowledge Snippet Text", "Bleibt lokal.");
+    setFieldValue("Test Message", "Bleibt lokal.");
 
-    await userEvent.click(screen.getByRole("button", { name: "Load saved config" }));
+    clickButton("Load saved config");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByLabelText("Assistant Name")).toHaveValue("Stored Demo Agent");
-    expect(screen.getByLabelText("Assistant Role")).toHaveValue("Stored Role");
-    expect(screen.getByLabelText("Tone")).toHaveValue("consultative");
-    expect(screen.getByLabelText("Company Context")).toHaveValue("Persistierter Demo-Kontext.");
-    expect(screen.getByLabelText("Target Audience (eine Zeile oder CSV)")).toHaveValue("Finance\nOps");
-    expect(screen.getByLabelText("Allowed Tasks")).toHaveValue("answer_questions\ntriage_support");
-    expect(screen.getByLabelText("Blocked Tasks")).toHaveValue("deploy\ncreate_ticket");
-    expect(screen.getByLabelText("Required Fields")).toHaveValue("fullName\nemail\ndescription");
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assistant Name")).toHaveValue("Stored Demo Agent");
+      expect(screen.getByLabelText("Assistant Role")).toHaveValue("Stored Role");
+      expect(screen.getByLabelText("Tone")).toHaveValue("consultative");
+      expect(screen.getByLabelText("Company Context")).toHaveValue("Persistierter Demo-Kontext.");
+      expect(screen.getByLabelText("Target Audience (eine Zeile oder CSV)")).toHaveValue("Finance\nOps");
+      expect(screen.getByLabelText("Allowed Tasks")).toHaveValue("answer_questions\ntriage_support");
+      expect(screen.getByLabelText("Blocked Tasks")).toHaveValue("deploy\ncreate_ticket");
+      expect(screen.getByLabelText("Required Fields")).toHaveValue("fullName\nemail\ndescription");
+    });
     expect(screen.getByText("Gespeicherte Demo-Konfiguration geladen. Knowledge, PDFs und Chat bleiben unverändert.")).toBeInTheDocument();
     expect(screen.getByLabelText("Knowledge Snippet Text")).toHaveValue("Bleibt lokal.");
     expect(screen.getByLabelText("Test Message")).toHaveValue("Bleibt lokal.");
@@ -215,13 +222,15 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
-    await userEvent.type(screen.getByLabelText("Knowledge Snippet Text"), "Bleibt in-memory.");
-    await userEvent.type(screen.getByLabelText("Test Message"), "Bleibt ebenfalls lokal.");
-    await userEvent.click(screen.getByRole("button", { name: "Reset saved config" }));
+    setFieldValue("Knowledge Snippet Text", "Bleibt in-memory.");
+    setFieldValue("Test Message", "Bleibt ebenfalls lokal.");
+    clickButton("Reset saved config");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(screen.getByLabelText("Assistant Name")).toHaveValue("Demo Workspace Agent");
-    expect(screen.getByLabelText("Assistant Role")).toHaveValue("Digitaler Demo-Assistent fuer Admin-Tests");
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assistant Name")).toHaveValue("Demo Workspace Agent");
+      expect(screen.getByLabelText("Assistant Role")).toHaveValue("Digitaler Demo-Assistent fuer Admin-Tests");
+    });
     expect(screen.getByText("Gespeicherte Demo-Konfiguration gelöscht. Knowledge, PDFs und Chat wurden nicht gespeichert.")).toBeInTheDocument();
     expect(screen.getByLabelText("Knowledge Snippet Text")).toHaveValue("Bleibt in-memory.");
     expect(screen.getByLabelText("Test Message")).toHaveValue("Bleibt ebenfalls lokal.");
@@ -416,24 +425,16 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
 
     render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
 
-    await userEvent.clear(screen.getByLabelText("Assistant Name"));
-    await userEvent.type(screen.getByLabelText("Assistant Name"), "Demo Builder");
-    await userEvent.clear(screen.getByLabelText("Assistant Role"));
-    await userEvent.type(screen.getByLabelText("Assistant Role"), "Demo-Support");
-    await userEvent.type(screen.getByLabelText("Target Audience (eine Zeile oder CSV)"), "Ops-Team, Support-Leads");
-    await userEvent.clear(screen.getByLabelText("Allowed Tasks"));
-    await userEvent.type(screen.getByLabelText("Allowed Tasks"), "answer_questions{enter}triage_support");
-    await userEvent.clear(screen.getByLabelText("Blocked Tasks"));
-    await userEvent.type(screen.getByLabelText("Blocked Tasks"), "deploy");
-    await userEvent.clear(screen.getByLabelText("Required Fields"));
-    await userEvent.type(screen.getByLabelText("Required Fields"), "fullName{enter}email");
+    setFieldValue("Assistant Name", "Demo Builder");
+    setFieldValue("Assistant Role", "Demo-Support");
+    setFieldValue("Target Audience (eine Zeile oder CSV)", "Ops-Team\nSupport-Leads");
+    setFieldValue("Allowed Tasks", "answer_questions\ntriage_support");
+    setFieldValue("Blocked Tasks", "deploy");
+    setFieldValue("Required Fields", "fullName\nemail");
 
-    await userEvent.type(screen.getByLabelText("Snippet Title (optional)"), "Demo FAQ");
-    await userEvent.type(
-      screen.getByLabelText("Knowledge Snippet Text"),
-      "Nur synthetische Antworten im Demo-Workspace verwenden.",
-    );
-    await userEvent.click(screen.getByRole("button", { name: "Snippet aus Text hinzufuegen" }));
+    setFieldValue("Snippet Title (optional)", "Demo FAQ");
+    setFieldValue("Knowledge Snippet Text", "Nur synthetische Antworten im Demo-Workspace verwenden.");
+    clickButton("Snippet aus Text hinzufuegen");
 
     const fileInput = screen.getByLabelText("Text/Markdown-Datei laden");
     const file = new File(["# Demo Runbook\n\nNur fuer synthetische Tests."], "Demo Runbook.md", {
@@ -441,18 +442,17 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     });
     await userEvent.upload(fileInput, file);
 
-    await userEvent.type(
-      screen.getByLabelText("Test Message"),
-      "Bitte simuliere einen sicheren Demo-Supportfall.",
-    );
+    setFieldValue("Test Message", "Bitte simuliere einen sicheren Demo-Supportfall.");
 
-    await userEvent.click(screen.getByRole("button", { name: "Testnachricht senden" }));
+    clickButton("Testnachricht senden");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(screen.getAllByText("Ich kann das als Demo-Supportfall sicher einordnen.")).toHaveLength(2);
+      expect(screen.getAllByText(/publicWidgetActivation=false/)).toHaveLength(2);
+    });
     expect(screen.getByText("support")).toBeInTheDocument();
     expect(screen.getByText("support-agent")).toBeInTheDocument();
-    expect(screen.getAllByText("Ich kann das als Demo-Supportfall sicher einordnen.")).toHaveLength(2);
-    expect(screen.getAllByText(/publicWidgetActivation=false/)).toHaveLength(2);
     expect(screen.getByText(/reiner Admin-Testpfad ohne Persistenz/i)).toBeInTheDocument();
     expect(screen.getByText("Turn 1: User")).toBeInTheDocument();
     expect(screen.getByText("Bitte simuliere einen sicheren Demo-Supportfall.")).toBeInTheDocument();
@@ -609,22 +609,24 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
 
     render(<DemoWorkspaceAgentBuilderCard siteId="site-1" />);
 
-    await userEvent.type(screen.getByLabelText("Test Message"), "Erster Demo-Fall");
-    await userEvent.click(screen.getByRole("button", { name: "Testnachricht senden" }));
+    setFieldValue("Test Message", "Erster Demo-Fall");
+    clickButton("Testnachricht senden");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(screen.getAllByText("Erste Demo-Antwort")).toHaveLength(2);
+    await waitFor(() => expect(screen.getAllByText("Erste Demo-Antwort")).toHaveLength(2));
     expect(screen.getByText("Turn 1: User")).toBeInTheDocument();
 
-    await userEvent.type(screen.getByLabelText("Test Message"), "Zweiter Demo-Fall");
-    await userEvent.click(screen.getByRole("button", { name: "Testnachricht senden" }));
+    setFieldValue("Test Message", "Zweiter Demo-Fall");
+    clickButton("Testnachricht senden");
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(screen.getAllByText("Zweite Demo-Antwort")).toHaveLength(2);
+    await waitFor(() => {
+      expect(screen.getAllByText("Zweite Demo-Antwort")).toHaveLength(2);
+      expect(screen.getAllByText(/Side Effects:/)).toHaveLength(2);
+    });
     expect(screen.getByText("Turn 2: User")).toBeInTheDocument();
-    expect(screen.getAllByText(/Side Effects:/)).toHaveLength(2);
 
-    await userEvent.click(screen.getByRole("button", { name: "In-Memory-Chat leeren" }));
+    clickButton("In-Memory-Chat leeren");
 
     expect(screen.getByText("Noch keine Testnachricht gesendet. Der Transcript lebt nur im Browser-State.")).toBeInTheDocument();
     expect(screen.queryByText("Erster Demo-Fall")).not.toBeInTheDocument();
