@@ -14,6 +14,7 @@ import {
   type ProviderEmbeddingApproval,
   type ProviderEmbeddingEnvironment,
 } from '../knowledge-sources/provider-embedding-gate';
+import { ProviderApprovalStorageLookupService } from '../knowledge-sources/provider-approval-storage-lookup.service';
 import { chunkText } from '../utils/chunk';
 import { sha256 } from '../utils/hash';
 import { randomUUID } from 'crypto';
@@ -78,6 +79,7 @@ export class IngestService {
     private vector: VectorService,
     private sites: SitesService,
     private knowledgeSources: KnowledgeSourcesService,
+    private readonly approvalLookup?: ProviderApprovalStorageLookupService,
   ) {}
 
   async ingestFaq(siteId: string, title: string, items: Array<{ q: string; a: string }>) {
@@ -694,6 +696,21 @@ export class IngestService {
       throw new BadRequestException('Invalid sourceId');
     }
 
+    const resolvedApproval =
+      input.explicitApproval ||
+      (this.approvalLookup
+        ? await this.approvalLookup.findProviderApprovalGrant({
+            tenantId: source.tenantId,
+            siteId: source.siteId,
+            sourceId: source.id,
+            sourceType: source.type,
+            usageContext: 'website_ingest_runtime_indexing',
+            environment: input.environment || (process.env.NODE_ENV === 'production' ? 'production' : 'non_production'),
+            providerKey: input.providerKey,
+            model: input.model,
+          })
+        : null);
+
     const decision = evaluateProviderEmbeddingGate({
       tenantId: source.tenantId,
       siteId: source.siteId,
@@ -704,7 +721,7 @@ export class IngestService {
       environment: input.environment || (process.env.NODE_ENV === 'production' ? 'production' : 'non_production'),
       providerKey: input.providerKey,
       model: input.model,
-      explicitApproval: input.explicitApproval || null,
+      explicitApproval: resolvedApproval,
     });
 
     if (!decision.allowed) {

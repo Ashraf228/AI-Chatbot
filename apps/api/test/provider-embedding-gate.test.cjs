@@ -138,6 +138,16 @@ test('ProviderEmbeddingGate denies site mismatches', () => {
   assert.equal(decision.decisionCode, 'site_mismatch');
 });
 
+test('ProviderEmbeddingGate allows a site-wide policy without sourceId when the remaining scope matches', () => {
+  const decision = evaluateProviderEmbeddingGate({
+    ...createGateInput(),
+    explicitApproval: createPolicy({ sourceId: null }),
+  });
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.decisionCode, 'allowed');
+});
+
 test('ProviderEmbeddingGate denies source type mismatches', () => {
   const decision = evaluateProviderEmbeddingGate({
     ...createGateInput(),
