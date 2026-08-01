@@ -332,7 +332,7 @@ test('IngestService.evaluateWebsiteRuntimeIndexingGate denies website embedding 
   });
 
   assert.equal(result.allowed, false);
-  assert.equal(result.decisionCode, 'not_granted');
+  assert.equal(result.decisionCode, 'missing_policy');
   assert.equal(result.providerCallsUsed, false);
   assert.equal(result.embeddingGenerationUsed, false);
   assert.equal(result.readyTransitionAdded, false);
@@ -367,17 +367,34 @@ test('IngestService.evaluateWebsiteRuntimeIndexingGate can acknowledge explicit 
   const result = await service.evaluateWebsiteRuntimeIndexingGate({
     sourceId: 'source-1',
     actorRole: 'admin',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
     explicitApproval: {
-      granted: true,
-      grantedBy: 'security_owner',
-      providerKey: 'openai',
+      approvalId: 'approval-1',
+      tenantId: 'tenant-1',
+      siteId: 'site-1',
+      sourceId: 'source-1',
+      sourceTypes: ['url'],
+      usageContexts: ['website_ingest_runtime_indexing'],
+      environment: 'non_production',
+      provider: 'openai',
       model: 'text-embedding-3-small',
-      approvedTenantId: 'tenant-1',
-      approvedSiteId: 'site-1',
-      allowedSourceTypes: ['url'],
-      allowedUsageContexts: ['website_ingest_runtime_indexing'],
+      dataCategories: ['website_content'],
       customerDataApproved: true,
+      providerDpaApproved: true,
       productionApproved: false,
+      purpose: 'website_runtime_indexing_validation',
+      retentionPolicy: 'no_persisted_provider_payloads',
+      redactionPolicy: 'strip_operator_secrets',
+      loggingPolicy: 'metadata_only',
+      deletionPolicy: 'source_delete_reindex_required',
+      reindexPolicy: 'manual_reindex_only',
+      rateLimit: '100 requests/day',
+      costLimit: '25 eur/month',
+      validFrom: '2026-07-01T00:00:00.000Z',
+      expiresAt: '2026-12-31T23:59:59.000Z',
+      approvedBy: 'security_owner',
+      approvalEvidenceRef: 'policy-test-1',
     },
   });
 

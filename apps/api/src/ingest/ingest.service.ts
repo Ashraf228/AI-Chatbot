@@ -682,6 +682,8 @@ export class IngestService {
     explicitApproval?: ProviderEmbeddingApproval | null;
     actorRole?: 'system' | 'admin' | 'operator' | 'viewer' | 'public';
     environment?: ProviderEmbeddingEnvironment;
+    providerKey?: string | null;
+    model?: string | null;
   }): Promise<WebsiteRuntimeIndexingGateResult> {
     if (!input.sourceId?.trim()) {
       throw new BadRequestException('sourceId missing');
@@ -700,7 +702,9 @@ export class IngestService {
       usageContext: 'website_ingest_runtime_indexing',
       actorRole: input.actorRole || 'system',
       environment: input.environment || (process.env.NODE_ENV === 'production' ? 'production' : 'non_production'),
-      explicitApproval: input.explicitApproval || { granted: false },
+      providerKey: input.providerKey,
+      model: input.model,
+      explicitApproval: input.explicitApproval || null,
     });
 
     if (!decision.allowed) {
