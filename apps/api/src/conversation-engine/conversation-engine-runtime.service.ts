@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { WebsiteAnswerRuntimeGateService } from '../knowledge-sources/website-answer-runtime-gate.service';
+import { WebsiteAnswerRuntimePilotService } from '../knowledge-sources/website-answer-runtime-pilot.service';
 import { AssistantProfile } from '../assistant-profiles';
 import { ConversationEngineService } from './conversation-engine.service';
 import { ResponseDraftService } from './response-draft.service';
@@ -104,9 +105,10 @@ export class ConversationEngineRuntimeService {
     private readonly engine: ConversationEngineService,
     private readonly responseDrafts: ResponseDraftService,
     private readonly websiteAnswerRuntimeGate?: WebsiteAnswerRuntimeGateService,
+    private readonly websiteAnswerRuntimePilot?: WebsiteAnswerRuntimePilotService,
   ) {}
 
-  preview(input: ConversationEngineRuntimePilotInput): ConversationEngineRuntimePilotResult {
+  async preview(input: ConversationEngineRuntimePilotInput): Promise<ConversationEngineRuntimePilotResult> {
     const history = Array.isArray(input.conversationHistory) ? input.conversationHistory : [];
     const knowledgeRetrieval = sanitizeKnowledgeSnippets({
       latestUserMessage: input.latestUserMessage,
@@ -138,6 +140,15 @@ export class ConversationEngineRuntimeService {
           ...input.websiteAnswerRuntimeGateInput,
         })
       : null;
+    const websiteAnswerRuntimePilot = this.websiteAnswerRuntimePilot && input.websiteAnswerRuntimePilotInput
+      ? await this.websiteAnswerRuntimePilot.evaluatePilot({
+          runtimeContext: 'internal_admin_test',
+          environment: 'evaluation',
+          actorRole: 'operator',
+          answerMode: 'mock',
+          ...input.websiteAnswerRuntimePilotInput,
+        })
+      : null;
     const runtimeState = buildRuntimeState(
       knowledgeRetrieval,
       decision.nextActionKey || null,
@@ -147,7 +158,10 @@ export class ConversationEngineRuntimeService {
     runtimeState.selectedAgentKey = decision.selectedAgentKey;
 
     const blockedByWebsiteRuntimeGate = websiteAnswerRuntimeGate && !websiteAnswerRuntimeGate.allowed;
-    const finalResponsePreview = blockedByWebsiteRuntimeGate ? null : engineResponsePreview;
+    const finalResponsePreview =
+      blockedByWebsiteRuntimeGate || websiteAnswerRuntimePilot
+        ? null
+        : engineResponsePreview;
 
     return {
       enabled: true,
@@ -169,6 +183,7 @@ export class ConversationEngineRuntimeService {
       },
       knowledgeRetrieval,
       websiteAnswerRuntimeGate,
+      websiteAnswerRuntimePilot,
       runtimeState,
       conversationEnginePreview: decision,
       engineResponsePreview: finalResponsePreview,
@@ -176,6 +191,7 @@ export class ConversationEngineRuntimeService {
         ...(finalResponsePreview?.warnings || []),
         ...(knowledgeRetrieval.warnings || []),
         ...(blockedByWebsiteRuntimeGate ? [websiteAnswerRuntimeGate.sanitizedMessage] : []),
+        ...(websiteAnswerRuntimePilot ? [websiteAnswerRuntimePilot.sanitizedMessage] : []),
       ],
       reasons: [
         'Conversation Engine Runtime Pilot ist nur im Admin-Testpfad aktiv.',
@@ -183,6 +199,7 @@ export class ConversationEngineRuntimeService {
         ...(finalResponsePreview?.reasons || []),
         ...(knowledgeRetrieval.reasons || []),
         ...(blockedByWebsiteRuntimeGate ? [websiteAnswerRuntimeGate.reason] : []),
+        ...(websiteAnswerRuntimePilot ? [websiteAnswerRuntimePilot.reason] : []),
       ],
     };
   }
