@@ -101,6 +101,31 @@
 - No credentials
 - No passwords
 
+## Checks
+
+- build:api: PASS
+- check:dashboard: PASS
+- build:dashboard: PASS
+- check:all: PASS
+- website answer runtime gate tests: PASS
+- website answer evaluation tests: PASS
+- website embedding ingest tests: PASS
+- storage lookup tests: PASS
+- provider gate regressions: PASS
+- approval policy regressions: PASS
+- retrieval tests: PASS
+- source attribution tests: PASS
+- completion rule tests: PASS
+- provider no-call tests: PASS
+- cross-tenant denial tests: PASS
+- public widget denial tests: PASS
+- demo workspace regression batch: PASS
+- production-context audit: PASS
+- authorization matrix: PASS
+- security boundaries: PASS
+- report JSON validation: PASS
+- sensitive scan: PASS
+
 ## Recommended Next Step
 
 - Gate review: `KNOWLEDGE-WEBSITE-ANSWER-RUNTIME-GATE-1-D`
