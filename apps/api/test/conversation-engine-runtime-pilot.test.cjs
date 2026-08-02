@@ -15,7 +15,9 @@ const { HandoffReadinessService } = require('../dist/conversation-engine/handoff
 const { ConversationQualityService } = require('../dist/conversation-engine/conversation-quality.service.js');
 const { ResponseDraftService } = require('../dist/conversation-engine/response-draft.service.js');
 const { AssistantProfileResolverService } = require('../dist/assistant-profiles/assistant-profile-resolver.service.js');
+const { WebsiteAnswerEvaluationService } = require('../dist/knowledge-sources/website-answer-evaluation.service.js');
 const { WebsiteAnswerRuntimeGateService } = require('../dist/knowledge-sources/website-answer-runtime-gate.service.js');
+const { WebsiteAnswerRuntimePilotService } = require('../dist/knowledge-sources/website-answer-runtime-pilot.service.js');
 
 function createEngine() {
   return new ConversationEngineService(
@@ -79,6 +81,40 @@ function universalProfile(overrides = {}) {
   };
 }
 
+function createWebsiteSource(overrides = {}) {
+  return {
+    id: 'source-1',
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    type: 'url',
+    title: 'Website Quelle',
+    label: 'Website Quelle',
+    normalizedSourceUrl: 'https://example.com/faq',
+    sourceUrl: 'https://example.com/faq',
+    sourceDomain: 'example.com',
+    runtimeReadiness: 'ready',
+    indexStatus: 'indexed',
+    isActive: true,
+    ...overrides,
+  };
+}
+
+function createWebsiteVectorRow(overrides = {}) {
+  return {
+    id: 'chunk-1',
+    document_id: 'doc-1',
+    source_id: 'source-1',
+    source_type: 'url',
+    source_label: 'Website Quelle',
+    content: 'Die Oeffnungszeiten sind Montag bis Freitag von 09 bis 17 Uhr.',
+    metadata: { website: true, synthetic: true },
+    title: 'Website Quelle',
+    source_url: 'https://example.com/faq',
+    score: 0.97,
+    ...overrides,
+  };
+}
+
 function createController({ assistantProfile = universalProfile(), previewEnabled = true, responsePreviewEnabled = true, adminTestOnly = true } = {}) {
   const moduleStore = {
     'assistant-profile': {
@@ -121,10 +157,26 @@ function createController({ assistantProfile = universalProfile(), previewEnable
   const resolver = new AssistantProfileResolverService();
   const responseDrafts = new ResponseDraftService(new ConversationQualityService());
   const compareService = new ConversationEngineCompareService(createEngine());
+  const websiteAnswerEvaluation = new WebsiteAnswerEvaluationService(
+    {
+      async search() {
+        return [createWebsiteVectorRow()];
+      },
+    },
+    {
+      async getById() {
+        return createWebsiteSource();
+      },
+    },
+  );
   const runtimePilot = new ConversationEngineRuntimeService(
     createEngine(),
     responseDrafts,
     new WebsiteAnswerRuntimeGateService(),
+    new WebsiteAnswerRuntimePilotService(
+      websiteAnswerEvaluation,
+      new WebsiteAnswerRuntimeGateService(),
+    ),
   );
   const knowledgePreview = {
     async retrieve() {
@@ -210,6 +262,26 @@ function createWebsiteAnswerRuntimeGateInput(overrides = {}) {
       liveEmbeddingsUsed: false,
       ragUsed: false,
     },
+    ...overrides,
+  };
+}
+
+function createWebsiteAnswerRuntimePilotInput(overrides = {}) {
+  return {
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    sourceId: 'source-1',
+    expectedSourceId: 'source-1',
+    question: 'Wann ist geoeffnet?',
+    expectedAnswerHints: ['09 bis 17 Uhr'],
+    expectedUrl: 'https://example.com/faq',
+    expectedTitle: 'Website Quelle',
+    expectedDomain: 'example.com',
+    runtimeContext: 'internal_admin_test',
+    environment: 'evaluation',
+    actorRole: 'operator',
+    answerMode: 'mock',
+    queryEmbedding: [0.1, 0.2, 0.3],
     ...overrides,
   };
 }
@@ -461,5 +533,61 @@ test('runtime pilot blocks website answer runtime gate requests for public widge
   assert.equal(result.engineResponsePreview, null);
   assert.match(result.reasons.join(' | '), /public_widget_blocked/i);
   assert.match(result.warnings.join(' | '), /public widget/i);
+  assert.equal(result.sideEffects.providerCalls, false);
+});
+
+test('runtime pilot returns an internal mock-only website answer pilot result with verified source attribution', async () => {
+  const controller = createController();
+
+  const result = await controller.runtimePilotPreview(
+    'site-1',
+    {
+      message: 'Beantworte die Oeffnungszeiten direkt aus der Website.',
+      websiteAnswerRuntimePilotInput: createWebsiteAnswerRuntimePilotInput(),
+    },
+    { dashboardAuth: {} },
+  );
+
+  assert.equal(result.runtimePilotEnabled, true);
+  assert.equal(result.websiteAnswerRuntimePilot.allowed, true);
+  assert.equal(result.websiteAnswerRuntimePilot.decisionCode, 'allowed_internal_mock_runtime_pilot');
+  assert.match(result.websiteAnswerRuntimePilot.answerText, /09 bis 17 Uhr/i);
+  assert.equal(result.websiteAnswerRuntimePilot.runtimeGateDecision.allowed, true);
+  assert.equal(result.websiteAnswerRuntimePilot.answerEvaluationResult.answered, true);
+  assert.equal(result.websiteAnswerRuntimePilot.sourceAttribution.verified, true);
+  assert.equal(result.websiteAnswerRuntimePilot.sourceAttribution.retrievalVerified, true);
+  assert.equal(result.websiteAnswerRuntimePilot.sources[0].sourceId, 'source-1');
+  assert.equal(result.websiteAnswerRuntimePilot.providerCallsUsed, false);
+  assert.equal(result.websiteAnswerRuntimePilot.liveLlmAnswerUsed, false);
+  assert.equal(result.websiteAnswerRuntimePilot.liveEmbeddingsUsed, false);
+  assert.equal(result.websiteAnswerRuntimePilot.ragUsed, false);
+  assert.equal(result.engineResponsePreview, null);
+  assert.equal(result.sideEffects.providerCalls, false);
+});
+
+test('runtime pilot blocks website answer pilot when mock evidence is insufficient and returns no answer', async () => {
+  const controller = createController();
+
+  const result = await controller.runtimePilotPreview(
+    'site-1',
+    {
+      message: 'Beantworte die Website-Frage direkt.',
+      websiteAnswerRuntimePilotInput: createWebsiteAnswerRuntimePilotInput({
+        expectedAnswerHints: ['nicht im Kontext'],
+      }),
+    },
+    { dashboardAuth: {} },
+  );
+
+  assert.equal(result.runtimePilotEnabled, true);
+  assert.equal(result.websiteAnswerRuntimePilot.allowed, false);
+  assert.equal(result.websiteAnswerRuntimePilot.answerText, null);
+  assert.equal(result.websiteAnswerRuntimePilot.decisionCode, 'insufficient_evidence');
+  assert.equal(result.websiteAnswerRuntimePilot.runtimeGateDecision, null);
+  assert.equal(result.websiteAnswerRuntimePilot.providerCallsUsed, false);
+  assert.equal(result.websiteAnswerRuntimePilot.liveLlmAnswerUsed, false);
+  assert.equal(result.websiteAnswerRuntimePilot.liveEmbeddingsUsed, false);
+  assert.equal(result.websiteAnswerRuntimePilot.ragUsed, false);
+  assert.equal(result.engineResponsePreview, null);
   assert.equal(result.sideEffects.providerCalls, false);
 });

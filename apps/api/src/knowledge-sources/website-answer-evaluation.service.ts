@@ -65,6 +65,10 @@ export type WebsiteAnswerEvaluationResult = {
   reason: string;
   sanitizedMessage: string;
   answerText: string | null;
+  sourceType: string | null;
+  sourceActive: boolean | null;
+  runtimeReadiness: string | null;
+  indexStatus: string | null;
   sourceAttributionVerified: boolean;
   retrievalVerified: boolean;
   sourceId: string | null;
@@ -133,6 +137,10 @@ function deny(input: {
     reason: input.reason,
     sanitizedMessage: input.sanitizedMessage,
     answerText: null,
+    sourceType: null,
+    sourceActive: null,
+    runtimeReadiness: null,
+    indexStatus: null,
     sourceAttributionVerified: input.sourceAttributionVerified === true,
     retrievalVerified: input.retrievalVerified === true,
     sourceId: input.sourceId ?? null,
@@ -162,6 +170,10 @@ function allow(input: {
     reason: 'website_answer_verified_with_mock_adapter',
     sanitizedMessage: 'Die Website-Antwort wurde intern mit Retrieval, Source Attribution und Mock-Answer-Adapter verifiziert.',
     answerText: input.answerText,
+    sourceType: 'url',
+    sourceActive: true,
+    runtimeReadiness: 'ready',
+    indexStatus: 'indexed',
     sourceAttributionVerified: true,
     retrievalVerified: true,
     sourceId: input.sourceId,

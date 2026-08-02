@@ -3,6 +3,10 @@ import type {
   WebsiteAnswerRuntimeGateInput,
   WebsiteAnswerRuntimeGateResult,
 } from '../knowledge-sources/website-answer-runtime-gate.service';
+import type {
+  WebsiteAnswerRuntimePilotInput,
+  WebsiteAnswerRuntimePilotResult,
+} from '../knowledge-sources/website-answer-runtime-pilot.service';
 
 export type ConversationIntent =
   | 'question'
@@ -171,6 +175,7 @@ export type ConversationEngineRuntimePilotResult = {
   sideEffects: ConversationEngineRuntimeSideEffectsBoundary;
   knowledgeRetrieval: EngineKnowledgeRetrievalResult;
   websiteAnswerRuntimeGate: WebsiteAnswerRuntimeGateResult | null;
+  websiteAnswerRuntimePilot: WebsiteAnswerRuntimePilotResult | null;
   runtimeState: ConversationEngineRuntimeState;
   conversationEnginePreview: ConversationDecision | null;
   engineResponsePreview: ConversationEngineResponsePreview | null;
@@ -197,6 +202,7 @@ export type ConversationEngineRuntimePilotInput = {
   existingConversationState?: Record<string, unknown> | null;
   syntheticKnowledgeSnippets?: unknown;
   websiteAnswerRuntimeGateInput?: WebsiteAnswerRuntimeGateInput | null;
+  websiteAnswerRuntimePilotInput?: WebsiteAnswerRuntimePilotInput | null;
   testMode: true;
 };
 

@@ -649,6 +649,7 @@ export class ConversationEngineController {
           reasons: ['Runtime-Pilot ist nur im expliziten Admin-Testmodus mit Antwortvorschau aktiv.'],
         },
         websiteAnswerRuntimeGate: null,
+        websiteAnswerRuntimePilot: null,
         runtimeState: {
           selectedAgentKey: null,
           nextActionKey: null,
@@ -672,13 +673,14 @@ export class ConversationEngineController {
       this.resolver.resolve({ siteConfig, moduleConfigs }),
       body,
     );
-    const result = this.runtimePilot.preview({
+    const result = await this.runtimePilot.preview({
       assistantProfile,
       latestUserMessage: message,
       conversationHistory: sanitizeHistory(body.history),
       existingConversationState: asRecord(body.existingConversationState),
       syntheticKnowledgeSnippets: body.knowledgeSnippets,
       websiteAnswerRuntimeGateInput: body.websiteAnswerRuntimeGateInput as Record<string, unknown> | undefined,
+      websiteAnswerRuntimePilotInput: body.websiteAnswerRuntimePilotInput as Record<string, unknown> | undefined,
       testMode: true,
     });
 

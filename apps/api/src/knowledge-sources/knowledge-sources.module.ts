@@ -5,6 +5,7 @@ import { SitesModule } from '../sites/sites.module';
 import { ProviderApprovalStorageLookupService } from './provider-approval-storage-lookup.service';
 import { WebsiteAnswerEvaluationService } from './website-answer-evaluation.service';
 import { WebsiteAnswerRuntimeGateService } from './website-answer-runtime-gate.service';
+import { WebsiteAnswerRuntimePilotService } from './website-answer-runtime-pilot.service';
 import { WebsiteEmbeddingIngestService } from './website-embedding-ingest.service';
 import { KnowledgeSourcesService } from './knowledge-sources.service';
 
@@ -15,6 +16,7 @@ import { KnowledgeSourcesService } from './knowledge-sources.service';
     ProviderApprovalStorageLookupService,
     WebsiteAnswerEvaluationService,
     WebsiteAnswerRuntimeGateService,
+    WebsiteAnswerRuntimePilotService,
     WebsiteEmbeddingIngestService,
     PrismaService,
     VectorService,
@@ -24,6 +26,7 @@ import { KnowledgeSourcesService } from './knowledge-sources.service';
     ProviderApprovalStorageLookupService,
     WebsiteAnswerEvaluationService,
     WebsiteAnswerRuntimeGateService,
+    WebsiteAnswerRuntimePilotService,
     WebsiteEmbeddingIngestService,
   ],
 })
