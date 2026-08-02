@@ -557,6 +557,11 @@ test('runtime pilot returns an internal mock-only website answer pilot result wi
   assert.equal(result.websiteAnswerRuntimePilot.sourceAttribution.verified, true);
   assert.equal(result.websiteAnswerRuntimePilot.sourceAttribution.retrievalVerified, true);
   assert.equal(result.websiteAnswerRuntimePilot.sources[0].sourceId, 'source-1');
+  assert.equal(result.websiteAnswerRuntimePilot.observability.observabilityVersion, '1');
+  assert.equal(result.websiteAnswerRuntimePilot.observability.internalOnly, true);
+  assert.equal(result.websiteAnswerRuntimePilot.observability.mockOnly, true);
+  assert.equal(result.websiteAnswerRuntimePilot.observability.gate.allowed, true);
+  assert.equal(result.websiteAnswerRuntimePilot.observability.sourceAttribution.verified, true);
   assert.equal(result.websiteAnswerRuntimePilot.providerCallsUsed, false);
   assert.equal(result.websiteAnswerRuntimePilot.liveLlmAnswerUsed, false);
   assert.equal(result.websiteAnswerRuntimePilot.liveEmbeddingsUsed, false);
@@ -584,6 +589,9 @@ test('runtime pilot blocks website answer pilot when mock evidence is insufficie
   assert.equal(result.websiteAnswerRuntimePilot.answerText, null);
   assert.equal(result.websiteAnswerRuntimePilot.decisionCode, 'insufficient_evidence');
   assert.equal(result.websiteAnswerRuntimePilot.runtimeGateDecision, null);
+  assert.equal(result.websiteAnswerRuntimePilot.observability.observabilityVersion, '1');
+  assert.equal(result.websiteAnswerRuntimePilot.observability.denials.active, true);
+  assert.equal(result.websiteAnswerRuntimePilot.observability.answerEvaluation.insufficientEvidence, true);
   assert.equal(result.websiteAnswerRuntimePilot.providerCallsUsed, false);
   assert.equal(result.websiteAnswerRuntimePilot.liveLlmAnswerUsed, false);
   assert.equal(result.websiteAnswerRuntimePilot.liveEmbeddingsUsed, false);
