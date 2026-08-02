@@ -1,4 +1,8 @@
 import { AssistantProfile } from '../assistant-profiles';
+import type {
+  WebsiteAnswerRuntimeGateInput,
+  WebsiteAnswerRuntimeGateResult,
+} from '../knowledge-sources/website-answer-runtime-gate.service';
 
 export type ConversationIntent =
   | 'question'
@@ -166,6 +170,7 @@ export type ConversationEngineRuntimePilotResult = {
   activationBoundary: ConversationEngineRuntimeActivationBoundary;
   sideEffects: ConversationEngineRuntimeSideEffectsBoundary;
   knowledgeRetrieval: EngineKnowledgeRetrievalResult;
+  websiteAnswerRuntimeGate: WebsiteAnswerRuntimeGateResult | null;
   runtimeState: ConversationEngineRuntimeState;
   conversationEnginePreview: ConversationDecision | null;
   engineResponsePreview: ConversationEngineResponsePreview | null;
@@ -191,6 +196,7 @@ export type ConversationEngineRuntimePilotInput = {
   conversationHistory?: ConversationHistoryEntry[];
   existingConversationState?: Record<string, unknown> | null;
   syntheticKnowledgeSnippets?: unknown;
+  websiteAnswerRuntimeGateInput?: WebsiteAnswerRuntimeGateInput | null;
   testMode: true;
 };
 
