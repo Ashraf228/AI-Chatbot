@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AssistantProfilesModule } from '../assistant-profiles';
 import { PrismaService } from '../db/prisma.service';
+import { KnowledgeSourcesModule } from '../knowledge-sources/knowledge-sources.module';
 import { SiteModulesModule } from '../site-modules/site-modules.module';
 import { SitesModule } from '../sites/sites.module';
 import { AgentSelectorService } from './agent-selector.service';
@@ -21,7 +22,7 @@ import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 
 @Module({
-  imports: [AssistantProfilesModule, SitesModule, SiteModulesModule],
+  imports: [AssistantProfilesModule, SitesModule, SiteModulesModule, KnowledgeSourcesModule],
   controllers: [ConversationEngineController],
   providers: [
     ConversationEngineService,

@@ -15,6 +15,7 @@ const { HandoffReadinessService } = require('../dist/conversation-engine/handoff
 const { ConversationQualityService } = require('../dist/conversation-engine/conversation-quality.service.js');
 const { ResponseDraftService } = require('../dist/conversation-engine/response-draft.service.js');
 const { AssistantProfileResolverService } = require('../dist/assistant-profiles/assistant-profile-resolver.service.js');
+const { WebsiteAnswerRuntimeGateService } = require('../dist/knowledge-sources/website-answer-runtime-gate.service.js');
 
 function createEngine() {
   return new ConversationEngineService(
@@ -120,7 +121,11 @@ function createController({ assistantProfile = universalProfile(), previewEnable
   const resolver = new AssistantProfileResolverService();
   const responseDrafts = new ResponseDraftService(new ConversationQualityService());
   const compareService = new ConversationEngineCompareService(createEngine());
-  const runtimePilot = new ConversationEngineRuntimeService(createEngine(), responseDrafts);
+  const runtimePilot = new ConversationEngineRuntimeService(
+    createEngine(),
+    responseDrafts,
+    new WebsiteAnswerRuntimeGateService(),
+  );
   const knowledgePreview = {
     async retrieve() {
       return {
@@ -172,6 +177,41 @@ function createController({ assistantProfile = universalProfile(), previewEnable
     knowledgePreview,
     responseDrafts,
   );
+}
+
+function createWebsiteAnswerRuntimeGateInput(overrides = {}) {
+  return {
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    sourceId: 'source-1',
+    sourceType: 'url',
+    sourceActive: true,
+    runtimeReadiness: 'ready',
+    indexStatus: 'indexed',
+    runtimeContext: 'internal_admin_test',
+    environment: 'preview',
+    actorRole: 'operator',
+    answerMode: 'mock',
+    answerEvaluation: {
+      answered: true,
+      decisionCode: 'answered',
+      answerText: 'Antwort: Die Informationen stammen aus der verifizierten Website-Quelle.',
+      sanitizedMessage: 'ok',
+      sourceId: 'source-1',
+      sourceUrl: 'https://example.com/faq',
+      sourceTitle: 'Website Quelle',
+      sourceDomain: 'example.com',
+      sourceAttributionVerified: true,
+      retrievalVerified: true,
+      missingEvidence: [],
+      warnings: [],
+      providerCallsUsed: false,
+      liveLlmAnswerUsed: false,
+      liveEmbeddingsUsed: false,
+      ragUsed: false,
+    },
+    ...overrides,
+  };
 }
 
 test('runtime pilot handles dashboard support problem without side effects', async () => {
@@ -376,4 +416,50 @@ test('runtime pilot simulates ticket field collection without any delivery side 
   assert.equal(result.sideEffects.ticketDelivery, false);
   assert.equal(result.sideEffects.emailDelivery, false);
   assert.equal(result.sideEffects.webhookDelivery, false);
+});
+
+test('runtime pilot returns an internal mock-only website answer runtime gate decision when evaluation is verified', async () => {
+  const controller = createController();
+
+  const result = await controller.runtimePilotPreview(
+    'site-1',
+    {
+      message: 'Welche Oeffnungszeiten hat die Website?',
+      websiteAnswerRuntimeGateInput: createWebsiteAnswerRuntimeGateInput(),
+    },
+    { dashboardAuth: {} },
+  );
+
+  assert.equal(result.runtimePilotEnabled, true);
+  assert.equal(result.websiteAnswerRuntimeGate.allowed, true);
+  assert.equal(result.websiteAnswerRuntimeGate.runtimeMode, 'internal_mock_only');
+  assert.equal(result.websiteAnswerRuntimeGate.decisionCode, 'allowed_internal_mock_runtime');
+  assert.equal(result.websiteAnswerRuntimeGate.providerCallsUsed, false);
+  assert.equal(result.websiteAnswerRuntimeGate.liveLlmAnswerUsed, false);
+  assert.equal(result.websiteAnswerRuntimeGate.liveEmbeddingsUsed, false);
+  assert.equal(result.websiteAnswerRuntimeGate.ragUsed, false);
+  assert.ok(result.engineResponsePreview);
+});
+
+test('runtime pilot blocks website answer runtime gate requests for public widget contexts and suppresses response preview', async () => {
+  const controller = createController();
+
+  const result = await controller.runtimePilotPreview(
+    'site-1',
+    {
+      message: 'Beantworte die Frage direkt aus der Website.',
+      websiteAnswerRuntimeGateInput: createWebsiteAnswerRuntimeGateInput({
+        runtimeContext: 'public_widget',
+      }),
+    },
+    { dashboardAuth: {} },
+  );
+
+  assert.equal(result.runtimePilotEnabled, true);
+  assert.equal(result.websiteAnswerRuntimeGate.allowed, false);
+  assert.equal(result.websiteAnswerRuntimeGate.decisionCode, 'public_widget_context_blocked');
+  assert.equal(result.engineResponsePreview, null);
+  assert.match(result.reasons.join(' | '), /public_widget_blocked/i);
+  assert.match(result.warnings.join(' | '), /public widget/i);
+  assert.equal(result.sideEffects.providerCalls, false);
 });

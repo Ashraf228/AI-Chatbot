@@ -4,6 +4,7 @@ import { VectorService } from '../vector/vector.service';
 import { SitesModule } from '../sites/sites.module';
 import { ProviderApprovalStorageLookupService } from './provider-approval-storage-lookup.service';
 import { WebsiteAnswerEvaluationService } from './website-answer-evaluation.service';
+import { WebsiteAnswerRuntimeGateService } from './website-answer-runtime-gate.service';
 import { WebsiteEmbeddingIngestService } from './website-embedding-ingest.service';
 import { KnowledgeSourcesService } from './knowledge-sources.service';
 
@@ -13,6 +14,7 @@ import { KnowledgeSourcesService } from './knowledge-sources.service';
     KnowledgeSourcesService,
     ProviderApprovalStorageLookupService,
     WebsiteAnswerEvaluationService,
+    WebsiteAnswerRuntimeGateService,
     WebsiteEmbeddingIngestService,
     PrismaService,
     VectorService,
@@ -21,6 +23,7 @@ import { KnowledgeSourcesService } from './knowledge-sources.service';
     KnowledgeSourcesService,
     ProviderApprovalStorageLookupService,
     WebsiteAnswerEvaluationService,
+    WebsiteAnswerRuntimeGateService,
     WebsiteEmbeddingIngestService,
   ],
 })

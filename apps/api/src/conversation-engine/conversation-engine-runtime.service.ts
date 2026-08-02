@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { WebsiteAnswerRuntimeGateService } from '../knowledge-sources/website-answer-runtime-gate.service';
 import { AssistantProfile } from '../assistant-profiles';
 import { ConversationEngineService } from './conversation-engine.service';
 import { ResponseDraftService } from './response-draft.service';
@@ -102,6 +103,7 @@ export class ConversationEngineRuntimeService {
   constructor(
     private readonly engine: ConversationEngineService,
     private readonly responseDrafts: ResponseDraftService,
+    private readonly websiteAnswerRuntimeGate?: WebsiteAnswerRuntimeGateService,
   ) {}
 
   preview(input: ConversationEngineRuntimePilotInput): ConversationEngineRuntimePilotResult {
@@ -128,6 +130,14 @@ export class ConversationEngineRuntimeService {
       knowledgeRetrievalResult: knowledgeRetrieval,
       testMode: true,
     });
+    const websiteAnswerRuntimeGate = this.websiteAnswerRuntimeGate && input.websiteAnswerRuntimeGateInput
+      ? this.websiteAnswerRuntimeGate.evaluate({
+          runtimeContext: 'internal_admin_test',
+          environment: 'preview',
+          actorRole: 'operator',
+          ...input.websiteAnswerRuntimeGateInput,
+        })
+      : null;
     const runtimeState = buildRuntimeState(
       knowledgeRetrieval,
       decision.nextActionKey || null,
@@ -135,6 +145,9 @@ export class ConversationEngineRuntimeService {
       decision.shouldAskQuestion,
     );
     runtimeState.selectedAgentKey = decision.selectedAgentKey;
+
+    const blockedByWebsiteRuntimeGate = websiteAnswerRuntimeGate && !websiteAnswerRuntimeGate.allowed;
+    const finalResponsePreview = blockedByWebsiteRuntimeGate ? null : engineResponsePreview;
 
     return {
       enabled: true,
@@ -155,18 +168,21 @@ export class ConversationEngineRuntimeService {
         queryRunner: false,
       },
       knowledgeRetrieval,
+      websiteAnswerRuntimeGate,
       runtimeState,
       conversationEnginePreview: decision,
-      engineResponsePreview,
+      engineResponsePreview: finalResponsePreview,
       warnings: [
-        ...engineResponsePreview.warnings,
+        ...(finalResponsePreview?.warnings || []),
         ...(knowledgeRetrieval.warnings || []),
+        ...(blockedByWebsiteRuntimeGate ? [websiteAnswerRuntimeGate.sanitizedMessage] : []),
       ],
       reasons: [
         'Conversation Engine Runtime Pilot ist nur im Admin-Testpfad aktiv.',
         'Neue Runtime-Logik nutzt keine DB-, SQL-, Query-Runner- oder Provider-Aufrufe.',
-        ...engineResponsePreview.reasons,
+        ...(finalResponsePreview?.reasons || []),
         ...(knowledgeRetrieval.reasons || []),
+        ...(blockedByWebsiteRuntimeGate ? [websiteAnswerRuntimeGate.reason] : []),
       ],
     };
   }
