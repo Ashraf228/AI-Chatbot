@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import {
+  evaluateWebsiteAnswerPilotOperatorReadiness,
+  type WebsiteAnswerPilotOperatorReadiness,
+} from './website-answer-pilot-operator-readiness';
+import {
   WebsiteAnswerEvaluationResult,
   WebsiteAnswerEvaluationService,
 } from './website-answer-evaluation.service';
@@ -181,11 +185,12 @@ export type WebsiteAnswerRuntimePilotResult = {
   liveEmbeddingsUsed: false;
   ragUsed: false;
   observability: WebsiteAnswerRuntimePilotObservability;
+  operatorReadiness: WebsiteAnswerPilotOperatorReadiness;
 };
 
 type WebsiteAnswerRuntimePilotBaseResult = Omit<
   WebsiteAnswerRuntimePilotResult,
-  'observability'
+  'observability' | 'operatorReadiness'
 >;
 
 function asText(value: unknown) {
@@ -417,9 +422,11 @@ function withObservability(
   input: WebsiteAnswerRuntimePilotInput,
   result: WebsiteAnswerRuntimePilotBaseResult,
 ): WebsiteAnswerRuntimePilotResult {
+  const observability = buildObservability(input, result);
   return {
     ...result,
-    observability: buildObservability(input, result),
+    observability,
+    operatorReadiness: evaluateWebsiteAnswerPilotOperatorReadiness(observability),
   };
 }
 
