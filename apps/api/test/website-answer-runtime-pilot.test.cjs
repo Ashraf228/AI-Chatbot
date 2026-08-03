@@ -115,6 +115,8 @@ test('WebsiteAnswerRuntimePilotService returns a verified internal mock-only pil
   assert.equal(result.liveLlmAnswerUsed, false);
   assert.equal(result.liveEmbeddingsUsed, false);
   assert.equal(result.ragUsed, false);
+  assert.equal(result.operatorReviewChecklist.checklistStatus, 'internal_review_ready');
+  assert.deepEqual(result.operatorReviewChecklist.allowedFor, ['internal_operator_review']);
   assert.equal(evaluationCalls.length, 1);
   assert.equal(gateCalls.length, 1);
   assert.equal(gateCalls[0].runtimeContext, 'internal_admin_test');
