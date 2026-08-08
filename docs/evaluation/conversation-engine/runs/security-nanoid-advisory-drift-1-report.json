@@ -11,7 +11,7 @@
   "advisory": "GHSA-2V37-7H3G-55P8",
   "before_version": "3.3.16",
   "after_version": "3.3.18",
-  "patched_version_or_range": ">=3.3.17",
+  "patched_version_or_range": ">= 3.3.17",
   "dependency_chain": "@ai-chatbot/dashboard@0.1.0 -> next@16.3.0 -> postcss@8.5.23 -> nanoid@3.3.16",
   "remediation_method": "lockfile_update",
   "security_audit_production_contexts_before": "FAIL",
