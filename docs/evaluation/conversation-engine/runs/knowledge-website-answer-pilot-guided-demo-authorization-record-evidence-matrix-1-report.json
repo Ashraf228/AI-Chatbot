@@ -124,6 +124,7 @@
   "security_nanoid_fix_available": true,
   "security_next_postcss_fix_available": true,
   "ci_workflow_trigger_fix_available": true,
+  "authorization_record_validation_rules_available": true,
   "authorization_record_design_available": true,
   "authorization_decision_available": true,
   "post_nogo_remediation_plan_available": true,
