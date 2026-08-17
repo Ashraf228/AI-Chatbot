@@ -66,6 +66,7 @@ export type ProviderApprovalPolicyDecision = {
 export type ProviderApprovalPolicyValidationInput = {
   policy?: ProviderApprovalPolicy | null;
   environment?: ProviderEmbeddingEnvironment | null;
+  now?: Date | string | number | null;
 };
 
 export type ProviderApprovalPolicyEvaluationInput = {
@@ -78,6 +79,7 @@ export type ProviderApprovalPolicyEvaluationInput = {
   environment?: ProviderEmbeddingEnvironment | null;
   provider?: string | null;
   model?: string | null;
+  now?: Date | string | number | null;
 };
 
 function deny(
@@ -112,6 +114,25 @@ function hasListValue(value: unknown): value is string[] {
 
 function isValidTimestamp(value: unknown): value is string {
   return hasText(value) && Number.isFinite(Date.parse(value));
+}
+
+function resolvePolicyNowMs(now?: Date | string | number | null): number {
+  if (now instanceof Date && Number.isFinite(now.getTime())) {
+    return now.getTime();
+  }
+
+  if (typeof now === 'string') {
+    const parsed = Date.parse(now);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  if (typeof now === 'number' && Number.isFinite(now)) {
+    return now;
+  }
+
+  return Date.now();
 }
 
 function validateSharedPolicyFields(policy: ProviderApprovalPolicy): ProviderApprovalPolicyDecision | null {
@@ -267,7 +288,7 @@ export function validateProviderApprovalPolicy(
     return deny('not_granted', 'expires_at_missing_or_invalid', 'Die technische Approval-Policy ist unvollstaendig.');
   }
 
-  const now = Date.now();
+  const now = resolvePolicyNowMs(input.now);
   if (isValidTimestamp(policy.revokedAt) && Date.parse(policy.revokedAt) <= now) {
     return deny('revoked', 'approval_policy_revoked', 'Die technische Approval-Policy wurde widerrufen.');
   }
@@ -304,6 +325,7 @@ export function evaluateProviderApprovalPolicy(
   const policyDecision = validateProviderApprovalPolicy({
     policy: input.policy,
     environment: input.environment,
+    now: input.now,
   });
   if (!policyDecision.allowed) {
     return policyDecision;

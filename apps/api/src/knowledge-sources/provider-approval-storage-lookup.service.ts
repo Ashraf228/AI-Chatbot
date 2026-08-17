@@ -319,6 +319,7 @@ export function evaluateStoredProviderApprovalGrant(
     environment: input.environment,
     provider: input.providerKey,
     model: input.model,
+    now: input.now,
   });
 
   if (!decision.allowed) {

@@ -6,6 +6,8 @@ const {
   evaluateProviderEmbeddingGate,
 } = require('../dist/knowledge-sources/provider-embedding-gate.js');
 
+const FIXTURE_NOW = '2026-08-01T12:00:00.000Z';
+
 function createPolicy(overrides = {}) {
   return {
     approvalId: 'approval-1',
@@ -51,6 +53,7 @@ function createGateInput(overrides = {}) {
     providerKey: 'openai',
     model: 'text-embedding-3-small',
     explicitApproval: createPolicy(),
+    now: FIXTURE_NOW,
     ...overrides,
   };
 }
