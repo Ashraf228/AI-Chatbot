@@ -8,6 +8,8 @@ const {
   mapProviderApprovalGrantRow,
 } = require('../dist/knowledge-sources/provider-approval-storage-lookup.service.js');
 
+const FIXTURE_NOW = '2026-08-01T12:00:00.000Z';
+
 function createRow(overrides = {}) {
   return {
     id: 'approval-1',
@@ -52,7 +54,7 @@ function createLookupInput(overrides = {}) {
     environment: 'non_production',
     providerKey: 'openai',
     model: 'text-embedding-3-small',
-    now: '2026-08-01T12:00:00.000Z',
+    now: FIXTURE_NOW,
     ...overrides,
   };
 }

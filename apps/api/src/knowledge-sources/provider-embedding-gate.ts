@@ -53,6 +53,7 @@ export type ProviderEmbeddingGateInput = {
   providerKey?: string | null;
   model?: string | null;
   explicitApproval?: ProviderEmbeddingApproval | null;
+  now?: Date | string | number | null;
 };
 
 export type ProviderEmbeddingGateDecision = {
@@ -136,6 +137,7 @@ export function evaluateProviderEmbeddingGate(
     environment,
     provider: providerKey,
     model,
+    now: input.now,
   });
   if (!policyDecision.allowed) {
     return deny(policyDecision.decisionCode, policyDecision.reason, policyDecision.sanitizedMessage);
