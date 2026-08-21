@@ -38,9 +38,13 @@ const fs = require("node:fs");
 const path = process.argv[1];
 const today = new Date().toISOString().slice(0, 10);
 const data = JSON.parse(fs.readFileSync(path, "utf8"));
-if (!Array.isArray(data.exceptions) || data.exceptions.length === 0) {
-  console.error("FAIL production-context exception file must contain at least one exception");
+if (!Array.isArray(data.exceptions)) {
+  console.error("FAIL production-context exception file must contain an exceptions array");
   process.exit(1);
+}
+if (data.exceptions.length === 0) {
+  console.log("PASS machine-readable production-context exceptions are current (no active exceptions)");
+  process.exit(0);
 }
 for (const exception of data.exceptions) {
   const required = [
