@@ -1,6 +1,6 @@
 # Dependency Risk Register
 
-Stand: 2026-07-27
+Stand: 2026-08-21
 
 Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produktionskandidaten. Es ersetzt keinen externen Security-Scan.
 
@@ -23,33 +23,23 @@ Dieses Dokument bewertet bekannte Dependency-Risiken fuer den aktuellen Produkti
   - Kein stabiler Next-Release groesser als `16.2.11` mit gefixtem internem PostCSS ist derzeit verfuegbar.
   - Override-Tests waren fuer den exakten Next-internen Pfad nicht wirksam.
 - Entscheidung:
-  - Status: `accepted_temporarily_with_context`
-  - Das Finding bleibt **accepted temporarily, not fixed**.
-  - `production-context audit` passiert nur, weil eine exakt gescopte Exception fuer diesen einen High-Befund existiert.
-  - Upgrade auf einen stabilen Next-Release mit gefixtem internem PostCSS bleibt erforderlich.
-  - Stable-Next-Watch bleibt aktiv.
-  - Keine Broad-Rollout-, Customer-Data- oder Enterprise-Readiness-Freigabe folgt aus dieser Exception.
-  - Diese Exception erteilt keine Deploy-Freigabe.
-  - Jeder Deploy benoetigt weiterhin ein separates Deploy-Decision-Gate.
-  - Revalidation am `2026-07-27`: `next@16.2.12` geprueft und weiterhin intern `postcss@8.4.31`.
-  - Neue Expiry nach Revalidation: `2026-08-20`.
+  - Status: `resolved_and_removed_from_active_exception_register`
+  - Revalidation am `2026-08-21`: `next@16.3.0`, root/dashboard `postcss@8.5.23`, historischer Nested-Pfad `node_modules/next/node_modules/postcss` nicht mehr im aktuellen Lockfile.
+  - `npm audit --omit=dev --json`: `0` Vulnerabilities.
+  - Die aktive scoped Exception `dashboard-next-postcss-2026-07-23` wurde aus dem aktiven Register entfernt.
+  - Es wurde keine neue aktive Exception angelegt und keine Expiry verlaengert.
+  - Keine Broad-Rollout-, Customer-Data- oder Enterprise-Readiness-Freigabe folgt aus dieser Bereinigung.
+  - Diese Bereinigung erteilt keine Deploy-Freigabe.
 - Technische Begrenzung:
-  - `scripts/security/audit-production-contexts.sh` akzeptiert nur den exakten High-Finding-Pfad mit:
-    - Package `postcss`
-    - Advisories `GHSA-qx2v-qp2m-jg93`, `GHSA-6g55-p6wh-862q` und `GHSA-r28c-9q8g-f849`
-    - Pfad `node_modules/next/node_modules/postcss`
-    - Parent `next@16.2.11`
-    - Affected version `8.4.31`
-    - gueltiger Expiry- und Owner-Angabe
-    - Revalidation-Trigger inklusive `expiry reached`
+  - Das Audit-Gate unterstuetzt jetzt ein leeres aktives Exception-Register als gueltigen Zustand.
+  - Aktive Exceptions bleiben streng validiert, falls kuenftig wieder Eintraege noetig werden.
   - Alle anderen High-/Critical-Findings bleiben blocker.
   - Critical Findings werden nie akzeptiert.
   - Keine Broad-PostCSS-Exception.
   - Keine globale High-Waiver.
 - Residual risk:
-  - low under current deployment assumptions
-  - not none
-  - revalidation bleibt erforderlich, falls Dashboard-/Widget-Branding, CSS-Theme oder Custom-CSS-Scope erweitert wird
+  - kein aktiver production-context Exception-Fall fuer diesen historischen Scope mehr im aktuellen Repo-Stand belegt
+  - Revalidation bleibt erforderlich, falls Dashboard-/Widget-Branding, CSS-Theme oder Custom-CSS-Scope erneut erweitert wird
 
 ## 2026-07-23 - Next Dashboard High Advisory Fix Production-Live
 
