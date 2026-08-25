@@ -95,7 +95,7 @@
 15. no validation in this task boundary
 16. non-accepted validation signals boundary
 17. stop criteria boundary
-18. handoff to authorization grant creation path
+18. handoff to authorization-gate-recheck authorization grant creation path
 
 ## Authorization Record Validation Evaluation Matrix
 
@@ -279,4 +279,4 @@
 
 ## Follow-up
 
-- `KNOWLEDGE-WEBSITE-ANSWER-PILOT-GUIDED-DEMO-AUTHORIZATION-GRANT-CREATION-PATH-1`
+- `KNOWLEDGE-WEBSITE-ANSWER-PILOT-GUIDED-DEMO-AUTHORIZATION-GATE-RECHECK-AUTHORIZATION-GRANT-CREATION-PATH-1`

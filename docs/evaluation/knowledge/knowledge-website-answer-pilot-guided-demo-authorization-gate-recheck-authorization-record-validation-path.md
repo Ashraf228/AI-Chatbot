@@ -196,7 +196,7 @@
 15. no validation in this task boundary
 16. non-accepted validation signals boundary
 17. stop criteria boundary
-18. handoff to authorization grant creation path
+18. handoff to authorization-gate-recheck authorization grant creation path
 
 ## Path Step 1: Validation Purpose / Decision Boundary
 
@@ -302,9 +302,9 @@
 - Stop if validation would be inferred from PR, CI, chat, GitHub, or docs state.
 - Stop if the task would expand into authorization, grant creation, deploy, public widget, production, provider-live, customer-data, or production-data scope.
 
-## Path Step 18: Handoff To Authorization Grant Creation Path
+## Path Step 18: Handoff To Authorization Gate Recheck Authorization Grant Creation Path
 
-- After this documentation-only path exists, the next sensible follow-up is the authorization-grant-creation path.
+- After this documentation-only path exists, the next sensible follow-up is the authorization-gate-recheck authorization-grant-creation path.
 - That later path would still remain blocked until a later record exists and passes a later validation.
 - This task does not create a grant and does not authorize guided demo.
 
@@ -465,7 +465,7 @@
 
 ## Required Follow-up
 
-- `KNOWLEDGE-WEBSITE-ANSWER-PILOT-GUIDED-DEMO-AUTHORIZATION-GRANT-CREATION-PATH-1`
+- `KNOWLEDGE-WEBSITE-ANSWER-PILOT-GUIDED-DEMO-AUTHORIZATION-GATE-RECHECK-AUTHORIZATION-GRANT-CREATION-PATH-1`
 
 ## Runtime / Completion Boundary
 
