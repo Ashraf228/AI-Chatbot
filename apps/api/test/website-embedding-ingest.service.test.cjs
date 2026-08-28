@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { WebsiteEmbeddingIngestService } = require('../dist/knowledge-sources/website-embedding-ingest.service.js');
+const {
+  WebsiteEmbeddingIngestService,
+  createSafeWebsiteEmbeddingMockAdapter,
+} = require('../dist/knowledge-sources/website-embedding-ingest.service.js');
 
 function createSource(overrides = {}) {
   return {
@@ -52,23 +55,29 @@ function createGrant(overrides = {}) {
   };
 }
 
-function createAdapter(overrides = {}) {
+function createUnsafeMockLikeAdapter(overrides = {}) {
   const calls = [];
   return {
     calls,
     adapter: {
       mode: 'mock',
-      label: 'deterministic-mock',
+      label: 'unsafe-mock-like-adapter',
       embeddingDimension: 6,
       async embedText(text, context) {
         calls.push({ text, context });
-        const chars = Array.from(text).slice(0, 6).map((char) => char.charCodeAt(0) / 255);
-        while (chars.length < 6) chars.push(0);
-        return chars;
+        return [1, 2, 3, 4, 5, 6];
       },
       ...overrides,
     },
   };
+}
+
+function createSafeAdapter(overrides = {}) {
+  return createSafeWebsiteEmbeddingMockAdapter({
+    label: 'deterministic-mock',
+    embeddingDimension: 6,
+    ...overrides,
+  });
 }
 
 function createDeps() {
@@ -239,7 +248,7 @@ test('WebsiteEmbeddingIngestService denies when no storage grant exists and neve
     deps.approvalLookupCalls.push(input);
     return null;
   };
-  const { adapter, calls } = createAdapter();
+  const adapter = createSafeAdapter();
   const service = new WebsiteEmbeddingIngestService(deps.db, deps.vector, deps.knowledgeSources, deps.approvalLookup);
 
   const result = await service.runWebsiteEmbeddingIngest({
@@ -251,7 +260,6 @@ test('WebsiteEmbeddingIngestService denies when no storage grant exists and neve
 
   assert.equal(result.allowed, false);
   assert.equal(result.decisionCode, 'missing_policy');
-  assert.equal(calls.length, 0);
   assert.equal(deps.updateCalls.length, 0);
   assert.equal(deps.restoreCalls.length, 0);
   assert.equal(deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'), true);
@@ -273,7 +281,7 @@ test('WebsiteEmbeddingIngestService denies expired, revoked, future, tenant/site
   for (const grant of cases) {
     const deps = createDeps();
     deps.approvalLookup.findProviderApprovalGrant = async () => grant;
-    const { adapter, calls } = createAdapter();
+    const adapter = createSafeAdapter();
     const service = new WebsiteEmbeddingIngestService(deps.db, deps.vector, deps.knowledgeSources, deps.approvalLookup);
 
     const result = await service.runWebsiteEmbeddingIngest({
@@ -284,10 +292,61 @@ test('WebsiteEmbeddingIngestService denies expired, revoked, future, tenant/site
     });
 
     assert.equal(result.allowed, false);
-    assert.equal(calls.length, 0);
     assert.equal(deps.updateCalls.length, 0);
     assert.equal(deps.restoreCalls.length, 0);
   }
+});
+
+test('WebsiteEmbeddingIngestService rejects plain mock-like adapters before their methods run', async () => {
+  const deps = createDeps();
+  const { adapter, calls } = createUnsafeMockLikeAdapter();
+  const service = new WebsiteEmbeddingIngestService(deps.db, deps.vector, deps.knowledgeSources, deps.approvalLookup);
+
+  const result = await service.runWebsiteEmbeddingIngest({
+    sourceId: 'source-1',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    adapter,
+  });
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.decisionCode, 'unsafe_mock_adapter');
+  assert.equal(result.indexStatusChanged, true);
+  assert.equal(calls.length, 0);
+  assert.equal(deps.updateCalls.length, 0);
+  assert.equal(deps.restoreCalls.length, 0);
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markBlocked'),
+    true,
+  );
+  assert.equal(
+    deps.knowledgeSourceCalls.some((entry) => entry.method === 'markReady'),
+    false,
+  );
+  assert.equal(result.sourceAttributionVerified, false);
+});
+
+test('WebsiteEmbeddingIngestService rejects network-capable mock-like adapters before their methods run', async () => {
+  const deps = createDeps();
+  const { adapter, calls } = createUnsafeMockLikeAdapter({
+    label: 'network-capable-mock-like-adapter',
+    networkCapable: true,
+  });
+  const service = new WebsiteEmbeddingIngestService(deps.db, deps.vector, deps.knowledgeSources, deps.approvalLookup);
+
+  const result = await service.runWebsiteEmbeddingIngest({
+    sourceId: 'source-1',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    adapter,
+  });
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.decisionCode, 'unsafe_mock_adapter');
+  assert.equal(calls.length, 0);
+  assert.equal(deps.updateCalls.length, 0);
+  assert.equal(deps.restoreCalls.length, 0);
+  assert.equal(result.readyTransitionAdded, false);
 });
 
 test('WebsiteEmbeddingIngestService requires a mock adapter and sanitizes adapter failures', async () => {
@@ -317,11 +376,16 @@ test('WebsiteEmbeddingIngestService requires a mock adapter and sanitizes adapte
     failingDeps.knowledgeSources,
     failingDeps.approvalLookup,
   );
-  const { adapter } = createAdapter({
-    async embedText() {
-      throw new Error('raw provider stack should not leak');
-    },
-  });
+  const adapter = createSafeAdapter();
+  let updateCalls = 0;
+  const originalUpdateChunk = failingDeps.vector.updateChunk.bind(failingDeps.vector);
+  failingDeps.vector.updateChunk = async (params) => {
+    updateCalls += 1;
+    if (updateCalls === 2) {
+      throw new Error('update failure should not leak');
+    }
+    return originalUpdateChunk(params);
+  };
   const failing = await failingService.runWebsiteEmbeddingIngest({
     sourceId: 'source-1',
     providerKey: 'openai',
@@ -330,7 +394,7 @@ test('WebsiteEmbeddingIngestService requires a mock adapter and sanitizes adapte
   });
   assert.equal(failing.allowed, false);
   assert.equal(failing.decisionCode, 'embedding_failed');
-  assert.equal(failingDeps.restoreCalls.length, 0);
+  assert.equal(failingDeps.restoreCalls.length, 2);
   assert.equal(
     failingDeps.knowledgeSourceCalls.some((entry) => entry.method === 'markFailed'),
     true,
@@ -339,7 +403,7 @@ test('WebsiteEmbeddingIngestService requires a mock adapter and sanitizes adapte
 
 test('WebsiteEmbeddingIngestService indexes website chunks with mock embeddings, verifies retrieval/source attribution, and marks source ready', async () => {
   const deps = createDeps();
-  const { adapter, calls } = createAdapter();
+  const adapter = createSafeAdapter();
   const service = new WebsiteEmbeddingIngestService(deps.db, deps.vector, deps.knowledgeSources, deps.approvalLookup);
 
   const result = await service.runWebsiteEmbeddingIngest({
@@ -356,9 +420,6 @@ test('WebsiteEmbeddingIngestService indexes website chunks with mock embeddings,
   assert.equal(result.sourceAttributionVerified, true);
   assert.equal(result.runtimeReadinessChanged, true);
   assert.equal(result.readyTransitionAdded, true);
-  assert.equal(calls.length, 3);
-  assert.equal(calls[0].context.phase, 'index');
-  assert.equal(calls[2].context.phase, 'verification');
   assert.equal(deps.updateCalls.length, 2);
   assert.equal(deps.restoreCalls.length, 0);
   assert.equal(deps.updateCalls[0].metadata.websiteEmbeddingIndexed, true);
@@ -393,7 +454,7 @@ test('WebsiteEmbeddingIngestService fails without ready transition when retrieva
     }
     return originalQuery(sql, params);
   };
-  const { adapter, calls } = createAdapter();
+  const adapter = createSafeAdapter();
   const service = new WebsiteEmbeddingIngestService(deps.db, deps.vector, deps.knowledgeSources, deps.approvalLookup);
 
   const result = await service.runWebsiteEmbeddingIngest({
@@ -407,7 +468,6 @@ test('WebsiteEmbeddingIngestService fails without ready transition when retrieva
   assert.equal(result.decisionCode, 'retrieval_not_verified');
   assert.equal(result.runtimeReadinessChanged, false);
   assert.equal(result.readyTransitionAdded, false);
-  assert.equal(calls.length, 2);
   assert.equal(deps.restoreCalls.length, 1);
   assert.equal(deps.chunkState.get('chunk-1').embedding, null);
   assert.equal(deps.chunkState.get('chunk-1').metadata.providerFree, true);
@@ -424,16 +484,16 @@ test('WebsiteEmbeddingIngestService fails without ready transition when retrieva
 
 test('WebsiteEmbeddingIngestService restores persisted chunk state after mid-run failure', async () => {
   const deps = createDeps();
-  const { adapter } = createAdapter({
-    async embedText(text, context) {
-      if (context.phase === 'index' && context.chunkIndex === 1) {
-        throw new Error('network provider should not leak');
-      }
-      const chars = Array.from(text).slice(0, 6).map((char) => char.charCodeAt(0) / 255);
-      while (chars.length < 6) chars.push(0);
-      return chars;
-    },
-  });
+  const adapter = createSafeAdapter();
+  let updateCalls = 0;
+  const originalUpdateChunk = deps.vector.updateChunk.bind(deps.vector);
+  deps.vector.updateChunk = async (params) => {
+    updateCalls += 1;
+    if (updateCalls === 2) {
+      throw new Error('vector update should not leak');
+    }
+    return originalUpdateChunk(params);
+  };
   const service = new WebsiteEmbeddingIngestService(deps.db, deps.vector, deps.knowledgeSources, deps.approvalLookup);
 
   const result = await service.runWebsiteEmbeddingIngest({
@@ -447,7 +507,7 @@ test('WebsiteEmbeddingIngestService restores persisted chunk state after mid-run
   assert.equal(result.decisionCode, 'embedding_failed');
   assert.equal(result.readyTransitionAdded, false);
   assert.equal(deps.updateCalls.length, 1);
-  assert.equal(deps.restoreCalls.length, 1);
+  assert.equal(deps.restoreCalls.length, 2);
   assert.equal(deps.chunkState.get('chunk-1').embedding, null);
   assert.equal(deps.chunkState.get('chunk-1').metadata.providerFree, true);
   assert.equal(deps.chunkState.get('foreign-chunk').metadata.untouched, true);
@@ -464,7 +524,7 @@ test('WebsiteEmbeddingIngestService restores earlier chunk writes when a later g
     grantCalls += 1;
     return grantCalls === 1 ? createGrant() : null;
   };
-  const { adapter, calls } = createAdapter();
+  const adapter = createSafeAdapter();
   const service = new WebsiteEmbeddingIngestService(deps.db, deps.vector, deps.knowledgeSources, deps.approvalLookup);
 
   const result = await service.runWebsiteEmbeddingIngest({
@@ -476,7 +536,6 @@ test('WebsiteEmbeddingIngestService restores earlier chunk writes when a later g
 
   assert.equal(result.allowed, false);
   assert.equal(result.decisionCode, 'missing_policy');
-  assert.equal(calls.length, 1);
   assert.equal(deps.updateCalls.length, 1);
   assert.equal(deps.restoreCalls.length, 1);
   assert.equal(deps.chunkState.get('chunk-1').embedding, null);
