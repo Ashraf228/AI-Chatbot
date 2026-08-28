@@ -77,6 +77,7 @@ export type WebsiteEmbeddingIngestDecisionCode =
   | 'source_chunks_missing'
   | 'adapter_missing'
   | 'mock_adapter_required'
+  | 'unsafe_mock_adapter'
   | 'embedding_dimension_invalid'
   | 'embedding_failed'
   | 'retrieval_not_verified'
@@ -127,6 +128,43 @@ type UpdatedChunkSnapshot = {
   contentHash: string;
   embeddingVector: string | null;
 };
+
+const SAFE_WEBSITE_EMBEDDING_MOCK_ADAPTERS = new WeakSet<WebsiteEmbeddingAdapter>();
+const DEFAULT_MOCK_EMBEDDING_DIMENSION = 6;
+
+function buildDeterministicMockEmbedding(text: string, dimension: number) {
+  const chars = Array.from(text)
+    .slice(0, dimension)
+    .map((char) => char.charCodeAt(0) / 255);
+
+  while (chars.length < dimension) {
+    chars.push(0);
+  }
+
+  return chars;
+}
+
+export function createSafeWebsiteEmbeddingMockAdapter(input?: {
+  label?: string;
+  embeddingDimension?: number;
+}): WebsiteEmbeddingAdapter {
+  const embeddingDimension = Number.isInteger(input?.embeddingDimension)
+    && (input?.embeddingDimension || 0) > 0
+    ? Number(input?.embeddingDimension)
+    : DEFAULT_MOCK_EMBEDDING_DIMENSION;
+
+  const adapter: WebsiteEmbeddingAdapter = Object.freeze({
+    mode: 'mock',
+    label: hasText(input?.label) ? input!.label.trim() : 'website-embedding-safe-mock',
+    embeddingDimension,
+    async embedText(text: string) {
+      return buildDeterministicMockEmbedding(text, embeddingDimension);
+    },
+  });
+
+  SAFE_WEBSITE_EMBEDDING_MOCK_ADAPTERS.add(adapter);
+  return adapter;
+}
 
 function deny(
   decisionCode: WebsiteEmbeddingIngestDecisionCode,
@@ -188,6 +226,10 @@ function toPgVectorLiteral(embedding: number[]) {
 
 function sanitizeFailureMessage(_error: unknown, fallback: string) {
   return fallback;
+}
+
+function isSafeWebsiteEmbeddingMockAdapter(adapter: WebsiteEmbeddingAdapter) {
+  return SAFE_WEBSITE_EMBEDDING_MOCK_ADAPTERS.has(adapter);
 }
 
 function buildVerificationQueryText(source: LoadedWebsiteSource) {
@@ -340,6 +382,14 @@ export class WebsiteEmbeddingIngestService {
       );
     }
 
+    if (!isSafeWebsiteEmbeddingMockAdapter(input.adapter)) {
+      return deny(
+        'unsafe_mock_adapter',
+        'website_embedding_ingest_requires_internal_safe_mock_adapter',
+        'Der Website-Embedding-Ingest akzeptiert nur intern freigegebene Safe-Mock-Adapter.',
+      );
+    }
+
     if (!hasText(input.providerKey) || !hasText(input.model)) {
       return deny(
         'not_granted',
@@ -464,6 +514,17 @@ export class WebsiteEmbeddingIngestService {
     const source = await this.loadWebsiteSource(sourceId);
     const preconditionFailure = this.evaluatePreconditions(source, input);
     if (preconditionFailure) {
+      if (source && preconditionFailure.decisionCode === 'unsafe_mock_adapter') {
+        await this.knowledgeSources.markBlocked(
+          source.sourceId,
+          preconditionFailure.sanitizedMessage,
+          preconditionFailure.decisionCode,
+        );
+        return {
+          ...preconditionFailure,
+          indexStatusChanged: true,
+        };
+      }
       return preconditionFailure;
     }
 
