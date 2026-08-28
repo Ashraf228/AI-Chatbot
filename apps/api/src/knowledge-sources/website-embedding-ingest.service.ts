@@ -19,6 +19,7 @@ type WebsiteChunkRow = {
   content: string;
   metadata: Record<string, unknown> | null;
   content_hash: string;
+  embedding_vector: string | null;
 };
 
 type VerificationRow = {
@@ -115,7 +116,16 @@ type LoadedWebsiteSource = {
     content: string;
     metadata: Record<string, unknown>;
     contentHash: string;
+    embeddingVector: string | null;
   }>;
+};
+
+type UpdatedChunkSnapshot = {
+  id: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  contentHash: string;
+  embeddingVector: string | null;
 };
 
 function deny(
@@ -210,7 +220,8 @@ export class WebsiteEmbeddingIngestService {
          COALESCE(ks.source_url, d.source_url) AS source_url,
          c.content,
          c.metadata,
-         c.content_hash
+         c.content_hash,
+         CASE WHEN c.embedding IS NULL THEN NULL ELSE c.embedding::text END AS embedding_vector
        FROM documents d
        JOIN chunks c ON c.document_id = d.id
        JOIN knowledge_sources ks ON ks.id = d.source_id
@@ -238,9 +249,31 @@ export class WebsiteEmbeddingIngestService {
           content: row.content,
           metadata: sanitizeMetadata(row.metadata),
           contentHash: row.content_hash,
+          embeddingVector: row.embedding_vector,
         }))
         .filter((row) => hasText(row.content)),
     };
+  }
+
+  private async restoreUpdatedChunks(chunks: UpdatedChunkSnapshot[]) {
+    for (let index = chunks.length - 1; index >= 0; index -= 1) {
+      const chunk = chunks[index];
+      await this.db.query(
+        `UPDATE chunks
+         SET content = $2,
+             metadata = $3,
+             content_hash = $4,
+             embedding = $5::vector
+         WHERE id = $1`,
+        [
+          chunk.id,
+          chunk.content,
+          sanitizeMetadata(chunk.metadata),
+          chunk.contentHash,
+          chunk.embeddingVector,
+        ],
+      );
+    }
   }
 
   private evaluatePreconditions(
@@ -436,11 +469,13 @@ export class WebsiteEmbeddingIngestService {
 
     const loaded = source as LoadedWebsiteSource;
     let embeddingsCreated = 0;
+    const updatedChunks: UpdatedChunkSnapshot[] = [];
 
     try {
       for (let index = 0; index < loaded.chunks.length; index += 1) {
         const gateDecision = await this.evaluateGate(loaded, input);
         if (!gateDecision.allowed) {
+          await this.restoreUpdatedChunks(updatedChunks);
           await this.knowledgeSources.markBlocked(loaded.sourceId, gateDecision.sanitizedMessage, gateDecision.decisionCode);
           return {
             ...deny(gateDecision.decisionCode, gateDecision.reason, gateDecision.sanitizedMessage),
@@ -464,6 +499,7 @@ export class WebsiteEmbeddingIngestService {
         });
 
         if (!Array.isArray(embedding) || embedding.length !== input.adapter!.embeddingDimension) {
+          await this.restoreUpdatedChunks(updatedChunks);
           await this.knowledgeSources.markFailed(
             loaded.sourceId,
             'Der Mock-Embedding-Adapter lieferte keine gueltige Embedding-Dimension.',
@@ -480,6 +516,13 @@ export class WebsiteEmbeddingIngestService {
           };
         }
 
+        updatedChunks.push({
+          id: chunk.id,
+          content: chunk.content,
+          metadata: chunk.metadata,
+          contentHash: chunk.contentHash,
+          embeddingVector: chunk.embeddingVector,
+        });
         await this.vector.updateChunk({
           id: chunk.id,
           content: chunk.content,
@@ -501,6 +544,7 @@ export class WebsiteEmbeddingIngestService {
 
       const verification = await this.verifyRetrieval(loaded, input);
       if (!verification.retrievalVerified || !verification.sourceAttributionVerified) {
+        await this.restoreUpdatedChunks(updatedChunks);
         await this.knowledgeSources.markFailed(
           loaded.sourceId,
           'Die Website-Embedding-Verifikation blieb ohne belastbaren Retrieval-/Attribution-Nachweis.',
@@ -535,6 +579,7 @@ export class WebsiteEmbeddingIngestService {
         sourceAttributionVerified: true,
       });
     } catch (error) {
+      await this.restoreUpdatedChunks(updatedChunks);
       await this.knowledgeSources.markFailed(
         loaded.sourceId,
         sanitizeFailureMessage(error, 'Der Website-Embedding-Ingest ist fehlgeschlagen.'),
