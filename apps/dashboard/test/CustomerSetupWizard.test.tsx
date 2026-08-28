@@ -385,7 +385,19 @@ describe("CustomerSetupWizard", () => {
     expect(screen.getByText("Hauptantwort")).toBeInTheDocument();
     expect(screen.getByText("Operator-Auswertung")).toBeInTheDocument();
     expect(screen.getByText("Antwortentwurf bereit")).toBeInTheDocument();
+    expect(screen.getByText("Ergebnisbewertung")).toBeInTheDocument();
+    expect(screen.getByText("Naechster sinnvoller Schritt")).toBeInTheDocument();
+    expect(screen.getByText("Knowledge / Quellenhinweis")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Es wurde ein interner Antwortentwurf ohne sichtbare Wissenshinweise erzeugt/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Antwort fachlich pruefen und bei Bedarf Gespraechslogik oder Wissen nachschaerfen/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Keine synthetischen Wissens-Snippets/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Sichtbar im bestehenden Response-Objekt: Keine sichtbaren Wissenshinweise oder Quellenangaben im vorhandenen Testresultat/i),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/Runtime-Pilot nur im Admin-Testpfad/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Technische Diagnose (optional)")).toBeInTheDocument();
     expect(screen.getByText(/Der Transcript bleibt nur lokal im Browser-State/i)).toBeInTheDocument();

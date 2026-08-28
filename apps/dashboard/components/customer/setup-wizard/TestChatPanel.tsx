@@ -63,7 +63,7 @@ function setupContextLabel(site: SiteDetails) {
 
 function usedKnowledgeLabel(turn: InternalTestChatTurn) {
   if (turn.usedKnowledgeSnippets.length === 0) {
-    return "Keine Wissenshinweise im internen Test verwendet.";
+    return "Keine sichtbaren Wissenshinweise oder Quellenangaben im vorhandenen Testresultat.";
   }
   return turn.usedKnowledgeSnippets
     .map((snippet) => snippet.title || snippet.url || snippet.id || "Snippet")
@@ -119,6 +119,60 @@ function resultLabel(turn: InternalTestChatTurn) {
     return "Antwort mit Wissensbezug";
   }
   return "Antwortentwurf bereit";
+}
+
+function resultSummary(turn: InternalTestChatTurn) {
+  const shouldHandoff = turn.result.runtimeState?.shouldHandoff || turn.result.conversationEnginePreview?.shouldHandoff;
+  const shouldAskQuestion = turn.result.runtimeState?.shouldAskQuestion;
+  const missingFields = turn.result.conversationEnginePreview?.missingFields || [];
+  const sourceRequired = turn.result.runtimeState?.sourceRequired;
+  const snippetsUsed = turn.usedKnowledgeSnippets.length > 0;
+
+  if (!turn.assistantDraft.trim()) {
+    return "Es liegt noch keine belastbare Testantwort vor. Der Test bleibt intern; es wurde nichts live geschaltet oder ausgeliefert.";
+  }
+  if (shouldHandoff) {
+    return "Die aktuelle Testantwort markiert einen Uebergabe-Fall. Keine echte Weiterleitung, kein Ticket, keine E-Mail und kein Webhook wurden ausgeloest.";
+  }
+  if (shouldAskQuestion || missingFields.length > 0) {
+    const missingLabel = missingFields.length ? ` Fehlende Angaben: ${missingFields.join(", ")}.` : "";
+    return `Vor einer belastbaren Antwort ist noch eine Rueckfrage noetig.${missingLabel} Test bleibt intern ohne Public Widget oder Produktivbetrieb.`;
+  }
+  if (sourceRequired && !snippetsUsed) {
+    return "Die Antwort bleibt ohne nutzbaren Wissenshinweis unvollstaendig. Im vorhandenen Testresultat ist kein sichtbarer Quellen- oder Wissensbezug fuer diese Frage enthalten.";
+  }
+  if (snippetsUsed) {
+    return "Die Antwort wirkt wissensbezogen, weil im vorhandenen Testresultat sichtbare Wissenshinweise enthalten sind. Das bleibt ein interner Test ohne Livegang.";
+  }
+  return "Es wurde ein interner Antwortentwurf ohne sichtbare Wissenshinweise erzeugt. Daraus wird keine Provider-, RAG- oder Embedding-Nutzung abgeleitet.";
+}
+
+function nextStepSummary(turn: InternalTestChatTurn) {
+  const shouldHandoff = turn.result.runtimeState?.shouldHandoff || turn.result.conversationEnginePreview?.shouldHandoff;
+  const shouldAskQuestion = turn.result.runtimeState?.shouldAskQuestion;
+  const missingFields = turn.result.conversationEnginePreview?.missingFields || [];
+  const sourceRequired = turn.result.runtimeState?.sourceRequired;
+  const snippetsUsed = turn.usedKnowledgeSnippets.length > 0;
+
+  if (!turn.assistantDraft.trim()) {
+    return "Warnungen, Fehler und gespeicherten Setup-Stand pruefen; danach intern erneut testen.";
+  }
+  if (shouldHandoff) {
+    return "Uebergabe-Regeln und Pflichtangaben pruefen; Review vor Livegang bleibt weiterhin separat erforderlich.";
+  }
+  if (shouldAskQuestion || missingFields.length > 0) {
+    if (missingFields.length > 0) {
+      return `Testfrage praezisieren oder fehlende Angaben (${missingFields.join(", ")}) ergaenzen; danach erneut intern testen.`;
+    }
+    return "Rueckfragepfad pruefen und mit praeziserer Testfrage erneut intern testen.";
+  }
+  if (sourceRequired && !snippetsUsed) {
+    return "Wissensstand pruefen oder ergaenzen und denselben Test danach erneut ausfuehren.";
+  }
+  if (snippetsUsed) {
+    return "Antwort und sichtbare Wissenshinweise fachlich pruefen; Review vor Livegang bleibt weiterhin erforderlich.";
+  }
+  return "Antwort fachlich pruefen und bei Bedarf Gespraechslogik oder Wissen nachschaerfen; kein Public Widget oder Produktivbetrieb wird dadurch freigegeben.";
 }
 
 function knowledgeSummary(turn: InternalTestChatTurn) {
@@ -299,7 +353,7 @@ export function TestChatPanel({
             {turns.length === 0 ? (
               <EmptyStateCard
                 title="Noch kein interner Test"
-                description="Stelle eine Testfrage, um Hauptantwort, Operator-Auswertung, Knowledge-Status und Side-Effect-Grenzen gegen den gespeicherten Setup-Stand zu pruefen."
+                description="Stelle eine Testfrage, um Hauptantwort, Ergebnisbewertung, naechsten Schritt, Knowledge-Grenzen und Side-Effect-Grenzen gegen den gespeicherten Setup-Stand zu pruefen."
               />
             ) : (
               turns.map((turn, index) => (
@@ -322,10 +376,18 @@ export function TestChatPanel({
                     <strong>Operator-Auswertung</strong>
                     <div className="dashboard-grid dashboard-grid--metrics-2">
                       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
-                        <strong>Knowledge-Status</strong>
+                        <strong>Ergebnisbewertung</strong>
+                        <p className="dashboard-copy dashboard-no-margin-bottom">{resultSummary(turn)}</p>
+                      </div>
+                      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
+                        <strong>Naechster sinnvoller Schritt</strong>
+                        <p className="dashboard-copy dashboard-no-margin-bottom">{nextStepSummary(turn)}</p>
+                      </div>
+                      <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">
+                        <strong>Knowledge / Quellenhinweis</strong>
                         <p className="dashboard-copy dashboard-no-margin-bottom">{knowledgeSummary(turn)}</p>
                         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-                          Knowledge im Test genutzt: {usedKnowledgeLabel(turn)}
+                          Sichtbar im bestehenden Response-Objekt: {usedKnowledgeLabel(turn)}
                         </p>
                       </div>
                       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--xs">

@@ -4,97 +4,89 @@
 
 - run_id: `dashboard-testchat-result-clarity-1`
 - run_type: `dashboard_p1_testchat_result_clarity`
+- scope decision: `dashboard_testchat_result_clarity_improved`
+- dashboard-only: yes
 - testchat result clarity improved: yes
-- primary answer area added: yes
-- operator evaluation visible: yes
-- knowledge result clarity visible: yes
-- handoff / missing fields visible: yes
-- technical diagnostics secondary: yes
-- side-effect boundary preserved: yes
-- local transcript only: yes
-- dashboard code changed: yes
-- API code changed: no
-- guided customer demo: still blocked
-- self-service customer demo: blocked
-- real pilot: blocked
+- internal test context preserved: yes
+- API contract changed: no
+- backend code changed: no
+- widget code changed: no
+- viewer write access added: no
+- public widget claimed: no
+- production activation claimed: no
+- deploy executed: no
+- provider calls used: no
+- live embeddings used: no
+- rag activated: no
+- fake source attribution added: no
 
-## UI Changes
+## Scope Decision
 
-- elevated the answer draft into a dedicated `Hauptantwort` area
-- added an explicit result state at the start of each internal test turn
-- grouped operator-facing interpretation into a separate `Operator-Auswertung`
-- kept the existing local transcript model and blocked activation boundaries intact
+- dashboard-only implementation was sufficient
+- existing result fields already carried the required state
+- no API contract review was needed
 
-## Result Structure
+## Changed Components
 
-- `Hauptantwort` now carries the primary answer instead of burying it inside mixed details
-- result state explains whether the turn is a ready answer, a follow-up need, a handoff candidate, or knowledge-limited
-- operator evaluation is grouped into:
-- `Knowledge-Status`
-- `Gespraechslogik`
-- `Uebergabe & fehlende Angaben`
-- `Side-Effect-Grenze`
+- `apps/dashboard/components/customer/setup-wizard/TestChatPanel.tsx`
+- `apps/dashboard/test/TestChatPanel.test.tsx`
+- `apps/dashboard/test/CustomerSetupWizard.test.tsx`
+- `docs/evaluation/dashboard/dashboard-testchat-result-clarity.md`
+- `docs/evaluation/conversation-engine/runs/dashboard-testchat-result-clarity-1-report.json`
+- `docs/evaluation/conversation-engine/runs/dashboard-testchat-result-clarity-1-report.md`
 
-## Knowledge Clarity
+## Testchat Result Clarity Review
 
-- the UI states whether usable knowledge snippets were present for the current turn
-- when no snippet is present, the UI now surfaces the safe runtime-pilot reason or warning directly
-- the task does not invent source attribution or claim exact persisted source usage when the payload does not provide that
-- more detailed source-state UX remains a follow-up, not a hidden claim in this task
+- added explicit `Ergebnisbewertung` for each turn
+- added explicit `Naechster sinnvoller Schritt` for each turn
+- reframed the knowledge section to `Knowledge / Quellenhinweis`
+- kept `Hauptantwort` as the primary answer block
+- kept low-level runtime details inside optional technical diagnosis
 
-## Handoff / Missing Fields
+## Safety Boundary Review
 
-- handoff recommendation is visible without opening the technical details block
-- missing required fields are surfaced in the operator-facing area
-- no real handoff or real delivery path is triggered
+- internal test-only wording preserved
+- no public widget activation implied
+- no production activation implied
+- no deploy implied
+- no real side effects implied
+- no customer-data usage implied
 
-## Technical Diagnostics
+## Knowledge / Source Attribution Boundary
 
-- low-level runtime metadata remains available under `Technische Diagnose (optional)`
-- technical diagnostics stay secondary and optional
-- the operator can now understand the result before reading internal runtime fields
+- snippet / retrieval output uses existing response data only
+- no snippet now results in explicit no-source / no-knowledge-evidence wording
+- visible snippet titles remain grounded in the existing payload
+- no fake sources were added
 
-## Side Effects Boundary
+## Role Boundary
 
-- no deploy
-- no public widget activation
-- no production activation
-- no real tickets
-- no real emails
-- no real webhooks
-- no provider calls
-- no Query Runner
-- no chat-history persistence
+- admin and operator keep internal test access
+- viewer remains without internal test controls
+- no role broadening was introduced
 
-## Still Blocked
+## No Runtime / No Provider / No RAG Boundary
 
-- guided customer demo
-- self-service customer demo
-- real pilot
-- deploy
-- public widget activation
-- production activation
-- customer-data usage
+- no runtime code changed outside dashboard presentation
+- no provider call path added
+- no RAG activation added
+- no embedding path added
+- no API contract changed
 
-## Regression Coverage
+## Tests
 
-- updated `apps/dashboard/test/CustomerSetupWizard.test.tsx` to cover:
-- primary answer area visibility
-- operator evaluation visibility
-- visible runtime-pilot warning/reason copy
-- optional technical diagnosis boundary
+- `scripts/ops/codex-preflight.sh`: PASS
+- `git diff --check`: PASS
+- `scripts/ops/codex-sensitive-scan.sh --base origin/main --head HEAD`: PASS
+- `npm run security:audit:production-contexts`: PASS
+- `npm run security:check-authorization-matrix`: PASS
+- `npm run test:security-boundaries`: PASS
+- `npm run check:dashboard`: PASS
+- `npm run build:dashboard`: PASS
+- `npm run check:all`: PASS
 
-## Safety Confirmation
+## Follow-up
 
-- dashboard-only code change
-- no API/runtime/widget change
-- no migration
-- no DB read or write logic
-- no package or lockfile change
-- no credentials or passwords
-- no screenshots or recordings
-- no fake source attribution
-
-## Recommended Next Step
-
-- `DASHBOARD-P1-KNOWLEDGE-SOURCES-AND-STATUS-1`
+- next gate task: `DASHBOARD-P1-TESTCHAT-RESULT-CLARITY-1-D`
+- post-merge task: `DASHBOARD-P1-TESTCHAT-RESULT-CLARITY-1-E`
+- follow-up after post-merge check: `KNOWLEDGE-WEBSITE-EMBEDDING-INGEST-2`

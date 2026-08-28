@@ -2,108 +2,125 @@
 
 ## Summary
 
-- Audit date: Wednesday, July 29, 2026
-- Baseline: `e8a5f02ee619cfd1d5087747a020fa1032721723`
-- Scope: clarify the internal testchat result presentation inside `Review & Livegang`
-- Goal was result clarity only, not a new runtime path or permission change
-- No deploy was executed
-- No public widget was activated
-- No production activation was approved
-- No customer data was used
-- Guided customer demo remains blocked
-- Self-service customer demo remains blocked
-- Real pilot remains blocked
+- Audit date: Friday, August 28, 2026
+- Baseline: `137dc93a9ec0b5e36d546a2aab2559905befeb56`
+- Scope: improve internal testchat result clarity inside `Review & Livegang`
+- Scope decision: `dashboard_testchat_result_clarity_improved`
+- dashboard-only UI/copy/test change
+- no deploy executed
+- no public widget activated
+- no production activation approved
+- no customer data used
+- no production data used
 
-## Previous Problem
+## Scope Decision
 
-- the primary answer sat in the same visual weight as low-level diagnostics
-- operator-facing evaluation had to be inferred from technical key/value output
-- knowledge state was visible, but not framed as a result judgement for the current turn
-- handoff and missing-field information stayed buried in optional details
-- the review flow still made the operator read technical output before understanding the actual test result
+- `dashboard_testchat_result_clarity_improved`
+- dashboard-only implementation was confirmed as sufficient after code review
+- existing runtime-pilot response fields already expose:
+- result state
+- knowledge retrieval state
+- handoff / follow-up indicators
+- activation boundary
+- side-effect boundary
+- no API contract change was required
+- no backend change was required
 
-## UI Changes
+## Current State
 
-- every turn now starts with a visible result state and a dedicated primary answer area
-- the main answer is separated from the rest of the runtime-pilot metadata
-- the turn keeps the local-only transcript behavior and the existing admin/operator-only access gate
-- the review step still presents the test as an internal validation path, not as a customer-ready preview
+- the internal testchat is rendered by `apps/dashboard/components/customer/setup-wizard/TestChatPanel.tsx`
+- the setup review flow mounts that panel from `apps/dashboard/components/customer/setup-wizard/LaunchStep.tsx`
+- existing data already includes:
+- `assistantDraft`
+- `usedKnowledgeSnippets`
+- `knowledgeRetrieval`
+- `runtimeState`
+- `conversationEnginePreview`
+- `activationBoundary`
+- `sideEffects`
+- prior UI already separated `Hauptantwort` from optional diagnostics, but the operator still lacked a plain-language judgement and a clear next step for each result
 
-## Result Structure
+## Changed Components
 
-- `Hauptantwort` is now the first content block after the status badge
-- a compact result status explains whether the turn is an answer draft, follow-up need, handoff case, or knowledge-limited case
-- `Operator-Auswertung` groups the current turn into:
-- `Knowledge-Status`
-- `Gespraechslogik`
-- `Uebergabe & fehlende Angaben`
-- `Side-Effect-Grenze`
+- `apps/dashboard/components/customer/setup-wizard/TestChatPanel.tsx`
+- `apps/dashboard/test/TestChatPanel.test.tsx`
+- `apps/dashboard/test/CustomerSetupWizard.test.tsx`
 
-## Primary Answer Area
+## Result Clarity Changes
 
-- the answer draft is visually elevated above diagnostics
-- the answer remains derived from the existing runtime-pilot preview response
-- no new generation path was added
-- no new message persistence was added
+- each internal test turn now includes a dedicated `Ergebnisbewertung`
+- each internal test turn now includes a dedicated `Naechster sinnvoller Schritt`
+- the knowledge section is reframed as `Knowledge / Quellenhinweis`
+- source / knowledge wording is tied only to visible fields from the existing response object
+- no new response fields are assumed
+- no fake citations or synthetic source claims are added
+- empty state text now explains that the operator will see result judgement, next step, knowledge boundary, and side-effect boundary
 
-## Operator Evaluation
+## Safety Copy Boundaries
 
-- operator-facing judgement is now visible without opening the optional diagnosis section
-- the panel states the current knowledge result in plain language
-- the panel states the current conversation state, selected agent, and next action
-- the panel states whether handoff or additional required fields are present
-- the panel restates that side effects stay blocked in this path
+- the panel continues to state that the path is an internal admin/operator test only
+- no public widget activation is suggested
+- no production activation is suggested
+- no deploy is suggested
+- no real tickets, e-mails, or webhooks are suggested
+- no provider, query-runner, or side-effect activation is suggested
+- no customer demo or guided demo approval is implied
 
-## Knowledge Result Clarity
+## Knowledge / Source Attribution Boundary
 
-- if knowledge snippets are present, the result states that directly
-- if no snippet is present, the UI now explains whether retrieval is disabled, blocked, or simply not needed
-- warnings and reasons from the safe runtime-pilot response are visible without forcing the operator into the technical details
-- exact source-level proof remains limited to the existing safe payload
-- more granular source-state UX remains a follow-up topic
+- visible source / knowledge text is derived only from `usedKnowledgeSnippets` and `knowledgeRetrieval`
+- when no snippet is present, the UI now says that no visible knowledge hint or source attribution exists in the current response object
+- when snippets are present, only existing snippet title / url / id values are shown
+- no RAG usage is claimed from missing evidence
+- no embedding usage is claimed from missing evidence
+- no fake source attribution is added
 
-## Handoff / Missing Fields Clarity
+## Fallback / Error Boundary
 
-- handoff recommendation now has a dedicated visible summary
-- missing required fields are surfaced in the operator-facing area instead of only in optional diagnostics
-- no real handoff, ticket, e-mail, or webhook is triggered
+- no-answer state is now explicitly framed as `Keine belastbare Testantwort`
+- handoff state remains visible without triggering a real handoff
+- missing-field / follow-up state remains visible without creating any real task, ticket, or message
+- knowledge-limited state now tells the operator that the current test result lacks a visible usable knowledge hint for the question
+- each of those states now points to a conservative next step instead of suggesting live release
 
-## Technical Diagnostics Boundary
+## Role / Viewer Boundary
 
-- technical low-level output remains available under `Technische Diagnose (optional)`
-- the operator no longer has to read the technical block first to understand the result
-- the task keeps runtime-pilot diagnostics secondary instead of removing them
+- admin and operator keep access to the internal test tools
+- viewer remains read-only and does not gain testchat write access
+- no role / permission change was introduced
+- no viewer write path was added
 
-## Error / Empty States
+## No Public Widget / No Production Boundary
 
-- the empty state now explains that the turn result includes main answer, operator evaluation, knowledge status, and side-effect boundaries
-- no screenshot, recording, export, or report payload with real chat data was added
+- the UI continues to frame this path as internal-only
+- the new result judgement and next-step text do not claim public widget readiness
+- the new result judgement and next-step text do not claim production readiness
+- the new result judgement and next-step text keep live review as a separate later gate
 
-## Remaining Follow-up Fixes
+## No Provider / No RAG / No Embedding Boundary
 
-- source-level knowledge readiness can still be made more explicit in a dedicated follow-up
-- this task does not change runtime-pilot payload structure
-- this task does not release any guided customer demo or self-service test flow
+- no provider calls were added
+- no RAG activation was added
+- no embedding generation or indexing was added
+- no new runtime path was added
+- no backend contract was changed
 
-## Safety Boundaries
+## Tests
 
-- no deploy
-- no public widget activation
-- no production activation
-- no customer data
-- no production data
-- no credentials
-- no password creation
-- no password change
-- no DB migration
-- no Query Runner
-- no real tickets, e-mails, or webhooks
-- no provider calls
-- no chat-history persistence
-- no fake source attribution
-- no screenshots
-- no recordings
+- `apps/dashboard/test/TestChatPanel.test.tsx`
+- covers:
+- success with visible knowledge evidence
+- knowledge-limited result without fake source attribution
+- no-answer error state with internal-only boundary preserved
+- `apps/dashboard/test/CustomerSetupWizard.test.tsx`
+- verifies the launch-step integration renders:
+- `Ergebnisbewertung`
+- `Naechster sinnvoller Schritt`
+- `Knowledge / Quellenhinweis`
+- conservative no-source wording in the real setup flow
 
-## Next Step
+## Follow-up
 
-- Recommended next task: `DASHBOARD-P1-KNOWLEDGE-SOURCES-AND-STATUS-1`
+- next gate task after PR creation: `DASHBOARD-P1-TESTCHAT-RESULT-CLARITY-1-D`
+- post-merge task: `DASHBOARD-P1-TESTCHAT-RESULT-CLARITY-1-E`
+- follow-up after post-merge check: `KNOWLEDGE-WEBSITE-EMBEDDING-INGEST-2`
