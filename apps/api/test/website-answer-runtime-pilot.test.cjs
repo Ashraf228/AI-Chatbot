@@ -179,4 +179,6 @@ test('WebsiteAnswerRuntimePilotService blocks pilot answer when evaluation did n
   assert.equal(result.answerEvaluationResult.answered, false);
   assert.equal(result.sourceAttribution.verified, false);
   assert.equal(result.sourceAttribution.retrievalVerified, false);
+  assert.equal(result.sourceAttribution.sourceId, null);
+  assert.equal(result.sources.length, 0);
 });

@@ -145,10 +145,14 @@ test('WebsiteAnswerEvaluationService blocks tenant and site mismatches before re
       answerAdapter: adapter,
     });
 
-    assert.equal(result.answered, false);
-    assert.match(result.decisionCode, /tenant_mismatch|site_mismatch/);
-    assert.equal(vectorCalls.length, 0);
-    assert.equal(calls.length, 0);
+      assert.equal(result.answered, false);
+      assert.match(result.decisionCode, /tenant_mismatch|site_mismatch/);
+      assert.equal(result.sourceId, null);
+      assert.equal(result.sourceUrl, null);
+      assert.equal(result.sourceTitle, null);
+      assert.equal(result.sourceDomain, null);
+      assert.equal(vectorCalls.length, 0);
+      assert.equal(calls.length, 0);
   }
 });
 
@@ -162,6 +166,10 @@ test('WebsiteAnswerEvaluationService blocks retrieval-empty answers and never ca
 
   assert.equal(result.answered, false);
   assert.equal(result.decisionCode, 'retrieval_empty');
+  assert.equal(result.sourceId, null);
+  assert.equal(result.sourceUrl, null);
+  assert.equal(result.sourceTitle, null);
+  assert.equal(result.sourceDomain, null);
   assert.equal(vectorCalls.length, 1);
   assert.equal(calls.length, 0);
 });
@@ -185,6 +193,10 @@ test('WebsiteAnswerEvaluationService blocks cross-tenant or foreign source retri
 
   assert.equal(result.answered, false);
   assert.equal(result.decisionCode, 'source_attribution_not_verified');
+  assert.equal(result.sourceId, null);
+  assert.equal(result.sourceUrl, null);
+  assert.equal(result.sourceTitle, null);
+  assert.equal(result.sourceDomain, null);
   assert.equal(vectorCalls.length, 1);
   assert.equal(calls.length, 0);
 });
@@ -258,6 +270,10 @@ test('WebsiteAnswerEvaluationService rejects fake source attribution from the mo
 
   assert.equal(result.answered, false);
   assert.equal(result.decisionCode, 'fake_source_attribution');
+  assert.equal(result.sourceId, null);
+  assert.equal(result.sourceUrl, null);
+  assert.equal(result.sourceTitle, null);
+  assert.equal(result.sourceDomain, null);
   assert.equal(calls.length, 1);
 });
 
@@ -293,4 +309,8 @@ test('WebsiteAnswerEvaluationService sanitizes adapter failures and requires moc
     failing.sanitizedMessage,
     'Die Website-Answer-Evaluation ist fehlgeschlagen.',
   );
+  assert.equal(failing.sourceId, null);
+  assert.equal(failing.sourceUrl, null);
+  assert.equal(failing.sourceTitle, null);
+  assert.equal(failing.sourceDomain, null);
 });

@@ -208,9 +208,28 @@ function asStringList(value: unknown) {
     : [];
 }
 
+function hasVerifiedSourceAttribution(
+  evaluation: WebsiteAnswerEvaluationResult | null,
+) {
+  return (
+    evaluation?.answered === true &&
+    evaluation.retrievalVerified === true &&
+    evaluation.sourceAttributionVerified === true
+  );
+}
+
 function buildSourceSummary(
   evaluation: WebsiteAnswerEvaluationResult | null,
 ): WebsiteAnswerRuntimePilotSourceSummary {
+  if (!hasVerifiedSourceAttribution(evaluation)) {
+    return {
+      sourceId: null,
+      sourceUrl: null,
+      sourceTitle: null,
+      sourceDomain: null,
+    };
+  }
+
   return {
     sourceId: evaluation?.sourceId ?? null,
     sourceUrl: evaluation?.sourceUrl ?? null,
@@ -222,6 +241,17 @@ function buildSourceSummary(
 function buildSourceAttribution(
   evaluation: WebsiteAnswerEvaluationResult | null,
 ): WebsiteAnswerRuntimePilotSourceAttribution {
+  if (!hasVerifiedSourceAttribution(evaluation)) {
+    return {
+      verified: false,
+      retrievalVerified: evaluation?.retrievalVerified === true,
+      sourceId: null,
+      sourceUrl: null,
+      sourceTitle: null,
+      sourceDomain: null,
+    };
+  }
+
   return {
     verified: evaluation?.sourceAttributionVerified === true,
     retrievalVerified: evaluation?.retrievalVerified === true,
@@ -450,6 +480,7 @@ function deny(input: {
   missingEvidence?: string[];
 }): WebsiteAnswerRuntimePilotBaseResult {
   const evaluation = input.answerEvaluationResult ?? null;
+  const source = buildSourceSummary(evaluation);
   return {
     allowed: false,
     decisionCode: input.decisionCode,
@@ -462,7 +493,7 @@ function deny(input: {
     runtimeGateDecision: input.runtimeGateDecision ?? null,
     answerEvaluationResult: evaluation,
     sourceAttribution: buildSourceAttribution(evaluation),
-    sources: evaluation?.sourceId ? [buildSourceSummary(evaluation)] : [],
+    sources: source.sourceId ? [source] : [],
     warnings: input.warnings ?? [],
     missingEvidence: input.missingEvidence ?? [],
     providerCallsUsed: false,
@@ -477,6 +508,7 @@ function allow(input: {
   runtimeGateDecision: WebsiteAnswerRuntimeGateResult;
   answerEvaluationResult: WebsiteAnswerEvaluationResult;
 }): WebsiteAnswerRuntimePilotBaseResult {
+  const source = buildSourceSummary(input.answerEvaluationResult);
   return {
     allowed: true,
     decisionCode: 'allowed_internal_mock_runtime_pilot',
@@ -490,7 +522,7 @@ function allow(input: {
     runtimeGateDecision: input.runtimeGateDecision,
     answerEvaluationResult: input.answerEvaluationResult,
     sourceAttribution: buildSourceAttribution(input.answerEvaluationResult),
-    sources: [buildSourceSummary(input.answerEvaluationResult)],
+    sources: source.sourceId ? [source] : [],
     warnings: [
       ...input.answerEvaluationResult.warnings,
       ...input.runtimeGateDecision.warnings,

@@ -315,13 +315,19 @@ test('insufficient evidence, retrieval gaps, source attribution gaps, fake sourc
 
   assert.ok(insufficient.observability.denials.decisionCodes.includes('insufficient_evidence'));
   assert.equal(insufficient.observability.answerEvaluation.insufficientEvidence, true);
+  assert.equal(insufficient.observability.retrieval.sourceCount, 0);
+  assert.deepEqual(insufficient.observability.sourceAttribution.sourceIds, []);
   assert.ok(retrievalGap.observability.denials.decisionCodes.includes('retrieval_not_verified'));
   assert.equal(retrievalGap.observability.retrieval.verified, false);
+  assert.equal(retrievalGap.observability.retrieval.sourceCount, 0);
   assert.ok(sourceAttributionGap.observability.denials.decisionCodes.includes('source_attribution_not_verified'));
   assert.equal(sourceAttributionGap.observability.sourceAttribution.verified, false);
+  assert.deepEqual(sourceAttributionGap.observability.sourceAttribution.sourceIds, []);
   assert.ok(fakeSource.observability.denials.decisionCodes.includes('fake_source_attribution'));
   assert.equal(fakeSource.observability.sourceAttribution.verified, false);
+  assert.deepEqual(fakeSource.observability.sourceAttribution.sourceIds, []);
   assert.ok(crossTenant.observability.denials.decisionCodes.includes('tenant_mismatch'));
+  assert.deepEqual(crossTenant.observability.sourceAttribution.sourceIds, []);
   assert.ok(unknownContext.observability.denials.decisionCodes.includes('unknown_context_blocked'));
 });
 
