@@ -37,7 +37,7 @@
 
 ## Lookup Query Rules
 
-- Hard scope required:
+- Source-scoped lookup requires:
   - `tenant_id`
   - `site_id`
   - `provider_key`
@@ -53,19 +53,41 @@
   - `provider_dpa_approved = true`
   - in production: `production_approved = true`
 - Source matching:
-  - source-specific grant preferred first
-  - site-wide grant with `source_id IS NULL` allowed as fallback
+  - `scope_kind = 'source'` is preferred first
+  - `scope_kind = 'source_type'` with `source_id IS NULL` is the only fallback
+  - `scope_kind = 'site_runtime'` is excluded from this lookup
 - Deterministic ordering:
-  - source-specific before site-wide
+  - `source` before `source_type`
   - newer `valid_from` before older entries
   - newer `created_at` before older entries
 - SQL remains parameterized.
 - No untrusted value is interpolated into SQL text.
 
+## Site Runtime Lookup Rules
+
+- `source_id IS NULL` does not generally mean a runtime grant.
+- Site-runtime lookup is separate and only evaluates rows with:
+  - `scope_kind = 'site_runtime'`
+  - exact `tenant_id`
+  - exact `site_id`
+  - exact `environment`
+  - exact `provider_key`
+  - exact `model`
+  - `source_id IS NULL`
+  - `source_types = []`
+  - `usage_contexts = ["query_embedding"]`
+- The site-runtime path does not use a source-type fallback loop.
+- Candidate handling is fail-closed:
+  - `0` valid candidates -> deny
+  - `1` valid candidate -> revalidate and then allow/deny
+  - `>1` valid candidates -> deny with internal `ambiguous_policy`
+- `ambiguous_policy` remains an internal diagnosis code, not a public approval signal.
+
 ## Storage Grant Mapping
 
 - DB row fields are normalized into the existing `ProviderApprovalPolicy` contract:
   - `id -> approvalId`
+  - `scope_kind -> scopeKind`
   - `tenant_id -> tenantId`
   - `site_id -> siteId`
   - `source_id -> sourceId`
@@ -99,11 +121,13 @@
   - storage lookup match
   - policy contract validation pass
 - Missing or malformed storage data remains denied.
+- A `query_embedding` site-runtime grant does not authorize any downstream LLM call.
 
 ## Default Deny Behavior
 
 - No storage lookup service available: denied unless an explicit synthetic approval is injected by tests.
 - No matching grant: denied.
+- Ambiguous site-runtime match: denied.
 - Expired grant: denied.
 - Revoked grant: denied.
 - Future `valid_from`: denied.
@@ -135,7 +159,8 @@
 ## Source Scope Boundary
 
 - Source-specific grants are preferred when available.
-- Site-wide grants remain source-safe only within the same tenant/site scope.
+- `source_type` fallback grants remain source-safe only within the same tenant/site scope.
+- Site-runtime grants are not considered by source-scoped lookups.
 - No source from another tenant/site can satisfy the lookup.
 
 ## Revocation / Expiry Boundary
@@ -158,6 +183,7 @@
 - No RAG execution was added.
 - No website embedding ingest was executed live.
 - No `runtime_readiness = ready` transition was added.
+- No ChatPipeline, ToolExecutor, widget, or public-runtime integration was added.
 
 ## Tests Added
 
@@ -184,6 +210,7 @@
 - No audit-write path exists yet.
 - No live provider execution path exists yet.
 - No embedding runtime job exists yet.
+- No productive provisionierungsweg exists yet for site-runtime query-embedding grants.
 - Website embedding still stays blocked without a valid active storage grant.
 
 ## Remaining Follow-up Fixes
@@ -209,6 +236,7 @@
 - Default remains denied
 - Without a valid active storage grant, website embedding remains blocked
 - Valid storage grant allows gate decision only, not live execution
+- No Production-/Enterprise-Freigabe
 - No `runtime_readiness = ready`
 - No deploy
 - No public widget

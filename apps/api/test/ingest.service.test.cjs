@@ -377,6 +377,7 @@ test('IngestService.evaluateWebsiteRuntimeIndexingGate can acknowledge explicit 
     model: 'text-embedding-3-small',
     explicitApproval: {
       approvalId: 'approval-1',
+      scopeKind: 'source',
       tenantId: 'tenant-1',
       siteId: 'site-1',
       sourceId: 'source-1',
@@ -441,6 +442,7 @@ test('IngestService.evaluateWebsiteRuntimeIndexingGate can acknowledge a valid s
     deps.approvalLookupCalls.push(input);
     return {
       approvalId: 'approval-1',
+      scopeKind: 'source',
       tenantId: 'tenant-1',
       siteId: 'site-1',
       sourceId: 'source-1',

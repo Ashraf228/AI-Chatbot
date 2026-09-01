@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const {
   ProviderApprovalStorageLookupService,
   buildProviderApprovalLookupQuery,
+  buildSiteRuntimeQueryEmbeddingLookupQuery,
   evaluateStoredProviderApprovalGrant,
   mapProviderApprovalGrantRow,
 } = require('../dist/knowledge-sources/provider-approval-storage-lookup.service.js');
@@ -13,6 +14,7 @@ const FIXTURE_NOW = '2026-08-01T12:00:00.000Z';
 function createRow(overrides = {}) {
   return {
     id: 'approval-1',
+    scope_kind: 'source',
     tenant_id: 'tenant-1',
     site_id: 'site-1',
     source_id: 'source-1',
@@ -67,17 +69,64 @@ test('buildProviderApprovalLookupQuery keeps untrusted values parameterized and 
   const { sql, params } = buildProviderApprovalLookupQuery(input);
 
   assert.match(sql, /FROM provider_approval_grants/i);
+  assert.match(sql, /scope_kind IN \('source', 'source_type'\)/i);
   assert.match(sql, /source_types \? \$7/i);
   assert.match(sql, /usage_contexts \? \$8/i);
-  assert.match(sql, /CASE WHEN source_id = \$9 THEN 0 ELSE 1 END/i);
+  assert.match(sql, /CASE WHEN scope_kind = 'source' THEN 0 ELSE 1 END/i);
   assert.equal(sql.includes(input.tenantId), false);
   assert.equal(params[0], input.tenantId);
   assert.equal(params[8], 'source-1');
 });
 
-test('mapProviderApprovalGrantRow returns null for malformed JSON arrays', () => {
+test('buildSiteRuntimeQueryEmbeddingLookupQuery keeps runtime scope explicit and limited to two candidates', () => {
+  const input = {
+    tenantId: "tenant-1'; DROP TABLE provider_approval_grants; --",
+    siteId: 'site-1',
+    environment: 'production',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    now: FIXTURE_NOW,
+  };
+  const { sql, params } = buildSiteRuntimeQueryEmbeddingLookupQuery(input);
+
+  assert.match(sql, /scope_kind = 'site_runtime'/i);
+  assert.match(sql, /source_types = '\[\]'::jsonb/i);
+  assert.match(sql, /usage_contexts = '\["query_embedding"\]'::jsonb/i);
+  assert.match(sql, /LIMIT 2/i);
+  assert.equal(sql.includes(input.tenantId), false);
+  assert.equal(params[0], input.tenantId);
+  assert.equal(params[4], 'production');
+});
+
+test('mapProviderApprovalGrantRow returns null for malformed JSON arrays and invalid scope combinations', () => {
   const policy = mapProviderApprovalGrantRow(createRow({ usage_contexts: 'not-an-array' }));
   assert.equal(policy, null);
+
+  const sourceTypeWithSourceId = mapProviderApprovalGrantRow(
+    createRow({ scope_kind: 'source_type', source_id: 'source-1' }),
+  );
+  assert.equal(sourceTypeWithSourceId, null);
+
+  const invalidSiteRuntime = mapProviderApprovalGrantRow(
+    createRow({
+      scope_kind: 'site_runtime',
+      source_id: null,
+      source_types: ['url'],
+      usage_contexts: ['query_embedding'],
+    }),
+  );
+  assert.equal(invalidSiteRuntime, null);
+
+  const validSiteRuntime = mapProviderApprovalGrantRow(
+    createRow({
+      scope_kind: 'site_runtime',
+      source_id: null,
+      source_types: [],
+      usage_contexts: ['query_embedding'],
+    }),
+  );
+  assert.equal(validSiteRuntime.scopeKind, 'site_runtime');
+  assert.deepEqual(validSiteRuntime.sourceTypes, []);
 });
 
 test('evaluateStoredProviderApprovalGrant denies no grant, revoked, expired, future, cross-tenant, scope mismatches, and missing approvals', () => {
@@ -175,6 +224,20 @@ test('evaluateStoredProviderApprovalGrant denies no grant, revoked, expired, fut
   });
   assert.equal(noDpaApproval.allowed, false);
   assert.equal(noDpaApproval.decisionCode, 'dpa_not_approved');
+
+  const siteRuntimeScope = evaluateStoredProviderApprovalGrant({
+    ...createLookupInput(),
+    policy: mapProviderApprovalGrantRow(
+      createRow({
+        scope_kind: 'site_runtime',
+        source_id: null,
+        source_types: [],
+        usage_contexts: ['query_embedding'],
+      }),
+    ),
+  });
+  assert.equal(siteRuntimeScope.allowed, false);
+  assert.equal(siteRuntimeScope.decisionCode, 'not_granted');
 });
 
 test('evaluateStoredProviderApprovalGrant requires production approval in production and allows a valid synthetic grant', () => {
@@ -225,7 +288,7 @@ test('ProviderApprovalStorageLookupService loads a valid grant and supports site
   const service = new ProviderApprovalStorageLookupService({
     async query(sql, params) {
       captured = { sql, params };
-      return { rows: [createRow({ source_id: null })] };
+      return { rows: [createRow({ scope_kind: 'source_type', source_id: null })] };
     },
   });
 
@@ -233,5 +296,126 @@ test('ProviderApprovalStorageLookupService loads a valid grant and supports site
   assert.equal(decision.allowed, true);
   assert.equal(decision.decisionCode, 'allowed');
   assert.equal(decision.policy.sourceId, null);
-  assert.match(captured.sql, /ORDER BY\s+CASE WHEN source_id = \$9 THEN 0 ELSE 1 END/i);
+  assert.equal(decision.policy.scopeKind, 'source_type');
+  assert.match(captured.sql, /ORDER BY\s+CASE WHEN scope_kind = 'source' THEN 0 ELSE 1 END/i);
+});
+
+test('ProviderApprovalStorageLookupService site runtime lookup allows one valid match and fails closed on ambiguity', async () => {
+  const noMatchService = new ProviderApprovalStorageLookupService({
+    async query() {
+      return { rows: [] };
+    },
+  });
+
+  const missing = await noMatchService.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    environment: 'non_production',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    now: FIXTURE_NOW,
+  });
+  assert.equal(missing.allowed, false);
+  assert.equal(missing.decisionCode, 'missing_policy');
+
+  const service = new ProviderApprovalStorageLookupService({
+    async query() {
+      return {
+        rows: [
+          createRow({
+            scope_kind: 'site_runtime',
+            source_id: null,
+            source_types: [],
+            usage_contexts: ['query_embedding'],
+          }),
+        ],
+      };
+    },
+  });
+
+  const allowed = await service.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    environment: 'non_production',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    now: FIXTURE_NOW,
+  });
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.policy.scopeKind, 'site_runtime');
+  assert.equal(allowed.decisionCode, 'allowed');
+
+  const ambiguousService = new ProviderApprovalStorageLookupService({
+    async query() {
+      return {
+        rows: [
+          createRow({
+            id: 'approval-a',
+            scope_kind: 'site_runtime',
+            source_id: null,
+            source_types: [],
+            usage_contexts: ['query_embedding'],
+          }),
+          createRow({
+            id: 'approval-b',
+            scope_kind: 'site_runtime',
+            source_id: null,
+            source_types: [],
+            usage_contexts: ['query_embedding'],
+            valid_from: '2026-07-15T00:00:00.000Z',
+          }),
+        ],
+      };
+    },
+  });
+
+  const ambiguous = await ambiguousService.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    environment: 'non_production',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    now: FIXTURE_NOW,
+  });
+  assert.equal(ambiguous.allowed, false);
+  assert.equal(ambiguous.decisionCode, 'ambiguous_policy');
+  assert.doesNotMatch(ambiguous.sanitizedMessage, /ambiguous_policy/i);
+});
+
+test('ProviderApprovalStorageLookupService site runtime lookup ignores malformed candidates before ambiguity evaluation', async () => {
+  const service = new ProviderApprovalStorageLookupService({
+    async query() {
+      return {
+        rows: [
+          createRow({
+            id: 'approval-valid',
+            scope_kind: 'site_runtime',
+            source_id: null,
+            source_types: [],
+            usage_contexts: ['query_embedding'],
+          }),
+          createRow({
+            id: 'approval-malformed',
+            scope_kind: 'site_runtime',
+            source_id: null,
+            source_types: ['url'],
+            usage_contexts: ['query_embedding'],
+          }),
+        ],
+      };
+    },
+  });
+
+  const decision = await service.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    environment: 'non_production',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    now: FIXTURE_NOW,
+  });
+
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.decisionCode, 'allowed');
+  assert.equal(decision.policy.scopeKind, 'site_runtime');
 });

@@ -4,6 +4,7 @@ import {
   evaluateProviderApprovalPolicy,
   type ProviderApprovalPolicy,
   type ProviderApprovalPolicyDecisionCode,
+  type ProviderApprovalScopeKind,
 } from './provider-approval-policy';
 import type {
   ProviderEmbeddingEnvironment,
@@ -12,6 +13,7 @@ import type {
 
 type ProviderApprovalGrantRow = {
   id: string;
+  scope_kind: string;
   tenant_id: string;
   site_id: string;
   source_id: string | null;
@@ -55,6 +57,7 @@ export type ProviderApprovalStorageLookupInput = {
 
 export type ProviderApprovalStorageLookupDecisionCode =
   | 'allowed'
+  | 'ambiguous_policy'
   | 'missing_policy'
   | 'not_granted'
   | ProviderApprovalPolicyDecisionCode;
@@ -73,11 +76,16 @@ export type ProviderApprovalStorageLookupDecision = {
   policyDecision?: ProviderApprovalPolicyDecisionCode | null;
 };
 
+type SiteRuntimeQueryEmbeddingGrantCandidates =
+  | { kind: 'not_found'; policies: [] }
+  | { kind: 'single'; policies: [ProviderApprovalPolicy] }
+  | { kind: 'ambiguous'; policies: ProviderApprovalPolicy[] };
+
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function normalizeStringArray(value: unknown): string[] | null {
+function normalizeStringArray(value: unknown, options?: { allowEmpty?: boolean }): string[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
@@ -86,7 +94,11 @@ function normalizeStringArray(value: unknown): string[] | null {
     .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
     .filter((entry) => entry.length > 0);
 
-  return normalized.length > 0 ? normalized : null;
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return options?.allowEmpty ? [] : null;
 }
 
 function toIsoTimestamp(value: unknown): string | null {
@@ -96,6 +108,14 @@ function toIsoTimestamp(value: unknown): string | null {
 
   if (typeof value === 'string' && Number.isFinite(Date.parse(value))) {
     return new Date(value).toISOString();
+  }
+
+  return null;
+}
+
+function normalizeScopeKind(value: unknown): ProviderApprovalScopeKind | null {
+  if (value === 'source' || value === 'source_type' || value === 'site_runtime') {
+    return value;
   }
 
   return null;
@@ -164,6 +184,7 @@ export function buildProviderApprovalLookupQuery(input: ProviderApprovalStorageL
     sql: `
       SELECT
         id,
+        scope_kind,
         tenant_id,
         site_id,
         source_id,
@@ -203,14 +224,15 @@ export function buildProviderApprovalLookupQuery(input: ProviderApprovalStorageL
         AND customer_data_approved = true
         AND provider_dpa_approved = true
         AND ($5 <> 'production' OR production_approved = true)
+        AND scope_kind IN ('source', 'source_type')
         AND source_types ? $7
         AND usage_contexts ? $8
         AND (
-          ($9::text IS NULL AND source_id IS NULL)
-          OR ($9::text IS NOT NULL AND (source_id = $9 OR source_id IS NULL))
+          (scope_kind = 'source' AND $9::text IS NOT NULL AND source_id = $9)
+          OR (scope_kind = 'source_type' AND source_id IS NULL)
         )
       ORDER BY
-        CASE WHEN source_id = $9 THEN 0 ELSE 1 END,
+        CASE WHEN scope_kind = 'source' THEN 0 ELSE 1 END,
         valid_from DESC,
         created_at DESC
       LIMIT 1
@@ -229,12 +251,99 @@ export function buildProviderApprovalLookupQuery(input: ProviderApprovalStorageL
   };
 }
 
+export type ProviderApprovalSiteRuntimeLookupInput = {
+  tenantId?: string | null;
+  siteId?: string | null;
+  environment?: ProviderEmbeddingEnvironment | null;
+  providerKey?: string | null;
+  model?: string | null;
+  now?: Date | string | null;
+};
+
+export function buildSiteRuntimeQueryEmbeddingLookupQuery(input: ProviderApprovalSiteRuntimeLookupInput): {
+  sql: string;
+  params: readonly unknown[];
+} {
+  const normalized = trimLookupInput({
+    tenantId: input.tenantId,
+    siteId: input.siteId,
+    environment: input.environment,
+    providerKey: input.providerKey,
+    model: input.model,
+    now: input.now,
+  });
+
+  return {
+    sql: `
+      SELECT
+        id,
+        scope_kind,
+        tenant_id,
+        site_id,
+        source_id,
+        source_types,
+        usage_contexts,
+        environment,
+        provider_key,
+        model,
+        embedding_dimension,
+        provider_region,
+        data_categories,
+        customer_data_approved,
+        production_approved,
+        provider_dpa_approved,
+        purpose,
+        retention_policy,
+        redaction_policy,
+        logging_policy,
+        deletion_policy,
+        reindex_policy,
+        rate_limit,
+        cost_limit,
+        valid_from,
+        expires_at,
+        revoked_at,
+        approved_by,
+        approval_evidence_ref
+      FROM provider_approval_grants
+      WHERE tenant_id = $1
+        AND site_id = $2
+        AND provider_key = $3
+        AND model = $4
+        AND environment = $5
+        AND revoked_at IS NULL
+        AND valid_from <= $6::timestamptz
+        AND expires_at > $6::timestamptz
+        AND customer_data_approved = true
+        AND provider_dpa_approved = true
+        AND ($5 <> 'production' OR production_approved = true)
+        AND scope_kind = 'site_runtime'
+        AND source_id IS NULL
+        AND source_types = '[]'::jsonb
+        AND usage_contexts = '["query_embedding"]'::jsonb
+      ORDER BY
+        valid_from DESC,
+        created_at DESC
+      LIMIT 2
+    `,
+    params: [
+      normalized.tenantId,
+      normalized.siteId,
+      normalized.providerKey,
+      normalized.model,
+      normalized.environment,
+      normalized.now,
+    ],
+  };
+}
+
 export function mapProviderApprovalGrantRow(row: ProviderApprovalGrantRow | null | undefined): ProviderApprovalPolicy | null {
   if (!row) {
     return null;
   }
 
-  const sourceTypes = normalizeStringArray(row.source_types);
+  const scopeKind = normalizeScopeKind(row.scope_kind);
+  const sourceTypes = normalizeStringArray(row.source_types, { allowEmpty: true });
   const usageContexts = normalizeStringArray(row.usage_contexts);
   const dataCategories = normalizeStringArray(row.data_categories);
   const validFrom = toIsoTimestamp(row.valid_from);
@@ -243,6 +352,7 @@ export function mapProviderApprovalGrantRow(row: ProviderApprovalGrantRow | null
 
   if (
     !hasText(row.id) ||
+    !scopeKind ||
     !hasText(row.tenant_id) ||
     !hasText(row.site_id) ||
     !sourceTypes ||
@@ -266,8 +376,24 @@ export function mapProviderApprovalGrantRow(row: ProviderApprovalGrantRow | null
     return null;
   }
 
+  if (scopeKind === 'source' && (!hasText(row.source_id) || sourceTypes.length === 0)) {
+    return null;
+  }
+
+  if (scopeKind === 'source_type' && (hasText(row.source_id) || sourceTypes.length === 0)) {
+    return null;
+  }
+
+  if (
+    scopeKind === 'site_runtime' &&
+    (hasText(row.source_id) || sourceTypes.length !== 0 || usageContexts.length !== 1 || usageContexts[0] !== 'query_embedding')
+  ) {
+    return null;
+  }
+
   return {
     approvalId: row.id.trim(),
+    scopeKind,
     tenantId: row.tenant_id.trim(),
     siteId: row.site_id.trim(),
     sourceId: hasText(row.source_id) ? row.source_id.trim() : null,
@@ -299,7 +425,10 @@ export function mapProviderApprovalGrantRow(row: ProviderApprovalGrantRow | null
 }
 
 export function evaluateStoredProviderApprovalGrant(
-  input: ProviderApprovalStorageLookupInput & { policy?: ProviderApprovalPolicy | null },
+  input: ProviderApprovalStorageLookupInput & {
+    policy?: ProviderApprovalPolicy | null;
+    requiredScopeKinds?: ProviderApprovalScopeKind[] | null;
+  },
 ): ProviderApprovalStorageLookupDecision {
   if (!input.policy) {
     return deny(
@@ -320,6 +449,7 @@ export function evaluateStoredProviderApprovalGrant(
     provider: input.providerKey,
     model: input.model,
     now: input.now,
+    requiredScopeKinds: input.requiredScopeKinds || ['source', 'source_type'],
   });
 
   if (!decision.allowed) {
@@ -344,6 +474,26 @@ export function evaluateStoredProviderApprovalGrant(
 @Injectable()
 export class ProviderApprovalStorageLookupService {
   constructor(private readonly db: PrismaService) {}
+
+  private async loadSiteRuntimeQueryEmbeddingGrantCandidates(
+    input: ProviderApprovalSiteRuntimeLookupInput,
+  ): Promise<SiteRuntimeQueryEmbeddingGrantCandidates> {
+    const { sql, params } = buildSiteRuntimeQueryEmbeddingLookupQuery(input);
+    const res = await this.db.query<ProviderApprovalGrantRow>(sql, params);
+    const policies = res.rows
+      .map((row) => mapProviderApprovalGrantRow(row))
+      .filter(Boolean) as ProviderApprovalPolicy[];
+
+    if (policies.length === 0) {
+      return { kind: 'not_found', policies: [] };
+    }
+
+    if (policies.length === 1) {
+      return { kind: 'single', policies: [policies[0]] };
+    }
+
+    return { kind: 'ambiguous', policies };
+  }
 
   async findProviderApprovalGrant(
     input: ProviderApprovalStorageLookupInput,
@@ -381,6 +531,66 @@ export class ProviderApprovalStorageLookupService {
       return evaluateStoredProviderApprovalGrant({
         ...input,
         policy,
+      });
+    } catch {
+      return deny(
+        'not_granted',
+        'provider_approval_storage_lookup_failed',
+        'Der technische Approval-Storage-Lookup konnte nicht bestaetigt werden.',
+      );
+    }
+  }
+
+  async evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage(
+    input: ProviderApprovalSiteRuntimeLookupInput,
+  ): Promise<ProviderApprovalStorageLookupDecision> {
+    try {
+      const normalized = trimLookupInput({
+        tenantId: input.tenantId,
+        siteId: input.siteId,
+        environment: input.environment,
+        providerKey: input.providerKey,
+        model: input.model,
+        now: input.now,
+      });
+      if (!normalized.tenantId || !normalized.siteId || !normalized.providerKey || !normalized.model) {
+        return deny(
+          'missing_policy',
+          'provider_approval_storage_grant_missing',
+          'Ohne gueltigen Storage-Grant bleibt der Provider-/Embedding-Pfad gesperrt.',
+        );
+      }
+
+      const candidates = await this.loadSiteRuntimeQueryEmbeddingGrantCandidates(input);
+
+      if (candidates.kind === 'not_found') {
+        return deny(
+          'missing_policy',
+          'provider_approval_storage_grant_missing',
+          'Ohne gueltigen Storage-Grant bleibt der Provider-/Embedding-Pfad gesperrt.',
+        );
+      }
+
+      if (candidates.kind === 'ambiguous') {
+        return deny(
+          'ambiguous_policy',
+          'provider_approval_storage_grant_ambiguous',
+          'Der technische Approval-Storage-Lookup konnte nicht eindeutig bestaetigt werden.',
+        );
+      }
+
+      return evaluateStoredProviderApprovalGrant({
+        tenantId: input.tenantId,
+        siteId: input.siteId,
+        sourceId: null,
+        sourceType: null,
+        usageContext: 'query_embedding',
+        environment: input.environment,
+        providerKey: input.providerKey,
+        model: input.model,
+        now: input.now,
+        policy: candidates.policies[0],
+        requiredScopeKinds: ['site_runtime'],
       });
     } catch {
       return deny(
