@@ -7,9 +7,9 @@ import {
   type IntegrationDispatchResult,
 } from '../integrations/integration-event-dispatcher.service';
 import { IntegrationsService } from '../integrations/integrations.service';
+import { RuntimeQueryEmbeddingService } from '../knowledge-sources/runtime-query-embedding.service';
 import { SitesService } from '../sites/sites.service';
 import { deepRedactSensitiveValues, redactSensitiveText } from '../modules/it-support/it-support-flow';
-import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { WebhookJobsService } from './webhook-jobs.service';
 import { ToolAuditService } from './tool-audit.service';
@@ -41,12 +41,12 @@ export class ToolExecutorService {
     private readonly sites: SitesService,
     private readonly integrations: IntegrationsService,
     private readonly webhookJobs: WebhookJobsService,
-    private readonly embedder: EmbeddingService,
     private readonly vector: VectorService,
     private readonly registry: ToolRegistryService,
     private readonly audit: ToolAuditService,
     private readonly integrationEvents: IntegrationEventDispatcherService,
     private readonly usageLimits: UsageLimitService,
+    private readonly runtimeQueryEmbedding: RuntimeQueryEmbeddingService,
   ) {}
 
   async executeTool(
@@ -595,11 +595,38 @@ export class ToolExecutorService {
     const query = text(input.query);
     const limit = Number(input.limit) || 4;
     const minScore = Number(input.minScore);
-    const embedding = await this.embedder.embed(query);
+    const queryEmbeddingResult = await this.runtimeQueryEmbedding.embedAuthorizedQuery({
+      tenantId: context.tenantId,
+      siteId: context.siteId,
+      query,
+    });
+    if (queryEmbeddingResult.kind === 'denied') {
+      return {
+        toolName: 'query_knowledge',
+        status: 'failed',
+        message: 'Die Wissenssuche ist derzeit nicht verfuegbar.',
+        error: {
+          code: 'query_knowledge_unavailable',
+          message: 'Knowledge query unavailable',
+        },
+      };
+    }
+    if (queryEmbeddingResult.kind === 'no_ready_sources') {
+      return {
+        toolName: 'query_knowledge',
+        status: 'success',
+        message: 'Keine passenden Wissensquellen gefunden.',
+        data: {
+          query,
+          resultCount: 0,
+          sources: [],
+        },
+      };
+    }
     const hits = await this.vector.search(
       context.tenantId,
       context.siteId,
-      embedding,
+      queryEmbeddingResult.embedding,
       limit,
       Number.isFinite(minScore) ? minScore : undefined,
     );

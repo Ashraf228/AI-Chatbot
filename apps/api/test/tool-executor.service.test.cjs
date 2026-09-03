@@ -6,10 +6,55 @@ const { ToolRegistryService } = require('../dist/tools/tool-registry.service.js'
 const { ChatPipelineService } = require('../dist/ai/chat-pipeline/chat-pipeline.service.js');
 const { ResponseComposerService } = require('../dist/ai/chat-pipeline/response-composer.service.js');
 
+function normalizeRuntimeQueryEmbeddingResult(result = {}) {
+  if (result.kind) {
+    return result;
+  }
+
+  if (result.allowed === false) {
+    return {
+      kind: 'denied',
+      decisionCode: 'missing_policy',
+      reason: 'provider_approval_storage_grant_missing',
+      sanitizedMessage: 'blocked',
+      environment: 'non_production',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+      ...result,
+    };
+  }
+
+  if (result.skipProviderCall === true) {
+    return {
+      kind: 'no_ready_sources',
+      decisionCode: 'no_ready_sources',
+      reason: 'runtime_query_embedding_no_ready_sources',
+      sanitizedMessage: 'Keine answer-ready Wissensquellen aktiv.',
+      environment: 'non_production',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+      ...result,
+    };
+  }
+
+  return {
+    kind: 'embedded',
+    decisionCode: 'allowed',
+    reason: 'runtime_query_embedding_authorized',
+    sanitizedMessage: 'ok',
+    embedding: [0.1, 0.2],
+    environment: 'non_production',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    ...result,
+  };
+}
+
 function createToolHarness({
   usageLimits,
   integrationDispatchResults,
   integrationDispatchThrows = false,
+  queryEmbeddingAuthorizationResult,
 } = {}) {
   const conversations = new Map([
     ['conversation-1', { id: 'conversation-1', session_id: 'session-1', metadata: {} }],
@@ -190,13 +235,9 @@ function createToolHarness({
       ];
     },
   };
-  const embedder = {
-    async embed() {
-      return [0.1, 0.2];
-    },
-  };
   const vector = {
     async search() {
+      vector.calls += 1;
       return [
         {
           id: 'chunk-1',
@@ -208,6 +249,7 @@ function createToolHarness({
         },
       ];
     },
+    calls: 0,
   };
 
   const service = new ToolExecutorService(
@@ -215,7 +257,6 @@ function createToolHarness({
     sites,
     integrations,
     webhookJobs,
-    embedder,
     vector,
     new ToolRegistryService(),
     new ToolAuditService(db),
@@ -224,6 +265,11 @@ function createToolHarness({
       async assertWithinLimit() {},
       async withMonthlyLeadLimit(_tenantId, callback) {
         return callback(db, async () => undefined);
+      },
+    },
+    {
+      async embedAuthorizedQuery() {
+        return normalizeRuntimeQueryEmbeddingResult(queryEmbeddingAuthorizationResult);
       },
     },
   );
@@ -245,6 +291,7 @@ function createToolHarness({
     agentRuns,
     toolInvocations,
     dispatchedEvents,
+    vector,
   };
 }
 
@@ -508,6 +555,49 @@ test('ToolExecutorService query_knowledge returns sources', async () => {
   assert.equal(result.data.sources[0].title, 'FAQ');
 });
 
+test('ToolExecutorService query_knowledge denies missing provider authorization without provider details or embedding calls', async () => {
+  const { service, context, vector } = createToolHarness({
+    queryEmbeddingAuthorizationResult: {
+      kind: 'denied',
+      decisionCode: 'missing_policy',
+      reason: 'provider_approval_storage_grant_missing',
+      sanitizedMessage: 'blocked',
+      environment: 'non_production',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+    },
+  });
+
+  const result = await service.executeTool('query_knowledge', { query: 'Support KI' }, context);
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error.code, 'query_knowledge_unavailable');
+  assert.equal(vector.calls, 0);
+  assert.doesNotMatch(result.message, /grant|policy|provider|openai/i);
+});
+
+test('ToolExecutorService query_knowledge returns a controlled empty result when no answer-ready sources are active', async () => {
+  const { service, context, vector } = createToolHarness({
+    queryEmbeddingAuthorizationResult: {
+      kind: 'no_ready_sources',
+      decisionCode: 'no_ready_sources',
+      reason: 'no_answer_ready_sources',
+      sanitizedMessage: 'Keine answer-ready Wissensquellen aktiv.',
+      environment: 'non_production',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+    },
+  });
+
+  const result = await service.executeTool('query_knowledge', { query: 'Support KI' }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.data.resultCount, 0);
+  assert.deepEqual(result.data.sources, []);
+  assert.equal(vector.calls, 0);
+  assert.doesNotMatch(result.message, /grant|policy|provider|openai|debug/i);
+});
+
 test('ToolExecutorService handoff updates conversation metadata', async () => {
   const { service, context, conversations } = createToolHarness();
 
@@ -558,7 +648,6 @@ test('ChatPipeline executes allowed suggested tools and skips tools with require
     {},
     {},
     {},
-    {},
     {
       async decide() {
         return {
@@ -573,6 +662,11 @@ test('ChatPipeline executes allowed suggested tools and skips tools with require
     new ResponseComposerService(),
     toolExecutor,
     { async assertWithinLimit() {} },
+    {
+      async embedAuthorizedQuery() {
+        return normalizeRuntimeQueryEmbeddingResult();
+      },
+    },
   );
 
   await makePipeline({

@@ -4,6 +4,7 @@ import { ChatAgentOrchestratorService } from '../../chat/chat-agent-orchestrator
 import { ChatRoutingModule } from '../../chat-routing/chat-routing.module';
 import { PrismaService } from '../../db/prisma.service';
 import { IntegrationsModule } from '../../integrations/integrations.module';
+import { KnowledgeSourcesModule } from '../../knowledge-sources/knowledge-sources.module';
 import { EcommerceProductAdvisorModule } from '../../modules/ecommerce-product-advisor/ecommerce-product-advisor.module';
 import { LeadMailerService } from '../../modules/widget/services/lead-mailer.service';
 import { ReportMailerService } from '../../modules/widget/services/report-mailer.service';
@@ -14,7 +15,6 @@ import { ToolAuditService } from '../../tools/tool-audit.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { ToolRegistryService } from '../../tools/tool-registry.service';
 import { WebhookJobsService } from '../../tools/webhook-jobs.service';
-import { EmbeddingService } from '../../vector/embedding.service';
 import { LlmService } from '../../vector/llm.service';
 import { VectorService } from '../../vector/vector.service';
 import { ChatPipelineService } from './chat-pipeline.service';
@@ -30,6 +30,7 @@ import { BillingModule } from '../../billing/billing.module';
     OrchestrationModule,
     SitesModule,
     IntegrationsModule,
+    KnowledgeSourcesModule,
     BillingModule,
   ],
   providers: [
@@ -38,7 +39,6 @@ import { BillingModule } from '../../billing/billing.module';
     ResponseComposerService,
     ChatAgentOrchestratorService,
     PrismaService,
-    EmbeddingService,
     VectorService,
     LlmService,
     LeadMailerService,

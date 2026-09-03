@@ -26,9 +26,18 @@ function createDispatcher(overrides = {}) {
     overrides.reportMailer || { isConfigured() { return false; } },
     overrides.webhookJobs || { async enqueue() { return { id: 'webhook-job-1', queued: true }; } },
     overrides.shopifyCatalog || { async searchProductsForSite() { return []; } },
-    overrides.embedder || {
-      async embed() {
-        return [0.1, 0.2];
+    overrides.runtimeQueryEmbedding || {
+      async embedAuthorizedQuery() {
+        return {
+          kind: 'embedded',
+          decisionCode: 'allowed',
+          reason: 'runtime_query_embedding_authorized',
+          sanitizedMessage: 'ok',
+          embedding: [0.1, 0.2],
+          environment: 'non_production',
+          providerKey: 'openai',
+          model: 'text-embedding-3-small',
+        };
       },
     },
     overrides.vector || {
@@ -467,6 +476,80 @@ test('ToolDispatcherService query_knowledge prefers the agent run tenant over a 
 
   assert.equal(vectorCalls[0].tenantId, 'tenant-run');
   assert.equal(vectorCalls[0].siteId, 'site-9');
+});
+
+test('ToolDispatcherService query_knowledge fails closed when the runtime embedding boundary denies access', async () => {
+  const vectorCalls = [];
+  const service = createDispatcher({
+    db: {
+      async query(sql) {
+        if (/SELECT id, tenant_id, site_id, status\s+FROM agent_runs/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'run-denied',
+                tenant_id: 'tenant-1',
+                site_id: 'site-1',
+                status: 'queued',
+              },
+            ],
+          };
+        }
+
+        if (/SELECT\s+id,\s+agent_run_id,/i.test(sql) && /FROM tool_invocations/i.test(sql)) {
+          return {
+            rows: [
+              {
+                id: 'invocation-denied',
+                agent_run_id: 'run-denied',
+                tenant_id: 'tenant-1',
+                site_id: 'site-1',
+                tool_key: 'query_knowledge',
+                status: 'failed',
+                input_payload: { query: 'FAQ Frage' },
+                output_payload: {},
+                error_message: 'Die Wissenssuche ist derzeit nicht verfuegbar.',
+                created_at: '2026-05-05T10:00:00.000Z',
+                completed_at: '2026-05-05T10:00:01.000Z',
+              },
+            ],
+          };
+        }
+
+        return { rows: [] };
+      },
+    },
+    runtimeQueryEmbedding: {
+      async embedAuthorizedQuery() {
+        return {
+          kind: 'denied',
+          decisionCode: 'missing_policy',
+          reason: 'provider_approval_storage_grant_missing',
+          sanitizedMessage: 'blocked',
+          environment: 'non_production',
+          providerKey: 'openai',
+          model: 'text-embedding-3-small',
+        };
+      },
+    },
+    vector: {
+      async search() {
+        vectorCalls.push('unexpected');
+        return [];
+      },
+    },
+  });
+
+  const result = await service.execute('run-denied', {
+    toolKey: 'query_knowledge',
+    inputPayload: {
+      query: 'FAQ Frage',
+    },
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.errorMessage, 'Die Wissenssuche ist derzeit nicht verfuegbar.');
+  assert.deepEqual(vectorCalls, []);
 });
 
 test('ToolDispatcherService create_ticket stores a structured ticket', async () => {

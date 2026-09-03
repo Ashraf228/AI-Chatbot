@@ -1,0 +1,151 @@
+import { Injectable } from '@nestjs/common';
+import { EmbeddingService, type ResolvedEmbeddingConfig } from '../vector/embedding.service';
+import type { ProviderEmbeddingEnvironment } from './provider-embedding-gate';
+import {
+  type ProviderApprovalStorageLookupDecisionCode,
+  ProviderApprovalStorageLookupService,
+} from './provider-approval-storage-lookup.service';
+import { KnowledgeSourcesService } from './knowledge-sources.service';
+
+export type RuntimeQueryEmbeddingDeniedDecisionCode =
+  | ProviderApprovalStorageLookupDecisionCode
+  | 'invalid_runtime_scope'
+  | 'unsupported_provider_configuration';
+
+type RuntimeQueryEmbeddingMetadata = {
+  environment: ProviderEmbeddingEnvironment;
+  providerKey: string;
+  model: string;
+};
+
+export type RuntimeQueryEmbeddingResult =
+  | ({
+      kind: 'embedded';
+      decisionCode: 'allowed';
+      reason: string;
+      sanitizedMessage: string;
+      embedding: number[];
+    } & RuntimeQueryEmbeddingMetadata)
+  | ({
+      kind: 'no_ready_sources';
+      decisionCode: 'no_ready_sources';
+      reason: string;
+      sanitizedMessage: string;
+    } & RuntimeQueryEmbeddingMetadata)
+  | ({
+      kind: 'denied';
+      decisionCode: RuntimeQueryEmbeddingDeniedDecisionCode;
+      reason: string;
+      sanitizedMessage: string;
+    } & RuntimeQueryEmbeddingMetadata);
+
+@Injectable()
+export class RuntimeQueryEmbeddingService {
+  constructor(
+    private readonly knowledgeSources: KnowledgeSourcesService,
+    private readonly approvalLookup: ProviderApprovalStorageLookupService,
+    private readonly embedder: EmbeddingService,
+  ) {}
+
+  private resolveEnvironment(): ProviderEmbeddingEnvironment {
+    return process.env.NODE_ENV === 'production' ? 'production' : 'non_production';
+  }
+
+  private buildMetadata(
+    config: ResolvedEmbeddingConfig,
+    environment: ProviderEmbeddingEnvironment,
+  ): RuntimeQueryEmbeddingMetadata {
+    return {
+      environment,
+      providerKey: config.providerKey,
+      model: config.model,
+    };
+  }
+
+  private buildDeniedResult(input: {
+    decisionCode: RuntimeQueryEmbeddingDeniedDecisionCode;
+    reason: string;
+    sanitizedMessage: string;
+    config: ResolvedEmbeddingConfig;
+    environment: ProviderEmbeddingEnvironment;
+  }): RuntimeQueryEmbeddingResult {
+    return {
+      kind: 'denied',
+      decisionCode: input.decisionCode,
+      reason: input.reason,
+      sanitizedMessage: input.sanitizedMessage,
+      ...this.buildMetadata(input.config, input.environment),
+    };
+  }
+
+  async embedAuthorizedQuery(input: {
+    tenantId: string;
+    siteId: string;
+    query: string;
+  }): Promise<RuntimeQueryEmbeddingResult> {
+    const tenantId = input.tenantId.trim();
+    const siteId = input.siteId.trim();
+    const query = input.query.trim();
+    const environment = this.resolveEnvironment();
+    const config = this.embedder.resolveConfig();
+
+    if (!tenantId || !siteId || !query) {
+      return this.buildDeniedResult({
+        decisionCode: 'invalid_runtime_scope',
+        reason: 'runtime_query_embedding_tenant_site_or_query_missing',
+        sanitizedMessage: 'Die Wissenssuche ist derzeit nicht sicher verfuegbar.',
+        config,
+        environment,
+      });
+    }
+
+    if (!this.embedder.supportsResolvedConfig(config)) {
+      return this.buildDeniedResult({
+        decisionCode: 'unsupported_provider_configuration',
+        reason: 'runtime_query_embedding_provider_configuration_unresolved',
+        sanitizedMessage: 'Die Wissenssuche ist derzeit nicht sicher verfuegbar.',
+        config,
+        environment,
+      });
+    }
+
+    const hasReadySources = await this.knowledgeSources.hasActiveRuntimeReadySource(tenantId, siteId);
+    if (!hasReadySources) {
+      return {
+        kind: 'no_ready_sources',
+        decisionCode: 'no_ready_sources',
+        reason: 'runtime_query_embedding_no_ready_sources',
+        sanitizedMessage: 'Keine answer-ready Wissensquellen aktiv.',
+        ...this.buildMetadata(config, environment),
+      };
+    }
+
+    const decision = await this.approvalLookup.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage({
+      tenantId,
+      siteId,
+      environment,
+      providerKey: config.providerKey,
+      model: config.model,
+    });
+
+    if (!decision.allowed) {
+      return this.buildDeniedResult({
+        decisionCode: decision.decisionCode,
+        reason: decision.reason,
+        sanitizedMessage: decision.sanitizedMessage,
+        config,
+        environment,
+      });
+    }
+
+    const embedding = await this.embedder.embedWithResolvedConfig(query, config);
+    return {
+      kind: 'embedded',
+      decisionCode: 'allowed',
+      reason: 'runtime_query_embedding_authorized',
+      sanitizedMessage: 'Die Wissenssuche ist fuer diesen Runtime-Kontext technisch autorisiert.',
+      embedding,
+      ...this.buildMetadata(config, environment),
+    };
+  }
+}

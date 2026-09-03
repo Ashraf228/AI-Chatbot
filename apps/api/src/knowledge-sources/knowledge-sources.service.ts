@@ -45,7 +45,7 @@ function normalizeRecord(value: Record<string, unknown> | null | undefined) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
-function normalizeSourceType(value: string): KnowledgeSourceType {
+export function normalizeSourceType(value: string): KnowledgeSourceType {
   switch (value) {
     case 'faq':
     case 'faq_manual':
@@ -73,6 +73,21 @@ export class KnowledgeSourcesService {
     private readonly db: PrismaService,
     private readonly sites: SitesService,
   ) {}
+
+  async hasActiveRuntimeReadySource(tenantId: string, siteId: string) {
+    const res = await this.db.query<{ ready: number }>(
+      `SELECT 1 AS ready
+       FROM knowledge_sources
+       WHERE tenant_id = $1
+         AND site_id = $2
+         AND is_active = true
+         AND runtime_readiness = 'ready'
+       LIMIT 1`,
+      [tenantId, siteId],
+    );
+
+    return Boolean(res.rows[0]);
+  }
 
   private mapRow(row: KnowledgeSourceRow) {
     const config = normalizeRecord(row.config);
