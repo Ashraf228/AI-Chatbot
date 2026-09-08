@@ -110,20 +110,32 @@ export class DatabaseMigrationsService implements OnModuleInit {
 
       const sql = await readFile(join(dir, file), 'utf8');
 
-      await this.db.query('BEGIN');
+      this.logger.log('Database migration transaction started', {
+        migration: file,
+        phase: 'start',
+      });
 
       try {
-        await this.db.query(sql);
-        await this.db.query(
-          `INSERT INTO schema_migrations(version)
-           VALUES ($1)`,
-          [file],
-        );
-        await this.db.query('COMMIT');
+        await this.db.transaction(async (tx) => {
+          await tx.query(sql);
+          await tx.query(
+            `INSERT INTO schema_migrations(version)
+             VALUES ($1)`,
+            [file],
+          );
+        });
       } catch (error) {
-        await this.db.query('ROLLBACK');
+        this.logger.error('Database migration transaction failed', {
+          migration: file,
+          phase: 'rolled_back',
+        });
         throw error;
       }
+
+      this.logger.log('Database migration transaction committed', {
+        migration: file,
+        phase: 'committed',
+      });
     }
   }
 }
