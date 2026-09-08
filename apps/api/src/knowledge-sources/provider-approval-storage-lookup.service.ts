@@ -81,6 +81,8 @@ type SiteRuntimeQueryEmbeddingGrantCandidates =
   | { kind: 'single'; policies: [ProviderApprovalPolicy] }
   | { kind: 'ambiguous'; policies: ProviderApprovalPolicy[] };
 
+const SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE = 'query_embedding';
+
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
@@ -318,6 +320,7 @@ export function buildSiteRuntimeQueryEmbeddingLookupQuery(input: ProviderApprova
         AND provider_dpa_approved = true
         AND ($5 <> 'production' OR production_approved = true)
         AND scope_kind = 'site_runtime'
+        AND purpose = $7
         AND source_id IS NULL
         AND source_types = '[]'::jsonb
         AND usage_contexts = '["query_embedding"]'::jsonb
@@ -333,6 +336,7 @@ export function buildSiteRuntimeQueryEmbeddingLookupQuery(input: ProviderApprova
       normalized.model,
       normalized.environment,
       normalized.now,
+      SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE,
     ],
   };
 }
@@ -482,6 +486,8 @@ export class ProviderApprovalStorageLookupService {
     const res = await this.db.query<ProviderApprovalGrantRow>(sql, params);
     const policies = res.rows
       .map((row) => mapProviderApprovalGrantRow(row))
+      // Keep mocks and malformed database rows fail-closed like the SQL filter.
+      .filter((policy) => policy?.purpose === SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE)
       .filter(Boolean) as ProviderApprovalPolicy[];
 
     if (policies.length === 0) {

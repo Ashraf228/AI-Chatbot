@@ -188,6 +188,28 @@ test('RuntimeQueryEmbeddingService fails closed on denied runtime grants without
   assert.equal(calls.embed.length, 0);
 });
 
+test('RuntimeQueryEmbeddingService does not embed when a site runtime grant has the wrong purpose', async () => {
+  const { service, calls } = createRuntimeService({
+    approvalDecision: {
+      allowed: false,
+      decisionCode: 'missing_policy',
+      reason: 'provider_approval_storage_grant_missing',
+      sanitizedMessage: 'blocked',
+    },
+  });
+
+  const result = await service.embedAuthorizedQuery({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    query: 'VPN',
+  });
+
+  assert.equal(result.kind, 'denied');
+  assert.equal(result.decisionCode, 'missing_policy');
+  assert.equal(calls.approval.length, 1);
+  assert.equal(calls.embed.length, 0);
+});
+
 test('RuntimeQueryEmbeddingService fails closed when the configured provider cannot be proven at call time', async () => {
   const { service, calls } = createRuntimeService({
     resolvedConfig: {

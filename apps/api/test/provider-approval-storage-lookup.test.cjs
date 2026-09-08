@@ -90,12 +90,14 @@ test('buildSiteRuntimeQueryEmbeddingLookupQuery keeps runtime scope explicit and
   const { sql, params } = buildSiteRuntimeQueryEmbeddingLookupQuery(input);
 
   assert.match(sql, /scope_kind = 'site_runtime'/i);
+  assert.match(sql, /purpose = \$7/i);
   assert.match(sql, /source_types = '\[\]'::jsonb/i);
   assert.match(sql, /usage_contexts = '\["query_embedding"\]'::jsonb/i);
   assert.match(sql, /LIMIT 2/i);
   assert.equal(sql.includes(input.tenantId), false);
   assert.equal(params[0], input.tenantId);
   assert.equal(params[4], 'production');
+  assert.equal(params[6], 'query_embedding');
 });
 
 test('mapProviderApprovalGrantRow returns null for malformed JSON arrays and invalid scope combinations', () => {
@@ -113,6 +115,7 @@ test('mapProviderApprovalGrantRow returns null for malformed JSON arrays and inv
       source_id: null,
       source_types: ['url'],
       usage_contexts: ['query_embedding'],
+      purpose: 'query_embedding',
     }),
   );
   assert.equal(invalidSiteRuntime, null);
@@ -123,6 +126,7 @@ test('mapProviderApprovalGrantRow returns null for malformed JSON arrays and inv
       source_id: null,
       source_types: [],
       usage_contexts: ['query_embedding'],
+      purpose: 'query_embedding',
     }),
   );
   assert.equal(validSiteRuntime.scopeKind, 'site_runtime');
@@ -233,6 +237,7 @@ test('evaluateStoredProviderApprovalGrant denies no grant, revoked, expired, fut
         source_id: null,
         source_types: [],
         usage_contexts: ['query_embedding'],
+        purpose: 'query_embedding',
       }),
     ),
   });
@@ -327,6 +332,7 @@ test('ProviderApprovalStorageLookupService site runtime lookup allows one valid 
             source_id: null,
             source_types: [],
             usage_contexts: ['query_embedding'],
+            purpose: 'query_embedding',
           }),
         ],
       };
@@ -355,6 +361,7 @@ test('ProviderApprovalStorageLookupService site runtime lookup allows one valid 
             source_id: null,
             source_types: [],
             usage_contexts: ['query_embedding'],
+            purpose: 'query_embedding',
           }),
           createRow({
             id: 'approval-b',
@@ -362,6 +369,7 @@ test('ProviderApprovalStorageLookupService site runtime lookup allows one valid 
             source_id: null,
             source_types: [],
             usage_contexts: ['query_embedding'],
+            purpose: 'query_embedding',
             valid_from: '2026-07-15T00:00:00.000Z',
           }),
         ],
@@ -382,6 +390,137 @@ test('ProviderApprovalStorageLookupService site runtime lookup allows one valid 
   assert.doesNotMatch(ambiguous.sanitizedMessage, /ambiguous_policy/i);
 });
 
+test('ProviderApprovalStorageLookupService excludes wrong-purpose site runtime grants before ambiguity evaluation', async () => {
+  const onlyWrongPurposeService = new ProviderApprovalStorageLookupService({
+    async query() {
+      return {
+        rows: [
+          createRow({
+            scope_kind: 'site_runtime',
+            source_id: null,
+            source_types: [],
+            usage_contexts: ['query_embedding'],
+            purpose: 'website_runtime_indexing_validation',
+          }),
+        ],
+      };
+    },
+  });
+
+  const input = {
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    environment: 'non_production',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    now: FIXTURE_NOW,
+  };
+  const denied = await onlyWrongPurposeService.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage(input);
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.decisionCode, 'missing_policy');
+
+  const invalidPurposeCases = [
+    {
+      name: 'missing purpose property',
+      buildRow() {
+        const row = createRow({
+          scope_kind: 'site_runtime',
+          source_id: null,
+          source_types: [],
+          usage_contexts: ['query_embedding'],
+        });
+        delete row.purpose;
+        return row;
+      },
+    },
+    {
+      name: 'null purpose',
+      buildRow: () =>
+        createRow({
+          scope_kind: 'site_runtime',
+          source_id: null,
+          source_types: [],
+          usage_contexts: ['query_embedding'],
+          purpose: null,
+        }),
+    },
+    {
+      name: 'empty purpose',
+      buildRow: () =>
+        createRow({
+          scope_kind: 'site_runtime',
+          source_id: null,
+          source_types: [],
+          usage_contexts: ['query_embedding'],
+          purpose: '',
+        }),
+    },
+    {
+      name: 'whitespace purpose',
+      buildRow: () =>
+        createRow({
+          scope_kind: 'site_runtime',
+          source_id: null,
+          source_types: [],
+          usage_contexts: ['query_embedding'],
+          purpose: '   ',
+        }),
+    },
+    {
+      name: 'different purpose',
+      buildRow: () =>
+        createRow({
+          scope_kind: 'site_runtime',
+          source_id: null,
+          source_types: [],
+          usage_contexts: ['query_embedding'],
+          purpose: 'website_runtime_indexing_validation',
+        }),
+    },
+  ];
+
+  for (const invalidPurposeCase of invalidPurposeCases) {
+    const service = new ProviderApprovalStorageLookupService({
+      async query() {
+        return { rows: [invalidPurposeCase.buildRow()] };
+      },
+    });
+    const decision = await service.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage(input);
+    assert.equal(decision.allowed, false, invalidPurposeCase.name);
+    assert.equal(decision.decisionCode, 'missing_policy', invalidPurposeCase.name);
+    assert.equal(decision.policy, null, invalidPurposeCase.name);
+  }
+
+  const mixedPurposeService = new ProviderApprovalStorageLookupService({
+    async query() {
+      return {
+        rows: [
+          createRow({
+            id: 'approval-wrong-purpose',
+            scope_kind: 'site_runtime',
+            source_id: null,
+            source_types: [],
+            usage_contexts: ['query_embedding'],
+            purpose: 'website_runtime_indexing_validation',
+          }),
+          createRow({
+            id: 'approval-query-embedding',
+            scope_kind: 'site_runtime',
+            source_id: null,
+            source_types: [],
+            usage_contexts: ['query_embedding'],
+            purpose: 'query_embedding',
+          }),
+        ],
+      };
+    },
+  });
+
+  const allowed = await mixedPurposeService.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage(input);
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.approvalGrantId, 'approval-query-embedding');
+});
+
 test('ProviderApprovalStorageLookupService site runtime lookup ignores malformed candidates before ambiguity evaluation', async () => {
   const service = new ProviderApprovalStorageLookupService({
     async query() {
@@ -393,6 +532,7 @@ test('ProviderApprovalStorageLookupService site runtime lookup ignores malformed
             source_id: null,
             source_types: [],
             usage_contexts: ['query_embedding'],
+            purpose: 'query_embedding',
           }),
           createRow({
             id: 'approval-malformed',
@@ -400,6 +540,7 @@ test('ProviderApprovalStorageLookupService site runtime lookup ignores malformed
             source_id: null,
             source_types: ['url'],
             usage_contexts: ['query_embedding'],
+            purpose: 'query_embedding',
           }),
         ],
       };
