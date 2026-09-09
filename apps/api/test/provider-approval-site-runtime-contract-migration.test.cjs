@@ -9,9 +9,21 @@ function readMigration(name) {
   return fs.readFileSync(path.join(migrationsDir, name), 'utf8');
 }
 
-test('site runtime contract migration uses the next free migration number', () => {
+test('site runtime concurrency migration uses the next free migration number', () => {
   const files = fs.readdirSync(migrationsDir).filter((entry) => /^\d+_.*\.sql$/i.test(entry)).sort();
-  assert.equal(files.at(-1), '031_query_embedding_site_runtime_grant_contract.sql');
+  assert.equal(files.at(-1), '032_site_runtime_grant_concurrency.sql');
+});
+
+test('032 migration validates site-runtime purpose and prevents overlapping active windows', () => {
+  const sql = readMigration('032_site_runtime_grant_concurrency.sql');
+  assert.match(sql, /CREATE EXTENSION IF NOT EXISTS btree_gist/i);
+  assert.match(sql, /purpose IS DISTINCT FROM 'query_embedding'/i);
+  assert.match(sql, /provider_approval_grants_site_runtime_purpose_check/i);
+  assert.match(sql, /EXCLUDE USING gist/i);
+  assert.match(sql, /tstzrange\(valid_from, expires_at, '\[\)'\) WITH &&/i);
+  assert.match(sql, /revoked_at IS NULL/i);
+  assert.match(sql, /scope_kind = 'site_runtime'/i);
+  assert.match(sql, /purpose = 'query_embedding'/i);
 });
 
 test('historical provider approval storage migration remains unchanged at 030', () => {
