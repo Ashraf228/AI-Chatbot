@@ -166,6 +166,17 @@ test('RuntimeQueryEmbeddingService uses one exact site_runtime lookup and one em
   });
 });
 
+test('RuntimeQueryEmbeddingService exposes the same resolved runtime contract used by the lookup boundary', async () => {
+  const { service } = createRuntimeService({
+    resolvedConfig: { providerKey: 'openai', model: 'text-embedding-3-small' },
+  });
+  const contract = service.resolveRuntimeContract();
+  assert.equal(contract.providerKey, 'openai');
+  assert.equal(contract.model, 'text-embedding-3-small');
+  assert.equal(contract.environment, 'non_production');
+  assert.equal(contract.supported, true);
+});
+
 test('RuntimeQueryEmbeddingService fails closed on denied runtime grants without embedding', async () => {
   const { service, calls } = createRuntimeService({
     approvalDecision: {

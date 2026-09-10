@@ -6,6 +6,10 @@ import {
   ProviderApprovalStorageLookupService,
 } from './provider-approval-storage-lookup.service';
 import { KnowledgeSourcesService } from './knowledge-sources.service';
+import {
+  buildSiteRuntimeGrantRuntimeContract,
+  type SiteRuntimeGrantRuntimeContract,
+} from './site-runtime-grant-runtime-contract';
 
 export type RuntimeQueryEmbeddingDeniedDecisionCode =
   | ProviderApprovalStorageLookupDecisionCode
@@ -47,8 +51,9 @@ export class RuntimeQueryEmbeddingService {
     private readonly embedder: EmbeddingService,
   ) {}
 
-  private resolveEnvironment(): ProviderEmbeddingEnvironment {
-    return process.env.NODE_ENV === 'production' ? 'production' : 'non_production';
+  resolveRuntimeContract(): SiteRuntimeGrantRuntimeContract {
+    const config = this.embedder.resolveConfig();
+    return buildSiteRuntimeGrantRuntimeContract(config, this.embedder.supportsResolvedConfig(config));
   }
 
   private buildMetadata(
@@ -86,8 +91,12 @@ export class RuntimeQueryEmbeddingService {
     const tenantId = input.tenantId.trim();
     const siteId = input.siteId.trim();
     const query = input.query.trim();
-    const environment = this.resolveEnvironment();
     const config = this.embedder.resolveConfig();
+    const runtimeContract = buildSiteRuntimeGrantRuntimeContract(
+      config,
+      this.embedder.supportsResolvedConfig(config),
+    );
+    const environment = runtimeContract.environment;
 
     if (!tenantId || !siteId || !query) {
       return this.buildDeniedResult({
