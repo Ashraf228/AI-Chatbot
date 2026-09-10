@@ -2,18 +2,19 @@
 
 ## Status and boundary
 
-This document defines the API-side authentication and authorization component for a future internal
-site-runtime grant transport. The transport itself is **not implemented**: there is no controller,
-Dashboard BFF route, UI, CLI, module registration, deployment configuration, or operational grant
-provisioning in this change.
+This document defines the implemented internal API and Dashboard BFF transport for site-runtime
+grant preview, creation, status, and revocation. The transport is registered in the API and reuses
+the existing operator-auth, write, audit, and runtime-contract services; it does not duplicate their
+business rules.
 
-The component does not create, revoke, inspect, or audit grants. It only resolves a verified request
-to the existing `SiteRuntimeGrantWriteService` context.
+No UI or CLI invokes these routes. This transport change does not provision users or capabilities,
+apply Migration 032, create a grant, deploy a service, or activate provider, public-widget,
+production, or Enterprise behavior.
 
 ## Identity chain
 
-The accepted principal is an individually authenticated `tenant_users` row. The future Dashboard BFF
-must forward both:
+The accepted principal is an individually authenticated `tenant_users` row. The Dashboard BFF
+forwards both:
 
 - the unchanged signed `ssb_admin` tenant-user session token as `Authorization: Bearer <token>`; and
 - the dedicated server-side Dashboard credential as `X-DASHBOARD-TOKEN`.
@@ -68,6 +69,59 @@ return metadata. Thus an internal administrator can provision the capability, wh
 tenant user or tenant admin cannot self-elevate through an existing application route. The shared
 administrative credential is not accepted as an execution identity by this auth component.
 
+## Transport routes and request boundary
+
+The Dashboard exposes four server-only BFF routes and maps them to the corresponding internal API
+routes:
+
+| Operation | Dashboard BFF | Internal API |
+| --- | --- | --- |
+| Preview | `POST /api/internal/site-runtime-grants/:tenantId/:siteId/preview` | `POST /internal/site-runtime-grants/:tenantId/:siteId/preview` |
+| Create | `POST /api/internal/site-runtime-grants/:tenantId/:siteId` | `POST /internal/site-runtime-grants/:tenantId/:siteId` |
+| Revoke | `POST /api/internal/site-runtime-grants/:tenantId/:siteId/:grantId/revoke` | `POST /internal/site-runtime-grants/:tenantId/:siteId/:grantId/revoke` |
+| Status | `GET /api/internal/site-runtime-grants/:tenantId/:siteId/:grantId` | `GET /internal/site-runtime-grants/:tenantId/:siteId/:grantId` |
+
+The BFF obtains the unchanged token from the verified, HTTP-only `ssb_admin` cookie. It accepts only
+an individual `customer` session with a tenant and `tenantUserId`. It never forwards browser-supplied
+authorization, dashboard-token, admin-key, actor, role, tenant, host, or forwarded-host headers.
+The target URL is built only from the configured `BACKEND_BASE_URL` origin and encoded path segments,
+redirect following is disabled, and both the upstream request and returned response use `no-store`.
+
+Preview and create accept only the write-service term fields. Revoke accepts only
+`revocationReason`; status has no body. The API controller authorizes before inspecting or executing
+a write and performs its own exact raw-body key check. Its body remains `unknown`, so the global
+`ValidationPipe({ whitelist: true, transform: true })` cannot silently strip a reserved field before
+that check.
+
+## Mutation provenance
+
+Every POST requires both an `Origin` equal to the exact origin configured in
+`DASHBOARD_PUBLIC_URL` and `Sec-Fetch-Site: same-origin`. Missing, malformed, same-site-only, or
+foreign values fail before any upstream call. The expected origin never comes from `Host`,
+`Forwarded`, or `X-Forwarded-*` request headers. The status GET remains read-only and does not use the
+mutation-origin check, but it still requires the verified individual session and full API
+authorization.
+
+## Required configuration
+
+- Dashboard: `BACKEND_BASE_URL`, `DASHBOARD_PUBLIC_URL`, `DASHBOARD_INTERNAL_TOKEN`, and
+  `ADMIN_SESSION_SECRET`.
+- API: `DASHBOARD_INTERNAL_TOKEN` and the same `ADMIN_SESSION_SECRET` used to sign the Dashboard
+  session.
+
+The dashboard credential and session-signing secret retain separate purposes. Missing, weak, or
+malformed values fail closed. Compose files contain variable references only; secret values remain
+outside the repository.
+
+## Response and error projection
+
+The API maps invalid input to 400, authentication failure to 401, missing capability to 403,
+unknown or inaccessible scope/grant to 404, overlap or unavailable runtime to 409, and unexpected
+failures to a generic 500. The BFF accepts only the documented successful status and exact safe
+grant/runtime projection for each operation. Redirects, malformed success bodies, additional
+fields, unexpected statuses, and upstream failures become a generic 500. Upstream exception,
+database, policy, audit, credential, and token details are never reflected.
+
 ## Scope and service context
 
 The requested target tenant and site are compared with the exact capability entries. The API also
@@ -91,15 +145,11 @@ principals to 403, and inaccessible or unknown target scope to 404. Unexpected f
 internal cause while exposing only a generic 500 message. Tokens, credentials, full payloads,
 password metadata, and database details are never logged or returned.
 
-## Remaining transport and operational work
+## Remaining operational work
 
-Before this can be used, a separate implementation must register the service, provide
-`ADMIN_SESSION_SECRET` to the API through secret management, add a narrowly scoped controller and
-same-origin Dashboard BFF routes, enforce the existing `SameSite=Strict` cookie boundary plus an
-explicit mutation Origin/Fetch-Metadata check, reject unknown request fields, and map only sanitized
-write-service projections.
-
-Individual internal users and their exact capability targets must be provisioned in a separate,
-authorized operational step. Migration 032 must be applied separately before grant writes are used.
-None of these prerequisites implies deployment, provider use, public-widget activation, production
-activation, or grant approval.
+Individual internal users and their exact capability targets still require a separate authorized
+provisioning step. Migration 032 must be applied separately, and runtime configuration and an
+explicit operational release must be validated before grant writes are used. A UI or CLI, if ever
+needed, is separate product work. None of these prerequisites or this transport implementation
+implies deployment, provider use, public-widget activation, production activation, Enterprise
+approval, or grant approval.
