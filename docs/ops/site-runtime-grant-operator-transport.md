@@ -145,6 +145,40 @@ principals to 403, and inaccessible or unknown target scope to 404. Unexpected f
 internal cause while exposing only a generic 500 message. Tokens, credentials, full payloads,
 password metadata, and database details are never logged or returned.
 
+## Deployment environment binding
+
+`NODE_ENV` remains the technical execution mode and must stay `production` for deployed Staging
+and Production services. The API-only `APP_ENV` setting selects the deployment environment used
+by the site-runtime grant contract. It is not accepted from requests, headers, cookies, tenant
+metadata, hostnames, origins, browser code, or `NEXT_PUBLIC_*` settings.
+
+| `NODE_ENV` | `APP_ENV` | Site-runtime approval environment |
+| --- | --- | --- |
+| `production` | unset | `production` (safe legacy behavior) |
+| `production` | `production` | `production` |
+| `production` | `staging` | `non_production` |
+| Development, test, or another value | unset | `non_production` (existing behavior) |
+| Development, test, or another value | `staging` | `non_production` |
+| Anything other than the exact combinations above | empty, `production` without `NODE_ENV=production`, or any other value | configuration rejected before lookup or mutation |
+
+Values are exact and case-sensitive; no trimming or case normalization occurs. Staging therefore
+uses the existing stored `non_production` value and is not additionally isolated from Development
+by the database environment column. Existing grants are not rewritten or reclassified. Exact
+environment matching means a Production grant does not authorize Staging and a Staging grant does
+not authorize Production. Production continues to require `productionApproved=true`; customer-data,
+DPA, evidence, retention, redaction, logging, rate, cost, tenant, site, provider, model, scope, and
+purpose requirements remain unchanged.
+
+This binding applies only to the `site_runtime` query-embedding grant writer and runtime resolver.
+Ingestion and source/source-type grants retain their existing environment semantics, including their
+Production treatment when `NODE_ENV=production`. Preview and Create resolve the same server-side
+contract; Status and Revoke remain scoped to the authenticated tenant, site, and grant identity.
+
+An `APP_ENV` value alone does not prove which host is running the service. Deployment verification
+must independently match the approved target inventory, environment-specific Compose file, exact
+commit or image, and the effective `NODE_ENV` and `APP_ENV` inside the running API container without
+printing secrets. Rollback uses the previously approved image/configuration; it never rewrites grants.
+
 ## Remaining operational work
 
 Individual internal users and their exact capability targets still require a separate authorized
@@ -194,5 +228,6 @@ code after simulated container creation.
 
 This is an integration test, not a browser UX test or a production-readiness proof. It neither
 provisions an operational identity nor applies a migration to an existing database. Deployment
-still requires separately authorized secret distribution, Migration 032 execution, individual user
-and exact capability provisioning, environment validation, and an explicit release decision.
+still requires a confirmed Staging target, separately authorized secret distribution, backup and
+restore evidence, Migration 032 execution, individual user and exact capability provisioning, a
+concrete grant approval, environment validation, and an explicit release decision.

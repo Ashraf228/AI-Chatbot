@@ -390,6 +390,54 @@ test('ProviderApprovalStorageLookupService site runtime lookup allows one valid 
   assert.doesNotMatch(ambiguous.sanitizedMessage, /ambiguous_policy/i);
 });
 
+test('ProviderApprovalStorageLookupService defensively rejects site runtime environment mismatches in both directions', async () => {
+  const cases = [
+    {
+      requestedEnvironment: 'production',
+      storedEnvironment: 'non_production',
+      decisionCode: 'production_not_approved',
+    },
+    {
+      requestedEnvironment: 'non_production',
+      storedEnvironment: 'production',
+      decisionCode: 'not_granted',
+    },
+  ];
+
+  for (const current of cases) {
+    const service = new ProviderApprovalStorageLookupService({
+      async query() {
+        return {
+          rows: [
+            createRow({
+              scope_kind: 'site_runtime',
+              source_id: null,
+              source_types: [],
+              usage_contexts: ['query_embedding'],
+              purpose: 'query_embedding',
+              environment: current.storedEnvironment,
+              production_approved: true,
+            }),
+          ],
+        };
+      },
+    });
+
+    const decision = await service.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage({
+      tenantId: 'tenant-1',
+      siteId: 'site-1',
+      environment: current.requestedEnvironment,
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+      now: FIXTURE_NOW,
+    });
+
+    assert.equal(decision.allowed, false);
+    assert.equal(decision.decisionCode, current.decisionCode);
+    assert.equal(decision.reason, 'environment_mismatch');
+  }
+});
+
 test('ProviderApprovalStorageLookupService excludes wrong-purpose site runtime grants before ambiguity evaluation', async () => {
   const onlyWrongPurposeService = new ProviderApprovalStorageLookupService({
     async query() {

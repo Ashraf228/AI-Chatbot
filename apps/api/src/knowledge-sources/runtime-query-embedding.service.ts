@@ -17,7 +17,7 @@ export type RuntimeQueryEmbeddingDeniedDecisionCode =
   | 'unsupported_provider_configuration';
 
 type RuntimeQueryEmbeddingMetadata = {
-  environment: ProviderEmbeddingEnvironment;
+  environment: ProviderEmbeddingEnvironment | null;
   providerKey: string;
   model: string;
 };
@@ -58,7 +58,7 @@ export class RuntimeQueryEmbeddingService {
 
   private buildMetadata(
     config: ResolvedEmbeddingConfig,
-    environment: ProviderEmbeddingEnvironment,
+    environment: ProviderEmbeddingEnvironment | null,
   ): RuntimeQueryEmbeddingMetadata {
     return {
       environment,
@@ -72,7 +72,7 @@ export class RuntimeQueryEmbeddingService {
     reason: string;
     sanitizedMessage: string;
     config: ResolvedEmbeddingConfig;
-    environment: ProviderEmbeddingEnvironment;
+    environment: ProviderEmbeddingEnvironment | null;
   }): RuntimeQueryEmbeddingResult {
     return {
       kind: 'denied',
@@ -108,10 +108,12 @@ export class RuntimeQueryEmbeddingService {
       });
     }
 
-    if (!this.embedder.supportsResolvedConfig(config)) {
+    if (!runtimeContract.supported) {
       return this.buildDeniedResult({
         decisionCode: 'unsupported_provider_configuration',
-        reason: 'runtime_query_embedding_provider_configuration_unresolved',
+        reason: runtimeContract.reason === 'invalid_deployment_environment'
+          ? 'runtime_query_embedding_deployment_environment_invalid'
+          : 'runtime_query_embedding_provider_configuration_unresolved',
         sanitizedMessage: 'Die Wissenssuche ist derzeit nicht sicher verfuegbar.',
         config,
         environment,

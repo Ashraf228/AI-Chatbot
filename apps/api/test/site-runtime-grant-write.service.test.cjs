@@ -7,6 +7,9 @@ const {
 const {
   ProviderApprovalAuditWriter,
 } = require('../dist/knowledge-sources/provider-approval-audit-writer.service.js');
+const {
+  buildSiteRuntimeGrantRuntimeContract,
+} = require('../dist/knowledge-sources/site-runtime-grant-runtime-contract.js');
 
 const now = new Date('2027-01-01T00:00:00.000Z');
 
@@ -155,7 +158,7 @@ function createService(options = {}) {
       auditCalls.push({ tx, input });
     },
   };
-  const runtime = {
+  const runtime = options.runtime || {
     resolveRuntimeContract() {
       return {
         environment: 'non_production',
@@ -166,6 +169,19 @@ function createService(options = {}) {
     },
   };
   return { db, auditCalls, service: new SiteRuntimeGrantWriteService(db, auditWriter, runtime) };
+}
+
+function runtimeResolver(nodeEnv, appEnv, providerSupported = true) {
+  return {
+    resolveRuntimeContract() {
+      return buildSiteRuntimeGrantRuntimeContract(
+        { providerKey: 'openai', model: 'text-embedding-3-small' },
+        providerSupported,
+        nodeEnv,
+        appEnv,
+      );
+    },
+  };
 }
 
 test('create persists only the fixed site-runtime contract and records audit on the transaction client', async () => {
@@ -185,6 +201,58 @@ test('create persists only the fixed site-runtime contract and records audit on 
   assert.equal(auditCalls.length, 1);
   assert.equal(auditCalls[0].tx, db);
   assert.equal(auditCalls[0].input.eventType, 'approval_created');
+});
+
+test('writer uses the shared staging resolution and accepts valid non-production terms', async () => {
+  const { service, db, auditCalls } = createService({
+    runtime: runtimeResolver('production', 'staging'),
+  });
+
+  const preview = await service.preview(context(), terms());
+  assert.deepEqual(preview, {
+    kind: 'would_create',
+    runtime: {
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+      environment: 'non_production',
+    },
+  });
+
+  const created = await service.create(context(), terms());
+  assert.equal(created.kind, 'created');
+  assert.equal(db.grants[0].environment, 'non_production');
+  assert.equal(db.grants[0].production_approved, false);
+  assert.equal(auditCalls.length, 1);
+});
+
+test('writer still rejects production terms without production approval', async () => {
+  const { service, db, auditCalls } = createService({
+    runtime: runtimeResolver('production', 'production'),
+  });
+
+  assert.deepEqual(await service.create(context(), terms()), {
+    kind: 'invalid_terms',
+    reason: 'production_not_approved',
+  });
+  assert.equal(db.grants.length, 0);
+  assert.equal(auditCalls.length, 0);
+});
+
+test('writer rejects invalid deployment configuration before database or audit work', async () => {
+  const { service, db, auditCalls } = createService({
+    runtime: runtimeResolver('production', ' staging '),
+  });
+  const expected = {
+    kind: 'unsupported_runtime_configuration',
+    reason: 'site_runtime_grant_runtime_configuration_unsupported',
+  };
+
+  assert.deepEqual(await service.preview(context(), terms()), expected);
+  assert.deepEqual(await service.create(context(), terms()), expected);
+  assert.equal(db.transactionCalls, 0);
+  assert.deepEqual(db.queries, []);
+  assert.equal(db.grants.length, 0);
+  assert.equal(auditCalls.length, 0);
 });
 
 test('identical future create is reused without a second grant or audit entry', async () => {

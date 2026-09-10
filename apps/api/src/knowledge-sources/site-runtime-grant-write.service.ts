@@ -10,7 +10,7 @@ import {
 import { ProviderApprovalAuditWriter } from './provider-approval-audit-writer.service';
 import type { ProviderEmbeddingUsageContext } from './provider-embedding-gate';
 import { RuntimeQueryEmbeddingService } from './runtime-query-embedding.service';
-import type { SiteRuntimeGrantRuntimeContract } from './site-runtime-grant-runtime-contract';
+import type { SupportedSiteRuntimeGrantRuntimeContract } from './site-runtime-grant-runtime-contract';
 
 const SITE_RUNTIME_SCOPE_KIND = 'site_runtime';
 const QUERY_EMBEDDING_PURPOSE = 'query_embedding';
@@ -268,7 +268,7 @@ function isExactRepeat(
   row: GrantRow,
   context: SiteRuntimeGrantContext,
   terms: SiteRuntimeGrantTerms,
-  runtime: SiteRuntimeGrantRuntimeContract,
+  runtime: SupportedSiteRuntimeGrantRuntimeContract,
 ): boolean {
   return row.revoked_at === null
     && row.tenant_id === context.tenantId
@@ -310,7 +310,7 @@ function buildPolicy(
   approvalId: string,
   context: SiteRuntimeGrantContext,
   terms: SiteRuntimeGrantTerms,
-  runtime: SiteRuntimeGrantRuntimeContract,
+  runtime: SupportedSiteRuntimeGrantRuntimeContract,
 ): ProviderApprovalPolicy {
   return {
     approvalId,
@@ -348,16 +348,13 @@ function buildPolicy(
 function validateTerms(
   context: SiteRuntimeGrantContext,
   terms: SiteRuntimeGrantTerms,
-  runtime: SiteRuntimeGrantRuntimeContract,
+  runtime: SupportedSiteRuntimeGrantRuntimeContract,
   now: Date,
 ): WriteError | null {
   const validFromMs = Date.parse(terms.validFrom);
   const expiresAtMs = Date.parse(terms.expiresAt);
   if (!Number.isFinite(validFromMs) || !Number.isFinite(expiresAtMs) || expiresAtMs <= validFromMs || expiresAtMs <= now.getTime()) {
     return { kind: 'invalid_terms', reason: 'site_runtime_grant_validity_window_invalid' };
-  }
-  if (!runtime.supported) {
-    return { kind: 'unsupported_runtime_configuration', reason: 'site_runtime_grant_runtime_configuration_unsupported' };
   }
   const policyNow = new Date(Math.max(now.getTime(), validFromMs));
   const decision: ProviderApprovalPolicyDecision = validateProviderApprovalPolicy({
@@ -382,6 +379,9 @@ export class SiteRuntimeGrantWriteService {
     const terms = parseTerms(termsInput);
     if ('kind' in terms) return terms;
     const runtime = this.runtimeQueryEmbedding.resolveRuntimeContract();
+    if (!runtime.supported) {
+      return { kind: 'unsupported_runtime_configuration', reason: 'site_runtime_grant_runtime_configuration_unsupported' };
+    }
     const now = new Date();
     const validationError = validateTerms(context, terms, runtime, now);
     if (validationError) return validationError;
@@ -401,6 +401,10 @@ export class SiteRuntimeGrantWriteService {
     if ('kind' in context) return context;
     const terms = parseTerms(termsInput);
     if ('kind' in terms) return terms;
+    const preflightRuntime = this.runtimeQueryEmbedding.resolveRuntimeContract();
+    if (!preflightRuntime.supported) {
+      return { kind: 'unsupported_runtime_configuration', reason: 'site_runtime_grant_runtime_configuration_unsupported' };
+    }
 
     try {
       return await this.db.transaction(async (tx) => {
@@ -409,6 +413,9 @@ export class SiteRuntimeGrantWriteService {
         }
         const now = await this.readDatabaseNow(tx);
         const runtime = this.runtimeQueryEmbedding.resolveRuntimeContract();
+        if (!runtime.supported) {
+          return { kind: 'unsupported_runtime_configuration', reason: 'site_runtime_grant_runtime_configuration_unsupported' };
+        }
         const validationError = validateTerms(context, terms, runtime, now);
         if (validationError) return validationError;
 
@@ -525,7 +532,7 @@ export class SiteRuntimeGrantWriteService {
   private async readActiveRuntimeGrants(
     queryable: Queryable,
     context: SiteRuntimeGrantContext,
-    runtime: SiteRuntimeGrantRuntimeContract,
+    runtime: SupportedSiteRuntimeGrantRuntimeContract,
     lock = false,
   ): Promise<GrantRow[]> {
     const lockClause = lock ? ' FOR UPDATE' : '';
@@ -573,7 +580,7 @@ export class SiteRuntimeGrantWriteService {
     tx: Queryable,
     context: SiteRuntimeGrantContext,
     terms: SiteRuntimeGrantTerms,
-    runtime: SiteRuntimeGrantRuntimeContract,
+    runtime: SupportedSiteRuntimeGrantRuntimeContract,
   ): Promise<GrantRow> {
     const inserted = await tx.query<GrantRow>(
       `INSERT INTO provider_approval_grants(

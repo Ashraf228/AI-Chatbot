@@ -520,9 +520,11 @@ test('individual login drives the complete site-runtime grant flow through Dashb
       apiRuntime,
       minimalEnvironment(tempRoot, {
         ADMIN_SESSION_SECRET: sessionSecret,
+        ALLOW_PRODUCTION_AUTO_MIGRATIONS: 'true',
+        APP_ENV: 'staging',
         DASHBOARD_INTERNAL_TOKEN: dashboardToken,
         DATABASE_URL: postgres.databaseUrl,
-        NODE_ENV: 'test',
+        NODE_ENV: 'production',
         OPENAI_API_KEY: 'synthetic-provider-key-not-for-use',
         OPENAI_EMBED_MODEL: providerModel,
         OPENAI_EMBED_PROVIDER: providerKey,

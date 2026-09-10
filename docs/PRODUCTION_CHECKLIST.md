@@ -4,6 +4,7 @@
 
 - [ ] `.env` liegt nur auf dem Server und ist nicht committed.
 - [ ] `NODE_ENV=production`
+- [ ] Der API-Service ist literal mit `APP_ENV=production` gebunden; effektive Container-Konfiguration und Zielhost wurden getrennt verifiziert.
 - [ ] `POSTGRES_PASSWORD` stark gesetzt.
 - [ ] `REDIS_PASSWORD` stark gesetzt.
 - [ ] `OPENAI_API_KEY` gesetzt.

@@ -273,6 +273,8 @@ test('rejects unknown and reserved fields before the write service despite globa
     terms({ actorRole: 'admin' }),
     terms({ tenantId: TARGET_TENANT_ID }),
     terms({ providerKey: 'synthetic-provider' }),
+    terms({ environment: 'non_production' }),
+    terms({ APP_ENV: 'staging' }),
   ]) {
     const response = await request(harness, path, { token: validToken, body });
     assert.equal(response.status, 400);
