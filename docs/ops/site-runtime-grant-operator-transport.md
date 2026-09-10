@@ -153,3 +153,46 @@ explicit operational release must be validated before grant writes are used. A U
 needed, is separate product work. None of these prerequisites or this transport implementation
 implies deployment, provider use, public-widget activation, production activation, Enterprise
 approval, or grant approval.
+
+## Reproducible integrated flow test
+
+The opt-in PostgreSQL 16 flow test exercises the built API and Dashboard as separate local
+processes and sends real HTTP requests through the complete path:
+
+```text
+individual tenant-user login -> ssb_admin cookie -> Dashboard BFF -> API operator auth
+-> persisted principal and capability -> grant write service -> PostgreSQL grant and audit
+```
+
+Prerequisites are Node.js 24.17.0, npm 11.12.1, installed lockfile dependencies, successful API
+and Dashboard production builds, a running Docker engine, and the already-local
+`pgvector/pgvector:pg16` image. Run the test from the repository root after the builds:
+
+```bash
+npm run build:api
+npm run build:dashboard
+POSTGRES16_SITE_RUNTIME_GRANT_OPERATOR_FLOW_TEST=1 \
+  node --test --test-concurrency=1 \
+  apps/api/test/site-runtime-grant-operator-flow.postgres16.test.cjs
+```
+
+Without the opt-in variable, the real HTTP/PostgreSQL test is explicitly skipped while its
+Docker-free setup-failure cleanup regression still runs. The activated test applies the actual
+migrations through 032 to its own disposable database, creates only synthetic fixture identities,
+logs in through the production customer-login route, and verifies preview, create, reuse, status,
+revoke, repeated revoke, persisted actor provenance, and grant/audit counts. It also verifies
+capability and site boundaries, indistinguishable foreign and unknown grant responses, mutation
+origin checks, reserved-field rejection, shared-key-only denial, and immediate denial after
+capability removal or account deactivation.
+
+The harness passes an explicit minimal environment to both child processes and does not load an
+existing `.env` file. It owns every process, temporary directory, container, and captured anonymous
+volume from the point of creation. Cleanup continues after individual cleanup failures, preserves
+the primary test error, removes only those owned resources, and verifies container and captured
+volume absence. A deterministic Docker-free setup-abort regression exercises the same lifecycle
+code after simulated container creation.
+
+This is an integration test, not a browser UX test or a production-readiness proof. It neither
+provisions an operational identity nor applies a migration to an existing database. Deployment
+still requires separately authorized secret distribution, Migration 032 execution, individual user
+and exact capability provisioning, environment validation, and an explicit release decision.
