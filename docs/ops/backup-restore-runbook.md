@@ -137,10 +137,44 @@ scripts/ops/restore-postgres-test.sh /root/AI-Chatbot/backups/backup_postgres_YY
 Das Script:
 
 - erstellt eine temporaere Datenbank mit Prefix `restore_check_`
-- spielt den Dump mit `ON_ERROR_STOP=1` ein
-- prueft zentrale Tabellen und Counts
-- prueft, ob die Demo-Site `rohrreinigung-ffm24` vorhanden ist
-- entfernt die temporaere Datenbank am Ende automatisch
+- bestimmt zuerst die tatsaechlich adressierte Quelldatenbank und verweigert ein identisches Restore-Ziel
+- begrenzt den Zielnamen auf PostgreSQLs 63-Byte-Identifiergrenze, damit Namenskuerzung die Quell-/Zieltrennung nicht umgehen kann
+- verweigert bereits vorhandene Zieldatenbanken und uebernimmt oder loescht sie nicht
+- spielt den Plain-SQL-Dump mit deaktivierter `psql`-Benutzer-Startdatei und `ON_ERROR_STOP=1` ein
+- entfernt nur eine nachweislich selbst erzeugte temporaere Datenbank
+- meldet Erfolg erst nach erfolgreichem Restore und bestaetigtem Cleanup
+
+Ein erfolgreicher Restore ohne weitere Pruefung belegt nur, dass der Dump technisch eingespielt werden konnte. Er ist kein Nachweis fuer erwartete Dateninhalte. Fuer einen belastbaren lokalen Wegwerftest kann eine vertrauenswuerdige lokale SQL-Pruefdatei angegeben werden:
+
+```bash
+RESTORE_TEST_DB=restore_check_local_synthetic \
+RESTORE_TEST_VALIDATION_SQL_FILE=/private/tmp/restore-marker-check.sql \
+scripts/ops/restore-postgres-test.sh /private/tmp/synthetic-backup.sql.gz
+```
+
+Die Pruefdatei muss vor dem Start existieren und lesbar sein. Sie wird ausschliesslich gegen die neu erzeugte Restore-Zieldatenbank mit `psql -X -1 -v ON_ERROR_STOP=1` in einer read-only-Transaktion ausgefuehrt. Ein blosses `SELECT false` oder ein Count von `0` ist kein Fehler und daher keine ausreichende Assertion. Eine generische Markerpruefung muss bei Abweichung explizit fehlschlagen, zum Beispiel:
+
+```sql
+DO $restore_validation$
+DECLARE
+  restored_name text;
+BEGIN
+  SELECT name INTO restored_name
+  FROM tenants
+  WHERE id = 'synthetic_restore_marker';
+
+  IF restored_name IS DISTINCT FROM 'Synthetic restore marker' THEN
+    RAISE EXCEPTION 'synthetic restore marker mismatch';
+  END IF;
+END
+$restore_validation$;
+```
+
+Die Validierung darf nur lesen und pruefen. Sie darf keine Migration, Reparatur, Trackingzeilen-Manipulation oder fachliche Datenaenderung enthalten. Fehler beim Restore oder bei der Pruefung fuehren weiterhin zum Cleanup. Bleibt ein eigenes Ziel bestehen oder kann seine Entfernung nicht bestaetigt werden, endet der Lauf fehlerhaft. Bei gleichzeitigem Primaer- und Cleanupfehler bleibt der Primaerfehler erhalten und der zusaetzliche Cleanupfehler wird sichtbar ausgegeben.
+
+Der Restore bewahrt den im Dump enthaltenen Migrationsstand. Insbesondere darf ein Backup vor Migration 032 nicht allein durch den Restore auf 032 angehoben werden. `schema_migrations`, relevante Constraints und synthetische Marker muessen gegen den gesicherten Ausgangszustand geprueft werden. Ein anschliessendes Schema-Upgrade ist ein getrennter, freigabepflichtiger Schritt; Trackingzeilen duerfen nicht manuell geloescht oder veraendert werden.
+
+Der Opt-in-Test `POSTGRES16_BACKUP_RESTORE_TEST=1 node --test --test-concurrency=1 apps/api/test/postgres-backup-restore.postgres16.test.cjs` verwendet ausschliesslich ein selbst erzeugtes lokales PostgreSQL-16-Compose-Projekt und synthetische Daten. Er belegt den technischen Backup-/Restore-Werkzeugweg. Ein Nachweis fuer ein tatsaechliches Staging-Backup und dessen Restore bleibt eine separate operative Voraussetzung mit eigener Freigabe.
 
 ## Notfall-Restore
 
@@ -321,8 +355,9 @@ Regeln:
 
 - kein Restore in Produktion
 - Offsite-Snapshot oder einzelne Backup-Datei nur in isolierte Test-DB einspielen
-- danach zentrale Tabellen und Counts pruefen
-- Test-DB danach entfernen
+- fuer den dokumentierten Integritaetsnachweis `RESTORE_TEST_VALIDATION_SQL_FILE` mit einer vertrauenswuerdigen lokalen Pruefdatei verwenden; das generische SQL-Assertion-Beispiel im Abschnitt "Restore-Test in isolierter Datenbank" ist massgeblich
+- Markerinhalt, erwartetes Schema, `schema_migrations` und relevante Constraints gegen den beim Backup gesicherten Ausgangsstand pruefen; auch begruendete Counts muessen als echte Assertions bei Abweichung einen SQL-Fehler ausloesen
+- den Restore-Test erst nach erfolgreicher Validierung und bestaetigter Entfernung der temporaeren Testdatenbank als abgeschlossen werten
 - produktive DB bleibt unveraendert
 
 ### Letzter Offsite-Restore-Test
@@ -360,7 +395,7 @@ Gepruefte Tabellen/Objekte:
 - `usage_daily`: 7
 - `email_jobs`: 2
 - `webhook_jobs`: 0
-- Demo-Site `rohrreinigung-ffm24`: vorhanden
+- der damalige kundenspezifische Kontrollwert wurde bestaetigt; dieser Legacy-Nachweis ist keine generische Erfolgsvoraussetzung mehr
 
 Die Counts sind Plausibilitaetswerte aus dem Restore-Test und enthalten keine personenbezogenen Inhalte. Keine Lead-Inhalte, Telefonnummern, Namen oder Chatverlaeufe wurden dokumentiert.
 
@@ -399,7 +434,9 @@ Diese Werte sind Startwerte fuer den ersten Kundengang und muessen bei zahlenden
 
 - Backup taeglich automatisiert ausfuehren und pruefen.
 - Restore-Test monatlich oder vor groesseren Releases ausfuehren.
-- Nach jedem Restore-Test Counts und Demo-Site-Existenz pruefen.
+- Fuer jeden dokumentierten Integritaetsnachweis `RESTORE_TEST_VALIDATION_SQL_FILE` und das oben beschriebene generische Assertion-Muster verwenden. Erwartete Marker, Schemaobjekte, Migrationstracking und relevante Constraints muessen zum gesicherten Ausgangsstand passen; jede Abweichung muss den Test fehlschlagen lassen.
+- Ein Backup bis Migration 031 darf ohne Migration 032 wiederhergestellt werden. Ein spaeteres Schema-Upgrade bleibt ein getrennter Schritt; `schema_migrations` darf fuer den Restore-Nachweis nicht manipuliert werden.
+- Ohne Pruefdatei ist nur der technische Restore und Cleanup belegt, nicht die fachliche Datenintegritaet. Jeder Lauf gilt erst nach bestaetigtem Cleanup als abgeschlossen. Der lokale Werkzeugnachweis ersetzt keinen Restore-Nachweis der tatsaechlichen Staging-Datenbank.
 - Fehlerlogging fuer Backup-Laeufe aufbewahren.
 
 ## Sicherheitsregeln
