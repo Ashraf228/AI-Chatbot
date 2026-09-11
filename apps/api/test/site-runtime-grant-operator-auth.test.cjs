@@ -8,6 +8,7 @@ const {
 
 const SESSION_SECRET = 'synthetic-session-secret-for-operator-auth-tests';
 const DASHBOARD_TOKEN = 'synthetic-dashboard-token-for-operator-auth-tests';
+const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const PRINCIPAL_ID = 'operator-user-1';
 const ORIGIN_TENANT_ID = 't_default';
 const TARGET_TENANT_ID = 'tenant-target';
@@ -117,7 +118,15 @@ test.afterEach(() => {
   delete process.env.DASHBOARD_INTERNAL_TOKEN;
 });
 
-test('accepts a token produced by the existing dashboard signer and derives a fixed service context', async () => {
+test('accepts a token produced by the existing dashboard signer and derives a fixed service context', async (t) => {
+  const originalNow = Date.now;
+  const initialNow = Date.UTC(2030, 0, 1);
+  let clockReads = 0;
+  Date.now = () => initialNow + clockReads++;
+  t.after(() => {
+    Date.now = originalNow;
+  });
+
   const dashboardAuth = await import('../../dashboard/lib/auth-core.ts');
   const token = await dashboardAuth.createTenantSessionToken({
     role: 'customer',
@@ -126,9 +135,12 @@ test('accepts a token produced by the existing dashboard signer and derives a fi
     email: 'operator@synthetic.invalid',
     displayName: 'Synthetic Operator',
   });
+  const [encodedPayload] = token.split('.');
+  const signedClaims = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
   const db = new FakeDatabase();
   const service = new SiteRuntimeGrantOperatorAuthService(db);
 
+  assert.equal(signedClaims.exp - signedClaims.iat, SESSION_TTL_MS);
   assert.deepEqual(
     await service.authorize(authInput(token, { actorId: 'attacker', actorRole: 'operator' })),
     {
@@ -169,6 +181,14 @@ test('rejects the shared dashboard operator principal, tampering, signed claim c
   await assertRejected(service.authorize(authInput(tampered)), 401);
 
   await assertRejected(service.authorize(authInput(signClaims(claims({ tenantId: 'other-origin' })))), 401);
+  const overlongIssuedAt = Date.now();
+  const overlongExpiresAt = overlongIssuedAt + SESSION_TTL_MS + 1;
+  await assertRejected(service.authorize(authInput(signClaims(claims({
+    iat: overlongIssuedAt,
+    exp: overlongExpiresAt,
+    sessionIssuedAt: new Date(overlongIssuedAt).toISOString(),
+    sessionExpiresAt: new Date(overlongExpiresAt).toISOString(),
+  })))), 401);
   const expiredAt = Date.now() - 1000;
   const issuedAt = expiredAt - 60 * 60 * 1000;
   await assertRejected(service.authorize(authInput(signClaims(claims({
