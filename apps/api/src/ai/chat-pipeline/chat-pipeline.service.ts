@@ -11,7 +11,7 @@ import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { ToolExecutionResult } from '../../tools/tool-result.types';
 import { logEvent } from '../../utils/logger';
 import { sanitizeInput, sanitizeOutput } from '../../utils/security';
-import { EmbeddingService } from '../../vector/embedding.service';
+import { RuntimeQueryEmbeddingService } from '../../knowledge-sources/runtime-query-embedding.service';
 import { LlmService } from '../../vector/llm.service';
 import { VectorService } from '../../vector/vector.service';
 import { ChatPipelineEvent } from './chat-pipeline-events';
@@ -29,7 +29,6 @@ import { UsageLimitService } from '../../billing/usage-limit.service';
 export class ChatPipelineService {
   constructor(
     private readonly db: PrismaService,
-    private readonly embedder: EmbeddingService,
     private readonly vector: VectorService,
     private readonly llm: LlmService,
     private readonly routing: ChatRoutingService,
@@ -39,6 +38,7 @@ export class ChatPipelineService {
     private readonly responseComposer: ResponseComposerService,
     private readonly toolExecutor: ToolExecutorService,
     private readonly usageLimits: UsageLimitService,
+    private readonly runtimeQueryEmbedding: RuntimeQueryEmbeddingService,
   ) {}
 
   async process(input: ChatPipelineInput): Promise<ChatPipelineResult> {
@@ -54,6 +54,26 @@ export class ChatPipelineService {
     }
 
     const routed = await this.prepareRoutedAnswer(normalized, conversation.id);
+    if (routed.providerAuthorizationFallbackAnswer) {
+      return this.persistAndReturnRuleBasedAnswer({
+        input: normalized,
+        conversation,
+        answer: routed.providerAuthorizationFallbackAnswer,
+        route: routed.routeDecision.route,
+        sources: routed.sources,
+        model: 'rule-based-query-embedding-gate',
+      });
+    }
+    if (routed.noReadySourcesFallbackAnswer) {
+      return this.persistAndReturnRuleBasedAnswer({
+        input: normalized,
+        conversation,
+        answer: routed.noReadySourcesFallbackAnswer,
+        route: routed.routeDecision.route,
+        sources: routed.sources,
+        model: 'rule-based-knowledge-no-ready-sources',
+      });
+    }
     if (routed.advisorFallbackAnswer) {
       return this.persistAndReturnRuleBasedAnswer({
         input: normalized,
@@ -207,6 +227,46 @@ export class ChatPipelineService {
     }
 
     const routed = await this.prepareRoutedAnswer(normalized, conversation.id);
+    if (routed.providerAuthorizationFallbackAnswer) {
+      const result = await this.persistAndReturnRuleBasedAnswer({
+        input: normalized,
+        conversation,
+        answer: routed.providerAuthorizationFallbackAnswer,
+        route: routed.routeDecision.route,
+        sources: routed.sources,
+        model: 'rule-based-query-embedding-gate',
+      });
+      await emit({ type: 'token', delta: result.answer });
+      await emit({
+        type: 'message_end',
+        answer: result.answer,
+        sessionId: result.sessionId,
+        conversationId: result.conversationId,
+        parts: result.parts,
+        sources: result.sources,
+      });
+      return;
+    }
+    if (routed.noReadySourcesFallbackAnswer) {
+      const result = await this.persistAndReturnRuleBasedAnswer({
+        input: normalized,
+        conversation,
+        answer: routed.noReadySourcesFallbackAnswer,
+        route: routed.routeDecision.route,
+        sources: routed.sources,
+        model: 'rule-based-knowledge-no-ready-sources',
+      });
+      await emit({ type: 'token', delta: result.answer });
+      await emit({
+        type: 'message_end',
+        answer: result.answer,
+        sessionId: result.sessionId,
+        conversationId: result.conversationId,
+        parts: result.parts,
+        sources: result.sources,
+      });
+      return;
+    }
     if (routed.advisorFallbackAnswer) {
       const result = await this.persistAndReturnRuleBasedAnswer({
         input: normalized,
@@ -560,10 +620,23 @@ export class ChatPipelineService {
     });
 
     const retrievalStart = Date.now();
-    const qEmbedding = await this.embedder.embed(input.message);
-    const hits = await this.vector.search(input.tenantId, input.siteId, qEmbedding, 6, undefined, {
-      demoOnly: input.evaluationMode === true,
+    const queryEmbeddingResult = await this.runtimeQueryEmbedding.embedAuthorizedQuery({
+      tenantId: input.tenantId,
+      siteId: input.siteId,
+      query: input.message,
     });
+    const hits = queryEmbeddingResult.kind === 'embedded'
+      ? await this.vector.search(
+          input.tenantId,
+          input.siteId,
+          queryEmbeddingResult.embedding,
+          6,
+          undefined,
+          {
+            demoOnly: input.evaluationMode === true,
+          },
+        )
+      : [];
     const retrievalTime = Date.now() - retrievalStart;
 
     logEvent('retrieval_result', {
@@ -572,6 +645,10 @@ export class ChatPipelineService {
       siteId: input.siteId,
       hits: hits.length,
       retrievalTime,
+      queryEmbeddingStatus: queryEmbeddingResult.kind,
+      queryEmbeddingDecision: queryEmbeddingResult.decisionCode,
+      queryEmbeddingProviderKey: queryEmbeddingResult.providerKey,
+      queryEmbeddingModel: queryEmbeddingResult.model,
     });
 
     const advisorContext =
@@ -604,6 +681,11 @@ export class ChatPipelineService {
       systemPrompt: input.systemPrompt,
       guides: [routingGuide, itSupportKnowledgeGuide, conversationGuide],
     });
+    const noReadySourcesFallbackAnswer =
+      queryEmbeddingResult.kind === 'no_ready_sources' &&
+      (routeDecision.route === 'faq' || routeDecision.route === 'hybrid')
+        ? this.buildNoKnowledgeFallbackAnswer(input)
+        : undefined;
 
     return {
       history,
@@ -614,13 +696,17 @@ export class ChatPipelineService {
       userPrompt,
       systemPrompt,
       sources: this.responseComposer.buildSources(hits),
+      noReadySourcesFallbackAnswer,
+      providerAuthorizationFallbackAnswer:
+        queryEmbeddingResult.kind === 'denied'
+          ? 'Ich kann diese Anfrage im Moment nicht sicher mit dem freigegebenen Wissen abgleichen. Bitte versuche es spaeter erneut oder kontaktiere einen Mitarbeiter.'
+          : undefined,
       strictFallbackAnswer:
-        knowledgeMode === 'strict' && hits.length === 0
-          ? input.evaluationMode === true
-            ? 'Diese Frage kann ich auf Grundlage der freigegebenen Demonstrationsinhalte nicht zuverlaessig beantworten.'
-            : 'Dazu habe ich gerade keine passende Information im Unternehmenswissen gefunden. Bitte hinterlasse kurz deine Anfrage, dann kann ein Mensch das pruefen.'
+        queryEmbeddingResult.kind !== 'denied' && knowledgeMode === 'strict' && hits.length === 0
+          ? this.buildNoKnowledgeFallbackAnswer(input)
           : undefined,
       advisorFallbackAnswer:
+        queryEmbeddingResult.kind !== 'denied' &&
         routeDecision.route === 'advisor' &&
         hits.length === 0 &&
         advisorContext.products.length === 0 &&
@@ -628,6 +714,12 @@ export class ChatPipelineService {
           ? 'Dazu habe ich aktuell keine verifizierten Produktdaten gefunden. Bitte beschreibe kurz, wonach du suchst, oder hinterlasse eine Anfrage, damit ein Mitarbeiter das pruefen kann.'
           : undefined,
     };
+  }
+
+  private buildNoKnowledgeFallbackAnswer(input: Required<ChatPipelineInput>) {
+    return input.evaluationMode === true
+      ? 'Diese Frage kann ich auf Grundlage der freigegebenen Demonstrationsinhalte nicht zuverlaessig beantworten.'
+      : 'Dazu habe ich gerade keine passende Information im Unternehmenswissen gefunden. Bitte hinterlasse kurz deine Anfrage, dann kann ein Mensch das pruefen.';
   }
 
   private getKnowledgeMode(siteConfig?: Record<string, unknown> | null) {

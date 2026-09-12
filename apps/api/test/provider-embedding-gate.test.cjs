@@ -11,6 +11,7 @@ const FIXTURE_NOW = '2026-08-01T12:00:00.000Z';
 function createPolicy(overrides = {}) {
   return {
     approvalId: 'approval-1',
+    scopeKind: 'source',
     tenantId: 'tenant-1',
     siteId: 'site-1',
     sourceId: 'source-1',
@@ -144,11 +145,26 @@ test('ProviderEmbeddingGate denies site mismatches', () => {
 test('ProviderEmbeddingGate allows a site-wide policy without sourceId when the remaining scope matches', () => {
   const decision = evaluateProviderEmbeddingGate({
     ...createGateInput(),
-    explicitApproval: createPolicy({ sourceId: null }),
+    explicitApproval: createPolicy({ scopeKind: 'source_type', sourceId: null }),
   });
 
   assert.equal(decision.allowed, true);
   assert.equal(decision.decisionCode, 'allowed');
+});
+
+test('ProviderEmbeddingGate denies a site_runtime policy for source-scoped ingest checks', () => {
+  const decision = evaluateProviderEmbeddingGate({
+    ...createGateInput(),
+    explicitApproval: createPolicy({
+      scopeKind: 'site_runtime',
+      sourceId: null,
+      sourceTypes: [],
+      usageContexts: ['query_embedding'],
+    }),
+  });
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.decisionCode, 'not_granted');
 });
 
 test('ProviderEmbeddingGate denies source type mismatches', () => {

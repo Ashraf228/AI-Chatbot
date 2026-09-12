@@ -13,15 +13,34 @@ export {
   verifyAdminSessionToken,
 } from "@/lib/auth-core";
 import {
+  type DashboardSession,
   SESSION_COOKIE_NAME,
   verifySessionToken,
   verifyAdminSessionToken,
 } from "@/lib/auth-core";
 
-export async function getDashboardSession() {
+export type DashboardSessionCredential = {
+  session: DashboardSession;
+  token: string;
+};
+
+export async function verifyDashboardSessionCredential(
+  token?: string | null
+): Promise<DashboardSessionCredential | null> {
+  if (!token) return null;
+  const session = await verifySessionToken(token);
+  return session ? { session, token } : null;
+}
+
+export async function getDashboardSessionCredential() {
   const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  return verifySessionToken(token);
+  return verifyDashboardSessionCredential(
+    cookieStore.get(SESSION_COOKIE_NAME)?.value
+  );
+}
+
+export async function getDashboardSession() {
+  return (await getDashboardSessionCredential())?.session ?? null;
 }
 
 export async function isAuthenticated() {

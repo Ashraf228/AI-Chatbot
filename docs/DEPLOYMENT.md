@@ -49,6 +49,7 @@ Variante B: Externer Proxy wie Caddy, Traefik oder Host-Nginx terminiert TLS und
 
 Production muss mindestens setzen:
 
+- `APP_ENV=production` (im Production-Compose literal an den API-Service gebunden)
 - `POSTGRES_PASSWORD`
 - `REDIS_PASSWORD`
 - `OPENAI_API_KEY`
@@ -63,6 +64,26 @@ Production muss mindestens setzen:
 - `ADMIN_DOMAIN`
 - `API_DOMAIN`
 - `WIDGET_DOMAIN`
+
+## Deployment-Umgebung fuer Site-Runtime-Grants
+
+`NODE_ENV=production` bleibt sowohl auf Staging als auch auf Production aktiv und steuert die
+technischen Schutzmechanismen. Ausschliesslich die serverseitige API-Variable `APP_ENV` ordnet den
+Site-Runtime-Grant-Vertrag zu:
+
+- `APP_ENV=production` ergibt den gespeicherten Grant-Wert `production` und verlangt weiterhin
+  `productionApproved=true`.
+- `APP_ENV=staging` ergibt den bestehenden gespeicherten Wert `non_production`; alle anderen
+  Approval-Anforderungen bleiben bestehen.
+- Fehlendes `APP_ENV` unter `NODE_ENV=production` behaelt aus Sicherheits- und
+  Kompatibilitaetsgruenden die bisherige Production-Einstufung.
+- Leere, unbekannte, anders geschriebene oder widerspruechliche Werte werden fail-closed abgelehnt.
+
+Production ist in `docker-compose.yml` literal gebunden; Staging erhaelt seine literale Bindung ueber
+`docker-compose.staging.yml`. Vor einer operativen Nutzung muessen Zielhost, verwendete Compose-Datei,
+Commit/Image und die effektive API-Konfiguration getrennt verifiziert werden. `APP_ENV` allein ist
+kein Nachweis fuer den tatsaechlichen Zielhost. Bestehende Grants werden nicht umklassifiziert, und
+Ingestion behaelt unter `NODE_ENV=production` ihre bisherige Production-Semantik.
 
 Optionale, aber empfohlene Werte:
 

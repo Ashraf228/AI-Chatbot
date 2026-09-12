@@ -109,8 +109,8 @@ function parseFutureTimestamp(value?: string | null) {
   return timestamp;
 }
 
-function resolveSessionExpiry(accountExpiresAt?: string) {
-  const defaultExpiry = Date.now() + SESSION_TTL_SECONDS * 1000;
+function resolveSessionExpiry(issuedAt: number, accountExpiresAt?: string) {
+  const defaultExpiry = issuedAt + SESSION_TTL_SECONDS * 1000;
   const accountExpiry = parseFutureTimestamp(accountExpiresAt);
   return typeof accountExpiry === "number" ? Math.min(defaultExpiry, accountExpiry) : defaultExpiry;
 }
@@ -130,7 +130,7 @@ async function createSessionToken(
   }
 
   const issuedAt = Date.now();
-  const expiresAt = resolveSessionExpiry(payload.accountExpiresAt);
+  const expiresAt = resolveSessionExpiry(issuedAt, payload.accountExpiresAt);
   const randomBytes = crypto.getRandomValues(new Uint8Array(16));
   const encodedPayload = base64UrlEncode(
     JSON.stringify({

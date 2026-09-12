@@ -7,9 +7,9 @@ import { IntegrationsService } from '../integrations/integrations.service';
 import { EmailJobsService } from '../modules/widget/services/email-jobs.service';
 import { LeadMailerService } from '../modules/widget/services/lead-mailer.service';
 import { ReportMailerService } from '../modules/widget/services/report-mailer.service';
+import { RuntimeQueryEmbeddingService } from '../knowledge-sources/runtime-query-embedding.service';
 import { WebhookJobsService } from './webhook-jobs.service';
 import { ShopifyCatalogService } from '../integrations/shopify/shopify-catalog.service';
-import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { PropertyTicketingService } from '../modules/property-ticketing/property-ticketing.service';
 import { UsageLimitService } from '../billing/usage-limit.service';
@@ -56,7 +56,7 @@ export class ToolDispatcherService {
     private readonly reportMailer: ReportMailerService,
     private readonly webhookJobs: WebhookJobsService,
     private readonly shopifyCatalog: ShopifyCatalogService,
-    private readonly embedder: EmbeddingService,
+    private readonly runtimeQueryEmbedding: RuntimeQueryEmbeddingService,
     private readonly vector: VectorService,
     private readonly propertyTicketing: PropertyTicketingService,
     private readonly usageLimits: UsageLimitService,
@@ -422,8 +422,25 @@ export class ToolDispatcherService {
 
     const limitRaw = Number(inputPayload.limit);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 6)) : 4;
-    const embedding = await this.embedder.embed(query);
-    const hits = await this.vector.search(tenantId, run.site_id, embedding, limit);
+    const queryEmbeddingResult = await this.runtimeQueryEmbedding.embedAuthorizedQuery({
+      tenantId,
+      siteId: run.site_id,
+      query,
+    });
+
+    if (queryEmbeddingResult.kind === 'denied') {
+      throw new BadRequestException('Die Wissenssuche ist derzeit nicht verfuegbar.');
+    }
+
+    if (queryEmbeddingResult.kind === 'no_ready_sources') {
+      return {
+        query,
+        resultCount: 0,
+        hits: [],
+      };
+    }
+
+    const hits = await this.vector.search(tenantId, run.site_id, queryEmbeddingResult.embedding, limit);
 
     return {
       query,

@@ -3,6 +3,8 @@ import type {
   ProviderEmbeddingUsageContext,
 } from './provider-embedding-gate';
 
+export type ProviderApprovalScopeKind = 'source' | 'source_type' | 'site_runtime';
+
 export type ProviderApprovalPolicyDecisionCode =
   | 'allowed'
   | 'missing_policy'
@@ -27,6 +29,7 @@ export type ProviderApprovalPolicyDecisionCode =
 
 export type ProviderApprovalPolicy = {
   approvalId: string;
+  scopeKind: ProviderApprovalScopeKind;
   tenantId: string;
   siteId: string;
   sourceId?: string | null;
@@ -80,6 +83,7 @@ export type ProviderApprovalPolicyEvaluationInput = {
   provider?: string | null;
   model?: string | null;
   now?: Date | string | number | null;
+  requiredScopeKinds?: ProviderApprovalScopeKind[] | null;
 };
 
 function deny(
@@ -112,8 +116,26 @@ function hasListValue(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string' && entry.trim().length > 0);
 }
 
+function hasStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function normalizeStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value
+    .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+    .filter((entry) => entry.length > 0);
+}
+
 function isValidTimestamp(value: unknown): value is string {
   return hasText(value) && Number.isFinite(Date.parse(value));
+}
+
+function isProviderApprovalScopeKind(value: unknown): value is ProviderApprovalScopeKind {
+  return value === 'source' || value === 'source_type' || value === 'site_runtime';
 }
 
 function resolvePolicyNowMs(now?: Date | string | number | null): number {
@@ -148,7 +170,11 @@ function validateSharedPolicyFields(policy: ProviderApprovalPolicy): ProviderApp
     return deny('site_mismatch', 'policy_site_missing', 'Die technische Approval-Policy deckt diese Site nicht ab.');
   }
 
-  if (!hasListValue(policy.sourceTypes)) {
+  if (!isProviderApprovalScopeKind(policy.scopeKind)) {
+    return deny('not_granted', 'policy_scope_kind_missing', 'Die technische Approval-Policy ist unvollstaendig.');
+  }
+
+  if (!hasStringArray(policy.sourceTypes)) {
     return deny(
       'source_type_not_allowed',
       'policy_source_types_missing',
@@ -207,6 +233,67 @@ function validateSharedPolicyFields(policy: ProviderApprovalPolicy): ProviderApp
   return null;
 }
 
+function validateScopeSpecificPolicyFields(policy: ProviderApprovalPolicy): ProviderApprovalPolicyDecision | null {
+  const sourceTypes = normalizeStringArray(policy.sourceTypes);
+  const sourceTypeCount = sourceTypes?.length ?? 0;
+  const hasSourceId = hasText(policy.sourceId);
+  const usageContexts = normalizeStringArray(policy.usageContexts) ?? [];
+
+  if (policy.scopeKind === 'source') {
+    if (!hasSourceId) {
+      return deny('not_granted', 'policy_source_id_missing', 'Die technische Approval-Policy ist unvollstaendig.');
+    }
+
+    if (sourceTypeCount === 0) {
+      return deny(
+        'source_type_not_allowed',
+        'policy_source_types_missing',
+        'Der Quelltyp ist durch die technische Approval-Policy nicht erlaubt.',
+      );
+    }
+
+    return null;
+  }
+
+  if (policy.scopeKind === 'source_type') {
+    if (hasSourceId) {
+      return deny('not_granted', 'policy_source_type_has_source_id', 'Die technische Approval-Policy ist unvollstaendig.');
+    }
+
+    if (sourceTypeCount === 0) {
+      return deny(
+        'source_type_not_allowed',
+        'policy_source_types_missing',
+        'Der Quelltyp ist durch die technische Approval-Policy nicht erlaubt.',
+      );
+    }
+
+    return null;
+  }
+
+  if (hasSourceId) {
+    return deny('not_granted', 'policy_site_runtime_has_source_id', 'Die technische Approval-Policy ist unvollstaendig.');
+  }
+
+  if (sourceTypeCount !== 0) {
+    return deny(
+      'source_type_not_allowed',
+      'policy_site_runtime_source_types_invalid',
+      'Der Quelltyp ist durch die technische Approval-Policy nicht erlaubt.',
+    );
+  }
+
+  if (usageContexts.length !== 1 || usageContexts[0] !== 'query_embedding') {
+    return deny(
+      'usage_context_not_allowed',
+      'policy_site_runtime_usage_context_invalid',
+      'Der Provider-/Embedding-Kontext ist durch die technische Approval-Policy nicht erlaubt.',
+    );
+  }
+
+  return null;
+}
+
 export function validateProviderApprovalPolicy(
   input: ProviderApprovalPolicyValidationInput,
 ): ProviderApprovalPolicyDecision {
@@ -222,6 +309,11 @@ export function validateProviderApprovalPolicy(
   const sharedError = validateSharedPolicyFields(policy);
   if (sharedError) {
     return sharedError;
+  }
+
+  const scopeError = validateScopeSpecificPolicyFields(policy);
+  if (scopeError) {
+    return scopeError;
   }
 
   if (policy.providerDpaApproved !== true) {
@@ -340,6 +432,14 @@ export function evaluateProviderApprovalPolicy(
   const environment = (input.environment || 'non_production').trim();
   const provider = (input.provider || '').trim();
   const model = (input.model || '').trim();
+  const requiredScopeKinds =
+    input.requiredScopeKinds && input.requiredScopeKinds.length > 0
+      ? input.requiredScopeKinds
+      : (['source', 'source_type'] as ProviderApprovalScopeKind[]);
+
+  if (!requiredScopeKinds.includes(policy.scopeKind)) {
+    return deny('not_granted', 'scope_kind_not_allowed', 'Die technische Approval-Policy deckt diesen Kontext nicht ab.');
+  }
 
   if (!tenantId || tenantId !== policy.tenantId.trim()) {
     return deny('tenant_mismatch', 'tenant_mismatch', 'Die technische Approval-Policy deckt diesen Tenant nicht ab.');
@@ -349,15 +449,36 @@ export function evaluateProviderApprovalPolicy(
     return deny('site_mismatch', 'site_mismatch', 'Die technische Approval-Policy deckt diese Site nicht ab.');
   }
 
-  if (hasText(policy.sourceId) && sourceId !== policy.sourceId.trim()) {
-    return deny(
-      'not_granted',
-      'source_id_mismatch',
-      'Die technische Approval-Policy deckt diese Quelle nicht ab.',
-    );
+  if (policy.scopeKind === 'source') {
+    if (!sourceId || sourceId !== policy.sourceId?.trim()) {
+      return deny(
+        'not_granted',
+        'source_id_mismatch',
+        'Die technische Approval-Policy deckt diese Quelle nicht ab.',
+      );
+    }
+  } else if (policy.scopeKind === 'site_runtime') {
+    if (sourceId) {
+      return deny(
+        'not_granted',
+        'site_runtime_source_id_not_allowed',
+        'Die technische Approval-Policy deckt diese Quelle nicht ab.',
+      );
+    }
+
+    if (sourceType) {
+      return deny(
+        'source_type_not_allowed',
+        'site_runtime_source_type_not_allowed',
+        'Der Quelltyp ist durch die technische Approval-Policy nicht erlaubt.',
+      );
+    }
   }
 
-  if (!sourceType || !policy.sourceTypes.includes(sourceType)) {
+  const normalizedSourceTypes = normalizeStringArray(policy.sourceTypes) ?? [];
+  const normalizedUsageContexts = normalizeStringArray(policy.usageContexts) ?? [];
+
+  if (policy.scopeKind !== 'site_runtime' && (!sourceType || !normalizedSourceTypes.includes(sourceType))) {
     return deny(
       'source_type_not_allowed',
       'source_type_not_allowed',
@@ -365,7 +486,7 @@ export function evaluateProviderApprovalPolicy(
     );
   }
 
-  if (!usageContext || !policy.usageContexts.includes(usageContext as ProviderEmbeddingUsageContext)) {
+  if (!usageContext || !normalizedUsageContexts.includes(usageContext)) {
     return deny(
       'usage_context_not_allowed',
       'usage_context_not_allowed',

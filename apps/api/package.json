@@ -23,9 +23,9 @@
     "compression": "^1.8.1",
     "helmet": "^8.1.0",
     "ioredis": "^5.10.1",
-    "multer": "2.2.0",
+    "multer": "2.3.0",
     "node-fetch": "^3.3.2",
-    "nodemailer": "9.0.1",
+    "nodemailer": "9.1.1",
     "openai": "^6.34.0",
     "pdf-parse": "^2.4.5",
     "pg": "^8.20.0",
@@ -44,13 +44,13 @@
     "typescript": "^6.0.3"
   },
   "overrides": {
-    "multer": "2.2.0",
-    "qs": "6.15.2",
+    "multer": "2.3.0",
+    "qs": "6.16.0",
     "body-parser": {
-      "qs": "6.15.2"
+      "qs": "6.16.0"
     },
     "express": {
-      "qs": "6.15.2"
+      "qs": "6.16.0"
     }
   }
 }

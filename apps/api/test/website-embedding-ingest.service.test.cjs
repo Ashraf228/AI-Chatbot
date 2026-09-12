@@ -26,6 +26,7 @@ function createSource(overrides = {}) {
 function createGrant(overrides = {}) {
   return {
     approvalId: 'approval-1',
+    scopeKind: 'source',
     tenantId: 'tenant-1',
     siteId: 'site-1',
     sourceId: 'source-1',

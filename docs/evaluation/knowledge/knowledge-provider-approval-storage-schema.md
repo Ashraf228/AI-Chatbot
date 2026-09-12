@@ -32,6 +32,11 @@
 - It creates durable storage for future provider approval grants and audit events.
 - It does not execute in production in this task.
 - It does not seed any approval row.
+- Follow-up: `apps/api/migrations/031_query_embedding_site_runtime_grant_contract.sql`
+  - adds mandatory `scope_kind`
+  - preserves existing grants through backfill
+  - adds a dedicated `site_runtime` contract for `query_embedding`
+  - does not auto-create or auto-upgrade any grant to `site_runtime`
 
 ## Approval Grants Table
 
@@ -69,10 +74,30 @@
 - Grant constraints enforce:
   - non-empty tenant/site/provider/model/purpose/policy/evidence text fields
   - `environment IN ('production', 'non_production')`
-  - non-empty JSONB arrays for `source_types`, `usage_contexts`, and `data_categories`
+  - non-empty JSONB arrays for `usage_contexts` and `data_categories`
   - positive `embedding_dimension` when present
   - `expires_at > valid_from`
   - revocation metadata required when `revoked_at` is set
+- Migration `030` established the original contract with no explicit scope discriminator.
+- Migration `031` extends the contract additively with three required scope kinds:
+  - `source`
+  - `source_type`
+  - `site_runtime`
+- Scope-specific grant rules after `031`:
+  - `source`
+    - `source_id IS NOT NULL`
+    - `source_types` must be non-empty
+  - `source_type`
+    - `source_id IS NULL`
+    - `source_types` must be non-empty
+  - `site_runtime`
+    - `source_id IS NULL`
+    - `source_types = []`
+    - `usage_contexts = ["query_embedding"]`
+- Historical rows are backfilled only as:
+  - `source_id IS NOT NULL -> source`
+  - `source_id IS NULL -> source_type`
+- No historical row is automatically converted to `site_runtime`.
 - Added grant indexes for:
   - tenant/site lookup
   - tenant/site/source lookup
@@ -104,7 +129,8 @@
 - The schema now supports a future durable lookup on:
   - tenant
   - site
-  - optional source
+  - source or source-type scope for ingestion-style checks
+  - dedicated site-runtime scope for `query_embedding`
   - provider
   - model
   - environment
@@ -113,6 +139,7 @@
 - Default deny remains preserved.
 - Without a later storage lookup and a valid active grant, website embedding remains blocked.
 - No `runtime_readiness = ready` transition was added here.
+- Site-runtime grants still have no productive provisionierungsweg in this task.
 
 ## API / Role Follow-up
 

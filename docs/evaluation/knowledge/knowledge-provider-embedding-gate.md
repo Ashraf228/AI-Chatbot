@@ -71,6 +71,29 @@
   - `decisionCode`
   - `sanitizedMessage`
 
+## Runtime Query Embedding Extension
+
+- Update date: Tuesday, September 1, 2026
+- The stored provider-approval/grant contract is also reused for public runtime query embeddings.
+- Enforced runtime integration points:
+  - `apps/api/src/ai/chat-pipeline/chat-pipeline.service.ts`
+  - `apps/api/src/tools/tool-executor.service.ts`
+  - `apps/api/src/tools/tool-dispatcher.service.ts`
+- Public runtime query embeddings now run through the encapsulated `RuntimeQueryEmbeddingService`.
+- The runtime readiness check is an exact tenant/site existence check on active `runtime_readiness = 'ready'` sources.
+- `tenant_id IS NULL` fallback rows are not accepted for public runtime query embeddings.
+- Multiple ready sources or source types do not increase the number of approval lookups.
+- Exactly one stored `site_runtime` `query_embedding` grant lookup is evaluated per real public runtime query-embedding attempt.
+- Source-grants and source-type-grants do not authorize the public runtime query-embedding path.
+- The runtime service resolves provider and model once, binds those exact values to the grant lookup, and performs the embedding itself only after the lookup allows the call.
+- The public widget and `/chat/message` path share the same protection boundary through `ChatPipelineService`.
+- `ToolExecutorService` and `ToolDispatcherService` reuse the same boundary for `query_knowledge`.
+- On denial, the runtime returns a sanitized rule-based fallback and does not expose grant, policy, provider, or debug details to the public response.
+- `no_ready_sources` returns without embedding and without vector search.
+- This query-embedding grant does not authorize any downstream LLM call.
+- `KnowledgePreviewRetrievalService` remains outside this public runtime contract as an admin/test-only preview path and needs its own separate review.
+- No migration, no new dependency, and no public API shape change were required for this extension.
+
 ## Default Deny Behavior
 
 - Default remains `not_granted`.
