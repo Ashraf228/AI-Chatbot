@@ -161,6 +161,45 @@ Die Templates fragen keine Passwoerter, MFA-Codes, API-Keys, Tokens oder Secrets
 
 Details: `docs/IT_SUPPORT_KNOWLEDGE_TEMPLATES.md`
 
+## Kunden-Poweruser fuer IT-Wissensvorlagen
+
+Ein Kundenmitarbeiter darf freigegebene IT-Wissensvorlagen nur verwalten,
+wenn sein aktiver, persistierter Tenant-Benutzer neben der Rolle `customer`
+eine explizite Site-Zuordnung besitzt:
+
+```json
+{
+  "knowledgeManagementV1": {
+    "enabled": true,
+    "siteIds": ["assigned-site-id"]
+  }
+}
+```
+
+Die Capability wird ausschliesslich ueber den bestehenden internen
+Tenant-User-Administrationspfad vergeben. Die Customer-Endpunkte koennen sie
+weder lesen noch setzen oder erweitern. Viewer, inaktive oder abgelaufene
+Benutzer, fremde Tenants und nicht zugewiesene Sites werden serverseitig
+abgewiesen. Provider- und Grant-Operator-Capabilities ersetzen diese
+Wissens-Capability nicht.
+
+Der Dashboard-BFF stellt die folgenden site-gebundenen Funktionen bereit:
+
+- `GET /api/sites/:siteId/it-knowledge/templates`
+- `POST /api/sites/:siteId/it-knowledge/templates/import`
+- `DELETE /api/sites/:siteId/it-knowledge/templates/:sourceId`
+
+Import und Overwrite sind atomar. `skip_existing` ist bei Wiederholung
+idempotent. Importierte Vorlagen bleiben inaktive, nicht einsatzbereite
+Entwuerfe. Der Vorgang erzeugt keine Dokumente, Chunks oder Embeddings, ruft
+keinen Provider auf und erteilt keine Runtime- oder Answer-Ready-Freigabe.
+Loeschen ist nur fuer einen solchen Entwurf innerhalb des bereits
+autorisierten Tenant-/Site-Scopes erlaubt.
+
+FAQ-, Text-, PDF-, URL-, Reindex-, Aktivierungs- und Antworttest-Pfade bleiben
+ausserhalb dieser Customer-Poweruser-Freigabe. Sie duerfen erst ueber separate
+persistierte Provider- und Runtime-Vertraege freigegeben werden.
+
 ## Go-live Checklist
 
 - `it-support` Modul aktiv.

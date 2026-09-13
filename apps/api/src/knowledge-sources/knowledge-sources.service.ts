@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { Queryable } from '../db/database.service';
 import { PrismaService } from '../db/prisma.service';
 import { SitesService } from '../sites/sites.service';
 import {
@@ -222,7 +223,7 @@ export class KnowledgeSourcesService {
     ingestStatus?: KnowledgeSourceIngestStatus;
     indexStatus?: KnowledgeSourceIndexStatus;
     runtimeReadiness?: KnowledgeSourceRuntimeReadiness;
-  }) {
+  }, db: Queryable = this.db) {
     const id = randomUUID();
     const isActive = input.isActive !== false;
     const lifecycle = resolveKnowledgeSourceLifecycle({
@@ -233,7 +234,7 @@ export class KnowledgeSourcesService {
       isActive,
     });
     const urlMetadata = normalizeKnowledgeSourceUrlMetadata(input.sourceUrl);
-    await this.db.query(
+    await db.query(
       `INSERT INTO knowledge_sources(
          id,
          tenant_id,
@@ -280,6 +281,54 @@ export class KnowledgeSourcesService {
     );
 
     return id;
+  }
+
+  async replaceWithInactiveDraft(input: {
+    sourceId: string;
+    tenantId: string;
+    siteId: string;
+    label: string;
+    description?: string | null;
+    config: Record<string, unknown>;
+  }, db: Queryable = this.db) {
+    const updated = await db.query<{ id: string }>(
+      `UPDATE knowledge_sources
+       SET label = $4,
+           description = $5,
+           sync_status = 'pending',
+           is_active = false,
+           ingest_status = 'created',
+           index_status = 'not_requested',
+           runtime_readiness = 'not_ready',
+           ingest_error_code = null,
+           ingest_error_message_sanitized = null,
+           error_message = null,
+           last_synced_at = null,
+           last_ingest_at = null,
+           config = $6::jsonb,
+           updated_at = now()
+       WHERE id = $1
+         AND tenant_id = $2
+         AND site_id = $3
+         AND source_type = 'it_support_template'
+         AND is_active = false
+         AND runtime_readiness = 'not_ready'
+       RETURNING id`,
+      [
+        input.sourceId,
+        input.tenantId,
+        input.siteId,
+        input.label,
+        input.description || null,
+        JSON.stringify(normalizeRecord(input.config)),
+      ],
+    );
+    if (updated.rows.length !== 1) {
+      throw new NotFoundException('Knowledge source not found');
+    }
+
+    await db.query('DELETE FROM documents WHERE source_id = $1', [input.sourceId]);
+    return input.sourceId;
   }
 
   async setActive(sourceId: string, isActive: boolean) {

@@ -1,6 +1,7 @@
 import { KnowledgeWorkspace } from "../../../../components/knowledge/KnowledgeWorkspace";
 import { SiteTabs } from "../../../../components/layout/SiteTabs";
 import { Topbar } from "../../../../components/layout/Topbar";
+import { getDashboardSession } from "../../../../lib/auth";
 import { decodeSiteId } from "../../../../lib/site-id";
 
 export default async function SiteKnowledgePage({
@@ -10,6 +11,7 @@ export default async function SiteKnowledgePage({
 }) {
   const { siteId: rawSiteId } = await params;
   const siteId = decodeSiteId(rawSiteId);
+  const session = await getDashboardSession();
 
   return (
     <div>
@@ -25,7 +27,7 @@ export default async function SiteKnowledgePage({
             </p>
           </div>
         </div>
-        <KnowledgeWorkspace siteId={siteId} />
+        <KnowledgeWorkspace siteId={siteId} role={session?.role || null} />
       </div>
     </div>
   );

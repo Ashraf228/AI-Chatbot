@@ -24,8 +24,8 @@ export type KnowledgeManagerHandle = {
   reload: () => void;
 };
 
-export const KnowledgeManager = forwardRef<KnowledgeManagerHandle, { siteId: string }>(function KnowledgeManager(
-  { siteId },
+export const KnowledgeManager = forwardRef<KnowledgeManagerHandle, { siteId: string; readOnly?: boolean }>(function KnowledgeManager(
+  { siteId, readOnly = false },
   ref,
 ) {
   const [items, setItems] = useState<KnowledgeItem[]>([]);
@@ -157,13 +157,15 @@ export const KnowledgeManager = forwardRef<KnowledgeManagerHandle, { siteId: str
                       {item.chunkCount} Chunks · {new Date(item.createdAt).toLocaleString("de-DE")}
                     </p>
                   </div>
-                  <Button
-                    variant="danger"
-                    onClick={() => removeItem(item.id)}
-                    disabled={deletingId === item.id}
-                  >
-                    {deletingId === item.id ? "Löscht..." : "Löschen"}
-                  </Button>
+                  {!readOnly ? (
+                    <Button
+                      variant="danger"
+                      onClick={() => removeItem(item.id)}
+                      disabled={deletingId === item.id}
+                    >
+                      {deletingId === item.id ? "Löscht..." : "Löschen"}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -188,13 +190,15 @@ export const KnowledgeManager = forwardRef<KnowledgeManagerHandle, { siteId: str
                       {item.faqItems.length} Einträge · {new Date(item.createdAt).toLocaleString("de-DE")}
                     </p>
                   </div>
-                  <Button
-                    variant="danger"
-                    onClick={() => removeItem(item.id)}
-                    disabled={deletingId === item.id}
-                  >
-                    {deletingId === item.id ? "Löscht..." : "Löschen"}
-                  </Button>
+                  {!readOnly ? (
+                    <Button
+                      variant="danger"
+                      onClick={() => removeItem(item.id)}
+                      disabled={deletingId === item.id}
+                    >
+                      {deletingId === item.id ? "Löscht..." : "Löschen"}
+                    </Button>
+                  ) : null}
                 </div>
                 {item.faqItems.length > 0 ? (
                   <div className="dashboard-stack dashboard-stack--sm" style={{ marginTop: 14 }}>
@@ -234,12 +238,14 @@ export const KnowledgeManager = forwardRef<KnowledgeManagerHandle, { siteId: str
                                 {faq.answer}
                               </p>
                             </div>
-                            <Button
-                              variant="secondary"
-                              onClick={() => startEditFaq(faq.id, faq.question, faq.answer)}
-                            >
-                              Bearbeiten
-                            </Button>
+                            {!readOnly ? (
+                              <Button
+                                variant="secondary"
+                                onClick={() => startEditFaq(faq.id, faq.question, faq.answer)}
+                              >
+                                Bearbeiten
+                              </Button>
+                            ) : null}
                           </div>
                         )}
                       </div>
