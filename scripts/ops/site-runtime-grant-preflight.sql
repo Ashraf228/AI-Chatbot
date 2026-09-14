@@ -1,4 +1,4 @@
--- Read-only technical counts for the site-runtime grant concurrency migration.
+-- Read-only technical counts for site-runtime grant migrations 032 and 033.
 -- Run with a read-only transaction; this output intentionally contains no IDs or grant content.
 
 WITH invalid_windows AS (
@@ -15,7 +15,7 @@ WITH invalid_windows AS (
 SELECT 'invalid_site_runtime_purpose' AS check_name, count(*)::bigint AS row_count
 FROM provider_approval_grants
 WHERE scope_kind = 'site_runtime'
-  AND purpose IS DISTINCT FROM 'query_embedding'
+  AND purpose NOT IN ('query_embedding', 'llm_generation')
 UNION ALL
 SELECT 'invalid_site_runtime_source_or_usage_scope', count(*)::bigint
 FROM provider_approval_grants
@@ -23,7 +23,10 @@ WHERE scope_kind = 'site_runtime'
   AND (
     source_id IS NOT NULL
     OR source_types IS DISTINCT FROM '[]'::jsonb
-    OR usage_contexts IS DISTINCT FROM '["query_embedding"]'::jsonb
+    OR NOT (
+      (purpose = 'query_embedding' AND usage_contexts = '["query_embedding"]'::jsonb)
+      OR (purpose = 'llm_generation' AND usage_contexts = '["llm_generation"]'::jsonb)
+    )
   )
 UNION ALL
 SELECT 'missing_site_runtime_conflict_keys', count(*)::bigint
@@ -46,6 +49,7 @@ JOIN valid_site_runtime_windows AS right_grant
  AND left_grant.provider_key = right_grant.provider_key
  AND left_grant.model = right_grant.model
  AND left_grant.environment = right_grant.environment
+ AND left_grant.purpose = right_grant.purpose
  AND tstzrange(left_grant.valid_from, left_grant.expires_at, '[)')
      && tstzrange(right_grant.valid_from, right_grant.expires_at, '[)')
 ORDER BY check_name;

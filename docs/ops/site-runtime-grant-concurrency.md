@@ -1,7 +1,8 @@
 # Site-Runtime Grant Concurrency
 
-Migration `032_site_runtime_grant_concurrency.sql` adds database invariants for
-`provider_approval_grants` rows with `scope_kind = 'site_runtime'`. It does not
+Migrations `032_site_runtime_grant_concurrency.sql` and
+`033_site_runtime_llm_generation_grant_contract.sql` add database invariants for
+`provider_approval_grants` rows with `scope_kind = 'site_runtime'`. They do not
 create grants, activate a provider, or authorize runtime use.
 
 ## Preflight
@@ -20,15 +21,18 @@ the migration's own validation.
 
 ## Database Contract
 
-For `site_runtime`, `purpose` must be exactly `query_embedding`; the existing
-scope checks also require `source_id IS NULL`, empty `source_types`, and exactly
-`["query_embedding"]` in `usage_contexts`.
+Migration 032 initially constrained `site_runtime` to `query_embedding`.
+Migration 033 adds the separate exact pair `purpose = llm_generation` and
+`usage_contexts = ["llm_generation"]`. The query-embedding pair remains exact and
+unchanged. Both purposes require `source_id IS NULL` and empty `source_types`;
+neither purpose authorizes the other.
 
-The partial exclusion constraint applies only to non-revoked site-runtime
-query-embedding rows. Its equality binding is `tenant_id`, `site_id`,
-`provider_key`, `model`, and `environment`; `scope_kind` and `purpose` are
-constant within the partial predicate. Validity uses `[valid_from, expires_at)`,
-so adjacent windows are valid while overlapping windows are rejected.
+Separate partial exclusion constraints apply to non-revoked query-embedding and
+LLM-generation rows. Their equality binding is `tenant_id`, `site_id`,
+`provider_key`, `model`, and `environment`; validity uses
+`[valid_from, expires_at)`, so adjacent windows are valid while overlapping
+windows for the same purpose are rejected. A query-embedding grant and an LLM
+generation grant can coexist because they authorize different provider uses.
 
 ## Operational Requirements
 
@@ -76,5 +80,15 @@ verification succeed, provisioning and activation must not rely on the removed
 database guarantees.
 
 Do not blindly remove `btree_gist`: it can be shared by other constraints or
-indexes. Rollback removes the new data guarantees and is not a deployment,
-provider, public-widget, or runtime activation approval.
+indexes.
+
+To roll back migration 033, first prove that no row with
+`purpose = 'llm_generation'` remains, including revoked rows. Do not reinterpret
+such rows as query-embedding grants. Then a separately reviewed forward-recovery
+migration may drop `provider_approval_grants_site_runtime_llm_no_overlap` and
+restore the query-only purpose and usage checks. The migration runner has no
+down-migration path, so never edit `schema_migrations` or alter these constraints
+manually on an operational database.
+
+Rollback removes the new data guarantees and is not a deployment, provider,
+public-widget, or runtime activation approval.
