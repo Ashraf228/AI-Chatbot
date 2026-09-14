@@ -5,6 +5,7 @@ import {
   type ProviderApprovalPolicy,
   type ProviderApprovalPolicyDecisionCode,
   type ProviderApprovalScopeKind,
+  type ProviderApprovalUsageContext,
 } from './provider-approval-policy';
 import type {
   ProviderEmbeddingEnvironment,
@@ -76,12 +77,16 @@ export type ProviderApprovalStorageLookupDecision = {
   policyDecision?: ProviderApprovalPolicyDecisionCode | null;
 };
 
-type SiteRuntimeQueryEmbeddingGrantCandidates =
+type SiteRuntimeGrantCandidates =
   | { kind: 'not_found'; policies: [] }
   | { kind: 'single'; policies: [ProviderApprovalPolicy] }
   | { kind: 'ambiguous'; policies: ProviderApprovalPolicy[] };
 
 const SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE = 'query_embedding';
+const SITE_RUNTIME_LLM_GENERATION_PURPOSE = 'llm_generation';
+type SiteRuntimeGrantPurpose =
+  | typeof SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE
+  | typeof SITE_RUNTIME_LLM_GENERATION_PURPOSE;
 
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -262,7 +267,10 @@ export type ProviderApprovalSiteRuntimeLookupInput = {
   now?: Date | string | null;
 };
 
-export function buildSiteRuntimeQueryEmbeddingLookupQuery(input: ProviderApprovalSiteRuntimeLookupInput): {
+function buildSiteRuntimeLookupQuery(
+  input: ProviderApprovalSiteRuntimeLookupInput,
+  purpose: SiteRuntimeGrantPurpose,
+): {
   sql: string;
   params: readonly unknown[];
 } {
@@ -323,7 +331,13 @@ export function buildSiteRuntimeQueryEmbeddingLookupQuery(input: ProviderApprova
         AND purpose = $7
         AND source_id IS NULL
         AND source_types = '[]'::jsonb
-        AND usage_contexts = '["query_embedding"]'::jsonb
+        AND usage_contexts = $8::jsonb
+        AND EXISTS (
+          SELECT 1
+          FROM sites
+          WHERE sites.id = $2
+            AND sites.tenant_id = $1
+        )
       ORDER BY
         valid_from DESC,
         created_at DESC
@@ -336,9 +350,24 @@ export function buildSiteRuntimeQueryEmbeddingLookupQuery(input: ProviderApprova
       normalized.model,
       normalized.environment,
       normalized.now,
-      SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE,
+      purpose,
+      JSON.stringify([purpose]),
     ],
   };
+}
+
+export function buildSiteRuntimeQueryEmbeddingLookupQuery(input: ProviderApprovalSiteRuntimeLookupInput): {
+  sql: string;
+  params: readonly unknown[];
+} {
+  return buildSiteRuntimeLookupQuery(input, SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE);
+}
+
+export function buildSiteRuntimeLlmGenerationLookupQuery(input: ProviderApprovalSiteRuntimeLookupInput): {
+  sql: string;
+  params: readonly unknown[];
+} {
+  return buildSiteRuntimeLookupQuery(input, SITE_RUNTIME_LLM_GENERATION_PURPOSE);
 }
 
 export function mapProviderApprovalGrantRow(row: ProviderApprovalGrantRow | null | undefined): ProviderApprovalPolicy | null {
@@ -388,11 +417,15 @@ export function mapProviderApprovalGrantRow(row: ProviderApprovalGrantRow | null
     return null;
   }
 
-  if (
-    scopeKind === 'site_runtime' &&
-    (hasText(row.source_id) || sourceTypes.length !== 0 || usageContexts.length !== 1 || usageContexts[0] !== 'query_embedding')
-  ) {
-    return null;
+  if (scopeKind === 'site_runtime') {
+    const hasValidRuntimePurposeUsagePair =
+      (row.purpose === SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE &&
+        usageContexts.length === 1 && usageContexts[0] === SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE) ||
+      (row.purpose === SITE_RUNTIME_LLM_GENERATION_PURPOSE &&
+        usageContexts.length === 1 && usageContexts[0] === SITE_RUNTIME_LLM_GENERATION_PURPOSE);
+    if (hasText(row.source_id) || sourceTypes.length !== 0 || !hasValidRuntimePurposeUsagePair) {
+      return null;
+    }
   }
 
   return {
@@ -402,7 +435,7 @@ export function mapProviderApprovalGrantRow(row: ProviderApprovalGrantRow | null
     siteId: row.site_id.trim(),
     sourceId: hasText(row.source_id) ? row.source_id.trim() : null,
     sourceTypes,
-    usageContexts: usageContexts as ProviderEmbeddingUsageContext[],
+    usageContexts: usageContexts as ProviderApprovalUsageContext[],
     environment: row.environment.trim() as ProviderEmbeddingEnvironment,
     provider: row.provider_key.trim(),
     model: row.model.trim(),
@@ -479,15 +512,17 @@ export function evaluateStoredProviderApprovalGrant(
 export class ProviderApprovalStorageLookupService {
   constructor(private readonly db: PrismaService) {}
 
-  private async loadSiteRuntimeQueryEmbeddingGrantCandidates(
+  private async loadSiteRuntimeGrantCandidates(
     input: ProviderApprovalSiteRuntimeLookupInput,
-  ): Promise<SiteRuntimeQueryEmbeddingGrantCandidates> {
-    const { sql, params } = buildSiteRuntimeQueryEmbeddingLookupQuery(input);
+    purpose: SiteRuntimeGrantPurpose,
+  ): Promise<SiteRuntimeGrantCandidates> {
+    const { sql, params } = buildSiteRuntimeLookupQuery(input, purpose);
     const res = await this.db.query<ProviderApprovalGrantRow>(sql, params);
     const policies = res.rows
       .map((row) => mapProviderApprovalGrantRow(row))
       // Keep mocks and malformed database rows fail-closed like the SQL filter.
-      .filter((policy) => policy?.purpose === SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE)
+      .filter((policy) => policy?.purpose === purpose)
+      .filter((policy) => policy?.usageContexts.length === 1 && policy.usageContexts[0] === purpose)
       .filter(Boolean) as ProviderApprovalPolicy[];
 
     if (policies.length === 0) {
@@ -547,8 +582,9 @@ export class ProviderApprovalStorageLookupService {
     }
   }
 
-  async evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage(
+  private async evaluateSiteRuntimeApprovalFromStorage(
     input: ProviderApprovalSiteRuntimeLookupInput,
+    purpose: SiteRuntimeGrantPurpose,
   ): Promise<ProviderApprovalStorageLookupDecision> {
     try {
       const normalized = trimLookupInput({
@@ -567,7 +603,7 @@ export class ProviderApprovalStorageLookupService {
         );
       }
 
-      const candidates = await this.loadSiteRuntimeQueryEmbeddingGrantCandidates(input);
+      const candidates = await this.loadSiteRuntimeGrantCandidates(input, purpose);
 
       if (candidates.kind === 'not_found') {
         return deny(
@@ -590,7 +626,7 @@ export class ProviderApprovalStorageLookupService {
         siteId: input.siteId,
         sourceId: null,
         sourceType: null,
-        usageContext: 'query_embedding',
+        usageContext: purpose,
         environment: input.environment,
         providerKey: input.providerKey,
         model: input.model,
@@ -605,5 +641,17 @@ export class ProviderApprovalStorageLookupService {
         'Der technische Approval-Storage-Lookup konnte nicht bestaetigt werden.',
       );
     }
+  }
+
+  async evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage(
+    input: ProviderApprovalSiteRuntimeLookupInput,
+  ): Promise<ProviderApprovalStorageLookupDecision> {
+    return this.evaluateSiteRuntimeApprovalFromStorage(input, SITE_RUNTIME_QUERY_EMBEDDING_PURPOSE);
+  }
+
+  async evaluateSiteRuntimeLlmGenerationApprovalFromStorage(
+    input: ProviderApprovalSiteRuntimeLookupInput,
+  ): Promise<ProviderApprovalStorageLookupDecision> {
+    return this.evaluateSiteRuntimeApprovalFromStorage(input, SITE_RUNTIME_LLM_GENERATION_PURPOSE);
   }
 }

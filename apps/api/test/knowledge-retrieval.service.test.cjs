@@ -310,8 +310,8 @@ test('ChatPipeline evaluation mode bypasses general agent orchestrator and keeps
   assert.equal(result.sources[0].title, 'Reisepass beantragen');
 });
 
-test('ChatPipeline adds IT support answer guidance to routed prompt', async () => {
-  const calls = { systemPrompt: '' };
+test('ChatPipeline adds IT support answer guidance and passes server-derived LLM scope', async () => {
+  const calls = { systemPrompt: '', llmContext: null };
   const db = {
     async query() {
       return { rows: [] };
@@ -332,8 +332,9 @@ test('ChatPipeline adds IT support answer guidance to routed prompt', async () =
     db,
     { async search() { return []; } },
     {
-      async answer(systemPrompt) {
+      async answer(systemPrompt, _userPrompt, context) {
         calls.systemPrompt = systemPrompt;
+        calls.llmContext = context;
         return {
           text: 'Allgemeine sichere Schritte. Hat das geholfen? Falls nicht, kann ich ein Support-Ticket öffnen.',
           usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
@@ -376,6 +377,7 @@ test('ChatPipeline adds IT support answer guidance to routed prompt', async () =
   assert.match(calls.systemPrompt, /Hat das geholfen/i);
   assert.match(calls.systemPrompt, /Passwörtern|Passwoertern/i);
   assert.match(calls.systemPrompt, /MFA-Codes/i);
+  assert.deepEqual(calls.llmContext, { tenantId: 'tenant-1', siteId: 'site-1' });
 });
 
 test('ChatPipeline advisor route returns safe product fallback without catalog or knowledge', async () => {

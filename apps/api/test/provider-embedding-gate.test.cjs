@@ -160,6 +160,7 @@ test('ProviderEmbeddingGate denies a site_runtime policy for source-scoped inges
       sourceId: null,
       sourceTypes: [],
       usageContexts: ['query_embedding'],
+      purpose: 'query_embedding',
     }),
   });
 

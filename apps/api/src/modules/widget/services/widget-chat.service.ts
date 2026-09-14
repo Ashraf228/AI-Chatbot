@@ -23,12 +23,10 @@ type MessageRow = {
   created_at: string;
 };
 
+const PUBLIC_STREAM_ERROR = 'Die Streaming-Antwort ist derzeit nicht verfuegbar.';
+
 @Injectable()
 export class WidgetChatService {
-  private getErrorMessage(error: unknown, fallback: string) {
-    return error instanceof Error ? error.message : fallback;
-  }
-
   constructor(
     private readonly widgetConfigService: WidgetConfigService,
     private readonly db: PrismaService,
@@ -128,6 +126,7 @@ export class WidgetChatService {
       res.write(`${JSON.stringify(payload)}\n`);
     };
 
+    let responseChunkWritten = false;
     try {
       await this.chatPipeline.stream(
         {
@@ -147,12 +146,21 @@ export class WidgetChatService {
           conversationFlow: site.conversationFlow,
           sourceUrl: req?.headers.referer as string | undefined,
         },
-        async (event) => this.writeLegacyStreamEvent(event, writeEvent),
+        async (event) => {
+          if (event.type === 'token') {
+            responseChunkWritten = true;
+          }
+          this.writeLegacyStreamEvent(event, writeEvent);
+        },
       );
-    } catch (error: unknown) {
+    } catch {
+      logEvent('widget_chat_stream_failed', {
+        siteId: site.id,
+        responseChunkWritten,
+      });
       writeEvent({
         type: 'error',
-        message: this.getErrorMessage(error, 'Streaming failed'),
+        message: PUBLIC_STREAM_ERROR,
       });
     } finally {
       res.end();
@@ -227,7 +235,7 @@ export class WidgetChatService {
         });
         return;
       case 'error':
-        writeEvent({ type: 'error', message: event.message });
+        writeEvent({ type: 'error', message: PUBLIC_STREAM_ERROR });
         return;
       case 'sources':
       case 'tool_event':

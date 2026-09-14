@@ -4,6 +4,7 @@ import type {
 } from './provider-embedding-gate';
 
 export type ProviderApprovalScopeKind = 'source' | 'source_type' | 'site_runtime';
+export type ProviderApprovalUsageContext = ProviderEmbeddingUsageContext | 'llm_generation';
 
 export type ProviderApprovalPolicyDecisionCode =
   | 'allowed'
@@ -34,7 +35,7 @@ export type ProviderApprovalPolicy = {
   siteId: string;
   sourceId?: string | null;
   sourceTypes: string[];
-  usageContexts: ProviderEmbeddingUsageContext[];
+  usageContexts: ProviderApprovalUsageContext[];
   environment: ProviderEmbeddingEnvironment;
   provider: string;
   model: string;
@@ -283,7 +284,12 @@ function validateScopeSpecificPolicyFields(policy: ProviderApprovalPolicy): Prov
     );
   }
 
-  if (usageContexts.length !== 1 || usageContexts[0] !== 'query_embedding') {
+  const purpose = policy.purpose.trim();
+  const hasValidRuntimePurposeUsagePair =
+    (purpose === 'query_embedding' && usageContexts.length === 1 && usageContexts[0] === 'query_embedding') ||
+    (purpose === 'llm_generation' && usageContexts.length === 1 && usageContexts[0] === 'llm_generation');
+
+  if (!hasValidRuntimePurposeUsagePair) {
     return deny(
       'usage_context_not_allowed',
       'policy_site_runtime_usage_context_invalid',
