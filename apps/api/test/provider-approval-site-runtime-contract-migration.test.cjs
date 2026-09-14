@@ -9,9 +9,9 @@ function readMigration(name) {
   return fs.readFileSync(path.join(migrationsDir, name), 'utf8');
 }
 
-test('site runtime concurrency migration uses the next free migration number', () => {
+test('site runtime LLM generation contract uses the next free migration number', () => {
   const files = fs.readdirSync(migrationsDir).filter((entry) => /^\d+_.*\.sql$/i.test(entry)).sort();
-  assert.equal(files.at(-1), '032_site_runtime_grant_concurrency.sql');
+  assert.equal(files.at(-1), '033_site_runtime_llm_generation_grant_contract.sql');
 });
 
 test('032 migration validates site-runtime purpose and prevents overlapping active windows', () => {
@@ -57,4 +57,24 @@ test('031 migration constrains site_runtime usage and adds a dedicated lookup in
   assert.match(sql, /ALTER COLUMN scope_kind SET NOT NULL/i);
   assert.match(sql, /CREATE INDEX IF NOT EXISTS provider_approval_grants_site_runtime_lookup_idx/i);
   assert.match(sql, /scope_kind = 'site_runtime'/i);
+});
+
+test('033 migration adds only exact query-embedding and LLM-generation runtime pairs', () => {
+  const sql = readMigration('033_site_runtime_llm_generation_grant_contract.sql');
+  assert.match(sql, /purpose = 'query_embedding' AND usage_contexts = '\["query_embedding"\]'::jsonb/i);
+  assert.match(sql, /purpose = 'llm_generation' AND usage_contexts = '\["llm_generation"\]'::jsonb/i);
+  assert.match(sql, /purpose IN \('query_embedding', 'llm_generation'\)/i);
+  assert.doesNotMatch(sql, /INSERT INTO provider_approval_grants/i);
+  assert.doesNotMatch(sql, /UPDATE provider_approval_grants/i);
+});
+
+test('033 migration keeps query overlap protection and adds separate LLM overlap protection', () => {
+  const previousSql = readMigration('032_site_runtime_grant_concurrency.sql');
+  const sql = readMigration('033_site_runtime_llm_generation_grant_contract.sql');
+  assert.match(previousSql, /provider_approval_grants_site_runtime_no_overlap/i);
+  assert.match(sql, /provider_approval_grants_site_runtime_llm_no_overlap/i);
+  assert.match(sql, /EXCLUDE USING gist/i);
+  assert.match(sql, /tstzrange\(valid_from, expires_at, '\[\)'\) WITH &&/i);
+  assert.match(sql, /revoked_at IS NULL/i);
+  assert.match(sql, /purpose = 'llm_generation'/i);
 });
