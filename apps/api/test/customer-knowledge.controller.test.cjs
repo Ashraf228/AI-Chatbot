@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { NotFoundException } = require('@nestjs/common');
+const { ConflictException, NotFoundException } = require('@nestjs/common');
 const { Test } = require('@nestjs/testing');
 
 const { AuditLogService } = require('../dist/audit-logs/audit-log.service.js');
@@ -104,6 +104,9 @@ class FakeTemplateService {
 
   async deleteItKnowledgeTemplateDraft(input) {
     this.calls.push({ method: 'delete', input });
+    if (input.sourceId === 'source-with-document') {
+      throw new ConflictException('Knowledge source contains documents');
+    }
     if (input.sourceId !== 'source-1') throw new NotFoundException('Knowledge source not found');
     return { ok: true, siteId: input.siteId, sourceId: input.sourceId, providerCallsUsed: false };
   }
@@ -263,6 +266,21 @@ test('rejects a foreign or manipulated source id without deleting another resour
     { method: 'DELETE', token: validToken },
   );
   assert.equal(response.status, 404);
+  assert.equal(harness.audit.calls.length, 0);
+});
+
+test('returns a sanitized conflict when the owned draft still has documents', async () => {
+  const response = await request(
+    harness,
+    `/customer/it-knowledge/${SITE_ID}/templates/source-with-document`,
+    { method: 'DELETE', token: validToken },
+  );
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    message: 'Knowledge source contains documents',
+    error: 'Conflict',
+    statusCode: 409,
+  });
   assert.equal(harness.audit.calls.length, 0);
 });
 

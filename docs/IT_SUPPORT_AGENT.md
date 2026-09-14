@@ -194,7 +194,9 @@ idempotent. Importierte Vorlagen bleiben inaktive, nicht einsatzbereite
 Entwuerfe. Der Vorgang erzeugt keine Dokumente, Chunks oder Embeddings, ruft
 keinen Provider auf und erteilt keine Runtime- oder Answer-Ready-Freigabe.
 Loeschen ist nur fuer einen solchen Entwurf innerhalb des bereits
-autorisierten Tenant-/Site-Scopes erlaubt.
+autorisierten Tenant-/Site-Scopes erlaubt. Sobald noch ein Dokument mit dem
+Entwurf verbunden ist, wird die Loeschung atomar mit Konflikt abgewiesen;
+Dokumente und Chunks werden dabei nicht automatisch entfernt.
 
 FAQ-, Text-, PDF-, URL-, Reindex-, Aktivierungs- und Antworttest-Pfade bleiben
 ausserhalb dieser Customer-Poweruser-Freigabe. Sie duerfen erst ueber separate

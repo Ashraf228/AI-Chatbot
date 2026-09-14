@@ -219,6 +219,33 @@ export class ItKnowledgeTemplateImportService {
 
     return this.db.transaction(async (tx) => {
       await this.assertSiteBelongsToTenant(siteId, tenantId, tx);
+      const source = await tx.query<{ id: string }>(
+        `SELECT id
+         FROM knowledge_sources
+         WHERE id = $1
+           AND tenant_id = $2
+           AND site_id = $3
+           AND source_type = 'it_support_template'
+           AND is_active = false
+           AND runtime_readiness = 'not_ready'
+         FOR UPDATE`,
+        [sourceId, tenantId, siteId],
+      );
+      if (source.rows.length !== 1) {
+        throw new NotFoundException('Knowledge source not found');
+      }
+
+      const document = await tx.query<{ id: string }>(
+        `SELECT id
+         FROM documents
+         WHERE source_id = $1
+         LIMIT 1`,
+        [sourceId],
+      );
+      if (document.rows.length > 0) {
+        throw new ConflictException('Knowledge source contains documents');
+      }
+
       const deleted = await tx.query<{ id: string }>(
         `DELETE FROM knowledge_sources
          WHERE id = $1

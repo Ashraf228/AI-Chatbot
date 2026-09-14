@@ -37,7 +37,18 @@ function createHarness(options = {}) {
           && params[2] === 'site-1';
         return { rows: allowed ? [{ id: params[0] }] : [] };
       }
+      if (/FROM documents/i.test(sql)) {
+        return { rows: options.documentSourceId === params[0] ? [{ id: 'document-1' }] : [] };
+      }
       if (/FROM knowledge_sources/i.test(sql)) {
+        if (/FOR UPDATE/i.test(sql)) {
+          const allowed = options.deletableSourceId === params[0]
+            && siteTenantId === params[1]
+            && params[2] === 'site-1'
+            && options.deletableSourceIsActive !== true
+            && (options.deletableSourceRuntimeReadiness || 'not_ready') === 'not_ready';
+          return { rows: allowed ? [{ id: params[0] }] : [] };
+        }
         const sourceId = existingByTemplateKey.get(params[2]);
         return {
           rows: sourceId ? [{
@@ -305,4 +316,48 @@ test('deletes only an inactive template draft in the exact tenant and site scope
     }),
     /Knowledge source not found/,
   );
+});
+
+test('locks the eligible draft and rejects deletion when any document remains attached', async () => {
+  const harness = createHarness({
+    deletableSourceId: 'source-with-document',
+    documentSourceId: 'source-with-document',
+  });
+
+  await assert.rejects(
+    () => harness.service.deleteItKnowledgeTemplateDraft({
+      tenantId: 'tenant-1',
+      siteId: 'site-1',
+      sourceId: 'source-with-document',
+    }),
+    (error) => error?.status === 409 && error?.message === 'Knowledge source contains documents',
+  );
+
+  const sourceLockIndex = harness.state.queries.findIndex(
+    ({ sql }) => /FROM knowledge_sources/i.test(sql) && /FOR UPDATE/i.test(sql),
+  );
+  const documentReadIndex = harness.state.queries.findIndex(({ sql }) => /FROM documents/i.test(sql));
+  assert.ok(sourceLockIndex >= 0);
+  assert.ok(documentReadIndex > sourceLockIndex);
+  assert.equal(harness.state.queries.some(({ sql }) => /DELETE FROM knowledge_sources/i.test(sql)), false);
+  assert.equal(harness.state.rolledBack, true);
+});
+
+test('keeps foreign, active, and ready template sources protected from deletion', async () => {
+  for (const options of [
+    { deletableSourceId: 'source-protected', siteTenantId: 'tenant-2' },
+    { deletableSourceId: 'source-protected', deletableSourceIsActive: true },
+    { deletableSourceId: 'source-protected', deletableSourceRuntimeReadiness: 'ready' },
+  ]) {
+    const harness = createHarness(options);
+    await assert.rejects(
+      () => harness.service.deleteItKnowledgeTemplateDraft({
+        tenantId: 'tenant-1',
+        siteId: 'site-1',
+        sourceId: 'source-protected',
+      }),
+    );
+    assert.equal(harness.state.queries.some(({ sql }) => /DELETE FROM knowledge_sources/i.test(sql)), false);
+    assert.equal(harness.state.rolledBack, true);
+  }
 });

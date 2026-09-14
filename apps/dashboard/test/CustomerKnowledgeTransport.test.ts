@@ -200,6 +200,24 @@ test("maps an owned draft deletion to the fixed API route", async () => {
   assert.equal(current.calls[0].init.body, undefined);
 });
 
+test("maps document conflicts to the fixed public error without leaking backend details", async () => {
+  const current = harness(() => Response.json({
+    message: "document id and database detail",
+    internalPolicy: "must-not-leak",
+  }, { status: 409 }));
+  const response = await current.forward(request("DELETE"), "delete", {
+    siteId: "site-1",
+    sourceId: "source-with-document",
+  });
+  assert.equal(response.status, 409);
+  const responseBody = await body(response);
+  assert.deepEqual(responseBody, {
+    message: "Die Wissensvorlage konnte nicht übernommen werden.",
+  });
+  assert.equal(JSON.stringify(responseBody).includes("document id"), false);
+  assert.equal(JSON.stringify(responseBody).includes("internalPolicy"), false);
+});
+
 test("sanitizes redirects, backend details, and malformed success responses", async () => {
   const cases = [
     () => new Response(null, { status: 307, headers: { Location: "https://foreign.synthetic.invalid" } }),
