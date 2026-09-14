@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
 import { KnowledgeManager } from "../components/knowledge/KnowledgeManager";
+import { KnowledgeWorkspace } from "../components/knowledge/KnowledgeWorkspace";
 
 describe("KnowledgeManager", () => {
   test("loads saved FAQ/PDF entries and updates an FAQ answer", async () => {
@@ -84,5 +85,48 @@ describe("KnowledgeManager", () => {
     expect(
       await screen.findByText("KI, Automatisierung und smarte Prozesse."),
     ).toBeInTheDocument();
+  });
+
+  test("keeps existing knowledge read-only for customer sessions", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([{
+        id: "faq-doc-1",
+        type: "faq",
+        title: "FAQ",
+        sourceUrl: "",
+        createdAt: "2026-04-28T10:00:00.000Z",
+        chunkCount: 1,
+        faqItems: [{ id: "faq-1", question: "Frage", answer: "Antwort" }],
+      }]), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<KnowledgeManager siteId="site-1" readOnly />);
+
+    expect(await screen.findByText("Frage")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Bearbeiten" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Löschen" })).not.toBeInTheDocument();
+  });
+
+  test("keeps viewers read-only and hides all knowledge import controls", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      Response.json([{
+        id: "faq-doc-1",
+        type: "faq",
+        title: "FAQ",
+        sourceUrl: "",
+        createdAt: "2026-04-28T10:00:00.000Z",
+        chunkCount: 1,
+        faqItems: [{ id: "faq-1", question: "Viewer-Frage", answer: "Viewer-Antwort" }],
+      }]),
+    ));
+
+    render(<KnowledgeWorkspace siteId="site-1" role="viewer" />);
+
+    expect(await screen.findByText("Viewer-Frage")).toBeInTheDocument();
+    expect(screen.queryByText("Wissen hinzufügen")).not.toBeInTheDocument();
+    expect(screen.queryByText("Freigegebene Wissensvorlagen")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Bearbeiten" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Löschen" })).not.toBeInTheDocument();
   });
 });
