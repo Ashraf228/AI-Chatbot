@@ -138,3 +138,42 @@ No real provider, email, webhook, customer system, staging, or production call w
 3. `KNOWLEDGE_INGEST_PROVIDER_GATE_1`: shared gate for FAQ/manual/PDF/re-index embeddings after the grant contract is available.
 4. `STREAMING_USAGE_ACCOUNTING_1`: complete token and cost accounting independently of authorization.
 5. Staging and limited-pilot gates only after the implementation packages are independently reviewed and integrated.
+
+## Workstream C: site-runtime LLM generation grant
+
+Status: runtime split implemented and locally verified on `ffae00b5795615da9ae03d73a0ef570a7ddff8e7`; independent review, integration, operational migration, provisioning, and activation remain pending
+
+### Path and contract matrix
+
+| Entry and server-side scope | Provider path | Runtime authorization boundary | Required contract |
+| --- | --- | --- | --- |
+| Public chat API resolves the site and its tenant before `ChatPipelineService.process` | `LlmService.answer` -> OpenAI chat completion | fresh exact `site_runtime` LLM-generation grant for that tenant and site | grant check immediately before the normal provider attempt |
+| Public widget resolves the site by site key before `process` or `stream` | `LlmService.answer` / `streamAnswer` -> OpenAI chat completion | the same exact tenant/site grant | grant check immediately before normal or streamed provider creation |
+| Internal evaluation derives tenant and site from the persisted evaluation access context | `LlmService.answer` -> OpenAI chat completion | the same exact tenant/site grant | evaluation mode is not an authorization bypass |
+
+- `LlmService` is the only direct chat-generation provider adapter. There is no current provider fallback, and OpenAI SDK retries are disabled with `maxRetries: 0`.
+- A later fallback or retry must re-enter the same authorization boundary for every outgoing attempt.
+- `purpose=query_embedding` and embedding/ingestion usage contexts never authorize generation. The generation contract uses its own exact purpose and usage context.
+- The runtime provider is `openai`; the only permitted endpoint is `https://api.openai.com/v1`, redirects are rejected, and any different `OPENAI_BASE_URL` fails closed before an HTTP request.
+- `OPENAI_MODEL` is normalized and validated once per logical call, and that exact value is used by both the grant lookup and outgoing request. The deployment environment is resolved by the existing site-runtime environment contract.
+- The site must exist under the supplied tenant. Missing context, ownership mismatch, invalid environment, storage failure, missing/ambiguous/expired/revoked grant, or any binding mismatch fails closed before provider creation.
+- Grant decisions are read from storage for every logical attempt; no approval cache or implicit legacy fallback is introduced.
+- Public denial and widget-stream error text is fixed and contains no grant identifier, policy reason, provider detail, storage error, or SDK response.
+
+### Runtime split
+
+1. Migration 033 and its schema, rollback, and preflight evidence are already integrated on the `main` baseline. This runtime split does not modify any migration or operational SQL.
+2. The storage policy mapper and lookup add a purpose-specific LLM-generation query with exact tenant, site, provider, model, environment, and site-ownership checks while preserving query-embedding behavior.
+3. `LlmService` performs a fresh ownership and grant check immediately before both normal and streamed provider calls, using the server-derived tenant and site context from the pipeline.
+4. Synthetic SDK transports and a disposable PostgreSQL 16 integration test cover the persisted grant boundary without provider-live traffic.
+5. Streaming usage accounting, grant administration, operational migration, provisioning, deployment, and activation remain separate work.
+
+### Local verification status
+
+- API build and all repository typechecks pass under Node 24.17.0 and npm 11.12.1.
+- The focused LLM-generation, storage-policy, query-embedding, retrieval, provider-embedding, and widget-stream suites pass 93/93, including actual SDK normal/stream transport and disabled SDK logging under `OPENAI_LOG=debug`.
+- The disposable PostgreSQL 16 runtime suite passes 1/1 against migrations through 033. It proves persisted-grant allowance plus revoked, query-only, and cross-tenant denial with no additional HTTP attempt, and leaves no task-owned container or volume behind.
+- The API smoke suite passes 899 tests with nine expected opt-in database skips; Authorization Matrix passes 281/281 and Security Boundaries passes 70/70.
+- All five production dependency-audit contexts, preflight, the uncommitted-worktree sensitive scan, and tracked/untracked diff checks pass.
+- Earlier independent-review findings from the combined source package are represented by SDK-transport, widget-stream, runtime-configuration, rollback-contract, and setup-cleanup regressions. This derived runtime split still requires its own independent review before Ready for review.
+- Migration 033 has not been applied to an operational database. No LLM-generation grant exists or is provisioned by this package, no provider-live call was made, and public-widget, staging, production, pilot, or enterprise activation remains unauthorized.

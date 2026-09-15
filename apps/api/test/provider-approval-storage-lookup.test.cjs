@@ -92,12 +92,14 @@ test('buildSiteRuntimeQueryEmbeddingLookupQuery keeps runtime scope explicit and
   assert.match(sql, /scope_kind = 'site_runtime'/i);
   assert.match(sql, /purpose = \$7/i);
   assert.match(sql, /source_types = '\[\]'::jsonb/i);
-  assert.match(sql, /usage_contexts = '\["query_embedding"\]'::jsonb/i);
+  assert.match(sql, /usage_contexts = \$8::jsonb/i);
+  assert.match(sql, /FROM sites[\s\S]*sites\.id = \$2[\s\S]*sites\.tenant_id = \$1/i);
   assert.match(sql, /LIMIT 2/i);
   assert.equal(sql.includes(input.tenantId), false);
   assert.equal(params[0], input.tenantId);
   assert.equal(params[4], 'production');
   assert.equal(params[6], 'query_embedding');
+  assert.equal(params[7], '["query_embedding"]');
 });
 
 test('mapProviderApprovalGrantRow returns null for malformed JSON arrays and invalid scope combinations', () => {

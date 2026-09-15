@@ -53,13 +53,14 @@ test('validateProviderApprovalPolicy accepts a fully scoped synthetic contract',
   assert.equal(decision.decisionCode, 'allowed');
 });
 
-test('validateProviderApprovalPolicy accepts a site_runtime contract only with empty sourceTypes and exact query_embedding usage', () => {
+test('validateProviderApprovalPolicy accepts only exact site_runtime purpose and usage pairs', () => {
   const allowed = validateProviderApprovalPolicy({
     policy: createPolicy({
       scopeKind: 'site_runtime',
       sourceId: null,
       sourceTypes: [],
       usageContexts: ['query_embedding'],
+      purpose: 'query_embedding',
     }),
     environment: 'non_production',
   });
@@ -71,6 +72,7 @@ test('validateProviderApprovalPolicy accepts a site_runtime contract only with e
       sourceId: null,
       sourceTypes: ['url'],
       usageContexts: ['query_embedding'],
+      purpose: 'query_embedding',
     }),
   });
   assert.equal(withSourceTypes.allowed, false);
@@ -82,10 +84,36 @@ test('validateProviderApprovalPolicy accepts a site_runtime contract only with e
       sourceId: null,
       sourceTypes: [],
       usageContexts: ['query_embedding', 'knowledge_reindex'],
+      purpose: 'query_embedding',
     }),
   });
   assert.equal(withWrongUsage.allowed, false);
   assert.equal(withWrongUsage.decisionCode, 'usage_context_not_allowed');
+
+  const llmAllowed = validateProviderApprovalPolicy({
+    policy: createPolicy({
+      scopeKind: 'site_runtime',
+      sourceId: null,
+      sourceTypes: [],
+      usageContexts: ['llm_generation'],
+      purpose: 'llm_generation',
+    }),
+    environment: 'non_production',
+  });
+  assert.equal(llmAllowed.allowed, true);
+
+  const crossPurposeUsage = validateProviderApprovalPolicy({
+    policy: createPolicy({
+      scopeKind: 'site_runtime',
+      sourceId: null,
+      sourceTypes: [],
+      usageContexts: ['query_embedding'],
+      purpose: 'llm_generation',
+    }),
+    environment: 'non_production',
+  });
+  assert.equal(crossPurposeUsage.allowed, false);
+  assert.equal(crossPurposeUsage.decisionCode, 'usage_context_not_allowed');
 });
 
 test('evaluateProviderApprovalPolicy denies source-id mismatch even with valid policy metadata', () => {
@@ -129,6 +157,7 @@ test('evaluateProviderApprovalPolicy keeps source_type fallback valid but denies
       sourceId: null,
       sourceTypes: [],
       usageContexts: ['query_embedding'],
+      purpose: 'query_embedding',
     }),
     tenantId: 'tenant-1',
     siteId: 'site-1',
@@ -151,7 +180,7 @@ test('evaluateProviderApprovalPolicy allows only explicit site_runtime checks fo
       sourceId: null,
       sourceTypes: [],
       usageContexts: ['query_embedding'],
-      purpose: 'query_embedding_runtime_gate',
+      purpose: 'query_embedding',
     }),
     tenantId: 'tenant-1',
     siteId: 'site-1',

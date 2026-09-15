@@ -9,7 +9,6 @@ import { ChatModule } from './chat/chat.module';
 import { PrismaService } from './db/prisma.service';
 import { VectorService } from './vector/vector.service';
 import { EmbeddingService } from './vector/embedding.service';
-import { LlmService } from './vector/llm.service';
 import { RateLimitService } from './utils/rate-limit.service';
 import { RetentionService } from './retention/retention.service';
 import { ConversationsModule } from './conversations/conversations.module';
@@ -71,7 +70,6 @@ import { ConversationEngineModule } from './conversation-engine';
     DatabaseMigrationsService,
     VectorService,
     EmbeddingService,
-    LlmService,
     RateLimitService,
     RetentionService, // ✅ neu
   ],

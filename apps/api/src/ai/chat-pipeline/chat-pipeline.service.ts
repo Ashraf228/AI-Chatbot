@@ -103,7 +103,10 @@ export class ChatPipelineService {
           model: 'rule-based-advisor',
           latencyMs: 0,
         }
-      : await this.llm.answer(routed.systemPrompt, routed.userPrompt);
+      : await this.llm.answer(routed.systemPrompt, routed.userPrompt, {
+          tenantId: normalized.tenantId,
+          siteId: normalized.siteId,
+        });
 
     const safeAnswer = sanitizeOutput(llmRes.text);
     const estimatedCost = estimateOpenAICost({
@@ -322,11 +325,19 @@ export class ChatPipelineService {
       await emit({ type: 'token', delta: safeAnswer });
     } else {
       let fullAnswer = '';
-      llmRes = await this.llm.streamAnswer(routed.systemPrompt, routed.userPrompt, async (chunk) => {
-        const safeChunk = sanitizeOutput(chunk);
-        fullAnswer += safeChunk;
-        await emit({ type: 'token', delta: safeChunk });
-      });
+      llmRes = await this.llm.streamAnswer(
+        routed.systemPrompt,
+        routed.userPrompt,
+        async (chunk) => {
+          const safeChunk = sanitizeOutput(chunk);
+          fullAnswer += safeChunk;
+          await emit({ type: 'token', delta: safeChunk });
+        },
+        {
+          tenantId: normalized.tenantId,
+          siteId: normalized.siteId,
+        },
+      );
       safeAnswer = sanitizeOutput(fullAnswer || llmRes.text);
     }
 
