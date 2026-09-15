@@ -432,8 +432,8 @@ export class KnowledgeSourcesService {
     );
   }
 
-  async markReady(sourceId: string, metadataPatch?: Record<string, unknown>) {
-    await this.db.query(
+  async markReady(sourceId: string, metadataPatch?: Record<string, unknown>, db: Queryable = this.db) {
+    await db.query(
       `UPDATE knowledge_sources
        SET sync_status = 'ready',
            ingest_status = 'extracted',

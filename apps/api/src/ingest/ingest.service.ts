@@ -4,8 +4,8 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { IngestionEmbeddingService, INGESTION_FAILURE, type IngestionPurpose } from './ingestion-embedding.service';
 import { PrismaService } from '../db/prisma.service';
-import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { SitesService } from '../sites/sites.service';
 import { KnowledgeSourcesService } from '../knowledge-sources/knowledge-sources.service';
@@ -54,6 +54,8 @@ type FaqChunkRow = {
 type FaqChunkDetailRow = {
   id: string;
   site_id: string;
+  tenant_id: string;
+  source_id: string;
   metadata: Record<string, unknown> | null;
 };
 
@@ -75,11 +77,11 @@ type WebsiteRuntimeIndexingGateResult = {
 export class IngestService {
   constructor(
     private db: PrismaService,
-    private embedder: EmbeddingService,
     private vector: VectorService,
     private sites: SitesService,
     private knowledgeSources: KnowledgeSourcesService,
     private readonly approvalLookup?: ProviderApprovalStorageLookupService,
+    private readonly ingestionEmbedding?: IngestionEmbeddingService,
   ) {}
 
   async ingestFaq(siteId: string, title: string, items: Array<{ q: string; a: string }>) {
@@ -114,54 +116,12 @@ export class IngestService {
       },
     });
 
-    await this.knowledgeSources.markProcessing(sourceId);
-    const docId = randomUUID();
-
-    try {
-      await this.db.query(
-        `INSERT INTO documents(id, source_id, tenant_id, site_id, type, title) VALUES ($1,$2,$3,$4,$5,$6)`,
-        [docId, sourceId, tenantId, siteId, 'faq', title],
-      );
-    } catch (error) {
-      console.error('Failed to create FAQ document', error);
-      throw new InternalServerErrorException('Failed to create FAQ document');
-    }
-
-    let inserted = 0;
-    for (const it of items) {
-      const content = `Frage: ${it.q}\nAntwort: ${it.a}`.trim();
-      if (!content) continue;
-
-      let embedding: number[];
-      try {
-        embedding = await this.embedder.embed(content);
-      } catch (error) {
-        console.error('Failed to create FAQ embedding', error);
-        throw new BadGatewayException('Embedding request failed');
-      }
-
-      let res: { id: string; skipped: boolean };
-      try {
-        res = await this.vector.upsertChunk({
-          id: randomUUID(),
-          tenantId,
-          siteId,
-          documentId: docId,
-          content,
-          metadata: { kind: 'faq', q: it.q },
-          contentHash: sha256(content),
-          embedding,
-        });
-      } catch (error) {
-        console.error('Failed to store FAQ chunk', error);
-        throw new InternalServerErrorException('Failed to store FAQ chunk');
-      }
-
-      if (!res.skipped) inserted++;
-    }
-
-    await this.knowledgeSources.markReady(sourceId, { itemCount: items.length });
-    return { sourceId, documentId: docId, inserted };
+    const result = await this.persistEmbeddedSource({
+      tenantId, siteId, sourceId, type: 'faq', title, purpose: 'knowledge_ingest',
+      chunks: items.map((it) => ({ content: `Frage: ${it.q}\nAntwort: ${it.a}`.trim(), metadata: { kind: 'faq', q: it.q } })),
+      readyMetadata: { itemCount: items.length },
+    });
+    return { sourceId, documentId: result.documentId, inserted: result.inserted };
   }
 
   async ingestManual(siteId: string, input: {
@@ -202,6 +162,7 @@ export class IngestService {
       siteId,
       sourceId,
       type: input.question ? 'faq' : 'manual',
+      purpose: 'knowledge_ingest',
       title,
       text: content,
       metadata: {
@@ -362,7 +323,7 @@ export class IngestService {
       const parsed = await parser.getText();
       text = (parsed.text || '').trim();
     } catch (error) {
-      console.error('Failed to parse PDF', error);
+      // Parser diagnostics can contain uploaded content; expose only a fixed error.
       await this.knowledgeSources.markFailed(sourceId, 'PDF could not be parsed');
       throw new BadRequestException('PDF could not be parsed');
     } finally {
@@ -372,63 +333,17 @@ export class IngestService {
     }
 
     if (!text) {
+      await this.knowledgeSources.markFailed(sourceId, 'PDF has no extractable text');
       throw new BadRequestException('PDF has no extractable text');
     }
 
-    const docId = randomUUID();
-
-    try {
-      await this.db.query(
-        `INSERT INTO documents(id, source_id, tenant_id, site_id, type, title)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [docId, sourceId, tenantId, siteId, 'pdf', file.originalname],
-      );
-    } catch (error) {
-      console.error('Failed to create PDF document', error);
-      throw new InternalServerErrorException('Failed to create PDF document');
-    }
-
-    const chunks = chunkText(text, 1400, 250);
-
-    let inserted = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      const content = chunks[i];
-      let embedding: number[];
-      try {
-        embedding = await this.embedder.embed(content);
-      } catch (error) {
-        console.error('Failed to create PDF embedding', error);
-        await this.knowledgeSources.markFailed(sourceId, 'Embedding request failed');
-        throw new BadGatewayException('Embedding request failed');
-      }
-
-      let res: { id: string; skipped: boolean };
-      try {
-        res = await this.vector.upsertChunk({
-          id: randomUUID(),
-          tenantId,
-          siteId,
-          documentId: docId,
-          content,
-          metadata: {
-            kind: 'pdf',
-            filename: file.originalname,
-            chunkIndex: i,
-          },
-          contentHash: sha256(content),
-          embedding,
-        });
-      } catch (error) {
-        console.error('Failed to store PDF chunk', error);
-        await this.knowledgeSources.markFailed(sourceId, 'Failed to store PDF chunk');
-        throw new InternalServerErrorException('Failed to store PDF chunk');
-      }
-
-      if (!res.skipped) inserted++;
-    }
-
-    await this.knowledgeSources.markReady(sourceId, { chunks: chunks.length });
-    return { sourceId, documentId: docId, chunks: chunks.length, inserted };
+    const result = await this.persistEmbeddedSource({
+      tenantId, siteId, sourceId, type: 'pdf', title: file.originalname, purpose: 'knowledge_ingest',
+      chunks: chunkText(text, 1400, 250).map((content, chunkIndex) => ({
+        content, metadata: { kind: 'pdf', filename: file.originalname, chunkIndex },
+      })),
+    });
+    return { sourceId, documentId: result.documentId, chunks: result.chunks, inserted: result.inserted };
   }
 
   private async ingestTextIntoSource(input: {
@@ -440,42 +355,70 @@ export class IngestService {
     text: string;
     sourceUrl?: string;
     metadata: Record<string, unknown>;
+    purpose?: IngestionPurpose;
   }) {
-    await this.knowledgeSources.markProcessing(input.sourceId);
-    await this.db.query(`DELETE FROM documents WHERE source_id = $1`, [input.sourceId]);
+    const chunks = (input.type === 'faq' ? [input.text] : chunkText(input.text, 1400, 250))
+      .map((content, chunkIndex) => ({ content: content.trim(), metadata: { ...input.metadata, chunkIndex } }))
+      .filter((chunk) => chunk.content);
+    return this.persistEmbeddedSource({ ...input, purpose: input.purpose || 'knowledge_reindex', chunks });
+  }
 
-    const docId = randomUUID();
-    await this.db.query(
-      `INSERT INTO documents(id, source_id, tenant_id, site_id, type, title, source_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [docId, input.sourceId, input.tenantId, input.siteId, input.type, input.title, input.sourceUrl || null],
-    );
-
-    const chunks = input.type === 'faq' ? [input.text] : chunkText(input.text, 1400, 250);
-    let inserted = 0;
-    for (let i = 0; i < chunks.length; i++) {
-      const content = chunks[i].trim();
-      if (!content) {
-        continue;
-      }
-      const embedding = await this.embedder.embed(content);
-      const res = await this.vector.upsertChunk({
-        id: randomUUID(),
-        tenantId: input.tenantId,
-        siteId: input.siteId,
-        documentId: docId,
-        content,
-        metadata: { ...input.metadata, chunkIndex: i },
-        contentHash: sha256(content),
-        embedding,
-      });
-      if (!res.skipped) {
-        inserted++;
-      }
+  private async persistEmbeddedSource(input: {
+    tenantId: string; siteId: string; sourceId: string; type: string; title: string;
+    sourceUrl?: string; purpose: IngestionPurpose;
+    chunks: Array<{ content: string; metadata: Record<string, unknown> }>;
+    readyMetadata?: Record<string, unknown>;
+  }) {
+    const source = await this.knowledgeSources.getById(input.sourceId);
+    const site = await this.sites.getSite(input.siteId);
+    if (!input.tenantId || !source || source.tenantId !== input.tenantId || source.siteId !== input.siteId
+      || site?.tenant_id !== input.tenantId || !input.chunks.length
+      || (source.type !== input.type && !(source.type === 'it_support_template' && input.type === 'manual'))) {
+      throw new BadGatewayException(INGESTION_FAILURE);
     }
-
-    await this.knowledgeSources.markReady(input.sourceId, { chunks: chunks.length });
-    return { sourceId: input.sourceId, siteId: input.siteId, documentId: docId, chunks: chunks.length, inserted };
+    const preserveReady = source.runtimeReadiness === 'ready';
+    try {
+      if (!preserveReady) await this.knowledgeSources.markProcessing(input.sourceId);
+      const prepared: Array<{ content: string; metadata: Record<string, unknown>; embedding: number[] }> = [];
+      for (const chunk of input.chunks) {
+        if (!this.ingestionEmbedding) throw new BadGatewayException(INGESTION_FAILURE);
+        const embedding = await this.ingestionEmbedding.embed(chunk.content, input);
+        prepared.push({ ...chunk, embedding });
+      }
+      // Complete provider work before replacing any valid knowledge. The replacement
+      // and ready transition share a transaction and roll back on storage failure.
+      return await this.db.transaction(async (tx) => {
+        const owned = await tx.query<{ id: string }>(
+          `SELECT ks.id FROM knowledge_sources ks
+           JOIN sites s ON s.id = ks.site_id AND s.tenant_id = ks.tenant_id
+           WHERE ks.id = $1 AND ks.site_id = $2 AND ks.tenant_id = $3 AND ks.source_type = $4
+           FOR UPDATE OF ks`,
+          [input.sourceId, input.siteId, input.tenantId, source.type],
+        );
+        if (owned.rows.length !== 1) throw new Error('Source changed');
+        await tx.query(`DELETE FROM documents WHERE source_id = $1 AND site_id = $2 AND tenant_id = $3`,
+          [input.sourceId, input.siteId, input.tenantId]);
+        const docId = randomUUID();
+        await tx.query(
+          `INSERT INTO documents(id, source_id, tenant_id, site_id, type, title, source_url)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [docId, input.sourceId, input.tenantId, input.siteId, input.type, input.title, input.sourceUrl || null],
+        );
+        let inserted = 0;
+        for (const chunk of prepared) {
+          const result = await this.vector.upsertChunk({
+            id: randomUUID(), tenantId: input.tenantId, siteId: input.siteId, documentId: docId,
+            ...chunk, contentHash: sha256(chunk.content),
+          }, tx);
+          if (!result.skipped) inserted++;
+        }
+        await this.knowledgeSources.markReady(input.sourceId, input.readyMetadata || { chunks: prepared.length }, tx);
+        return { sourceId: input.sourceId, siteId: input.siteId, documentId: docId, chunks: prepared.length, inserted };
+      });
+    } catch {
+      if (!preserveReady) await this.knowledgeSources.markFailed(input.sourceId, INGESTION_FAILURE);
+      throw new BadGatewayException(INGESTION_FAILURE);
+    }
   }
 
   private async persistProviderFreeTextIntoSource(input: {
@@ -813,8 +756,6 @@ export class IngestService {
         return result;
       }
 
-      await this.knowledgeSources.markProcessing(sourceId);
-
       if (source.type === 'faq') {
         const items = Array.isArray(config.items) ? config.items : [];
         const text = items
@@ -828,7 +769,7 @@ export class IngestService {
         if (!text) {
           throw new BadRequestException('FAQ source has no stored items for re-sync');
         }
-        return this.ingestTextIntoSource({
+        return await this.ingestTextIntoSource({
           tenantId: source.tenantId || '',
           siteId: source.siteId,
           sourceId,
@@ -844,7 +785,7 @@ export class IngestService {
         if (!content) {
           throw new BadRequestException('Manual source has no stored content for re-sync');
         }
-        return this.ingestTextIntoSource({
+        return await this.ingestTextIntoSource({
           tenantId: source.tenantId || '',
           siteId: source.siteId,
           sourceId,
@@ -860,7 +801,7 @@ export class IngestService {
         if (!content) {
           throw new BadRequestException('IT support template source has no stored content for re-sync');
         }
-        return this.ingestTextIntoSource({
+        return await this.ingestTextIntoSource({
           tenantId: source.tenantId || '',
           siteId: source.siteId,
           sourceId,
@@ -881,6 +822,10 @@ export class IngestService {
 
       throw new BadRequestException('Re-sync for this source type requires re-upload');
     } catch (error) {
+      if (source.type !== 'url') {
+        if (error instanceof BadRequestException) throw error;
+        throw new BadGatewayException(INGESTION_FAILURE);
+      }
       if (error instanceof WebsitePolicyError) {
         await this.knowledgeSources.markBlocked(sourceId, error.message, error.code);
         throw new BadRequestException(error.message);
@@ -917,9 +862,9 @@ export class IngestService {
     }
 
     const current = await this.db.query<FaqChunkDetailRow>(
-      `SELECT c.id, c.site_id, c.metadata
+      `SELECT c.id, c.site_id, c.tenant_id, d.source_id, c.metadata
        FROM chunks c
-       JOIN documents d ON d.id = c.document_id
+       JOIN documents d ON d.id = c.document_id AND d.site_id = c.site_id AND d.tenant_id = c.tenant_id
        WHERE c.id = $1
          AND d.type = 'faq'
        LIMIT 1`,
@@ -935,10 +880,12 @@ export class IngestService {
 
     let embedding: number[];
     try {
-      embedding = await this.embedder.embed(content);
+      if (!this.ingestionEmbedding) throw new BadGatewayException(INGESTION_FAILURE);
+      embedding = await this.ingestionEmbedding.embed(content, {
+        tenantId: row.tenant_id, siteId: row.site_id, sourceId: row.source_id, purpose: 'knowledge_reindex',
+      });
     } catch (error) {
-      console.error('Failed to re-embed FAQ item', error);
-      throw new BadGatewayException('Embedding request failed');
+      throw new BadGatewayException(INGESTION_FAILURE);
     }
 
     const metadata = {

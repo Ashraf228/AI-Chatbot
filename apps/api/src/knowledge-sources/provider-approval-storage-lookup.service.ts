@@ -45,6 +45,7 @@ type ProviderApprovalGrantRow = {
 };
 
 export type ProviderApprovalStorageLookupInput = {
+  purpose?: string | null;
   tenantId?: string | null;
   siteId?: string | null;
   sourceId?: string | null;
@@ -134,6 +135,7 @@ function trimLookupInput(input: ProviderApprovalStorageLookupInput) {
     siteId: (input.siteId || '').trim(),
     sourceId: hasText(input.sourceId) ? input.sourceId.trim() : null,
     sourceType: (input.sourceType || '').trim(),
+    purpose: input.purpose?.trim() || null,
     usageContext: (input.usageContext || '').trim(),
     environment: (input.environment || 'non_production').trim() as ProviderEmbeddingEnvironment,
     providerKey: (input.providerKey || '').trim(),
@@ -234,6 +236,7 @@ export function buildProviderApprovalLookupQuery(input: ProviderApprovalStorageL
         AND scope_kind IN ('source', 'source_type')
         AND source_types ? $7
         AND usage_contexts ? $8
+        AND ($10::text IS NULL OR purpose = $10)
         AND (
           (scope_kind = 'source' AND $9::text IS NOT NULL AND source_id = $9)
           OR (scope_kind = 'source_type' AND source_id IS NULL)
@@ -254,6 +257,7 @@ export function buildProviderApprovalLookupQuery(input: ProviderApprovalStorageL
       normalized.sourceType,
       normalized.usageContext,
       normalized.sourceId,
+      normalized.purpose,
     ],
   };
 }

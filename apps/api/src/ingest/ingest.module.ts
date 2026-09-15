@@ -1,8 +1,8 @@
+import { IngestionEmbeddingService } from './ingestion-embedding.service';
 import { Module } from '@nestjs/common';
 import { IngestController } from './ingest.controller';
 import { IngestService } from './ingest.service';
 import { PrismaService } from '../db/prisma.service';
-import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 import { KnowledgeSourcesModule } from '../knowledge-sources/knowledge-sources.module';
 import { SitesModule } from '../sites/sites.module';
@@ -15,8 +15,8 @@ import { BillingModule } from '../billing/billing.module';
   controllers: [IngestController],
   providers: [
     IngestService,
+    IngestionEmbeddingService,
     PrismaService,
-    EmbeddingService,
     VectorService,
     RateLimitService,
   ],

@@ -492,6 +492,12 @@ export function evaluateProviderApprovalPolicy(
     );
   }
 
+  if ((usageContext === 'knowledge_ingest' || usageContext === 'knowledge_reindex')
+    && (policy.purpose.trim() !== usageContext || normalizedUsageContexts.length !== 1)) {
+    return deny('usage_context_not_allowed', 'ingestion_purpose_mismatch',
+      'Die technische Approval-Policy deckt diesen Kontext nicht ab.');
+  }
+
   if (!usageContext || !normalizedUsageContexts.includes(usageContext)) {
     return deny(
       'usage_context_not_allowed',

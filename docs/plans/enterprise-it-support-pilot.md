@@ -177,3 +177,33 @@ Status: runtime split implemented and locally verified on `ffae00b5795615da9ae03
 - All five production dependency-audit contexts, preflight, the uncommitted-worktree sensitive scan, and tracked/untracked diff checks pass.
 - Earlier independent-review findings from the combined source package are represented by SDK-transport, widget-stream, runtime-configuration, rollback-contract, and setup-cleanup regressions. This derived runtime split still requires its own independent review before Ready for review.
 - Migration 033 has not been applied to an operational database. No LLM-generation grant exists or is provisioned by this package, no provider-live call was made, and public-widget, staging, production, pilot, or enterprise activation remains unauthorized.
+
+## Knowledge ingestion provider gate — local package
+
+`KNOWLEDGE_INGEST_PROVIDER_GATE_1` starts from local commit
+`6dc89ef024a47e4f564b243e1cf83d0e6f1efe61` (parent
+`15fd2dbb176b11796f83882587bd42b85fd26cbc`). The preceding LLM logging P2
+was independently closed and that package committed locally; its Poweruser
+parent remains an integration dependency.
+
+The initial audit confirmed ungated FAQ/manual/PDF ingestion, FAQ edits and
+source reindex. The user authorized a distinct `knowledge_ingest` purpose and
+single usage context; `knowledge_reindex` remains distinct. The local package
+adds a source/source-type storage gate at every actual ingestion HTTP attempt,
+with exact ownership/provider/model/environment binding, no automatic SDK
+retries, fixed endpoint, redirect denial and disabled SDK logging. Prepared
+replacement vectors and transactional persistence preserve existing ready
+knowledge on rejection/provider/storage failure. No schema migration is needed.
+
+See `docs/ops/knowledge-ingest-provider-gate.md` for the path/contract matrix,
+rollback constraints and test boundaries. Query/LLM contracts, provider-free
+website/template imports and viewer permissions remain unchanged. No grant,
+provider connection or runtime activation is implied. An independent review
+identified and corrected an HTTP-400 preservation regression; final verification
+and manifest are reported with the local task outcome.
+
+Remaining separate pilot gates: scoped ingestion/reindex grant provisioning,
+admin-preview query review, live website-indexing activation, integration/CI and
+production gates, and `EXTERNAL_IPV6_PROBE_REQUIRED`. No commit, push, PR, merge,
+deploy, server/guard/network change or operational SQL was performed for this
+package.

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Queryable } from '../db/database.service';
 import { PrismaService } from '../db/prisma.service';
 
 export type VectorChunkMetadata = Record<string, unknown>;
@@ -62,14 +63,14 @@ export class VectorService {
     metadata: VectorChunkMetadata;
     contentHash: string;
     embedding: number[];
-  }) {
-    const exists = await this.db.query<{ id: string }>(
+  }, db: Queryable = this.db) {
+    const exists = await db.query<{ id: string }>(
       `SELECT id FROM chunks WHERE tenant_id=$1 AND document_id=$2 AND content_hash=$3 LIMIT 1`,
       [params.tenantId, params.documentId, params.contentHash],
     );
     if (exists.rows[0]) return { id: exists.rows[0].id, skipped: true };
 
-    await this.db.query(
+    await db.query(
       `INSERT INTO chunks(id, tenant_id, site_id, document_id, content, metadata, content_hash, embedding)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::vector)`,
       [
