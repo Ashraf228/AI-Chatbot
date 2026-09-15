@@ -11,13 +11,11 @@ const EMBEDDING_MODULE = path.join(SRC_ROOT, 'vector', 'embedding.service.ts');
 const RUNTIME_BOUNDARY_MODULE = path.join(SRC_ROOT, 'knowledge-sources', 'runtime-query-embedding.service.ts');
 const DIRECT_CONSUMERS = new Map([
   ['knowledge-sources/runtime-query-embedding.service.ts', ['RuntimeQueryEmbeddingService', 'embedWithResolvedConfig']],
-  ['ingest/ingest.service.ts', ['IngestService', 'embed']],
   ['conversation-engine/knowledge-preview-retrieval.service.ts', ['KnowledgePreviewRetrievalService', 'embed']],
 ]);
 const REGISTRATION_ONLY = new Map([
   ['app.module.ts', 'AppModule'],
   ['knowledge-sources/knowledge-sources.module.ts', 'KnowledgeSourcesModule'],
-  ['ingest/ingest.module.ts', 'IngestModule'],
   ['conversation-engine/conversation-engine.module.ts', 'ConversationEngineModule'],
 ]);
 const RUNTIME_CONSUMERS = [
@@ -250,6 +248,13 @@ function classifyEmbeddingAccesses(records) {
       if (DIRECT_CONSUMERS.has(relativePath)) {
         validateDirectConsumer(sourceFile, reference, relativePath);
         directConsumers.push(relativePath);
+      } else if (relativePath === 'ingest/ingestion-embedding.service.ts') {
+        assert.equal(reference.kind, 'import');
+        const named = reference.node.importClause?.namedBindings;
+        assert.ok(named && ts.isNamedImports(named));
+        assert.equal(named.elements.length, 1);
+        assert.ok(namedImportBinding(reference, 'resolveEmbeddingConfig'), 'ingestion may import configuration only');
+        assert.equal(reference.node.importClause.name, undefined, 'no default embedding-module import');
       } else if (REGISTRATION_ONLY.has(relativePath)) {
         validateRegistrationOnly(sourceFile, reference, relativePath);
         registrations.push(relativePath);
@@ -356,11 +361,11 @@ test('AST inventory rejects external consumers, aliases, requires, imports, and 
 });
 
 test('validated direct consumer and real Module provider registration are accepted', () => {
-  const directConsumer = fixture('../ingest/ingest.service.ts',
-    "import { EmbeddingService as E } from '../vector/embedding.service'; class IngestService { constructor(private readonly embedder: E) {} run() { return this.embedder.embed('x'); } }");
+  const directConsumer = fixture('../conversation-engine/knowledge-preview-retrieval.service.ts',
+    "import { EmbeddingService as E } from '../vector/embedding.service'; class KnowledgePreviewRetrievalService { constructor(private readonly embedder: E) {} run() { return this.embedder.embed('x'); } }");
   const registration = fixture('../app.module.ts',
     "import { Module as NestModule } from '@nestjs/common'; import { EmbeddingService } from './vector/embedding.service'; @NestModule({ providers: [EmbeddingService] }) export class AppModule {}");
-  assert.deepEqual(classifyEmbeddingAccesses([directConsumer]), { directConsumers: ['ingest/ingest.service.ts'], registrations: [] });
+  assert.deepEqual(classifyEmbeddingAccesses([directConsumer]), { directConsumers: ['conversation-engine/knowledge-preview-retrieval.service.ts'], registrations: [] });
   assert.deepEqual(classifyEmbeddingAccesses([registration]), { directConsumers: [], registrations: ['app.module.ts'] });
 });
 
@@ -394,4 +399,15 @@ test('site runtime boundary performs the grant lookup inside RuntimeQueryEmbeddi
   });
   assert.equal(hasSiteRuntimeLookup, true);
   assert.equal(hasGenericLookup, false);
+});
+
+// Ingestion no longer has access to the raw shared embedder. Its dedicated gate
+// may reuse configuration resolution, but cannot import the ungated service.
+test('ingestion inventory rejects reintroduced raw embedding imports', () => {
+  assert.throws(() => classifyEmbeddingAccesses([fixture('../ingest/ingest.service.ts',
+    "import { EmbeddingService } from '../vector/embedding.service';")]), /forbidden/);
+  assert.throws(() => classifyEmbeddingAccesses([fixture('../ingest/ingestion-embedding.service.ts',
+    "import { EmbeddingService } from '../vector/embedding.service';")]), /configuration only/);
+  assert.doesNotThrow(() => classifyEmbeddingAccesses([fixture('../ingest/ingestion-embedding.service.ts',
+    "import { resolveEmbeddingConfig } from '../vector/embedding.service';") ]));
 });

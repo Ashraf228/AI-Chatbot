@@ -5,6 +5,7 @@ import {
 
 export type ProviderEmbeddingUsageContext =
   | 'website_ingest_runtime_indexing'
+  | 'knowledge_ingest'
   | 'knowledge_reindex'
   | 'query_embedding';
 
@@ -65,6 +66,7 @@ export type ProviderEmbeddingGateDecision = {
 
 const KNOWN_USAGE_CONTEXTS = new Set<ProviderEmbeddingUsageContext>([
   'website_ingest_runtime_indexing',
+  'knowledge_ingest',
   'knowledge_reindex',
   'query_embedding',
 ]);

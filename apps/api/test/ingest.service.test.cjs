@@ -8,6 +8,7 @@ function createDeps() {
   const embedCalls = [];
   const vectorCalls = [];
   const knowledgeSourceCalls = [];
+  let created = null;
 
   return {
     dbQueries,
@@ -18,9 +19,11 @@ function createDeps() {
     db: {
       async query(sql, params) {
         dbQueries.push({ sql, params });
-        return { rows: [] };
+        return { rows: /FOR UPDATE OF ks/.test(sql) ? [{ id: params[0] }] : [] };
       },
+      async transaction(callback) { return callback(this); },
     },
+    ingestionEmbedding: { async embed(content) { embedCalls.push(content); return [content.length, 1, 2]; } },
     embedder: {
       async embed(content) {
         embedCalls.push(content);
@@ -42,7 +45,8 @@ function createDeps() {
       },
     },
     knowledgeSources: {
-      async createForSite() {
+      async createForSite(input) {
+        created = input;
         knowledgeSourceCalls.push({ method: 'createForSite', args: [...arguments] });
         return 'source-1';
       },
@@ -52,9 +56,9 @@ function createDeps() {
       async getById(sourceId) {
         return {
           id: sourceId,
-          tenantId: 'tenant-1',
-          siteId: 'site-1',
-          type: 'manual',
+          tenantId: created?.tenantId || 'tenant-1',
+          siteId: created?.siteId || 'site-1',
+          type: created?.sourceType || 'manual',
           title: 'Manual',
           metadata: { content: 'Alter Inhalt' },
           url: '',
@@ -89,10 +93,11 @@ test('IngestService.ingestFaq stores FAQ document and chunk', async () => {
   const deps = createDeps();
   const service = new IngestService(
     deps.db,
-    deps.embedder,
     deps.vector,
     deps.sites,
     deps.knowledgeSources,
+    deps.approvalLookup,
+    deps.ingestionEmbedding,
   );
 
   const result = await service.ingestFaq('site-1', 'FAQ', [
@@ -102,8 +107,9 @@ test('IngestService.ingestFaq stores FAQ document and chunk', async () => {
   assert.equal(result.inserted, 1);
   assert.ok(result.documentId);
   assert.equal(deps.dbQueries.length >= 1, true);
-  assert.match(deps.dbQueries[0].sql, /INSERT INTO documents/i);
-  assert.equal(deps.dbQueries[0].params[3], 'site-1');
+  const insert = deps.dbQueries.find(entry => /INSERT INTO documents/i.test(entry.sql));
+  assert.ok(insert);
+  assert.equal(insert.params[3], 'site-1');
 });
 
 test('IngestService.ingestFaq rejects unknown sites', async () => {
@@ -111,10 +117,11 @@ test('IngestService.ingestFaq rejects unknown sites', async () => {
   deps.sites.getSite = async () => null;
   const service = new IngestService(
     deps.db,
-    deps.embedder,
     deps.vector,
     deps.sites,
     deps.knowledgeSources,
+    deps.approvalLookup,
+    deps.ingestionEmbedding,
   );
 
   await assert.rejects(
@@ -136,6 +143,7 @@ test('IngestService.ingestFaq keeps tenant context scoped to the selected site',
   });
   deps.knowledgeSources.createForSite = async (input) => {
     captured.sourceInput = input;
+    deps.knowledgeSources.getById = async () => ({ id: 'source-tenant-2', tenantId: input.tenantId, siteId: input.siteId, type: input.sourceType });
     return 'source-tenant-2';
   };
   deps.vector.upsertChunk = async (params) => {
@@ -145,10 +153,11 @@ test('IngestService.ingestFaq keeps tenant context scoped to the selected site',
 
   const service = new IngestService(
     deps.db,
-    deps.embedder,
     deps.vector,
     deps.sites,
     deps.knowledgeSources,
+    deps.approvalLookup,
+    deps.ingestionEmbedding,
   );
 
   await service.ingestFaq('site-2', 'FAQ', [{ q: 'Q', a: 'A' }]);
@@ -171,7 +180,7 @@ test('IngestService.ingestManual creates source and chunk', async () => {
     chunkInput = params;
     return { id: params.id, skipped: false };
   };
-  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const service = new IngestService(deps.db, deps.vector, deps.sites, deps.knowledgeSources, deps.approvalLookup, deps.ingestionEmbedding);
 
   const result = await service.ingestManual('site-1', {
     title: 'Manual',
@@ -187,7 +196,7 @@ test('IngestService.ingestManual creates source and chunk', async () => {
 
 test('IngestService.deleteSource delegates source cleanup', async () => {
   const deps = createDeps();
-  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const service = new IngestService(deps.db, deps.vector, deps.sites, deps.knowledgeSources, deps.approvalLookup, deps.ingestionEmbedding);
 
   const result = await service.deleteSource('source-1');
 
@@ -203,9 +212,9 @@ test('IngestService.resyncSource replaces old chunks via source documents', asyn
     if (/DELETE FROM documents WHERE source_id/i.test(sql)) {
       deletes.push(params[0]);
     }
-    return { rows: [] };
+    return { rows: /FOR UPDATE OF ks/.test(sql) ? [{ id: params[0] }] : [] };
   };
-  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const service = new IngestService(deps.db, deps.vector, deps.sites, deps.knowledgeSources, deps.approvalLookup, deps.ingestionEmbedding);
 
   const result = await service.resyncSource('source-1');
 
@@ -238,7 +247,7 @@ test('IngestService.resyncSource supports IT support template sources', async ()
     return { id: params.id, skipped: false };
   };
 
-  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const service = new IngestService(deps.db, deps.vector, deps.sites, deps.knowledgeSources, deps.approvalLookup, deps.ingestionEmbedding);
   const result = await service.resyncSource('source-1');
 
   assert.equal(result.sourceId, 'source-1');
@@ -249,7 +258,7 @@ test('IngestService.resyncSource supports IT support template sources', async ()
 
 test('IngestService.ingestUrl persists website text without embeddings or vector writes and keeps runtime index pending', async () => {
   const deps = createDeps();
-  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const service = new IngestService(deps.db, deps.vector, deps.sites, deps.knowledgeSources, deps.approvalLookup, deps.ingestionEmbedding);
   const originalFetchWebsiteSource = websiteIngest.fetchWebsiteSource;
   websiteIngest.fetchWebsiteSource = async () => ({
     normalizedUrl: 'https://93.184.216.34/faq',
@@ -296,7 +305,7 @@ test('IngestService.ingestUrl persists website text without embeddings or vector
 
 test('IngestService.ingestUrl blocks private redirect targets and records blocked status', async () => {
   const deps = createDeps();
-  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const service = new IngestService(deps.db, deps.vector, deps.sites, deps.knowledgeSources, deps.approvalLookup, deps.ingestionEmbedding);
   const originalFetchWebsiteSource = websiteIngest.fetchWebsiteSource;
   websiteIngest.fetchWebsiteSource = async () => {
     throw new websiteIngest.WebsitePolicyError('Private oder interne Website-Ziele sind nicht erlaubt.', 'resolved_ip_blocked');
@@ -331,7 +340,7 @@ test('IngestService.evaluateWebsiteRuntimeIndexingGate denies website embedding 
     runtimeReadiness: 'not_ready',
     url: 'https://example.com/faq',
   });
-  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const service = new IngestService(deps.db, deps.vector, deps.sites, deps.knowledgeSources, deps.approvalLookup, deps.ingestionEmbedding);
 
   const result = await service.evaluateWebsiteRuntimeIndexingGate({
     sourceId: 'source-1',
@@ -368,7 +377,7 @@ test('IngestService.evaluateWebsiteRuntimeIndexingGate can acknowledge explicit 
     runtimeReadiness: 'not_ready',
     url: 'https://example.com/faq',
   });
-  const service = new IngestService(deps.db, deps.embedder, deps.vector, deps.sites, deps.knowledgeSources);
+  const service = new IngestService(deps.db, deps.vector, deps.sites, deps.knowledgeSources, deps.approvalLookup, deps.ingestionEmbedding);
 
   const result = await service.evaluateWebsiteRuntimeIndexingGate({
     sourceId: 'source-1',
@@ -471,7 +480,6 @@ test('IngestService.evaluateWebsiteRuntimeIndexingGate can acknowledge a valid s
   };
   const service = new IngestService(
     deps.db,
-    deps.embedder,
     deps.vector,
     deps.sites,
     deps.knowledgeSources,
