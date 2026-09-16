@@ -1,8 +1,10 @@
 # Enterprise IT Support Pilot
 
-Status: provider-free customer poweruser package implemented and independently reviewed locally
+Status: integration phases 1–5 merged with exact Main-CI; Phase 6 usage runtime split in progress; pilot activation remains blocked
 
-Reference commit: `bc3e9666d3ac3a9d8de7796aca54c54f39283ae4`
+Current integration baseline: `1a3e542e6d972a318388a8482882adcd222df6de`
+
+Historical Poweruser package base: `bc3e9666d3ac3a9d8de7796aca54c54f39283ae4`
 
 ## Product contract
 
@@ -20,7 +22,7 @@ Reference commit: `bc3e9666d3ac3a9d8de7796aca54c54f39283ae4`
 | --- | --- | --- |
 | M1 Pilot contract | Audience, one-tenant/one-site boundary, poweruser scope, ticket handoff, and no-live limits are explicit. | complete in this plan |
 | M2 Staging baseline | Immutable images, HTTPS/origin switch, migration probe and controlled migration, access guard evidence, monitoring, and restore evidence are complete. | blocked on operational gates |
-| M3 Customer flow | Persisted poweruser capability, site-scoped template management, provider-authorized ingestion and generation, and full API/BFF flow are proven. | partial: provider-free template package complete; provider authorization packages remain open |
+| M3 Customer flow | Persisted poweruser capability, site-scoped template management, provider-authorized ingestion and generation, and full API/BFF flow are proven. | partial: template, LLM and ingestion gates integrated; usage, Admin Preview, customer workspace and final integrated acceptance remain open |
 | M4 Operations and onboarding | Customer-specific runbook, budget/usage evidence, support ownership, and poweruser training are complete. | not started |
 | M5 Limited pilot | Separate deploy, provisioning, grant, and activation approvals are recorded and the reversible pilot acceptance run passes. | not started |
 
@@ -60,7 +62,12 @@ Only the existing internal-admin tenant-user mutation path can write this metada
 - Provider/operator capability keys do not grant knowledge management and the knowledge capability grants no provider/operator action.
 - No external provider, email, webhook, customer system, public widget, or production action is used.
 
-## Workstream B findings
+## Historical Workstream B findings
+
+This audit describes the original Poweruser package baseline. The gaps and code
+references below are historical; the current integration table at the end of this
+plan records which packages have since been merged. They are not a claim that the
+current LLM or ingestion paths still lack their implemented grant checks.
 
 ### Existing protections
 
@@ -141,7 +148,7 @@ No real provider, email, webhook, customer system, staging, or production call w
 
 ## Workstream C: site-runtime LLM generation grant
 
-Status: runtime split implemented and locally verified on `ffae00b5795615da9ae03d73a0ef570a7ddff8e7`; independent review, integration, operational migration, provisioning, and activation remain pending
+Status: runtime split independently reviewed and merged in Phase 3 as `6baf93db8a51a577486e51c19dae19f0e3d4e3e4` with exact Main-CI; operational migration, provisioning, and activation remain pending
 
 ### Path and contract matrix
 
@@ -207,3 +214,46 @@ admin-preview query review, live website-indexing activation, integration/CI and
 production gates, and `EXTERNAL_IPV6_PROBE_REQUIRED`. No commit, push, PR, merge,
 deploy, server/guard/network change or operational SQL was performed for this
 package.
+
+
+## Current sequential integration status
+
+| Phase | Scope | Git / CI status |
+| --- | --- | --- |
+| 1 | Poweruser/templates including atomic DELETE rejection | merged `8d5872abd07a82c944e8cb76d243b128e3cd2124`; Main-CI passed |
+| 2 | Migration 033 schema | merged `ffae00b5795615da9ae03d73a0ef570a7ddff8e7`; Main-CI passed |
+| 3 | LLM-generation runtime grants | merged `6baf93db8a51a577486e51c19dae19f0e3d4e3e4`; Main-CI passed |
+| 4 | Ingestion/reindex grants | merged `70dbe3836725ad764799e211b123234cd4d5e36a`; Main-CI passed |
+| 5 | Migration 034 schema | merged `1a3e542e6d972a318388a8482882adcd222df6de`; Main-CI 35042178461 attempt 2 passed after an npm-audit HTTP 503 in attempt 1 |
+| 6 | LLM usage runtime and existing admin dashboard | derived split in progress; fresh review and CI required |
+| 7 | Admin Preview query-embedding grant | local source package reported; integration pending |
+| 8 | Site-bound individual customer workspace access | local source package reported; integration pending |
+
+The original local source packages and their reviews do not replace review of
+each derived split. Historical local-package status paragraphs above describe
+those original implementation tasks. Git integration does not authorize applying
+migrations to a target database or activating any provider or customer traffic.
+
+## Phase 6 measurement contract
+
+Normal and streamed calls use provider-confirmed usage. Final textless usage
+snapshots are consumed; absent/incomplete values remain explicitly unmeasured.
+One server UUID identifies each actual invocation. Event insertion and confirmed
+token aggregation share a transaction; repeated persistence of the same UUID does
+not double-count. Tenant, site, conversation and session are revalidated before
+storage. Pre-transport rejection does not create a provider consumption event.
+Aborts reach the SDK and are not continued solely to obtain usage.
+
+Existing successful-message budgets and public widget response shapes remain
+unchanged. Embedding usage is excluded. The existing admin usage page separates
+confirmed sums, unmeasured calls and legacy events; no new customer surface or
+billing tariff is introduced. Process/storage failures can still lose unfinished
+measurements; there is no durable outbox or billing reconciliation guarantee.
+
+Migration 034 is a prerequisite for a later usage-runtime deployment. Keep its
+additive schema and measurement meaning on code rollback; never turn unknown
+usage into zero. The runtime rollback reference is the Phase 5 baseline above,
+which retains the LLM-/ingestion-grant and DELETE protections. Operational restore,
+lock/backup checks, provider grants, staging acceptance, pilot decisions and
+EXTERNAL_IPV6_PROBE_REQUIRED remain separate gates. The historical external
+connection evidence limitation remains open.

@@ -122,7 +122,15 @@ export class WidgetChatService {
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
 
+    const abort = new AbortController();
+    const onClose = () => { if (!res.writableEnded) abort.abort(); };
+    const onAborted = () => abort.abort();
+    res.on?.('close', onClose);
+    req?.on?.('aborted', onAborted);
+    if (req?.aborted || res.destroyed) abort.abort();
+
     const writeEvent = (payload: Record<string, unknown>) => {
+      if (abort.signal.aborted) return;
       res.write(`${JSON.stringify(payload)}\n`);
     };
 
@@ -152,6 +160,7 @@ export class WidgetChatService {
           }
           this.writeLegacyStreamEvent(event, writeEvent);
         },
+        abort.signal,
       );
     } catch {
       logEvent('widget_chat_stream_failed', {
@@ -163,6 +172,8 @@ export class WidgetChatService {
         message: PUBLIC_STREAM_ERROR,
       });
     } finally {
+      res.removeListener?.('close', onClose);
+      req?.removeListener?.('aborted', onAborted);
       res.end();
     }
   }

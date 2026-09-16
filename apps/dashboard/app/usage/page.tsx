@@ -7,7 +7,21 @@ import { EmptyState } from "../../components/shared/EmptyState";
 import { ErrorState } from "../../components/shared/ErrorState";
 import { Input } from "../../components/shared/Input";
 
+type LlmUsage = {
+  confirmed_calls: number;
+  unmeasured_calls: number;
+  legacy_events: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+};
+
+function measuredTokens(value: number | null | undefined) {
+  return value == null ? 'Nicht gemessen' : Number(value).toLocaleString();
+}
+
 type UsageRow = {
+  llm_usage?: LlmUsage;
   tenant_id: string;
   site_id: string;
   day: string;
@@ -24,6 +38,7 @@ type UsageRow = {
 };
 
 type UsageSummary = {
+  llm_usage?: LlmUsage;
   total_requests: number;
   total_user_messages: number;
   total_assistant_messages: number;
@@ -138,14 +153,22 @@ export default function UsagePage() {
         {err && <ErrorState message={err} />}
 
         {summary && (
+          <p>
+            Bestätigte Provideraufrufe: {summary.llm_usage?.confirmed_calls ?? 'unbekannt'}.
+            {' '}Aufrufe ohne vollständige Messung: {summary.llm_usage?.unmeasured_calls ?? 'unbekannt'}.
+            {' '}Historische/regelbasierte Ereignisse ohne Messnachweis: {summary.llm_usage?.legacy_events ?? 'unbekannt'}.
+            {' '}Tokens zeigen nur bestätigte LLM-Werte; Messlücken und Embeddings sind nicht enthalten.
+          </p>
+        )}
+        {summary && (
           <>
             <div className="dashboard-grid dashboard-grid--metrics-5" style={{ gap: 16, marginBottom: 16 }}>
               <Card title="Anfragen gesamt" value={Number(summary.total_requests).toLocaleString()} />
-              <Card title="Tokens gesamt" value={Number(summary.total_tokens).toLocaleString()} />
-              <Card title="Eingabe-Tokens" value={Number(summary.total_input_tokens).toLocaleString()} />
-              <Card title="Ausgabe-Tokens" value={Number(summary.total_output_tokens).toLocaleString()} />
+              <Card title="Bestätigte LLM-Tokens" value={measuredTokens(summary.llm_usage?.total_tokens)} />
+              <Card title="Eingabe-Tokens" value={measuredTokens(summary.llm_usage?.input_tokens)} />
+              <Card title="Ausgabe-Tokens" value={measuredTokens(summary.llm_usage?.output_tokens)} />
               <Card
-                title="Geschätzte Kosten"
+                title="Pauschale Anfrageschätzung"
                 value={`€${Number(summary.estimated_cost || 0).toFixed(4)}`}
               />
             </div>
@@ -218,9 +241,9 @@ export default function UsagePage() {
                       <td className="dashboard-td dashboard-td--right">
                         {Number(row.assistant_message_count).toLocaleString()}
                       </td>
-                      <td className="dashboard-td dashboard-td--right">{Number(row.input_tokens).toLocaleString()}</td>
-                      <td className="dashboard-td dashboard-td--right">{Number(row.output_tokens).toLocaleString()}</td>
-                      <td className="dashboard-td dashboard-td--right">{Number(row.total_tokens).toLocaleString()}</td>
+                      <td className="dashboard-td dashboard-td--right">{measuredTokens(row.llm_usage?.input_tokens)}</td>
+                      <td className="dashboard-td dashboard-td--right">{measuredTokens(row.llm_usage?.output_tokens)}</td>
+                      <td className="dashboard-td dashboard-td--right">{measuredTokens(row.llm_usage?.total_tokens)}</td>
                       <td className="dashboard-td dashboard-td--right">{Number(row.success_count).toLocaleString()}</td>
                       <td className="dashboard-td dashboard-td--right">{Number(row.error_count).toLocaleString()}</td>
                       <td className="dashboard-td dashboard-td--right">

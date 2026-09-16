@@ -1,5 +1,9 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import OpenAI from 'openai';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
+import { logEvent } from '../utils/logger';
+import { LlmUsageMeasurement, readProviderUsage } from '../usage/llm-usage';
 import { PrismaService } from '../db/prisma.service';
 import { ProviderApprovalStorageLookupService } from '../knowledge-sources/provider-approval-storage-lookup.service';
 import { resolveSiteRuntimeGrantDeploymentEnvironment } from '../knowledge-sources/site-runtime-grant-runtime-contract';
@@ -8,6 +12,13 @@ export type LlmGenerationRuntimeContext = {
   tenantId: string;
   siteId: string;
 };
+
+export type LlmCallOptions = {
+  signal?: AbortSignal;
+  onUsage?: (measurement: LlmUsageMeasurement) => Promise<void>;
+};
+
+const transportAttempt = new AsyncLocalStorage<{ started: boolean }>();
 
 const LLM_GENERATION_PURPOSE = 'llm_generation';
 const LLM_PROVIDER_KEY = 'openai';
@@ -43,6 +54,9 @@ async function openAiOnlyFetch(input: RequestInfo | URL, init?: RequestInit): Pr
     throw new Error('LLM provider target rejected');
   }
 
+  init?.signal?.throwIfAborted();
+  const attempt = transportAttempt.getStore();
+  if (attempt) attempt.started = true;
   return globalThis.fetch(input, { ...init, redirect: 'error' });
 }
 
@@ -55,42 +69,8 @@ export class LlmService {
     private readonly approvalLookup: ProviderApprovalStorageLookupService,
   ) {}
 
-  async answer(system: string, user: string, context: LlmGenerationRuntimeContext) {
-    const config = this.resolveRuntimeConfig();
-    await this.assertGenerationAuthorized(context, config.model);
-
-    const start = Date.now();
-
-    const res = await this.getClient(config).chat.completions.create({
-      model: config.model,
-      temperature: 0.2,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    });
-
-    const latencyMs = Date.now() - start;
-
-    const text = res.choices[0]?.message?.content ?? '';
-
-    // ✅ OpenAI Usage auslesen
-    const usage = res.usage || {
-      prompt_tokens: 0,
-      completion_tokens: 0,
-      total_tokens: 0,
-    };
-
-    return {
-      text,
-      usage: {
-        inputTokens: usage.prompt_tokens || 0,
-        outputTokens: usage.completion_tokens || 0,
-        totalTokens: usage.total_tokens || 0,
-      },
-      model: config.model,
-      latencyMs,
-    };
+  async answer(system: string, user: string, context: LlmGenerationRuntimeContext, options: LlmCallOptions = {}) {
+    return this.generate(system, user, context, options);
   }
 
   async streamAnswer(
@@ -98,43 +78,84 @@ export class LlmService {
     user: string,
     onChunk: (chunk: string) => Promise<void> | void,
     context: LlmGenerationRuntimeContext,
+    options: LlmCallOptions = {},
+  ) {
+    return this.generate(system, user, context, options, onChunk);
+  }
+
+  private async generate(
+    system: string,
+    user: string,
+    context: LlmGenerationRuntimeContext,
+    options: LlmCallOptions,
+    onChunk?: (chunk: string) => Promise<void> | void,
   ) {
     const config = this.resolveRuntimeConfig();
-    await this.assertGenerationAuthorized(context, config.model);
+    const scope = { tenantId: context?.tenantId?.trim(), siteId: context?.siteId?.trim() };
+    await this.assertGenerationAuthorized(scope, config.model);
+    options.signal?.throwIfAborted();
     const start = Date.now();
-
-    const stream = await this.getClient(config).chat.completions.create({
-      model: config.model,
-      temperature: 0.2,
-      stream: true,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    });
-
+    const callId = randomUUID();
+    const attempt = { started: false };
+    let usage = readProviderUsage(undefined);
     let text = '';
-
-    for await (const part of stream) {
-      const delta = part.choices[0]?.delta?.content ?? '';
-      if (!delta) {
-        continue;
+    let outcome: LlmUsageMeasurement['outcome'] = 'success';
+    let failure: unknown;
+    let failed = false;
+    await transportAttempt.run(attempt, async () => {
+      try {
+        const body = {
+          model: config.model,
+          temperature: 0.2,
+          messages: [
+            { role: 'system' as const, content: system },
+            { role: 'user' as const, content: user },
+          ],
+        };
+        if (onChunk) {
+          const stream = await this.getClient(config).chat.completions.create({
+            ...body, stream: true, stream_options: { include_usage: true },
+          }, { signal: options.signal });
+          for await (const part of stream) {
+            options.signal?.throwIfAborted();
+            // Usage is a cumulative final snapshot, including events with no choices/text.
+            if (part.usage != null) usage = readProviderUsage(part.usage);
+            const delta = part.choices[0]?.delta?.content ?? '';
+            if (delta) {
+              text += delta;
+              await onChunk(delta);
+            }
+          }
+          // The SDK can finish iteration quietly on abort; do not report success then.
+          options.signal?.throwIfAborted();
+        } else {
+          const res = await this.getClient(config).chat.completions.create(body, { signal: options.signal });
+          usage = readProviderUsage(res.usage);
+          text = res.choices[0]?.message?.content ?? '';
+          options.signal?.throwIfAborted();
+        }
+      } catch (error) {
+        failed = true;
+        failure = error;
+        outcome = options.signal?.aborted ? 'aborted' : 'error';
       }
-
-      text += delta;
-      await onChunk(delta);
+    });
+    const latencyMs = Date.now() - start;
+    if (attempt.started && options.onUsage) {
+      try {
+        await options.onUsage(Object.freeze({
+          callId, ...scope, provider: 'openai', model: config.model,
+          startedAt: new Date(start).toISOString(), usage: Object.freeze(usage), outcome, latencyMs,
+        }));
+      } catch {
+        // Successful responses remain fail-closed on accounting failure, as before.
+        // A secondary accounting failure must not replace an existing provider/abort error.
+        logEvent('llm_usage_storage_failed', { callId });
+        if (!failed) throw new ServiceUnavailableException('Verbrauchserfassung derzeit nicht verfuegbar.');
+      }
     }
-
-    return {
-      text,
-      usage: {
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-      },
-      model: config.model,
-      latencyMs: Date.now() - start,
-    };
+    if (failed) throw failure;
+    return { text, usage, model: config.model, latencyMs };
   }
 
   private async assertGenerationAuthorized(
