@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { repoPath } from "./authorization-inventory.mjs";
+import { checkLlmUsageSchema } from "./llm-usage-schema-checks.mjs";
 
 const databaseUrl = process.env.SECURITY_POSTGRES_DATABASE_URL;
 const execute = process.env.SECURITY_POSTGRES_EXECUTE === "1";
@@ -215,6 +216,12 @@ try {
       remainingOtherTenant.rows[0].deliveries === 1 &&
       remainingOtherTenant.rows[0].sessions === 1,
   ]);
+
+  checks.push(...await checkLlmUsageSchema(query, {
+    initialSql: fs.readFileSync(path.join(migrationDir, "001_initial_schema.sql"), "utf8"),
+    migrationSql: fs.readFileSync(path.join(migrationDir, "034_llm_usage_measurement.sql"), "utf8"),
+    pipelineSource: fs.readFileSync(repoPath("apps/api/src/ai/chat-pipeline/chat-pipeline.service.ts"), "utf8"),
+  }));
 
   const failed = checks.filter(([, ok]) => !ok);
   if (failed.length > 0) {

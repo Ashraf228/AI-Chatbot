@@ -9,9 +9,10 @@ function readMigration(name) {
   return fs.readFileSync(path.join(migrationsDir, name), 'utf8');
 }
 
-test('site runtime LLM generation contract uses the next free migration number', () => {
+test('site runtime LLM generation contract retains its unique migration number', () => {
   const files = fs.readdirSync(migrationsDir).filter((entry) => /^\d+_.*\.sql$/i.test(entry)).sort();
-  assert.equal(files.at(-1), '033_site_runtime_llm_generation_grant_contract.sql');
+  assert.deepEqual(files.filter((name) => name.startsWith('033_')), ['033_site_runtime_llm_generation_grant_contract.sql']);
+  assert.ok(files.indexOf('032_site_runtime_grant_concurrency.sql') < files.indexOf('033_site_runtime_llm_generation_grant_contract.sql'));
 });
 
 test('032 migration validates site-runtime purpose and prevents overlapping active windows', () => {
