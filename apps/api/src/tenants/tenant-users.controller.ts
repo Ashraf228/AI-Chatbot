@@ -1,7 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { RequireDashboardRoles } from '../utils/dashboard-rbac';
-import { AuthenticateTenantUserDto, CreateTenantUserDto, UpdateTenantUserDto } from './tenant-users.dto';
+import {
+  AuthenticateTenantUserDto,
+  CreateTenantUserDto,
+  SetCustomerWorkspaceAccessDto,
+  UpdateTenantUserDto,
+} from './tenant-users.dto';
 import { TenantUsersService } from './tenant-users.service';
 
 @UseGuards(AdminKeyGuard)
@@ -30,5 +35,20 @@ export class TenantUsersController {
   @RequireDashboardRoles('admin')
   async update(@Param('id') id: string, @Body() dto: UpdateTenantUserDto) {
     return this.tenantUsers.update(id, dto);
+  }
+
+  @Put(':id/customer-workspace-access')
+  @RequireDashboardRoles('admin')
+  async setCustomerWorkspaceAccess(
+    @Param('id') id: string,
+    @Body() dto: SetCustomerWorkspaceAccessDto,
+  ) {
+    return this.tenantUsers.setCustomerWorkspaceAccess(id, dto.siteIds);
+  }
+
+  @Delete(':id/customer-workspace-access')
+  @RequireDashboardRoles('admin')
+  async revokeCustomerWorkspaceAccess(@Param('id') id: string) {
+    return this.tenantUsers.revokeCustomerWorkspaceAccess(id);
   }
 }

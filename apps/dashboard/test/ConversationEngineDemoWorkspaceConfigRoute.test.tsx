@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-vi.mock("../lib/require-auth", () => ({
-  requireSession: vi.fn(),
+vi.mock("../lib/customer-workspace-proxy", () => ({
+  authorizeCustomerWorkspaceProxy: vi.fn(),
+  customerWorkspaceAuthorizationHeaders: vi.fn(() => ({})),
 }));
 
 vi.mock("../lib/dashboard-api", () => ({
@@ -14,8 +15,12 @@ import {
   GET,
   PUT,
 } from "../app/api/sites/[siteId]/conversation-engine/demo-workspace/config/route";
+import { GET as GET_ACCESS } from "../app/api/sites/[siteId]/conversation-engine/demo-workspace/access/route";
 import { assertSiteAccess, fetchDashboardBackend } from "../lib/dashboard-api";
-import { requireSession } from "../lib/require-auth";
+import {
+  authorizeCustomerWorkspaceProxy,
+  customerWorkspaceAuthorizationHeaders,
+} from "../lib/customer-workspace-proxy";
 
 describe("conversation engine demo workspace config dashboard route", () => {
   afterEach(() => {
@@ -23,12 +28,15 @@ describe("conversation engine demo workspace config dashboard route", () => {
   });
 
   test("proxies load/save/reset only for admin/operator site-bound requests", async () => {
-    vi.mocked(requireSession).mockResolvedValue({
+    vi.mocked(authorizeCustomerWorkspaceProxy).mockResolvedValue({
       response: null,
-      session: {
-        role: "operator",
-        sub: "operator:test",
-        tenantId: "tenant-1",
+      credential: {
+        token: "operator-session",
+        session: {
+          role: "operator",
+          sub: "operator:test",
+          tenantId: "tenant-1",
+        },
       },
     } as never);
     vi.mocked(assertSiteAccess).mockResolvedValue(undefined);
@@ -98,21 +106,70 @@ describe("conversation engine demo workspace config dashboard route", () => {
     expect(deleteResponse.headers.get("Cache-Control")).toBe("no-store");
   });
 
-  test("rejects customer sessions for demo workspace config persistence", async () => {
-    vi.mocked(requireSession).mockResolvedValue({
+  test("forwards a bounded customer session token for API-side authorization", async () => {
+    vi.mocked(authorizeCustomerWorkspaceProxy).mockResolvedValue({
       response: null,
-      session: {
-        role: "customer",
-        sub: "customer:test",
-        tenantId: "tenant-1",
+      credential: {
+        token: "customer-session",
+        session: {
+          role: "customer",
+          sub: "customer:tenant-1:user@synthetic.invalid",
+          tenantId: "tenant-1",
+          tenantUserId: "user-1",
+        },
       },
     } as never);
+    vi.mocked(customerWorkspaceAuthorizationHeaders).mockReturnValue({
+      Authorization: "Bearer customer-session",
+    });
+    vi.mocked(fetchDashboardBackend).mockResolvedValue(
+      new Response(JSON.stringify({ hasSavedConfig: false, savedConfig: null }), { status: 200 }),
+    );
 
     const response = await GET(new Request("http://localhost"), {
       params: Promise.resolve({ siteId: "site-1" }),
     });
 
-    expect(fetchDashboardBackend).not.toHaveBeenCalled();
-    expect(response.status).toBe(403);
+    expect(assertSiteAccess).not.toHaveBeenCalled();
+    expect(fetchDashboardBackend).toHaveBeenCalledWith(
+      "/admin/sites/site-1/conversation-engine/demo-workspace/config",
+      expect.objectContaining({
+        session: expect.objectContaining({ role: "customer", tenantUserId: "user-1" }),
+        headers: { Authorization: "Bearer customer-session" },
+      }),
+    );
+    expect(response.status).toBe(200);
+  });
+
+  test("uses the API access endpoint as the customer navigation authority", async () => {
+    vi.mocked(authorizeCustomerWorkspaceProxy).mockResolvedValue({
+      response: null,
+      credential: {
+        token: "customer-session",
+        session: {
+          role: "customer",
+          sub: "customer:tenant-1:user@synthetic.invalid",
+          tenantId: "tenant-1",
+          tenantUserId: "user-1",
+        },
+      },
+    } as never);
+    vi.mocked(customerWorkspaceAuthorizationHeaders).mockReturnValue({
+      Authorization: "Bearer customer-session",
+    });
+    vi.mocked(fetchDashboardBackend).mockResolvedValue(
+      new Response(JSON.stringify({ allowed: true, siteId: "site-1" }), { status: 200 }),
+    );
+
+    const response = await GET_ACCESS(new Request("http://localhost"), {
+      params: Promise.resolve({ siteId: "site-1" }),
+    });
+
+    expect(assertSiteAccess).not.toHaveBeenCalled();
+    expect(fetchDashboardBackend).toHaveBeenCalledWith(
+      "/admin/sites/site-1/conversation-engine/demo-workspace/access",
+      expect.objectContaining({ headers: { Authorization: "Bearer customer-session" } }),
+    );
+    await expect(response.json()).resolves.toEqual({ allowed: true, siteId: "site-1" });
   });
 });

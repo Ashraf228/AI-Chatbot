@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { assertSiteAccess, fetchDashboardBackend } from "../../../../../../../lib/dashboard-api";
-import { requireSession } from "../../../../../../../lib/require-auth";
+import {
+  authorizeCustomerWorkspaceProxy,
+  customerWorkspaceAuthorizationHeaders,
+} from "../../../../../../../lib/customer-workspace-proxy";
 
 const MAX_PDF_UPLOAD_BYTES = 5 * 1024 * 1024;
 
@@ -46,18 +49,16 @@ export async function POST(
   req: Request,
   context: { params: Promise<{ siteId: string }> },
 ) {
-  const auth = await requireSession();
+  const auth = await authorizeCustomerWorkspaceProxy(req, { mutating: true });
   if (auth.response) return auth.response;
 
-  if (!["admin", "operator"].includes(auth.session.role)) {
-    return noStoreJson({ message: "Forbidden" }, 403);
-  }
-
   const { siteId } = await context.params;
-  try {
-    await assertSiteAccess(auth.session, siteId);
-  } catch {
-    return noStoreJson({ message: "Forbidden" }, 403);
+  if (auth.credential.session.role !== "customer") {
+    try {
+      await assertSiteAccess(auth.credential.session, siteId);
+    } catch {
+      return noStoreJson({ message: "Forbidden" }, 403);
+    }
   }
 
   const formData = await req.formData().catch(() => null);
@@ -83,7 +84,8 @@ export async function POST(
       {
         method: "POST",
         cache: "no-store",
-        session: auth.session,
+        session: auth.credential.session,
+        headers: customerWorkspaceAuthorizationHeaders(auth.credential),
         body: proxyFormData,
       },
     );

@@ -2,6 +2,11 @@ import { BadRequestException, Injectable, NotFoundException, UnauthorizedExcepti
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'crypto';
 import { DatabaseService } from '../db/database.service';
 import { resolveSiteKey } from '../sites/site-key';
+import {
+  createCustomerWorkspaceCapability,
+  CUSTOMER_WORKSPACE_CAPABILITY_KEY,
+  CUSTOMER_WORKSPACE_ROLES,
+} from './customer-workspace-capability';
 import { TENANT_USER_ROLES, TenantUserRole } from './tenant-users.dto';
 import { TenantsService } from './tenants.service';
 
@@ -72,6 +77,10 @@ function normalizeOptionalId(value: string | null | undefined) {
   if (value === undefined) return undefined;
   if (value === null || value.trim() === '') return null;
   return value.trim();
+}
+
+function hasCustomerWorkspaceCapability(value: Record<string, unknown>) {
+  return Object.prototype.hasOwnProperty.call(value, CUSTOMER_WORKSPACE_CAPABILITY_KEY);
 }
 
 function hashPassword(password: string) {
@@ -216,6 +225,9 @@ export class TenantUsersService {
     const role = this.normalizeRole(input.role);
     const id = randomUUID();
     const metadata = normalizeRecord(input.metadata);
+    if (hasCustomerWorkspaceCapability(metadata)) {
+      throw new BadRequestException('customer workspace access must use the dedicated admin endpoint');
+    }
     const expiresAt = normalizeExpiresAt(input.expiresAt);
     const evaluationSiteId = await this.resolveEvaluationSiteId({
       tenantId,
@@ -316,6 +328,10 @@ export class TenantUsersService {
     const nextMetadata =
       input.metadata !== undefined ? normalizeRecord(input.metadata) : normalizeRecord(row.metadata);
 
+    if (input.metadata !== undefined && hasCustomerWorkspaceCapability(nextMetadata)) {
+      throw new BadRequestException('customer workspace access must use the dedicated admin endpoint');
+    }
+
     if (typeof input.password === 'string' && input.password.trim()) {
       nextMetadata.passwordHash = hashPassword(input.password.trim());
     }
@@ -348,6 +364,95 @@ export class TenantUsersService {
     }
 
     return updated;
+  }
+
+  async setCustomerWorkspaceAccess(id: string, requestedSiteIds: unknown) {
+    const normalizedId = resolveSiteKey(id, id);
+    const capability = createCustomerWorkspaceCapability(requestedSiteIds);
+    if (!normalizedId || !capability) {
+      throw new BadRequestException('valid tenantUserId and unique siteIds are required');
+    }
+
+    const current = await this.db.query<TenantUserRow>(
+      `SELECT
+         id,
+         tenant_id,
+         email,
+         display_name,
+         role,
+         is_active,
+         metadata,
+         expires_at,
+         evaluation_site_id,
+         created_at,
+         updated_at
+       FROM tenant_users
+       WHERE id = $1
+       LIMIT 1`,
+      [normalizedId],
+    );
+    const row = current.rows[0];
+    if (!row) throw new NotFoundException('Tenant user not found');
+    if (!CUSTOMER_WORKSPACE_ROLES.has(row.role)) {
+      throw new BadRequestException('customer workspace access requires a non-viewer tenant role');
+    }
+
+    const sites = await this.db.query<{ id: string }>(
+      `SELECT id
+       FROM sites
+       WHERE tenant_id = $1
+         AND id = ANY($2::text[])`,
+      [row.tenant_id, capability.siteIds],
+    );
+    const foundSiteIds = new Set(sites.rows.map((site) => site.id));
+    if (foundSiteIds.size !== capability.siteIds.length || capability.siteIds.some((siteId) => !foundSiteIds.has(siteId))) {
+      throw new BadRequestException('all workspace sites must belong to the tenant user tenant');
+    }
+
+    await this.db.query(
+      `UPDATE tenant_users
+       SET metadata = jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             ARRAY[$2]::text[],
+             $3::jsonb,
+             true
+           ),
+           updated_at = now()
+       WHERE id = $1`,
+      [normalizedId, CUSTOMER_WORKSPACE_CAPABILITY_KEY, JSON.stringify(capability)],
+    );
+
+    return {
+      tenantUserId: normalizedId,
+      tenantId: row.tenant_id,
+      capability: CUSTOMER_WORKSPACE_CAPABILITY_KEY,
+      enabled: true,
+      siteIds: capability.siteIds,
+    };
+  }
+
+  async revokeCustomerWorkspaceAccess(id: string) {
+    const normalizedId = resolveSiteKey(id, id);
+    if (!normalizedId) throw new BadRequestException('tenantUserId required');
+
+    const result = await this.db.query<{ id: string; tenant_id: string }>(
+      `UPDATE tenant_users
+       SET metadata = COALESCE(metadata, '{}'::jsonb) - $2,
+           updated_at = now()
+       WHERE id = $1
+       RETURNING id, tenant_id`,
+      [normalizedId, CUSTOMER_WORKSPACE_CAPABILITY_KEY],
+    );
+    const row = result.rows[0];
+    if (!row) throw new NotFoundException('Tenant user not found');
+
+    return {
+      tenantUserId: row.id,
+      tenantId: row.tenant_id,
+      capability: CUSTOMER_WORKSPACE_CAPABILITY_KEY,
+      enabled: false,
+      siteIds: [],
+    };
   }
 
   async authenticate(input: {

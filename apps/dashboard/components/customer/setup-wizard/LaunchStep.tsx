@@ -39,6 +39,7 @@ type LaunchStepProps = {
   onGoLive: () => void;
   onJumpToStatusStep: (stepKey?: string) => void;
   dashboardRole?: DashboardSessionRole | null;
+  canUseWorkspaceTestTools?: boolean;
 };
 
 export function LaunchStep({
@@ -66,8 +67,10 @@ export function LaunchStep({
   onGoLive,
   onJumpToStatusStep,
   dashboardRole,
+  canUseWorkspaceTestTools = false,
 }: LaunchStepProps) {
   const canUseAdminTestTools = dashboardRole === "admin" || dashboardRole === "operator";
+  const canUseBoundedWorkspace = canUseAdminTestTools || canUseWorkspaceTestTools;
 
   return (
     <section className="dashboard-card dashboard-stack launch-step" id="setup-step-live">
@@ -105,7 +108,7 @@ export function LaunchStep({
             turns={testChatTurns}
             input={testQuestion}
             isLoading={savingKey === "test-chat"}
-            canUseTestTools={canUseAdminTestTools}
+            canUseTestTools={canUseBoundedWorkspace}
             onChangeInput={onChangeTestQuestion}
             onSend={onSendTestMessage}
             onClear={onClearTestChat}
@@ -129,6 +132,15 @@ export function LaunchStep({
           <ConversationEnginePreviewCard siteId={site.id} />
           <ConversationEngineCompareCard siteId={site.id} />
           <ConversationEngineResponsePreviewCard siteId={site.id} />
+          <DemoWorkspaceAgentBuilderCard siteId={site.id} />
+        </SetupAdvancedDetails>
+      ) : null}
+
+      {!canUseAdminTestTools && canUseBoundedWorkspace ? (
+        <SetupAdvancedDetails
+          title="Freigegebener Pilot Workspace"
+          description="Dieser Zugriff gilt nur für den ausdrücklich zugewiesenen Workspace. Er schaltet weder Provider noch Chatfenster oder Produktivbetrieb frei."
+        >
           <DemoWorkspaceAgentBuilderCard siteId={site.id} />
         </SetupAdvancedDetails>
       ) : null}

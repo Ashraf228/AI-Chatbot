@@ -417,6 +417,27 @@ describe("CustomerSetupWizard", () => {
     expect(await screen.findByText("Noch kein interner Test")).toBeInTheDocument();
   });
 
+  test("capability-authorized customer sees only the bounded workspace tools", async () => {
+    render(<CustomerSetupWizard siteId="site-1" dashboardRole="customer" />);
+
+    await screen.findByText("Setup-Assistent");
+    await waitFor(() =>
+      expect(vi.mocked(fetch).mock.calls.some(
+        ([requestUrl]) => String(requestUrl).includes("/conversation-engine/demo-workspace/access"),
+      )).toBe(true),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Review & Livegang/i }));
+
+    const boundedWorkspace = (await screen.findByText("Freigegebener Pilot Workspace")).closest("details");
+    expect(boundedWorkspace).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Interne Testfrage senden" })).toBeInTheDocument();
+    expect(screen.getByText("Enterprise Agent Workspace / Pilot Workspace")).toBeInTheDocument();
+    expect(screen.queryByText("Technische Diagnose")).not.toBeInTheDocument();
+    expect(within(boundedWorkspace as HTMLElement).queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();
+    expect(within(boundedWorkspace as HTMLElement).queryByText("Gesprächslogik Testfälle")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Live schalten" })).not.toBeInTheDocument();
+  });
+
   test("opens the launch step when the setup route is linked with a launch query and hash", async () => {
     window.history.replaceState({}, "", "/sites/site-1/setup?step=launch#customer-test-chat");
 
@@ -1473,5 +1494,15 @@ describe("LaunchStep review gate", () => {
     expect(screen.queryByText("Gesprächslogik Testfälle")).not.toBeInTheDocument();
     expect(screen.queryByText("Gesprächslogik Vorschau")).not.toBeInTheDocument();
     expect(screen.queryByText("Enterprise Agent Workspace / Pilot Workspace")).not.toBeInTheDocument();
+  });
+
+  test("an authorized customer sees only the bounded workspace, not general diagnostics", () => {
+    render(<LaunchStep {...launchProps("customer")} canUseWorkspaceTestTools />);
+
+    expect(screen.getByRole("button", { name: "Interne Testfrage senden" })).toBeInTheDocument();
+    expect(screen.getByText("Freigegebener Pilot Workspace")).toBeInTheDocument();
+    expect(screen.getByText("Enterprise Agent Workspace / Pilot Workspace")).toBeInTheDocument();
+    expect(screen.queryByText("Technische Diagnose")).not.toBeInTheDocument();
+    expect(screen.queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();
   });
 });

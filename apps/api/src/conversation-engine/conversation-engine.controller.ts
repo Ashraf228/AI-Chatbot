@@ -28,6 +28,10 @@ import { SitesService } from '../sites/sites.service';
 import { AdminScopeService } from '../utils/admin-scope.service';
 import { AdminKeyGuard } from '../utils/admin.guard';
 import { ConversationEngineCompareService } from './conversation-engine-compare.service';
+import {
+  CustomerWorkspaceOperatorAuthService,
+  type AuthorizedCustomerWorkspaceContext,
+} from './customer-workspace-operator-auth.service';
 import { ConversationEngineRuntimeService } from './conversation-engine-runtime.service';
 import { ConversationEngineService } from './conversation-engine.service';
 import { ConversationEngineTestCasesService } from './conversation-engine-test-cases.service';
@@ -38,6 +42,11 @@ import { ResponseDraftService } from './response-draft.service';
 type SiteModulePreview = {
   key: string;
   config: Record<string, unknown>;
+};
+
+type DashboardRequest = {
+  dashboardAuth?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
 };
 
 const MAX_DEMO_PDF_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -312,6 +321,7 @@ export class ConversationEngineController {
     private readonly testCases: ConversationEngineTestCasesService,
     private readonly knowledgePreview: KnowledgePreviewRetrievalService,
     private readonly responseDrafts: ResponseDraftService,
+    private readonly customerWorkspaceAuth: CustomerWorkspaceOperatorAuthService,
   ) {}
 
   @Get('settings')
@@ -336,12 +346,10 @@ export class ConversationEngineController {
   @Get('demo-workspace/config')
   async getDemoWorkspaceConfig(
     @Param('siteId') siteId: string,
-    @Req() req: { dashboardAuth?: unknown },
+    @Req() req: DashboardRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator'],
-    });
+    await this.assertDemoWorkspaceAccess(req, siteId);
     response.setHeader('Cache-Control', 'no-store');
     return this.testCases.getDemoWorkspaceConfig(siteId);
   }
@@ -350,28 +358,34 @@ export class ConversationEngineController {
   async updateDemoWorkspaceConfig(
     @Param('siteId') siteId: string,
     @Body() body: Record<string, unknown>,
-    @Req() req: { dashboardAuth?: unknown },
+    @Req() req: DashboardRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const auth = this.scope.getAuth(req);
-    await this.scope.assertSiteAccess(auth, siteId, {
-      allowedRoles: ['admin', 'operator'],
-    });
+    const auth = await this.assertDemoWorkspaceAccess(req, siteId);
     response.setHeader('Cache-Control', 'no-store');
-    return this.testCases.updateDemoWorkspaceConfig(siteId, body, auth.role || 'operator');
+    return this.testCases.updateDemoWorkspaceConfig(siteId, body, auth.actorRole);
   }
 
   @Delete('demo-workspace/config')
   async deleteDemoWorkspaceConfig(
     @Param('siteId') siteId: string,
-    @Req() req: { dashboardAuth?: unknown },
+    @Req() req: DashboardRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator'],
-    });
+    await this.assertDemoWorkspaceAccess(req, siteId);
     response.setHeader('Cache-Control', 'no-store');
     return this.testCases.deleteDemoWorkspaceConfig(siteId);
+  }
+
+  @Get('demo-workspace/access')
+  async getDemoWorkspaceAccess(
+    @Param('siteId') siteId: string,
+    @Req() req: DashboardRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.assertDemoWorkspaceAccess(req, siteId);
+    response.setHeader('Cache-Control', 'no-store');
+    return { allowed: true, siteId };
   }
 
   @Get('test-cases')
@@ -609,17 +623,27 @@ export class ConversationEngineController {
   async runtimePilotPreview(
     @Param('siteId') siteId: string,
     @Body() body: Record<string, unknown>,
-    @Req() req: { dashboardAuth?: unknown },
+    @Req() req: DashboardRequest,
   ) {
-    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator'],
-    });
+    const workspaceAccess = await this.assertDemoWorkspaceAccess(req, siteId);
+    const isCustomerWorkspace = workspaceAccess.actorRole === 'customer';
+    if (
+      isCustomerWorkspace
+      && (
+        Object.prototype.hasOwnProperty.call(body, 'websiteAnswerRuntimeGateInput')
+        || Object.prototype.hasOwnProperty.call(body, 'websiteAnswerRuntimePilotInput')
+      )
+    ) {
+      throw new BadRequestException('unsupported customer workspace input');
+    }
 
     const site = await this.sites.getSite(siteId);
     const modules = await this.siteModules.listForSite(siteId) as SiteModulePreview[];
     const siteConfig = asRecord(site?.config);
     const moduleConfigs = Object.fromEntries(modules.map((module) => [module.key, module.config || {}]));
-    const assistantProfileDebug = (await this.diagnostics.getDiagnostics(siteId)).assistantProfileDebug;
+    const assistantProfileDebug = isCustomerWorkspace
+      ? null
+      : (await this.diagnostics.getDiagnostics(siteId)).assistantProfileDebug;
 
     if (!runtimePilotEnabled(siteConfig, moduleConfigs)) {
       return {
@@ -696,12 +720,10 @@ export class ConversationEngineController {
   async pdfExtract(
     @Param('siteId') siteId: string,
     @UploadedFile() file: Express.Multer.File,
-    @Req() req: { dashboardAuth?: unknown },
+    @Req() req: DashboardRequest,
     @Res({ passthrough: true }) response: Response,
   ) {
-    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
-      allowedRoles: ['admin', 'operator'],
-    });
+    await this.assertDemoWorkspaceAccess(req, siteId);
 
     response.setHeader('Cache-Control', 'no-store');
 
@@ -779,5 +801,24 @@ export class ConversationEngineController {
     await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
       allowedRoles: ['admin', 'operator'],
     });
+  }
+
+  private async assertDemoWorkspaceAccess(
+    req: DashboardRequest,
+    siteId: string,
+  ): Promise<AuthorizedCustomerWorkspaceContext | { actorRole: 'admin' | 'operator' }> {
+    const auth = this.scope.getAuth(req);
+    if (auth.role === 'customer') {
+      return this.customerWorkspaceAuth.authorize({
+        authorizationHeader: req.headers?.authorization,
+        dashboardTokenHeader: req.headers?.['x-dashboard-token'],
+        targetSiteId: siteId,
+      });
+    }
+
+    await this.scope.assertSiteAccess(auth, siteId, {
+      allowedRoles: ['admin', 'operator'],
+    });
+    return { actorRole: auth.role === 'admin' ? 'admin' : 'operator' };
   }
 }

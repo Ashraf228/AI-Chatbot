@@ -62,7 +62,7 @@ type DemoWorkspaceConfig = {
   metadata: {
     source: 'demo_workspace_agent_builder';
     updatedAt: string;
-    updatedByRole: 'admin' | 'operator';
+    updatedByRole: 'admin' | 'operator' | 'customer';
     customerDataAllowed: false;
     knowledgePersistenceEnabled: false;
     chatHistoryPersistenceEnabled: false;
@@ -141,7 +141,8 @@ function normalizeDemoWorkspaceConfig(value: unknown): DemoWorkspaceConfig | nul
 
   const metadata = asRecord(source.metadata);
   const tone = asString(source.tone);
-  const updatedByRole = asString(metadata.updatedByRole) === 'admin' ? 'admin' : 'operator';
+  const persistedRole = asString(metadata.updatedByRole);
+  const updatedByRole = persistedRole === 'admin' || persistedRole === 'customer' ? persistedRole : 'operator';
   const updatedAt = asString(metadata.updatedAt) || new Date().toISOString();
 
   return {
@@ -176,7 +177,7 @@ function sanitizeDemoWorkspaceConfig(
   actorRole: string,
 ): DemoWorkspaceConfig {
   const source = asRecord(value);
-  const updatedByRole = actorRole === 'admin' ? 'admin' : 'operator';
+  const updatedByRole = actorRole === 'admin' || actorRole === 'customer' ? actorRole : 'operator';
 
   return {
     version: DEMO_WORKSPACE_CONFIG_VERSION,

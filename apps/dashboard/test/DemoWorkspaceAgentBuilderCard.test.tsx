@@ -26,7 +26,9 @@ describe("DemoWorkspaceAgentBuilderCard", () => {
     expect(screen.getByText("Workspace Status / Boundary Card")).toBeInTheDocument();
     expect(screen.getByText("Workspace Flow / Checklist")).toBeInTheDocument();
     expect(screen.getByText("Pilot Workspace")).toBeInTheDocument();
-    expect(screen.getByText("Admin/operator only")).toBeInTheDocument();
+    expect(
+      screen.getByText("Admin/operator oder ausdrücklich site-zugewiesener Kundenmitarbeiter"),
+    ).toBeInTheDocument();
     expect(screen.getAllByText("No public widget activation").length).toBeGreaterThan(0);
     expect(screen.getAllByText("No deploy").length).toBeGreaterThan(0);
     expect(screen.getByText("No customer data")).toBeInTheDocument();

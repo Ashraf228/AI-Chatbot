@@ -17,6 +17,8 @@ Diese Datei beschreibt das Security-Gate fuer Dashboard-, Viewer- und Backend-Ro
 - `customer`: tenantgebundene Rolle. Die Session muss eine `tenantId` enthalten; Site-/Ressourcen-Zugriffe duerfen nicht tenantuebergreifend funktionieren.
 - `viewer`: isolierter Evaluationszugang. Viewer duerfen nur die exakt freigegebenen Evaluation-Routen nutzen und werden serverseitig ueber `EvaluationAccessService` revalidiert.
 
+Die Rolle `customer` allein erteilt keine Demo-Workspace-Rechte. Der begrenzte Kunden-Workspace-Pfad verlangt zusaetzlich die persistierte Capability `tenant_users.metadata.customerWorkspaceOperatorV1` mit exakten Site-IDs. Die API revalidiert Konto, Rolle, Ablauf, Capability und Tenant-/Site-Zugehoerigkeit bei jedem Zugriff; der BFF leitet dafuer das signierte individuelle Session-Token weiter. Nur Plattform-Admins duerfen diese Capability ueber den dedizierten Tenant-User-Endpunkt setzen oder entfernen. Viewer und die gemeinsame, nicht tenantgebundene Operator-Session bleiben ausgeschlossen.
+
 ## Viewer-Allowlist
 
 Viewer-Zugriff ist absichtlich exakt und nicht prefixbasiert. Die erlaubten Pfade stehen in `apps/dashboard/lib/viewer-access.ts` und muessen mit der Matrix uebereinstimmen:
