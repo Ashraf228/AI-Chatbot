@@ -25,8 +25,8 @@ Poweruser capabilities do not replace a provider grant.
 | Website import/resync → site access | provider-free extraction and text persistence: no external embedding gap | unchanged, remains non-ready pending separate indexing |
 | WebsiteEmbeddingIngestService → internal mock workflow | persisted grant and safe-adapter WeakSet; only internally created frozen deterministic mocks permitted | unchanged; `website_ingest_runtime_indexing`, URL source, no external provider transport enabled |
 | IT template import → existing tenant/site/capability checks | transactional provider-free inactive draft import | unchanged; importing does not authorize subsequent reindex or add answer-ready state |
-| Public query → RuntimeQueryEmbeddingService | existing exact site-runtime query grant | unchanged `query_embedding`; shared EmbeddingService/query transport unchanged |
-| Admin/test preview query → KnowledgePreviewRetrievalService | direct shared embedder; outside public query-grant contract | outside this ingestion scope; separate preview review remains necessary |
+| Public query → RuntimeQueryEmbeddingService | existing exact site-runtime query grant | unchanged `query_embedding`; shared query transport is retry-, redirect- and log-hardened |
+| Admin/test preview query → KnowledgePreviewRetrievalService | server-checked site tenant and active answer-ready source | reuses the exact `site_runtime/query_embedding` boundary; admin/operator access is not a provider grant |
 | LLM generation → LlmService | reviewed exact site-runtime generation grant | unchanged `llm_generation` and transport controls |
 
 ## Contract decision
@@ -60,7 +60,8 @@ unchanged. Purpose/usage pairs are also checked again after storage mapping.
 
 `IngestionEmbeddingService` reuses existing embedding provider/model resolution
 and deployment-environment resolution. It owns a small ingestion-only OpenAI
-client to avoid changing public-query/preview transport semantics.
+client so source-scoped ingestion grants remain separate from the shared
+site-runtime query transport.
 
 Each text chunk creates one SDK request with explicit `maxRetries: 0`,
 `logLevel: 'off'`, fixed `https://api.openai.com/v1`, and normalized model.
@@ -120,7 +121,7 @@ Final gate counts and content hashes are recorded in the task completion report.
 No production CI/Docker/deploy gate is claimed for this uncommitted local package.
 
 Remaining pilot blockers include explicit ingestion/reindex grant provisioning,
-the separately scoped preview-query review, provider-free website live-indexing
-activation, and `EXTERNAL_IPV6_PROBE_REQUIRED`. Server, guard and network
+provider-free website live-indexing activation, and
+`EXTERNAL_IPV6_PROBE_REQUIRED`. Server, guard and network
 configuration remain unchanged. Streaming token accounting and cost-model work
 remain separate tasks.

@@ -111,6 +111,19 @@ It can show:
 
 Knowledge Preview is read-only. It must not trigger ingestion, document creation, chunk creation, or knowledge-source writes.
 
+Embedding retrieval uses the same server-side `site_runtime/query_embedding`
+contract as other runtime queries. The checked site tenant, exact site, active
+`runtime_readiness = 'ready'` source state, deployment environment, provider and
+model must match one current persisted grant. Admin or operator access enables
+the preview UI only; it never substitutes for that provider grant. Missing,
+expired, revoked, ambiguous or malformed grants and lookup failures return the
+existing sanitized preview error without starting provider transport.
+
+The shared query embedding transport is fixed to the expected HTTPS embedding
+endpoint, disables SDK retries and SDK logging, and rejects redirects. The grant
+is evaluated at the transport boundary for every caller attempt. No grant is
+created or broadened by preview execution.
+
 The expected grounding states are:
 
 - `grounded`: response draft uses concrete snippets.
@@ -136,6 +149,7 @@ The following must remain true unless a separate rollout plan explicitly changes
 - Admin test UI is gated to admin/operator roles.
 - Tenant and site scoping are enforced server-side.
 - Knowledge Preview retrieval is read-only.
+- Knowledge Preview provider transport requires an exact persisted query-embedding grant.
 - No ingestion is triggered by preview mode.
 - No leads, tickets, emails, webhooks, or integrations are triggered by preview or compare mode.
 - AssistantProfile migration remains explicit and reversible.

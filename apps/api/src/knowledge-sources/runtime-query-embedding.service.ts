@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { EmbeddingService, type ResolvedEmbeddingConfig } from '../vector/embedding.service';
 import type { ProviderEmbeddingEnvironment } from './provider-embedding-gate';
 import {
+  type ProviderApprovalStorageLookupDecision,
   type ProviderApprovalStorageLookupDecisionCode,
   ProviderApprovalStorageLookupService,
 } from './provider-approval-storage-lookup.service';
@@ -42,6 +43,27 @@ export type RuntimeQueryEmbeddingResult =
       reason: string;
       sanitizedMessage: string;
     } & RuntimeQueryEmbeddingMetadata);
+
+class RuntimeQueryEmbeddingTransportDeniedError extends Error {
+  constructor(readonly decision: ProviderApprovalStorageLookupDecision) {
+    super('runtime_query_embedding_transport_denied');
+  }
+}
+
+function findTransportDenial(error: unknown): RuntimeQueryEmbeddingTransportDeniedError | null {
+  const seen = new Set<unknown>();
+  let current = error;
+
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    if (current instanceof RuntimeQueryEmbeddingTransportDeniedError) {
+      return current;
+    }
+    seen.add(current);
+    current = 'cause' in current ? current.cause : null;
+  }
+
+  return null;
+}
 
 @Injectable()
 export class RuntimeQueryEmbeddingService {
@@ -131,25 +153,34 @@ export class RuntimeQueryEmbeddingService {
       };
     }
 
-    const decision = await this.approvalLookup.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage({
-      tenantId,
-      siteId,
-      environment,
-      providerKey: config.providerKey,
-      model: config.model,
-    });
-
-    if (!decision.allowed) {
-      return this.buildDeniedResult({
-        decisionCode: decision.decisionCode,
-        reason: decision.reason,
-        sanitizedMessage: decision.sanitizedMessage,
-        config,
-        environment,
+    let embedding: number[];
+    try {
+      embedding = await this.embedder.embedWithResolvedConfig(query, config, async () => {
+        const decision = await this.approvalLookup.evaluateSiteRuntimeQueryEmbeddingApprovalFromStorage({
+          tenantId,
+          siteId,
+          environment,
+          providerKey: config.providerKey,
+          model: config.model,
+        });
+        if (!decision.allowed) {
+          throw new RuntimeQueryEmbeddingTransportDeniedError(decision);
+        }
       });
+    } catch (error) {
+      const transportDenial = findTransportDenial(error);
+      if (transportDenial) {
+        return this.buildDeniedResult({
+          decisionCode: transportDenial.decision.decisionCode,
+          reason: transportDenial.decision.reason,
+          sanitizedMessage: transportDenial.decision.sanitizedMessage,
+          config,
+          environment,
+        });
+      }
+      throw error;
     }
 
-    const embedding = await this.embedder.embedWithResolvedConfig(query, config);
     return {
       kind: 'embedded',
       decisionCode: 'allowed',

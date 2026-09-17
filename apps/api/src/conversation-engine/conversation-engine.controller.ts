@@ -520,7 +520,7 @@ export class ConversationEngineController {
     @Body() body: Record<string, unknown>,
     @Req() req: { dashboardAuth?: unknown },
   ) {
-    await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
+    const scopedSite = await this.scope.assertSiteAccess(this.scope.getAuth(req), siteId, {
       allowedRoles: ['admin', 'operator'],
     });
 
@@ -562,7 +562,7 @@ export class ConversationEngineController {
     const includeKnowledge = body.includeKnowledge === true;
     const allowKnowledgePreview = includeKnowledge && knowledgePreviewEnabled(siteConfig, moduleConfigs);
     const knowledgeRetrieval = await this.knowledgePreview.retrieve({
-      tenantId: site?.tenant_id || '',
+      tenantId: scopedSite.tenant_id || '',
       siteId,
       assistantProfile,
       conversationDecision: decision,

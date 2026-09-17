@@ -362,6 +362,7 @@ function createController({ previewEnabled = true, siteConfig = {}, moduleConfig
       },
       async assertSiteAccess(auth, siteId, options) {
         calls.push({ method: 'assertSiteAccess', auth, siteId, options });
+        return { id: siteId, tenant_id: 'tenant-1' };
       },
     },
     resolver,

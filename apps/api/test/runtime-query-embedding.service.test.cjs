@@ -79,7 +79,8 @@ function createRuntimeService({
       supportsResolvedConfig() {
         return supportsResolvedConfig;
       },
-      async embedWithResolvedConfig(query, config) {
+      async embedWithResolvedConfig(query, config, authorizeTransport) {
+        await authorizeTransport();
         calls.embed.push({ query, config });
         return [0.1, 0.2, 0.3];
       },
