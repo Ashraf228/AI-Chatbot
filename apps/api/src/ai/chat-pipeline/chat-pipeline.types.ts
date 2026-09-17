@@ -60,10 +60,10 @@ export type ChatPipelineAdvisorContext = {
 
 export type ChatPipelineUsage = {
   model: string;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  estimatedCost: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  estimatedCost: number | null;
   latencyMs: number;
   success: boolean;
 };

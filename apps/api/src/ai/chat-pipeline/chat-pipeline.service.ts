@@ -23,6 +23,8 @@ import {
 } from './chat-pipeline.types';
 import { ConversationStateService } from './conversation-state.service';
 import { ResponseComposerService } from './response-composer.service';
+import { persistLlmUsage } from '../../usage/persist-llm-usage';
+import { LlmUsageMeasurement } from '../../usage/llm-usage';
 import { UsageLimitService } from '../../billing/usage-limit.service';
 
 @Injectable()
@@ -41,7 +43,7 @@ export class ChatPipelineService {
     private readonly runtimeQueryEmbedding: RuntimeQueryEmbeddingService,
   ) {}
 
-  async process(input: ChatPipelineInput): Promise<ChatPipelineResult> {
+  async process(input: ChatPipelineInput, signal?: AbortSignal): Promise<ChatPipelineResult> {
     const normalized = this.normalizeInput(input);
     await this.usageLimits.assertWithinLimit(normalized.tenantId, 'monthlyMessages');
     const conversation = await this.prepareConversation(normalized);
@@ -96,6 +98,11 @@ export class ChatPipelineService {
       });
     }
 
+    let usageRecorded = false;
+    const onUsage = async (measurement: LlmUsageMeasurement) => {
+      await persistLlmUsage(this.db, { ...normalized, conversationId: conversation.id, sessionId: conversation.sessionId }, measurement);
+      usageRecorded = true;
+    };
     const llmRes = routed.shouldClarifyAdvisor
       ? {
           text: routed.advisorContext.clarificationQuestion || '',
@@ -106,7 +113,7 @@ export class ChatPipelineService {
       : await this.llm.answer(routed.systemPrompt, routed.userPrompt, {
           tenantId: normalized.tenantId,
           siteId: normalized.siteId,
-        });
+        }, { signal, onUsage });
 
     const safeAnswer = sanitizeOutput(llmRes.text);
     const estimatedCost = estimateOpenAICost({
@@ -121,6 +128,7 @@ export class ChatPipelineService {
       conversationId: conversation.id,
       sessionId: conversation.sessionId,
       answer: safeAnswer,
+      usageAlreadyRecorded: usageRecorded,
       usage: {
         model: llmRes.model,
         inputTokens: llmRes.usage.inputTokens,
@@ -165,6 +173,7 @@ export class ChatPipelineService {
   async stream(
     input: ChatPipelineInput,
     emit: (event: ChatPipelineEvent) => Promise<void> | void,
+    signal?: AbortSignal,
   ): Promise<void> {
     const normalized = this.normalizeInput(input);
     await this.usageLimits.assertWithinLimit(normalized.tenantId, 'monthlyMessages');
@@ -312,8 +321,13 @@ export class ChatPipelineService {
       return;
     }
 
+    let usageRecorded = false;
+    const onUsage = async (measurement: LlmUsageMeasurement) => {
+      await persistLlmUsage(this.db, { ...normalized, conversationId: conversation.id, sessionId: conversation.sessionId }, measurement);
+      usageRecorded = true;
+    };
     let safeAnswer = '';
-    let llmRes = {
+    let llmRes: { text: string; usage: { inputTokens: number | null; outputTokens: number | null; totalTokens: number | null }; model: string; latencyMs: number } = {
       text: '',
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
       model: 'rule-based-advisor',
@@ -337,6 +351,7 @@ export class ChatPipelineService {
           tenantId: normalized.tenantId,
           siteId: normalized.siteId,
         },
+        { signal, onUsage },
       );
       safeAnswer = sanitizeOutput(fullAnswer || llmRes.text);
     }
@@ -347,6 +362,7 @@ export class ChatPipelineService {
       conversationId: conversation.id,
       sessionId: conversation.sessionId,
       answer: safeAnswer,
+      usageAlreadyRecorded: usageRecorded,
       usage: {
         model: llmRes.model,
         inputTokens: llmRes.usage.inputTokens,
@@ -800,10 +816,11 @@ export class ChatPipelineService {
     sessionId: string;
     answer: string;
     usage: ChatPipelineUsage;
+    usageAlreadyRecorded?: boolean;
     source?: ChatPipelineInput['source'];
     leadCaptured?: boolean;
   }) {
-    await this.insertUsageEvent({
+    if (!params.usageAlreadyRecorded) await this.insertUsageEvent({
       tenantId: params.tenantId,
       siteId: params.siteId,
       conversationId: params.conversationId,
@@ -817,10 +834,10 @@ export class ChatPipelineService {
       requestCount: 1,
       userMessageCount: 1,
       assistantMessageCount: 1,
-      inputTokens: params.usage.inputTokens,
-      outputTokens: params.usage.outputTokens,
-      totalTokens: params.usage.totalTokens,
-      estimatedCost: params.usage.estimatedCost,
+      inputTokens: params.usageAlreadyRecorded ? 0 : (params.usage.inputTokens ?? 0),
+      outputTokens: params.usageAlreadyRecorded ? 0 : (params.usage.outputTokens ?? 0),
+      totalTokens: params.usageAlreadyRecorded ? 0 : (params.usage.totalTokens ?? 0),
+      estimatedCost: params.usageAlreadyRecorded ? 0 : (params.usage.estimatedCost ?? 0),
       successCount: 1,
       errorCount: 0,
       latencyMs: params.usage.latencyMs,
@@ -848,10 +865,10 @@ export class ChatPipelineService {
     conversationId: string;
     sessionId: string;
     model: string;
-    inputTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-    estimatedCost: number;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens: number | null;
+    estimatedCost: number | null;
     latencyMs: number;
     success: boolean;
   }) {

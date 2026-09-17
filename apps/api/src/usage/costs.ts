@@ -1,9 +1,11 @@
 export function estimateOpenAICost(params: {
   model: string;
-  inputTokens: number;
-  outputTokens: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
 }) {
   const { model, inputTokens, outputTokens } = params;
+
+  if (inputTokens === null || outputTokens === null) return null;
 
   const pricing: Record<string, { input: number; output: number }> = {
     'gpt-4.1-mini': {

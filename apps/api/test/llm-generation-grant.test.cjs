@@ -238,7 +238,7 @@ test('LlmService authorizes one exact normal attempt before calling the provider
     const result = await service.answer('system', 'user', { tenantId: 'tenant-1', siteId: 'site-1' });
 
     assert.equal(result.text, 'Sicher beantwortet');
-    assert.deepEqual(result.usage, { inputTokens: 2, outputTokens: 3, totalTokens: 5 });
+    assert.deepEqual(result.usage, { inputTokens: 2, outputTokens: 3, totalTokens: 5, status: 'confirmed' });
     assert.equal(calls.site.length, 1);
     assert.deepEqual(calls.site[0].params, ['site-1', 'tenant-1']);
     assert.equal(calls.lookup.length, 1);
