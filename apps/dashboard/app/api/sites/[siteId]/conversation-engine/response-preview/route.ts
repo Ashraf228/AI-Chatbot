@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { assertSiteAccess, fetchDashboardBackend } from "@/lib/dashboard-api";
-import { requireSession } from "@/lib/require-auth";
+import { assertSiteAccess, fetchDashboardBackend } from "../../../../../../lib/dashboard-api";
+import { requireSession } from "../../../../../../lib/require-auth";
 
 export async function POST(
   req: Request,

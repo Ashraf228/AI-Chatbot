@@ -18,7 +18,6 @@ import { IntentClassifierService } from './intent-classifier.service';
 import { KnowledgePreviewRetrievalService } from './knowledge-preview-retrieval.service';
 import { NextActionService } from './next-action.service';
 import { ResponseDraftService } from './response-draft.service';
-import { EmbeddingService } from '../vector/embedding.service';
 import { VectorService } from '../vector/vector.service';
 
 @Module({
@@ -38,7 +37,6 @@ import { VectorService } from '../vector/vector.service';
     ResponseDraftService,
     HandoffReadinessService,
     ConversationQualityService,
-    EmbeddingService,
     VectorService,
     PrismaService,
   ],

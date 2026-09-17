@@ -11,15 +11,14 @@ const EMBEDDING_MODULE = path.join(SRC_ROOT, 'vector', 'embedding.service.ts');
 const RUNTIME_BOUNDARY_MODULE = path.join(SRC_ROOT, 'knowledge-sources', 'runtime-query-embedding.service.ts');
 const DIRECT_CONSUMERS = new Map([
   ['knowledge-sources/runtime-query-embedding.service.ts', ['RuntimeQueryEmbeddingService', 'embedWithResolvedConfig']],
-  ['conversation-engine/knowledge-preview-retrieval.service.ts', ['KnowledgePreviewRetrievalService', 'embed']],
 ]);
 const REGISTRATION_ONLY = new Map([
   ['app.module.ts', 'AppModule'],
   ['knowledge-sources/knowledge-sources.module.ts', 'KnowledgeSourcesModule'],
-  ['conversation-engine/conversation-engine.module.ts', 'ConversationEngineModule'],
 ]);
 const RUNTIME_CONSUMERS = [
   ['ChatPipelineService', 'ai/chat-pipeline/chat-pipeline.service.ts'],
+  ['KnowledgePreviewRetrievalService', 'conversation-engine/knowledge-preview-retrieval.service.ts'],
   ['ToolExecutorService', 'tools/tool-executor.service.ts'],
   ['ToolDispatcherService', 'tools/tool-dispatcher.service.ts'],
 ];
@@ -361,11 +360,11 @@ test('AST inventory rejects external consumers, aliases, requires, imports, and 
 });
 
 test('validated direct consumer and real Module provider registration are accepted', () => {
-  const directConsumer = fixture('../conversation-engine/knowledge-preview-retrieval.service.ts',
-    "import { EmbeddingService as E } from '../vector/embedding.service'; class KnowledgePreviewRetrievalService { constructor(private readonly embedder: E) {} run() { return this.embedder.embed('x'); } }");
+  const directConsumer = fixture('../knowledge-sources/runtime-query-embedding.service.ts',
+    "import { EmbeddingService as E } from '../vector/embedding.service'; class RuntimeQueryEmbeddingService { constructor(private readonly embedder: E) {} run() { return this.embedder.embedWithResolvedConfig('x', {}, async () => {}); } }");
   const registration = fixture('../app.module.ts',
     "import { Module as NestModule } from '@nestjs/common'; import { EmbeddingService } from './vector/embedding.service'; @NestModule({ providers: [EmbeddingService] }) export class AppModule {}");
-  assert.deepEqual(classifyEmbeddingAccesses([directConsumer]), { directConsumers: ['conversation-engine/knowledge-preview-retrieval.service.ts'], registrations: [] });
+  assert.deepEqual(classifyEmbeddingAccesses([directConsumer]), { directConsumers: ['knowledge-sources/runtime-query-embedding.service.ts'], registrations: [] });
   assert.deepEqual(classifyEmbeddingAccesses([registration]), { directConsumers: [], registrations: ['app.module.ts'] });
 });
 

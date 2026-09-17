@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { AssistantProfile } from '../assistant-profiles';
-import { EmbeddingService } from '../vector/embedding.service';
+import { RuntimeQueryEmbeddingService } from '../knowledge-sources/runtime-query-embedding.service';
 import { VectorSearchRow, VectorService } from '../vector/vector.service';
 import {
   ConversationDecision,
@@ -130,7 +130,7 @@ function toSnippet(row: VectorSearchRow, selectedAgentKey?: string | null): Engi
 @Injectable()
 export class KnowledgePreviewRetrievalService {
   constructor(
-    private readonly embedder: EmbeddingService,
+    private readonly runtimeEmbedding: RuntimeQueryEmbeddingService,
     private readonly vector: VectorService,
   ) {}
 
@@ -159,11 +159,35 @@ export class KnowledgePreviewRetrievalService {
     }
 
     try {
-      const embedding = await this.embedder.embed(query);
+      const embeddingResult = await this.runtimeEmbedding.embedAuthorizedQuery({
+        tenantId: input.tenantId,
+        siteId: input.siteId,
+        query,
+      });
+      if (embeddingResult.kind === 'no_ready_sources') {
+        return {
+          enabled: true,
+          attempted: true,
+          status: 'empty',
+          snippets: [],
+          warnings: [],
+          reasons: ['Keine aktiven, answer-ready Wissensquellen verfügbar.'],
+        };
+      }
+      if (embeddingResult.kind === 'denied') {
+        return {
+          enabled: true,
+          attempted: true,
+          status: 'error',
+          snippets: [],
+          warnings: ['Wissensbasis-Vorschau konnte nicht abgerufen werden.'],
+          reasons: ['Retrieval-Fehler wurde abgefangen; die Antwortvorschau bleibt verfügbar.'],
+        };
+      }
       const rows = await this.vector.search(
         input.tenantId,
         input.siteId,
-        embedding,
+        embeddingResult.embedding,
         Math.max(1, Math.min(input.maxSnippets || 4, 8)),
         undefined,
         {},
