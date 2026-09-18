@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-vi.mock("../lib/require-auth", () => ({
-  requireSession: vi.fn(),
+vi.mock("../lib/customer-workspace-proxy", () => ({
+  authorizeCustomerWorkspaceProxy: vi.fn(),
+  customerWorkspaceAuthorizationHeaders: vi.fn(() => ({})),
 }));
 
 vi.mock("../lib/dashboard-api", () => ({
@@ -11,7 +12,10 @@ vi.mock("../lib/dashboard-api", () => ({
 
 import { POST } from "../app/api/sites/[siteId]/conversation-engine/knowledge/pdf-extract/route";
 import { assertSiteAccess, fetchDashboardBackend } from "../lib/dashboard-api";
-import { requireSession } from "../lib/require-auth";
+import {
+  authorizeCustomerWorkspaceProxy,
+  customerWorkspaceAuthorizationHeaders,
+} from "../lib/customer-workspace-proxy";
 
 function createFormDataRequest(formData: FormData) {
   return {
@@ -25,12 +29,15 @@ describe("conversation engine pdf extract dashboard route", () => {
   });
 
   test("proxies PDF extraction only for admin/operator site-bound requests", async () => {
-    vi.mocked(requireSession).mockResolvedValue({
+    vi.mocked(authorizeCustomerWorkspaceProxy).mockResolvedValue({
       response: null,
-      session: {
-        role: "admin",
-        sub: "admin:test",
-        tenantId: null,
+      credential: {
+        token: "admin-session",
+        session: {
+          role: "admin",
+          sub: "admin:test",
+          tenantId: null,
+        },
       },
     } as never);
     vi.mocked(assertSiteAccess).mockResolvedValue(undefined);
@@ -83,15 +90,27 @@ describe("conversation engine pdf extract dashboard route", () => {
     });
   });
 
-  test("rejects customer sessions for the demo PDF extract route", async () => {
-    vi.mocked(requireSession).mockResolvedValue({
+  test("forwards bounded customer PDF extraction with the signed session", async () => {
+    vi.mocked(authorizeCustomerWorkspaceProxy).mockResolvedValue({
       response: null,
-      session: {
-        role: "customer",
-        sub: "customer:test",
-        tenantId: "tenant-1",
+      credential: {
+        token: "customer-session",
+        session: {
+          role: "customer",
+          sub: "customer:tenant-1:user@synthetic.invalid",
+          tenantId: "tenant-1",
+          tenantUserId: "user-1",
+        },
       },
     } as never);
+    vi.mocked(customerWorkspaceAuthorizationHeaders).mockReturnValue({
+      Authorization: "Bearer customer-session",
+    });
+    vi.mocked(fetchDashboardBackend).mockResolvedValue(
+      new Response(JSON.stringify({ fileName: "Demo Upload.pdf", extractedText: "Synthetic", truncated: false }), {
+        status: 200,
+      }),
+    );
 
     const formData = new FormData();
     formData.append("file", new File(["%PDF demo"], "Demo Upload.pdf", { type: "application/pdf" }));
@@ -101,17 +120,26 @@ describe("conversation engine pdf extract dashboard route", () => {
     });
 
     expect(assertSiteAccess).not.toHaveBeenCalled();
-    expect(fetchDashboardBackend).not.toHaveBeenCalled();
-    expect(response.status).toBe(403);
+    expect(fetchDashboardBackend).toHaveBeenCalledWith(
+      "/admin/sites/site-1/conversation-engine/knowledge/pdf-extract",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer customer-session" },
+        body: expect.any(FormData),
+      }),
+    );
+    expect(response.status).toBe(200);
   });
 
   test("rejects non-PDF uploads before any extraction runs", async () => {
-    vi.mocked(requireSession).mockResolvedValue({
+    vi.mocked(authorizeCustomerWorkspaceProxy).mockResolvedValue({
       response: null,
-      session: {
-        role: "operator",
-        sub: "operator:test",
-        tenantId: "tenant-1",
+      credential: {
+        token: "operator-session",
+        session: {
+          role: "operator",
+          sub: "operator:test",
+          tenantId: "tenant-1",
+        },
       },
     } as never);
     vi.mocked(assertSiteAccess).mockResolvedValue(undefined);
@@ -129,12 +157,15 @@ describe("conversation engine pdf extract dashboard route", () => {
   });
 
   test("rejects PDFs above the in-memory size boundary", async () => {
-    vi.mocked(requireSession).mockResolvedValue({
+    vi.mocked(authorizeCustomerWorkspaceProxy).mockResolvedValue({
       response: null,
-      session: {
-        role: "admin",
-        sub: "admin:test",
-        tenantId: null,
+      credential: {
+        token: "admin-session",
+        session: {
+          role: "admin",
+          sub: "admin:test",
+          tenantId: null,
+        },
       },
     } as never);
     vi.mocked(assertSiteAccess).mockResolvedValue(undefined);

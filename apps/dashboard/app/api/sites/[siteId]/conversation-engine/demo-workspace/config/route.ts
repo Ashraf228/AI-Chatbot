@@ -1,28 +1,30 @@
 import { NextResponse } from "next/server";
 import { assertSiteAccess, fetchDashboardBackend } from "../../../../../../../lib/dashboard-api";
-import { requireSession } from "../../../../../../../lib/require-auth";
+import {
+  authorizeCustomerWorkspaceProxy,
+  customerWorkspaceAuthorizationHeaders,
+} from "../../../../../../../lib/customer-workspace-proxy";
 
-async function requireAdminSiteAccess(context: { params: Promise<{ siteId: string }> }) {
-  const auth = await requireSession();
+async function requireWorkspaceSiteAccess(
+  request: Request,
+  context: { params: Promise<{ siteId: string }> },
+  mutating: boolean,
+) {
+  const auth = await authorizeCustomerWorkspaceProxy(request, { mutating });
   if (auth.response) {
     return { auth, response: auth.response, siteId: "" };
   }
-  if (!["admin", "operator"].includes(auth.session.role)) {
-    return {
-      auth,
-      response: NextResponse.json({ message: "Forbidden" }, { status: 403 }),
-      siteId: "",
-    };
-  }
   const { siteId } = await context.params;
-  try {
-    await assertSiteAccess(auth.session, siteId);
-  } catch {
-    return {
-      auth,
-      response: NextResponse.json({ message: "Forbidden" }, { status: 403 }),
-      siteId,
-    };
+  if (auth.credential.session.role !== "customer") {
+    try {
+      await assertSiteAccess(auth.credential.session, siteId);
+    } catch {
+      return {
+        auth,
+        response: NextResponse.json({ message: "Forbidden" }, { status: 403 }),
+        siteId,
+      };
+    }
   }
   return { auth, response: null, siteId };
 }
@@ -38,10 +40,10 @@ function noStoreJson(text: string, status: number) {
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   context: { params: Promise<{ siteId: string }> },
 ) {
-  const { auth, response, siteId } = await requireAdminSiteAccess(context);
+  const { auth, response, siteId } = await requireWorkspaceSiteAccess(req, context, false);
   if (response) return response;
 
   const backendResponse = await fetchDashboardBackend(
@@ -49,7 +51,8 @@ export async function GET(
     {
       method: "GET",
       cache: "no-store",
-      session: auth.session,
+      session: auth.credential.session,
+      headers: customerWorkspaceAuthorizationHeaders(auth.credential),
     },
   );
   const text = await backendResponse.text();
@@ -60,7 +63,7 @@ export async function PUT(
   req: Request,
   context: { params: Promise<{ siteId: string }> },
 ) {
-  const { auth, response, siteId } = await requireAdminSiteAccess(context);
+  const { auth, response, siteId } = await requireWorkspaceSiteAccess(req, context, true);
   if (response) return response;
 
   const body = await req.json().catch(() => ({}));
@@ -69,8 +72,11 @@ export async function PUT(
     {
       method: "PUT",
       cache: "no-store",
-      session: auth.session,
-      headers: { "Content-Type": "application/json" },
+      session: auth.credential.session,
+      headers: {
+        "Content-Type": "application/json",
+        ...customerWorkspaceAuthorizationHeaders(auth.credential),
+      },
       body: JSON.stringify(body),
     },
   );
@@ -79,10 +85,10 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   context: { params: Promise<{ siteId: string }> },
 ) {
-  const { auth, response, siteId } = await requireAdminSiteAccess(context);
+  const { auth, response, siteId } = await requireWorkspaceSiteAccess(req, context, true);
   if (response) return response;
 
   const backendResponse = await fetchDashboardBackend(
@@ -90,7 +96,8 @@ export async function DELETE(
     {
       method: "DELETE",
       cache: "no-store",
-      session: auth.session,
+      session: auth.credential.session,
+      headers: customerWorkspaceAuthorizationHeaders(auth.credential),
     },
   );
   const text = await backendResponse.text();

@@ -1,4 +1,17 @@
-import { IsBoolean, IsEmail, IsIn, IsISO8601, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsISO8601,
+  IsObject,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export const TENANT_USER_ROLES = ['owner', 'admin', 'manager', 'editor', 'viewer'] as const;
 export type TenantUserRole = (typeof TENANT_USER_ROLES)[number];
@@ -90,4 +103,14 @@ export class AuthenticateTenantUserDto {
   @IsString()
   @MaxLength(255)
   password!: string;
+}
+
+export class SetCustomerWorkspaceAccessDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(120, { each: true })
+  siteIds!: string[];
 }

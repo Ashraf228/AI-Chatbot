@@ -11,7 +11,9 @@
       "path": "/customer/it-knowledge/:siteId/templates",
       "source": "apps/api/src/modules/it-support/customer-knowledge.controller.ts",
       "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -28,7 +30,9 @@
       "path": "/customer/it-knowledge/:siteId/templates/import",
       "source": "apps/api/src/modules/it-support/customer-knowledge.controller.ts",
       "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -45,7 +49,9 @@
       "path": "/customer/it-knowledge/:siteId/templates/:sourceId",
       "source": "apps/api/src/modules/it-support/customer-knowledge.controller.ts",
       "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -62,7 +68,9 @@
       "path": "/api/sites/:siteId/it-knowledge/templates",
       "source": "apps/dashboard/app/api/sites/[siteId]/it-knowledge/templates/route.ts",
       "authType": "signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -79,7 +87,9 @@
       "path": "/api/sites/:siteId/it-knowledge/templates/import",
       "source": "apps/dashboard/app/api/sites/[siteId]/it-knowledge/templates/import/route.ts",
       "authType": "signed-tenant-user-session-plus-exact-same-origin",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -96,7 +106,9 @@
       "path": "/api/sites/:siteId/it-knowledge/templates/:sourceId",
       "source": "apps/dashboard/app/api/sites/[siteId]/it-knowledge/templates/[sourceId]/route.ts",
       "authType": "signed-tenant-user-session-plus-exact-same-origin",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -113,7 +125,9 @@
       "path": "/internal/site-runtime-grants/:tenantId/:siteId",
       "source": "apps/api/src/knowledge-sources/site-runtime-grants.controller.ts",
       "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -130,7 +144,9 @@
       "path": "/internal/site-runtime-grants/:tenantId/:siteId/preview",
       "source": "apps/api/src/knowledge-sources/site-runtime-grants.controller.ts",
       "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -147,7 +163,9 @@
       "path": "/internal/site-runtime-grants/:tenantId/:siteId/:grantId/revoke",
       "source": "apps/api/src/knowledge-sources/site-runtime-grants.controller.ts",
       "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -164,7 +182,9 @@
       "path": "/internal/site-runtime-grants/:tenantId/:siteId/:grantId",
       "source": "apps/api/src/knowledge-sources/site-runtime-grants.controller.ts",
       "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -181,7 +201,9 @@
       "path": "/api/internal/site-runtime-grants/:tenantId/:siteId",
       "source": "apps/dashboard/app/api/internal/site-runtime-grants/[tenantId]/[siteId]/route.ts",
       "authType": "signed-tenant-user-session-plus-exact-same-origin",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -198,7 +220,9 @@
       "path": "/api/internal/site-runtime-grants/:tenantId/:siteId/preview",
       "source": "apps/dashboard/app/api/internal/site-runtime-grants/[tenantId]/[siteId]/preview/route.ts",
       "authType": "signed-tenant-user-session-plus-exact-same-origin",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -215,7 +239,9 @@
       "path": "/api/internal/site-runtime-grants/:tenantId/:siteId/:grantId/revoke",
       "source": "apps/dashboard/app/api/internal/site-runtime-grants/[tenantId]/[siteId]/[grantId]/revoke/route.ts",
       "authType": "signed-tenant-user-session-plus-exact-same-origin",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -232,7 +258,9 @@
       "path": "/api/internal/site-runtime-grants/:tenantId/:siteId/:grantId",
       "source": "apps/dashboard/app/api/internal/site-runtime-grants/[tenantId]/[siteId]/[grantId]/route.ts",
       "authType": "signed-tenant-user-session",
-      "allowedRoles": ["customer"],
+      "allowedRoles": [
+        "customer"
+      ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": true,
@@ -5027,17 +5055,18 @@
       "method": "POST",
       "path": "/admin/sites/:siteId/conversation-engine/runtime-pilot",
       "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
-      "authType": "admin-key-or-dashboard-internal-token",
+      "authType": "admin-key-or-dashboard-internal-token-plus-customer-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": true,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "expectedScopeCheck": "CustomerWorkspaceOperatorAuthService for customer; AdminScopeService.assertSiteAccess for admin/operator",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5047,17 +5076,18 @@
       "method": "POST",
       "path": "/admin/sites/:siteId/conversation-engine/knowledge/pdf-extract",
       "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
-      "authType": "admin-key-or-dashboard-internal-token",
+      "authType": "admin-key-or-dashboard-internal-token-plus-customer-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": true,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "expectedScopeCheck": "CustomerWorkspaceOperatorAuthService for customer; AdminScopeService.assertSiteAccess for admin/operator",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5067,17 +5097,18 @@
       "method": "DELETE",
       "path": "/admin/sites/:siteId/conversation-engine/demo-workspace/config",
       "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
-      "authType": "admin-key-or-dashboard-internal-token",
+      "authType": "admin-key-or-dashboard-internal-token-plus-customer-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": true,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "expectedScopeCheck": "CustomerWorkspaceOperatorAuthService for customer; AdminScopeService.assertSiteAccess for admin/operator",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5087,17 +5118,18 @@
       "method": "GET",
       "path": "/admin/sites/:siteId/conversation-engine/demo-workspace/config",
       "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
-      "authType": "admin-key-or-dashboard-internal-token",
+      "authType": "admin-key-or-dashboard-internal-token-plus-customer-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": false,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "expectedScopeCheck": "CustomerWorkspaceOperatorAuthService for customer; AdminScopeService.assertSiteAccess for admin/operator",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5107,17 +5139,18 @@
       "method": "PUT",
       "path": "/admin/sites/:siteId/conversation-engine/demo-workspace/config",
       "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
-      "authType": "admin-key-or-dashboard-internal-token",
+      "authType": "admin-key-or-dashboard-internal-token-plus-customer-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": true,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "AdminScopeService.assertSiteAccess with admin/operator only",
+      "expectedScopeCheck": "CustomerWorkspaceOperatorAuthService for customer; AdminScopeService.assertSiteAccess for admin/operator",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5410,14 +5443,15 @@
       "authType": "dashboard-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": true,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "expectedScopeCheck": "signed individual customer session plus API capability revalidation; existing admin/operator site access proxy otherwise",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5430,14 +5464,15 @@
       "authType": "dashboard-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": true,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "expectedScopeCheck": "signed individual customer session plus API capability revalidation; existing admin/operator site access proxy otherwise",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5450,14 +5485,15 @@
       "authType": "dashboard-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": false,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "expectedScopeCheck": "signed individual customer session plus API capability revalidation; existing admin/operator site access proxy otherwise",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5470,14 +5506,15 @@
       "authType": "dashboard-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": true,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "expectedScopeCheck": "signed individual customer session plus API capability revalidation; existing admin/operator site access proxy otherwise",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5490,14 +5527,15 @@
       "authType": "dashboard-session",
       "allowedRoles": [
         "admin",
-        "operator"
+        "operator",
+        "customer"
       ],
       "tenantBound": true,
       "siteBound": true,
       "ownershipBound": false,
       "mutation": true,
       "sensitiveResponse": true,
-      "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "expectedScopeCheck": "signed individual customer session plus API capability revalidation; existing admin/operator site access proxy otherwise",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     },
@@ -5638,6 +5676,86 @@
       "mutation": true,
       "sensitiveResponse": true,
       "expectedScopeCheck": "dashboard session plus admin/operator site access proxy",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-061A",
+      "layer": "api",
+      "method": "PUT",
+      "path": "/admin/tenant-users/:id/customer-workspace-access",
+      "source": "apps/api/src/tenants/tenant-users.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminKeyGuard plus RequireDashboardRoles admin; service validates every assigned site against the tenant user tenant",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-061B",
+      "layer": "api",
+      "method": "DELETE",
+      "path": "/admin/tenant-users/:id/customer-workspace-access",
+      "source": "apps/api/src/tenants/tenant-users.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin"
+      ],
+      "tenantBound": true,
+      "siteBound": false,
+      "ownershipBound": false,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "AdminKeyGuard plus RequireDashboardRoles admin",
+      "testCaseId": "SEC-TENANT-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "API-111F",
+      "layer": "api",
+      "method": "GET",
+      "path": "/admin/sites/:siteId/conversation-engine/demo-workspace/access",
+      "source": "apps/api/src/conversation-engine/conversation-engine.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token-plus-customer-session",
+      "allowedRoles": [
+        "admin",
+        "operator",
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": false,
+      "expectedScopeCheck": "CustomerWorkspaceOperatorAuthService for customer; AdminScopeService.assertSiteAccess for admin/operator",
+      "testCaseId": "SEC-SITE-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-233AD",
+      "layer": "dashboard",
+      "method": "GET",
+      "path": "/api/sites/:siteId/conversation-engine/demo-workspace/access",
+      "source": "apps/dashboard/app/api/sites/[siteId]/conversation-engine/demo-workspace/access/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator",
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": false,
+      "mutation": false,
+      "sensitiveResponse": false,
+      "expectedScopeCheck": "signed individual customer session forwarded for authoritative API capability revalidation; existing admin/operator site access proxy otherwise",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
     }

@@ -28,7 +28,11 @@ function createEngine() {
   );
 }
 
-function createController(role = 'operator') {
+function createController(role = 'operator', workspaceAuthorized = false) {
+  const calls = {
+    diagnostics: 0,
+    runtimePilot: 0,
+  };
   const moduleStore = {
     'assistant-profile': {
       assistantProfile: {
@@ -119,6 +123,7 @@ function createController(role = 'operator') {
       };
     },
   };
+  const runtimePilot = new ConversationEngineRuntimeService(createEngine(), responseDrafts);
 
   const testCasesService = new ConversationEngineTestCasesService(
     {
@@ -135,6 +140,7 @@ function createController(role = 'operator') {
   );
 
   return {
+    calls,
     moduleStore,
     controller: new ConversationEngineController(
       {
@@ -157,15 +163,35 @@ function createController(role = 'operator') {
       resolver,
       {
         async getDiagnostics() {
+          calls.diagnostics += 1;
           return { assistantProfileDebug: {} };
         },
       },
       createEngine(),
       compareService,
-      new ConversationEngineRuntimeService(createEngine(), responseDrafts),
+      {
+        async preview(input) {
+          calls.runtimePilot += 1;
+          return runtimePilot.preview(input);
+        },
+      },
       testCasesService,
       knowledgePreview,
       responseDrafts,
+      {
+        async authorize(input) {
+          if (!workspaceAuthorized) throw new Error('Forbidden');
+          assert.equal(input.authorizationHeader, 'Bearer synthetic-session');
+          assert.equal(input.dashboardTokenHeader, 'synthetic-dashboard-token');
+          assert.equal(input.targetSiteId, 'site-1');
+          return {
+            tenantId: 'tenant-1',
+            siteId: 'site-1',
+            actorId: 'tenant-user:customer-1',
+            actorRole: 'customer',
+          };
+        },
+      },
     ),
   };
 }
@@ -280,4 +306,88 @@ test('demo workspace config endpoint rejects customer access', async () => {
     controller.getDemoWorkspaceConfig('site-1', { dashboardAuth: {} }, createResponseRecorder()),
     /Forbidden/,
   );
+});
+
+test('demo workspace config and access endpoints accept a capability-authorized customer context', async () => {
+  const { controller } = createController('customer', true);
+  const req = {
+    dashboardAuth: {},
+    headers: {
+      authorization: 'Bearer synthetic-session',
+      'x-dashboard-token': 'synthetic-dashboard-token',
+    },
+  };
+
+  const access = await controller.getDemoWorkspaceAccess('site-1', req, createResponseRecorder());
+  const saved = await controller.updateDemoWorkspaceConfig(
+    'site-1',
+    { assistantName: 'Customer Workspace Agent' },
+    req,
+    createResponseRecorder(),
+  );
+  const loaded = await controller.getDemoWorkspaceConfig('site-1', req, createResponseRecorder());
+
+  assert.deepEqual(access, { allowed: true, siteId: 'site-1' });
+  assert.equal(saved.savedConfig.metadata.updatedByRole, 'customer');
+  assert.equal(loaded.savedConfig.assistantName, 'Customer Workspace Agent');
+});
+
+test('customer runtime pilot rejects privileged website inputs before diagnostics or pilot execution', async () => {
+  for (const field of ['websiteAnswerRuntimeGateInput', 'websiteAnswerRuntimePilotInput']) {
+    const { calls, controller } = createController('customer', true);
+    const req = {
+      dashboardAuth: {},
+      headers: {
+        authorization: 'Bearer synthetic-session',
+        'x-dashboard-token': 'synthetic-dashboard-token',
+      },
+    };
+
+    await assert.rejects(
+      controller.runtimePilotPreview(
+        'site-1',
+        {
+          message: 'Synthetic customer test',
+          [field]: {
+            tenantId: 'tenant-foreign',
+            siteId: 'site-foreign',
+            sourceId: 'source-foreign',
+          },
+        },
+        req,
+      ),
+      (error) => {
+        assert.equal(error.getStatus(), 400);
+        assert.equal(error.message, 'unsupported customer workspace input');
+        return true;
+      },
+    );
+    assert.deepEqual(calls, { diagnostics: 0, runtimePilot: 0 });
+  }
+});
+
+test('customer runtime pilot omits internal diagnostics while the operator response remains unchanged', async () => {
+  const customer = createController('customer', true);
+  const customerResult = await customer.controller.runtimePilotPreview(
+    'site-1',
+    { message: 'Synthetic customer test' },
+    {
+      dashboardAuth: {},
+      headers: {
+        authorization: 'Bearer synthetic-session',
+        'x-dashboard-token': 'synthetic-dashboard-token',
+      },
+    },
+  );
+  assert.equal(customerResult.assistantProfileDebug, null);
+  assert.deepEqual(customer.calls, { diagnostics: 0, runtimePilot: 1 });
+
+  const operator = createController('operator');
+  const operatorResult = await operator.controller.runtimePilotPreview(
+    'site-1',
+    { message: 'Synthetic operator test' },
+    { dashboardAuth: {} },
+  );
+  assert.deepEqual(operatorResult.assistantProfileDebug, {});
+  assert.deepEqual(operator.calls, { diagnostics: 1, runtimePilot: 1 });
 });

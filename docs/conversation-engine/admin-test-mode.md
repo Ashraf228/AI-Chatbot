@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Conversation Engine is currently an admin/operator test and diagnostics layer. It is not the live decision engine for the public widget.
+The Conversation Engine is currently an internal test and diagnostics layer. It is not the live decision engine for the public widget. General diagnostics remain admin/operator-only; an explicitly assigned individual customer employee can use only the bounded Demo Workspace actions described below.
 
 The public widget continues to use the legacy chat pipeline. Conversation Engine features are intended for controlled review, comparison, response preview, and quality checks inside the dashboard.
 
@@ -28,13 +28,24 @@ Expected defaults:
 - `knowledgePreviewEnabled`: `false`
 - `adminTestOnly`: `true` when test mode is enabled
 
-These flags must only be enabled for explicit admin/operator test scenarios. They must not be enabled automatically for production sites.
+These flags must only be enabled for explicit internal test scenarios. They must not be enabled automatically for production sites.
 
 ## Access Model
 
-Conversation Engine test features are dashboard-only features for admin/operator roles.
+Conversation Engine test features are dashboard-only. General diagnostics, compare, response preview, stored test cases, and internal AssistantProfile details remain restricted to admin/operator roles.
 
-They are not exposed through public widget responses. Customer users, anonymous users, and public widget sessions must not receive diagnostics, compare results, response previews, knowledge snippets, quality scores, or internal AssistantProfile details.
+An individual non-viewer `tenant_users` account may additionally receive the persisted `customerWorkspaceOperatorV1` capability with an exact non-empty `siteIds` list. On every bounded request the API verifies the signed customer session, active account, current role, account expiry, persisted capability, and same-tenant site membership. The capability permits only:
+
+- `GET /admin/sites/:siteId/conversation-engine/demo-workspace/access`
+- `GET/PUT/DELETE /admin/sites/:siteId/conversation-engine/demo-workspace/config`
+- `POST /admin/sites/:siteId/conversation-engine/knowledge/pdf-extract`
+- `POST /admin/sites/:siteId/conversation-engine/runtime-pilot`
+
+Only platform admins may grant or revoke it through `PUT/DELETE /admin/tenant-users/:id/customer-workspace-access`. Revocation or account deactivation takes effect on the next API authorization check. The capability is stored in existing tenant-user metadata, so rollback is removal of that single key; no schema migration is involved. It does not grant access to any other operator endpoint and does not replace query-embedding, LLM-generation, ingestion, or provider grants.
+
+The customer runtime-pilot response sets `assistantProfileDebug` to `null` and does not resolve internal diagnostics. Customer requests containing `websiteAnswerRuntimeGateInput` or `websiteAnswerRuntimePilotInput` are rejected before pilot execution; those admin/operator-only inputs cannot introduce a tenant, site, source, or provider context into the bounded customer path.
+
+The shared dashboard operator session has no individual tenant/site assignment and gains no new rights from this capability. Viewer, anonymous, and public widget sessions remain excluded. No public widget response may expose diagnostics, compare results, response previews, knowledge snippets, quality scores, or internal AssistantProfile details.
 
 ## AssistantProfile Diagnostics
 
@@ -146,7 +157,7 @@ The following must remain true unless a separate rollout plan explicitly changes
 - Public widget remains on the legacy chat pipeline.
 - Public widget responses contain no debug, preview, compare, quality, grounding, or knowledge preview fields.
 - Feature flags default inactive.
-- Admin test UI is gated to admin/operator roles.
+- General admin test UI is gated to admin/operator roles; only the bounded Demo Workspace surface may be shown to an individually capability-assigned customer.
 - Tenant and site scoping are enforced server-side.
 - Knowledge Preview retrieval is read-only.
 - Knowledge Preview provider transport requires an exact persisted query-embedding grant.
@@ -168,8 +179,9 @@ Before any staging or production rollout:
 
 ## Quick Verification Checklist
 
-- Admin/operator can access the test cards.
-- Customer and anonymous users cannot access admin test features.
+- Admin/operator can access the existing test cards subject to their existing scope rules.
+- A capability-assigned customer can access only the Demo Workspace card and internal testchat for an exact assigned site.
+- Other customer, viewer, shared-operator, and anonymous sessions cannot use the bounded customer workspace path.
 - Public widget config contains no preview/debug fields.
 - Public widget chat response contains no preview/debug/knowledge fields.
 - `conversationEngine.knowledgePreviewEnabled` is inactive by default.

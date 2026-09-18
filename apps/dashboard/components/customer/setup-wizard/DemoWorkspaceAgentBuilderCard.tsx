@@ -140,7 +140,7 @@ type PersistedDemoWorkspaceConfig = {
   metadata: {
     source: string;
     updatedAt: string;
-    updatedByRole: "admin" | "operator";
+    updatedByRole: "admin" | "operator" | "customer";
     customerDataAllowed: false;
     knowledgePersistenceEnabled: false;
     chatHistoryPersistenceEnabled: false;
@@ -689,9 +689,9 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
           Enterprise Agent Workspace / Pilot Workspace
         </h3>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Klar strukturierter Admin-/Operator-Testpfad fuer einen synthetischen Runtime-Pilot. Bestehende Demo-
-          Workspace-Faehigkeiten bleiben erhalten, werden hier aber als kontrollierter Pilot Workspace ohne Public-
-          Widget-Aktivierung, ohne Deploy und ohne Kundendaten gebuendelt.
+          Klar strukturierter Testpfad fuer Admins, Operatoren und ausdrücklich site-zugewiesene Kundenmitarbeitende.
+          Bestehende Demo-Workspace-Faehigkeiten bleiben erhalten, werden hier aber als kontrollierter Pilot Workspace
+          ohne Public-Widget-Aktivierung, ohne Deploy und ohne Kundendaten gebuendelt.
         </p>
       </div>
 
@@ -699,7 +699,7 @@ export function DemoWorkspaceAgentBuilderCard({ siteId }: DemoWorkspaceAgentBuil
         <strong>Workspace Status / Boundary Card</strong>
         <ul className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
           <li>Pilot Workspace</li>
-          <li>Admin/operator only</li>
+          <li>Admin/operator oder ausdrücklich site-zugewiesener Kundenmitarbeiter</li>
           <li>Pilot/evaluation workspace</li>
           <li>No public widget activation</li>
           <li>No deploy</li>

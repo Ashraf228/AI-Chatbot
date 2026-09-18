@@ -11,6 +11,7 @@ import { ConversationEngineController } from './conversation-engine.controller';
 import { ConversationEngineRuntimeService } from './conversation-engine-runtime.service';
 import { ConversationEngineService } from './conversation-engine.service';
 import { ConversationEngineTestCasesService } from './conversation-engine-test-cases.service';
+import { CustomerWorkspaceOperatorAuthService } from './customer-workspace-operator-auth.service';
 import { ConversationQualityService } from './conversation-quality.service';
 import { GoalDetectorService } from './goal-detector.service';
 import { HandoffReadinessService } from './handoff-readiness.service';
@@ -28,6 +29,7 @@ import { VectorService } from '../vector/vector.service';
     ConversationEngineCompareService,
     ConversationEngineRuntimeService,
     ConversationEngineTestCasesService,
+    CustomerWorkspaceOperatorAuthService,
     ConversationContextService,
     IntentClassifierService,
     GoalDetectorService,

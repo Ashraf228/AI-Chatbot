@@ -128,6 +128,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasCustomerWorkspaceAccess, setHasCustomerWorkspaceAccess] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -215,13 +216,36 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     }
   }, [activeStepIndex, locationHash, searchParams]);
 
+  useEffect(() => {
+    if (dashboardRole !== "customer") {
+      setHasCustomerWorkspaceAccess(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setHasCustomerWorkspaceAccess(false);
+    void fetch(
+      `/api/sites/${encodeURIComponent(siteId)}/conversation-engine/demo-workspace/access`,
+      { cache: "no-store", signal: controller.signal },
+    )
+      .then((response) => {
+        if (!controller.signal.aborted) setHasCustomerWorkspaceAccess(response.ok);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setHasCustomerWorkspaceAccess(false);
+      });
+
+    return () => controller.abort();
+  }, [dashboardRole, siteId]);
+
   const templateMap = useMemo(() => templatesByKey(templates), [templates]);
   const activeStep = WIZARD_STEPS[activeStepIndex];
   const selectedTemplate = profileForm.industry ? templateMap[profileForm.industry] : undefined;
   const readyActiveSources = sources.filter((source) => source.isActive && source.status === "ready");
   const processingSources = sources.filter((source) => source.status === "pending" || source.status === "processing");
   const failedSources = sources.filter((source) => source.status === "failed");
-  const canUseInternalTestTools = dashboardRole === "admin" || dashboardRole === "operator";
+  const canUseInternalTestTools =
+    dashboardRole === "admin" || dashboardRole === "operator" || hasCustomerWorkspaceAccess;
   const knowledgeContinueBlockedReason =
     failedSources.length > 0
       ? "Wissensquellen mit Fehlern blockieren den Schritt. Bitte behebe, aktualisiere oder entferne die fehlerhaften Einträge, bevor du weitergehst."
@@ -1044,6 +1068,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
             onGoLive={goLive}
             onJumpToStatusStep={jumpToStatusStep}
             dashboardRole={dashboardRole}
+            canUseWorkspaceTestTools={canUseInternalTestTools}
           />
         );
     }
