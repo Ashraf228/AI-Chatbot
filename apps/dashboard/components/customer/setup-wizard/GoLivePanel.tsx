@@ -20,7 +20,7 @@ export function GoLivePanel({ canGoLive, isLive, isLoading: _isLoading, onGoLive
 
       {isLive ? (
         <p className="dashboard-status dashboard-status--success dashboard-no-margin-bottom">
-          Das Chatfenster ist bereits live. Dieser Bereich bleibt trotzdem ein reiner Review- und Diagnose-Schritt.
+          Das Chatfenster ist im gespeicherten Site-Status als live markiert. Dieser Bereich verändert diesen Status nicht.
         </p>
       ) : (
         <EmptyStateCard
@@ -31,10 +31,10 @@ export function GoLivePanel({ canGoLive, isLive, isLoading: _isLoading, onGoLive
 
       <div className="dashboard-stack dashboard-stack--xs">
         <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Deploy:</strong> nicht freigegeben</p>
-        <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Oeffentliches Chatfenster:</strong> nicht aktiviert</p>
-        <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Produktivbetrieb:</strong> nicht aktiviert</p>
-        <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Kundendaten:</strong> nicht freigegeben</p>
-        <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Echte Tickets / E-Mails / Webhooks:</strong> nein</p>
+        <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Oeffentliches Chatfenster:</strong> {isLive ? "als live markiert" : "nicht aktiviert"}</p>
+        <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Aktivierung in diesem Schritt:</strong> nicht verfügbar</p>
+        <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Kundendaten:</strong> keine Freigabe durch diesen Schritt</p>
+        <p className="dashboard-copy dashboard-no-margin-bottom"><strong>Echte Tickets / E-Mails / Webhooks im internen Test:</strong> werden nicht ausgelöst</p>
       </div>
 
       {!canGoLive && !isLive ? (

@@ -25,7 +25,10 @@ function capability(label: string, allowed: boolean, key: DashboardRoleCapabilit
   return { key, label, allowed };
 }
 
-export function getDashboardRoleAccess(role: DashboardSessionRole | null | undefined): DashboardRoleAccess {
+export function getDashboardRoleAccess(
+  role: DashboardSessionRole | null | undefined,
+  hasCustomerWorkspaceAccess = false,
+): DashboardRoleAccess {
   switch (role) {
     case "admin":
       return {
@@ -48,7 +51,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
         boundaryBadges: [
           "Interner Setup-/Testzugang",
           "Kein Deploy",
-          "Kein Public Widget",
+          "Keine Widget-Aktivierung hier",
           "Keine Production-Aktivierung",
         ],
         demoBoundaryCopy:
@@ -75,7 +78,7 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
         boundaryBadges: [
           "Interner Setup-/Testzugang",
           "Kein Deploy",
-          "Kein Public Widget",
+          "Keine Widget-Aktivierung hier",
           "Keine Production-Aktivierung",
         ],
         demoBoundaryCopy:
@@ -113,27 +116,30 @@ export function getDashboardRoleAccess(role: DashboardSessionRole | null | undef
         role: "customer",
         sourceRole: role,
         roleLabel: "Kunde",
-        summary: "Site-gebundener Zugang ohne internen Setup-Status",
-        description:
-          "Dieser Zugang ist nicht als interner Admin-/Operator-Zugang markiert. Interne Testpfade, oeffentliches Chatfenster, Deploy, Produktivbetrieb und Kundendaten bleiben gesperrt.",
+        summary: hasCustomerWorkspaceAccess
+          ? "Freigegebener Workspace-Zugang für diese Site"
+          : "Workspace-Zugang für diese Site nicht bestätigt",
+        description: hasCustomerWorkspaceAccess
+          ? "Du kannst den zugewiesenen Workspace konfigurieren, Demo-Wissen hinzufügen und den internen Testchat nutzen. Diese Rechte gelten nur für den Workspace dieser Site, nicht für die allgemeine Wissensverwaltung oder die technische Admin-Diagnose."
+          : "Konfiguration und interner Testchat im Workspace benötigen eine bestätigte Freigabe für diese Site. Die Customer-Rolle allein erteilt diese Rechte nicht.",
         isInternalRole: false,
         isEvaluationOnly: false,
         capabilities: [
-          capability("Konfigurieren", false, "configure"),
-          capability("Interner Testchat", false, "internal_test"),
-          capability("Wissen hinzufügen", false, "knowledge"),
+          capability("Konfigurieren", hasCustomerWorkspaceAccess, "configure"),
+          capability("Interner Testchat", hasCustomerWorkspaceAccess, "internal_test"),
+          capability("Demo-Wissen im Workspace", hasCustomerWorkspaceAccess, "knowledge"),
           capability("Review sehen", true, "review"),
           capability("Deploy / Oeffentliches Chatfenster", false, "deploy"),
           capability("Kundendaten nutzen", false, "customer_data"),
         ],
         boundaryBadges: [
-          "Kein interner Setup-/Testzugang",
+          hasCustomerWorkspaceAccess ? "Workspace-Freigabe für diese Site" : "Workspace-Freigabe nicht bestätigt",
           "Kein Deploy",
-          "Kein Public Widget",
+          "Keine Widget-Aktivierung hier",
           "Keine Kundendaten",
         ],
         demoBoundaryCopy:
-          "Ohne internen Admin-/Operator-Status bleibt dieser Zugang auf einen konservativen Demo- und Review-Rahmen beschraenkt. Keine Freigabe fuer Produktivbetrieb und keine Nutzung von Kundendaten.",
+          "Eine Workspace-Freigabe erlaubt die interne Prüfung mit Demo-Daten. Sie erteilt keine Providerfreigabe und aktiviert weder Deploy noch öffentliches Chatfenster oder Produktivbetrieb.",
       };
     default:
       return {

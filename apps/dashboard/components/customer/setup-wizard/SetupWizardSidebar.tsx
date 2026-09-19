@@ -15,6 +15,7 @@ type SetupWizardSidebarProps = {
   activeStepIndex: number;
   status: CustomerApiStatus | null;
   dashboardRole?: DashboardSessionRole | null;
+  hasCustomerWorkspaceAccess?: boolean;
   onStepChange: (index: number) => void;
 };
 
@@ -39,15 +40,18 @@ export function SetupWizardSidebar({
   activeStepIndex,
   status,
   dashboardRole = null,
+  hasCustomerWorkspaceAccess = false,
   onStepChange,
 }: SetupWizardSidebarProps) {
-  const roleAccess = getDashboardRoleAccess(dashboardRole);
+  const roleAccess = getDashboardRoleAccess(dashboardRole, hasCustomerWorkspaceAccess);
   const boundaryNotes = [
     roleAccess.isInternalRole
-      ? "Interner Testpfad bleibt nur für Admin und Operator offen."
-      : "Kein interner Setup-/Testzugang bestätigt. Der Zustand bleibt konservativ.",
+      ? "Die technische Diagnose bleibt Admin und Operator vorbehalten. Workspace-Freigaben werden separat geprüft."
+      : dashboardRole === "customer" && hasCustomerWorkspaceAccess
+        ? "Konfiguration und interner Test sind für den zugewiesenen Workspace dieser Site freigegeben."
+        : "Kein Workspace-Zugang für diese Site bestätigt.",
     status?.lifecycleStatus === "live"
-      ? "Der Produktivbetrieb ist bereits aktiv. Die Einrichtung bleibt trotzdem review-orientiert."
+      ? "Das Chatfenster ist im gespeicherten Site-Status als live markiert. Dieser Einrichtungsschritt ändert den Status nicht."
       : "Kein oeffentliches Chatfenster und kein Produktivbetrieb aus der Einrichtung.",
     status?.isLiveReady
       ? "Der Livegang ist fachlich vorbereitet, bleibt aber weiterhin ein Review-Gate."
