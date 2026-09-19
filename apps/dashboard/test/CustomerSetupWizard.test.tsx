@@ -436,6 +436,11 @@ describe("CustomerSetupWizard", () => {
     expect(within(boundedWorkspace as HTMLElement).queryByText("KI-Mitarbeiter Profil")).not.toBeInTheDocument();
     expect(within(boundedWorkspace as HTMLElement).queryByText("Gesprächslogik Testfälle")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Live schalten" })).not.toBeInTheDocument();
+    const rights = within(screen.getByLabelText("Rollenfähigkeiten"));
+    expect(rights.getByText("Konfigurieren: Ja")).toBeInTheDocument();
+    expect(rights.getByText("Interner Testchat: Ja")).toBeInTheDocument();
+    expect(rights.getByText("Demo-Wissen im Workspace: Ja")).toBeInTheDocument();
+    expect(rights.getByText("Deploy / Oeffentliches Chatfenster: Nein")).toBeInTheDocument();
   });
 
   test("opens the launch step when the setup route is linked with a launch query and hash", async () => {

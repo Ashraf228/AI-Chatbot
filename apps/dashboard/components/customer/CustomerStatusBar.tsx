@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { DashboardSessionRole } from "../../lib/auth";
 import { findSiteWorkspaceLocation, type SiteNavGroup } from "../../lib/dashboard-config";
 import { getDashboardRoleAccess } from "../../lib/dashboard-role-access";
+import { useCustomerWorkspaceAccess } from "../../lib/use-customer-workspace-access";
 import { encodeSiteId } from "../../lib/site-id";
 import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
 import { Button } from "../shared/Button";
@@ -83,9 +84,15 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const siteSlug = encodeSiteId(siteId);
-  const roleAccess = getDashboardRoleAccess(dashboardRole);
-  const [site, setSite] = useState<SiteDetails | null>(null);
-  const [status, setStatus] = useState<CustomerApiStatus | null>(null);
+  const hasCustomerWorkspaceAccess = useCustomerWorkspaceAccess(siteId, dashboardRole);
+  const roleAccess = getDashboardRoleAccess(dashboardRole, hasCustomerWorkspaceAccess);
+  const [loaded, setLoaded] = useState<{
+    siteId: string;
+    site: SiteDetails | null;
+    status: CustomerApiStatus | null;
+  } | null>(null);
+  const site = loaded?.siteId === siteId ? loaded.site : null;
+  const status = loaded?.siteId === siteId ? loaded.status : null;
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
   const [hash, setHash] = useState("");
@@ -110,29 +117,35 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
+    setLoaded(null);
     async function load() {
-      const [siteResponse, statusResponse] = await Promise.all([
-        fetch(`/api/widget/sites/${siteId}`, { cache: "no-store" }),
-        fetch(`/api/sites/${siteId}/status`, { cache: "no-store" }),
-      ]);
-      const siteData = await siteResponse.json().catch(() => ({}));
-      const statusData = await statusResponse.json().catch(() => ({}));
-
-      if (siteResponse.ok) {
-        setSite({
-          name: siteData.name || siteId,
-          siteKey: siteData.siteKey || "",
-          allowedDomains: Array.isArray(siteData.allowedDomains) ? siteData.allowedDomains : [],
-          goLiveAt: siteData.goLiveAt || "",
+      try {
+        const options = { cache: "no-store" as const, signal: controller.signal };
+        const [siteResponse, statusResponse] = await Promise.all([
+          fetch(`/api/widget/sites/${encodeSiteId(siteId)}`, options),
+          fetch(`/api/sites/${encodeSiteId(siteId)}/status`, options),
+        ]);
+        const siteData = await siteResponse.json().catch(() => ({}));
+        const statusData = await statusResponse.json().catch(() => ({}));
+        if (controller.signal.aborted) return;
+        setLoaded({
+          siteId,
+          site: siteResponse.ok ? {
+            name: siteData.name || siteId,
+            siteKey: siteData.siteKey || "",
+            allowedDomains: Array.isArray(siteData.allowedDomains) ? siteData.allowedDomains : [],
+            goLiveAt: siteData.goLiveAt || "",
+          } : null,
+          status: statusResponse.ok && statusData?.status ? statusData : null,
         });
-      }
-
-      if (statusResponse.ok && statusData?.status) {
-        setStatus(statusData);
+      } catch {
+        if (!controller.signal.aborted) setLoaded({ siteId, site: null, status: null });
       }
     }
 
-    load();
+    void load();
+    return () => controller.abort();
   }, [siteId]);
 
   const embedCode = useMemo(() => {
@@ -158,9 +171,9 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
   const activeAreaDescription = activeItem?.description || activeGroup?.description || "Aktueller Workspace-Bereich.";
   const boundaryLabels = [
     ...roleAccess.boundaryBadges,
-    isLive ? "Produktivbetrieb aktiv" : "Produktivbetrieb nicht aktiviert",
-    isLive ? "Oeffentliches Chatfenster aktiv" : "Oeffentliches Chatfenster nicht aktiviert",
-    isLive ? "Betrieb beobachten" : "Livegang nur nach Review",
+    isLive ? "Betriebsfreigabe hier nicht geprüft" : "Produktivbetrieb nicht aktiviert",
+    isLive ? "Gespeicherter Site-Status: live" : "Oeffentliches Chatfenster nicht aktiviert",
+    isLive ? "Erreichbarkeit separat prüfen" : "Livegang nur nach Review",
   ];
 
   async function copyEmbedCode() {
@@ -198,7 +211,7 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
           label={status?.label || "Status wird geladen"}
         />
         <span className={isLive ? "dashboard-status dashboard-status--success" : "dashboard-badge"}>
-          {isLive ? "Live" : "Nicht live"}
+          {isLive ? "Als live markiert" : "Nicht live"}
         </span>
         <span className={site?.siteKey ? "dashboard-status dashboard-status--success" : "dashboard-badge"}>
           {site?.siteKey ? "Widget bereit" : "Einbindung fehlt"}
@@ -213,10 +226,10 @@ export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: Cust
 
       <div className="customer-status-bar__next customer-status-bar__segment">
         <span>Nächster Schritt</span>
-        <strong>{isLive ? "Betrieb prüfen" : status?.nextAction?.label || mainAction.label}</strong>
+        <strong>{isLive ? "Gespeicherten Status prüfen" : status?.nextAction?.label || mainAction.label}</strong>
         <small>
           {isLive
-            ? "Live-Betrieb beobachten und internen Testpfad sauber halten."
+            ? "Der gespeicherte Live-Status ist kein Nachweis der Erreichbarkeit oder einer Betriebsfreigabe."
             : "Die Einrichtung bleibt die verbindliche Arbeitsgrundlage bis zum Review-Gate."}
         </small>
       </div>

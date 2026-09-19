@@ -20,6 +20,7 @@ import {
 } from "../../lib/setup-wizard-api";
 import { encodeSiteId } from "../../lib/site-id";
 import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
+import { useCustomerWorkspaceAccess } from "../../lib/use-customer-workspace-access";
 import { ErrorState } from "../shared/ErrorState";
 import { LoadingState } from "../shared/LoadingState";
 import { CustomerStatusBadge } from "./CustomerStatusBadge";
@@ -128,7 +129,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [hasCustomerWorkspaceAccess, setHasCustomerWorkspaceAccess] = useState(false);
+  const hasCustomerWorkspaceAccess = useCustomerWorkspaceAccess(siteId, dashboardRole);
   const [message, setMessage] = useState<string | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -215,28 +216,6 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
       setActiveStepIndex(nextIndex);
     }
   }, [activeStepIndex, locationHash, searchParams]);
-
-  useEffect(() => {
-    if (dashboardRole !== "customer") {
-      setHasCustomerWorkspaceAccess(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setHasCustomerWorkspaceAccess(false);
-    void fetch(
-      `/api/sites/${encodeURIComponent(siteId)}/conversation-engine/demo-workspace/access`,
-      { cache: "no-store", signal: controller.signal },
-    )
-      .then((response) => {
-        if (!controller.signal.aborted) setHasCustomerWorkspaceAccess(response.ok);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setHasCustomerWorkspaceAccess(false);
-      });
-
-    return () => controller.abort();
-  }, [dashboardRole, siteId]);
 
   const templateMap = useMemo(() => templatesByKey(templates), [templates]);
   const activeStep = WIZARD_STEPS[activeStepIndex];
@@ -1093,6 +1072,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
           activeStepIndex={activeStepIndex}
           status={serverStatus}
           dashboardRole={dashboardRole}
+          hasCustomerWorkspaceAccess={hasCustomerWorkspaceAccess}
           onStepChange={setWizardStep}
         />
       }
