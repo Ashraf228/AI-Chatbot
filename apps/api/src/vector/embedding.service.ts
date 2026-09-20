@@ -61,6 +61,7 @@ export class EmbeddingService {
     text: string,
     config: ResolvedEmbeddingConfig,
     authorizeTransport: EmbeddingTransportAuthorization,
+    options: { signal?: AbortSignal } = {},
   ): Promise<number[]> {
     const apiKey = process.env.OPENAI_API_KEY?.trim() || '';
     const configuredBaseUrl = process.env.OPENAI_BASE_URL?.trim().replace(/\/+$/, '') || OPENAI_EMBEDDING_BASE_URL;
@@ -80,12 +81,15 @@ export class EmbeddingService {
       baseURL: OPENAI_EMBEDDING_BASE_URL,
       maxRetries: 0,
       logLevel: 'off',
+      timeout: 30_000,
       fetch: async (input, init) => {
         const requestUrl = input instanceof Request ? input.url : input.toString();
         if (!isAllowedEmbeddingRequestUrl(requestUrl)) {
           throw new Error('Embedding provider target rejected');
         }
+        options.signal?.throwIfAborted();
         await authorizeTransport();
+        options.signal?.throwIfAborted();
         return globalThis.fetch(input, { ...init, redirect: 'error' });
       },
     });
@@ -94,7 +98,7 @@ export class EmbeddingService {
       model: config.model,
       input: text,
       encoding_format: 'float',
-    });
+    }, { signal: options.signal });
     const embedding = res.data[0]?.embedding;
     if (!Array.isArray(embedding) || embedding.length === 0 || !embedding.every(Number.isFinite)) {
       throw new Error('Invalid embedding response');

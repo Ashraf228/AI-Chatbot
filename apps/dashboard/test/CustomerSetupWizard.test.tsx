@@ -358,7 +358,7 @@ describe("CustomerSetupWizard", () => {
 
     expect(screen.getByText(/4 Wissensquellen sind im bestehenden Produktpfad gespeichert/i)).toBeInTheDocument();
     expect(screen.getByText(/1 ready-Quelle ist gespeichert, aber nicht aktiv/i)).toBeInTheDocument();
-    expect(screen.getByText(/Einzelne importierte Webseite. Kein automatisches Website-Crawling/i)).toBeInTheDocument();
+    expect(screen.getByText(/Einzelne importierte Seite. Website durchsuchen und indexieren/i)).toBeInTheDocument();
     expect(screen.getByText(/Noch nicht im internen Test nutzbar, weil die Quelle noch verarbeitet wird/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Zaehlt aktuell nicht fuer Einrichtung und Save-and-Continue/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Import konnte nicht abgeschlossen werden/i)).toBeInTheDocument();

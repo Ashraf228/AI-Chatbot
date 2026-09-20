@@ -21,6 +21,9 @@ import { ChatPipelineService } from './chat-pipeline.service';
 import { ConversationStateService } from './conversation-state.service';
 import { ResponseComposerService } from './response-composer.service';
 import { BillingModule } from '../../billing/billing.module';
+import { AssistantProfilesModule } from '../../assistant-profiles';
+import { ConversationEngineModule } from '../../conversation-engine/conversation-engine.module';
+import { KnowledgeConversationService } from './knowledge-conversation.service';
 
 @Module({
   imports: [
@@ -32,9 +35,12 @@ import { BillingModule } from '../../billing/billing.module';
     IntegrationsModule,
     KnowledgeSourcesModule,
     BillingModule,
+    AssistantProfilesModule,
+    ConversationEngineModule,
   ],
   providers: [
     ChatPipelineService,
+    KnowledgeConversationService,
     ConversationStateService,
     ResponseComposerService,
     ChatAgentOrchestratorService,

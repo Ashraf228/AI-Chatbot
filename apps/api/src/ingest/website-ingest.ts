@@ -1,5 +1,5 @@
 import type { LookupAddress } from 'dns';
-import { lookup as defaultLookup } from 'dns/promises';
+import { Resolver, type lookup } from 'dns/promises';
 import type { IncomingMessage, RequestOptions } from 'http';
 import { request as httpRequest } from 'http';
 import { request as httpsRequest } from 'https';
@@ -41,13 +41,14 @@ export class WebsiteFetchError extends Error {
   constructor(
     message: string,
     readonly code: string,
+    readonly statusCode?: number,
   ) {
     super(message);
     this.name = 'WebsiteFetchError';
   }
 }
 
-export type WebsiteLookupFn = typeof defaultLookup;
+export type WebsiteLookupFn = typeof lookup;
 export type WebsiteFetchFn = typeof fetch;
 
 export type ValidatedWebsiteUrl = {
@@ -67,6 +68,10 @@ export type WebsiteFetchResult = {
   extractedText: string;
   extractedChars: number;
   truncated: boolean;
+  links?: string[];
+  linksTruncated?: boolean;
+  pageTitle?: string;
+  resourceText?: string;
 };
 
 export type ResolvedPublicAddress = {
@@ -96,6 +101,7 @@ type WebsitePinnedRequestOptions = {
   headers?: Record<string, string>;
   httpRequestImpl?: WebsiteTransportFn;
   httpsRequestImpl?: WebsiteTransportFn;
+  signal?: AbortSignal;
 };
 
 export type WebsiteRequestFn = (
@@ -106,10 +112,13 @@ export type WebsiteRequestFn = (
 
 export async function validatePublicWebsiteUrl(
   input: string,
-  resolver: WebsiteLookupFn = defaultLookup,
+  resolver?: WebsiteLookupFn,
+  options: { signal?: AbortSignal; timeoutMs?: number } = {},
 ): Promise<ValidatedWebsiteUrl> {
+  options.signal?.throwIfAborted();
   const parsed = parseWebsiteUrl(input);
-  const pinnedAddress = await resolvePublicAddresses(parsed.hostname, resolver);
+  const pinnedAddress = await resolvePublicAddresses(parsed.hostname, resolver, options);
+  options.signal?.throwIfAborted();
 
   return {
     normalizedUrl: parsed.toString(),
@@ -126,26 +135,40 @@ export async function fetchWebsiteSource(
     timeoutMs?: number;
     httpRequestImpl?: WebsiteTransportFn;
     httpsRequestImpl?: WebsiteTransportFn;
+    signal?: AbortSignal;
+    allowedOrigin?: string;
+    resource?: 'robots' | 'sitemap';
+    allowUrl?: (url: string) => boolean;
   } = {},
 ): Promise<WebsiteFetchResult> {
   const requestImpl = options.requestImpl ?? fetchWithPinnedDns;
-  const resolver = options.resolver ?? defaultLookup;
+  const resolver = options.resolver;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const initial = await validatePublicWebsiteUrl(input, resolver);
+  options.signal?.throwIfAborted();
+  const deadlineController = new AbortController();
+  const deadline = setTimeout(() => deadlineController.abort(createTimeoutError()), timeoutMs);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadlineController.signal]) : deadlineController.signal;
 
   try {
+    const initial = await validatePublicWebsiteUrl(input, resolver, { signal, timeoutMs });
     let currentTarget = initial;
     let redirectCount = 0;
 
     for (;;) {
+      signal.throwIfAborted();
+      if ((options.allowedOrigin && new URL(currentTarget.normalizedUrl).origin !== options.allowedOrigin)
+        || (options.allowUrl && !options.allowUrl(currentTarget.normalizedUrl))) {
+        throw new WebsitePolicyError('Das Ziel liegt außerhalb des erlaubten Website-Bereichs.', 'crawl_scope_blocked');
+      }
       const response = await requestImpl(currentTarget.normalizedUrl, currentTarget.pinnedAddress, {
         timeoutMs,
         headers: {
-          accept: 'text/html,text/plain,application/xhtml+xml',
+          accept: options.resource === 'sitemap' ? 'application/xml,text/xml' : 'text/html,text/plain,application/xhtml+xml',
           'user-agent': WEBSITE_USER_AGENT,
         },
         httpRequestImpl: options.httpRequestImpl,
         httpsRequestImpl: options.httpsRequestImpl,
+        signal,
       });
       const statusCode = response.statusCode ?? 0;
 
@@ -164,6 +187,7 @@ export async function fetchWebsiteSource(
         currentTarget = await validatePublicWebsiteUrl(
           new URL(location, currentTarget.normalizedUrl).toString(),
           resolver,
+          { signal, timeoutMs },
         );
         redirectCount += 1;
         continue;
@@ -171,19 +195,23 @@ export async function fetchWebsiteSource(
 
       if (statusCode < 200 || statusCode >= 300) {
         response.resume();
-        throw new WebsiteFetchError(`Website antwortete mit HTTP ${statusCode}.`, 'remote_http_error');
+        throw new WebsiteFetchError(`Website antwortete mit HTTP ${statusCode}.`, 'remote_http_error', statusCode);
       }
 
       const contentType = headerValue(response.headers['content-type']).trim();
-      if (!ALLOWED_CONTENT_TYPES.some((pattern) => pattern.test(contentType))) {
+      const contentTypes = options.resource === 'sitemap' ? [/^(application|text)\/xml(?:\s*;|$)/i] : ALLOWED_CONTENT_TYPES;
+      if (!contentTypes.some((pattern) => pattern.test(contentType))) {
         response.resume();
         throw new WebsitePolicyError('Der Inhaltstyp der Website ist nicht erlaubt.', 'content_type_blocked');
       }
 
       const { chunks, totalBytes } = await readResponseBody(response);
 
-      const extraction = extractWebsiteText(Buffer.concat(chunks).toString('utf8'), contentType);
-      if (!extraction.text) {
+      signal.throwIfAborted();
+      const raw = Buffer.concat(chunks).toString('utf8');
+      const extraction = extractWebsiteText(raw, contentType);
+      const linkMatches = options.resource ? [] : [...raw.matchAll(/<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi)];
+      if (!extraction.text && !options.resource) {
         throw new WebsitePolicyError('Die Website enthält keinen auswertbaren Text.', 'empty_extract');
       }
 
@@ -198,9 +226,18 @@ export async function fetchWebsiteSource(
         extractedText: extraction.text,
         extractedChars: extraction.text.length,
         truncated: extraction.truncated,
+        ...(options.resource ? { resourceText: raw } : {
+          links: linkMatches.slice(0, 500).map((match) => decodeHtmlEntities(match[1] ?? match[2] ?? match[3] ?? '')),
+          linksTruncated: linkMatches.length > 500,
+          pageTitle: extractWebsiteText(raw.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '').text.slice(0, 200),
+        }),
       };
     }
   } catch (error) {
+    options.signal?.throwIfAborted();
+    if (deadlineController.signal.aborted) {
+      throw new WebsiteFetchError('Die Website hat nicht rechtzeitig geantwortet.', 'fetch_timeout');
+    }
     if (error instanceof WebsitePolicyError || error instanceof WebsiteFetchError) {
       throw error;
     }
@@ -208,6 +245,8 @@ export async function fetchWebsiteSource(
       throw new WebsiteFetchError('Die Website hat nicht rechtzeitig geantwortet.', 'fetch_timeout');
     }
     throw new WebsiteFetchError('Die Website konnte nicht geladen werden.', 'fetch_failed');
+  } finally {
+    clearTimeout(deadline);
   }
 }
 
@@ -238,6 +277,10 @@ export async function fetchWithPinnedDns(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return await new Promise<IncomingMessage>((resolve, reject) => {
+    options.signal?.throwIfAborted();
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => { clearTimeout(deadline); options.signal?.removeEventListener('abort', abort); };
+    const abort = () => request.destroy(new Error('Website request aborted'));
     const request = requester(
       {
         protocol: target.protocol,
@@ -251,13 +294,20 @@ export async function fetchWithPinnedDns(
         rejectUnauthorized: true,
       },
       (response) => {
+        response.once('close', cleanup);
         resolve(response);
       },
     );
 
     request.on('error', (error) => {
+      cleanup();
       reject(error);
     });
+
+    deadline = setTimeout(() => request.destroy(createTimeoutError()), timeoutMs);
+    deadline.unref?.();
+    options.signal?.addEventListener('abort', abort, { once: true });
+    if (options.signal?.aborted) abort();
 
     request.setTimeout?.(timeoutMs, () => {
       request.destroy(createTimeoutError());
@@ -308,7 +358,11 @@ function parseWebsiteUrl(input: string) {
   return parsed;
 }
 
-async function resolvePublicAddresses(hostname: string, resolver: WebsiteLookupFn): Promise<ResolvedPublicAddress> {
+async function resolvePublicAddresses(
+  hostname: string,
+  resolver: WebsiteLookupFn | undefined,
+  options: { signal?: AbortSignal; timeoutMs?: number },
+): Promise<ResolvedPublicAddress> {
   if (isIP(hostname)) {
     if (isPrivateAddress(hostname)) {
       throw new WebsitePolicyError('Private oder interne Website-Ziele sind nicht erlaubt.', 'ip_blocked');
@@ -319,7 +373,7 @@ async function resolvePublicAddresses(hostname: string, resolver: WebsiteLookupF
     };
   }
 
-  const records = await resolver(hostname, { all: true, verbatim: true }).catch(() => []);
+  const records = await lookupWebsiteAddresses(hostname, resolver, options);
   if (!Array.isArray(records) || records.length === 0) {
     throw new WebsiteFetchError('Der Hostname der Website konnte nicht aufgelöst werden.', 'dns_lookup_failed');
   }
@@ -338,6 +392,51 @@ async function resolvePublicAddresses(hostname: string, resolver: WebsiteLookupF
   }
 
   return normalizedRecords[0];
+}
+
+function lookupWebsiteAddresses(
+  hostname: string,
+  resolver: WebsiteLookupFn | undefined,
+  { signal, timeoutMs = DEFAULT_TIMEOUT_MS }: { signal?: AbortSignal; timeoutMs?: number },
+): Promise<LookupAddress[]> {
+  signal?.throwIfAborted();
+  // dns.lookup/getaddrinfo cannot be cancelled. Each production lookup owns a
+  // cancellable DNS Resolver, so aborting it cannot cancel another crawl's DNS.
+  const dns = resolver ? undefined : new Resolver({ timeout: timeoutMs, tries: 1 });
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const finish = (error?: unknown, records?: LookupAddress[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      dns?.cancel();
+      if (records) resolve(records);
+      else reject(error);
+    };
+    const abort = () => finish(signal?.reason);
+    timer = setTimeout(() => finish(new WebsiteFetchError('DNS-Auflösung hat das Zeitlimit überschritten.', 'fetch_timeout')), timeoutMs);
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { abort(); return; }
+    const family = async (version: 4 | 6): Promise<LookupAddress[]> => {
+      try {
+        const addresses = await (version === 4 ? dns!.resolve4(hostname) : dns!.resolve6(hostname));
+        return addresses.map((address) => ({ address, family: version }));
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === 'ENODATA' || code === 'ENOTFOUND') return [];
+        throw error;
+      }
+    };
+    const pending = resolver
+      ? Promise.resolve().then(() => { signal?.throwIfAborted(); return resolver(hostname, { all: true, verbatim: true }); })
+      : Promise.all([family(4), family(6)]).then((records) => records.flat());
+    // Observe late resolve/reject even for injected resolvers that cannot cancel.
+    pending.then((records) => finish(undefined, records), () => finish(
+      new WebsiteFetchError('Der Hostname der Website konnte nicht aufgelöst werden.', 'dns_lookup_failed'),
+    ));
+  });
 }
 
 function isBlockedHostname(hostname: string) {
@@ -380,6 +479,11 @@ function isPrivateAddress(address: string) {
   }
   if (
     /^10\./.test(normalized)
+    || /^127\./.test(normalized)
+    || /^0\./.test(normalized)
+    || /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(normalized)
+    || /^198\.(18|19)\./.test(normalized)
+    || (isIP(normalized) === 4 && Number(normalized.split('.')[0]) >= 224)
     || /^192\.168\./.test(normalized)
     || /^172\.(1[6-9]|2\d|3[0-1])\./.test(normalized)
     || /^169\.254\./.test(normalized)
@@ -389,7 +493,8 @@ function isPrivateAddress(address: string) {
   if (
     /^fc/i.test(normalized)
     || /^fd/i.test(normalized)
-    || /^fe80:/i.test(normalized)
+    || /^fe[89ab][0-9a-f]:/i.test(normalized)
+    || /^ff/i.test(normalized)
   ) {
     return true;
   }

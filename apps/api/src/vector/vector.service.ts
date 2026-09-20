@@ -176,4 +176,41 @@ export class VectorService {
 
     return res.rows;
   }
+
+  async searchKnowledge(tenantId: string, siteId: string, embedding: number[], query: string,
+    options: { demoOnly?: boolean } = {}): Promise<VectorSearchRow[]> {
+    const stop = new Set('aber alle auch auf aus bei das dass dem den der des die dies diese dieser dieses ein eine einer eines fuer für habe ist kann mit nach nicht oder sie sind und von was welche wie wir wird zu zum zur the a an and are do does for how in is it of or that the this to what which with'.split(' '));
+    const terms = [...new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [])
+      .filter((term) => !stop.has(term)))].slice(-16);
+    const result = await this.db.query<VectorSearchRow>(`
+      WITH eligible AS (
+        SELECT c.id, c.document_id, d.source_id, ks.source_type, ks.label AS source_label,
+          c.content, c.metadata, d.title,
+          CASE WHEN ks.source_type = 'url' THEN COALESCE(c.metadata->>'pageUrl', ks.source_url, d.source_url)
+            ELSE COALESCE(ks.source_url, d.source_url) END AS source_url,
+          1 - (c.embedding <=> $3::vector) AS score,
+          c.embedding <=> $3::vector AS distance
+        FROM chunks c JOIN documents d ON d.id = c.document_id AND d.tenant_id = c.tenant_id AND d.site_id = c.site_id
+        JOIN knowledge_sources ks ON ks.id = d.source_id AND ks.tenant_id = c.tenant_id AND ks.site_id = c.site_id
+        WHERE c.tenant_id = $1 AND c.site_id = $2 AND c.embedding IS NOT NULL
+          AND ks.is_active = true AND ks.runtime_readiness = 'ready'
+          AND ($5::boolean = false OR (c.metadata->>'demo' = 'true' AND c.metadata->>'synthetic' = 'true'
+            AND ks.config->>'demo' = 'true' AND ks.config->>'synthetic' = 'true'))
+      ), semantic AS (
+        SELECT id, row_number() OVER (ORDER BY distance, id) AS rank FROM eligible
+        WHERE score >= 0.30 ORDER BY distance, id LIMIT 16
+      ), lexical AS (
+        SELECT id, row_number() OVER (ORDER BY ts_rank_cd(to_tsvector('simple', content), to_tsquery('simple', $4)) DESC, id) AS rank
+        FROM eligible WHERE $4 <> '' AND score > 0
+          AND to_tsvector('simple', content) @@ to_tsquery('simple', $4)
+        ORDER BY ts_rank_cd(to_tsvector('simple', content), to_tsquery('simple', $4)) DESC, id LIMIT 16
+      ), fused AS (
+        SELECT id, 1.0 / (60 + rank) AS weight FROM semantic
+        UNION ALL SELECT id, 1.0 / (60 + rank) AS weight FROM lexical
+      )
+      SELECT e.* FROM eligible e JOIN (SELECT id, sum(weight) AS relevance FROM fused GROUP BY id) r ON r.id = e.id
+      ORDER BY r.relevance DESC, e.score DESC, e.id LIMIT 16`,
+      [tenantId, siteId, this.toPgVectorLiteral(embedding), terms.join(' | '), options.demoOnly === true]);
+    return result.rows;
+  }
 }

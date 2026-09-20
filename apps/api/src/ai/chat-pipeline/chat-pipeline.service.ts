@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { ChatAgentOrchestratorService } from '../../chat/chat-agent-orchestrator.service';
@@ -26,6 +26,9 @@ import { ResponseComposerService } from './response-composer.service';
 import { persistLlmUsage } from '../../usage/persist-llm-usage';
 import { LlmUsageMeasurement } from '../../usage/llm-usage';
 import { UsageLimitService } from '../../billing/usage-limit.service';
+import type { AssistantProfile } from '../../assistant-profiles';
+import { KnowledgeConversationService } from './knowledge-conversation.service';
+import { buildKnowledgeQuery, buildKnowledgeUserPrompt, KNOWLEDGE_NO_ANSWER, selectKnowledgeEvidence, validateKnowledgeAnswer } from './knowledge-answer-policy';
 
 @Injectable()
 export class ChatPipelineService {
@@ -41,12 +44,15 @@ export class ChatPipelineService {
     private readonly toolExecutor: ToolExecutorService,
     private readonly usageLimits: UsageLimitService,
     private readonly runtimeQueryEmbedding: RuntimeQueryEmbeddingService,
+    @Optional() private readonly knowledgeConversation?: KnowledgeConversationService,
   ) {}
 
   async process(input: ChatPipelineInput, signal?: AbortSignal): Promise<ChatPipelineResult> {
     const normalized = this.normalizeInput(input);
     await this.usageLimits.assertWithinLimit(normalized.tenantId, 'monthlyMessages');
     const conversation = await this.prepareConversation(normalized);
+    const knowledgeProfile = await this.knowledgeConversation?.resolve(normalized);
+    if (knowledgeProfile) return this.processKnowledge(normalized, conversation, knowledgeProfile, signal);
     const agentResult = normalized.evaluationMode
       ? null
       : await this.tryAgent(normalized, conversation);
@@ -183,6 +189,18 @@ export class ChatPipelineService {
       sessionId: conversation.sessionId,
       conversationId: conversation.id,
     });
+
+    const knowledgeProfile = await this.knowledgeConversation?.resolve(normalized);
+    if (knowledgeProfile) {
+      // Hold generated text until its source references have been checked. An
+      // invalid answer must not leak through token events before validation.
+      const result = await this.processKnowledge(normalized, conversation, knowledgeProfile, signal, true);
+      signal?.throwIfAborted();
+      await emit({ type: 'token', delta: result.answer });
+      await emit({ type: 'message_end', answer: result.answer, sessionId: result.sessionId,
+        conversationId: result.conversationId, parts: result.parts, sources: result.sources });
+      return;
+    }
 
     const agentResult = normalized.evaluationMode
       ? null
@@ -396,6 +414,58 @@ export class ChatPipelineService {
       parts,
       sources: routed.sources,
     });
+  }
+
+  private async processKnowledge(input: Required<ChatPipelineInput>, conversation: { id: string; sessionId: string },
+    profile: AssistantProfile, signal?: AbortSignal, streamed = false): Promise<ChatPipelineResult> {
+    signal?.throwIfAborted();
+    const history = await this.conversationState.loadHistory(conversation.id);
+    const plan = this.knowledgeConversation!.plan(profile, input.message, history, false);
+    const fallback = async (answer: string, model: string) => this.persistAndReturnRuleBasedAnswer({
+      input, conversation, answer, route: 'faq', sources: [], model,
+    });
+    if (plan.blocked) return fallback('Diese Aktion kann ich nicht ausführen. Ich kann Fragen anhand der freigegebenen Wissensbasis beantworten.', 'rule-based-knowledge-action-boundary');
+    const query = buildKnowledgeQuery(input.message, history);
+    const start = Date.now();
+    const embedding = await this.runtimeQueryEmbedding.embedAuthorizedQuery({ tenantId: input.tenantId, siteId: input.siteId, query, signal });
+    signal?.throwIfAborted();
+    logEvent('retrieval_result', { tenantId: input.tenantId, siteId: input.siteId, conversationId: conversation.id,
+      queryEmbeddingStatus: embedding.kind, queryEmbeddingDecision: embedding.decisionCode,
+      queryEmbeddingProviderKey: embedding.providerKey, queryEmbeddingModel: embedding.model, runtime: 'knowledge' });
+    if (embedding.kind === 'denied') return fallback(
+      'Ich kann diese Anfrage im Moment nicht sicher mit dem freigegebenen Wissen abgleichen. Bitte versuche es spaeter erneut oder kontaktiere einen Mitarbeiter.',
+      'rule-based-query-embedding-gate');
+    const hits = embedding.kind === 'embedded' ? selectKnowledgeEvidence(await this.vector.searchKnowledge(
+      input.tenantId, input.siteId, embedding.embedding, query, { demoOnly: input.evaluationMode })) : [];
+    signal?.throwIfAborted();
+    if (!hits.length) return fallback(KNOWLEDGE_NO_ANSWER, 'rule-based-knowledge-insufficient-evidence');
+    let usageRecorded = false;
+    const onUsage = async (measurement: LlmUsageMeasurement) => {
+      await persistLlmUsage(this.db, { ...input, conversationId: conversation.id, sessionId: conversation.sessionId }, measurement);
+      usageRecorded = true;
+    };
+    const scope = { tenantId: input.tenantId, siteId: input.siteId };
+    const system = this.knowledgeConversation!.plan(profile, input.message, history, true).systemPrompt;
+    const user = buildKnowledgeUserPrompt(input.message, history, hits);
+    const generated = streamed
+      ? await this.llm.streamAnswer(system, user, async () => { signal?.throwIfAborted(); }, scope, { signal, onUsage })
+      : await this.llm.answer(system, user, scope, { signal, onUsage });
+    signal?.throwIfAborted();
+    const checked = validateKnowledgeAnswer(sanitizeOutput(generated.text), hits);
+    const sources = this.responseComposer.buildSources(checked.hits).map((source) => ({ ...source, metadata: {} }));
+    await this.persistSuccessfulAssistantResponse({
+      tenantId: input.tenantId, siteId: input.siteId, conversationId: conversation.id, sessionId: conversation.sessionId,
+      answer: checked.answer, usageAlreadyRecorded: usageRecorded,
+      source: input.source,
+      usage: { model: generated.model, ...generated.usage, latencyMs: generated.latencyMs,
+        estimatedCost: estimateOpenAICost({ model: generated.model, ...generated.usage }), success: true },
+    });
+    logEvent('knowledge_answer_completed', { tenantId: input.tenantId, siteId: input.siteId,
+      conversationId: conversation.id, evidenceCount: hits.length, sourceCount: sources.length,
+      citationsValid: checked.grounded, totalTime: Date.now() - start });
+    return { answer: checked.answer, sources,
+      parts: this.responseComposer.buildParts({ answer: checked.answer, route: 'faq', sources }),
+      sessionId: conversation.sessionId, conversationId: conversation.id, route: 'faq' };
   }
 
   private normalizeInput(input: ChatPipelineInput): Required<ChatPipelineInput> {

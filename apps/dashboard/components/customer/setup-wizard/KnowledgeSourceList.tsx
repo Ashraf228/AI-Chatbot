@@ -4,6 +4,7 @@ import { KnowledgeEmptyState } from "./KnowledgeEmptyState";
 import { KnowledgeSourceCard } from "./KnowledgeSourceCard";
 
 type KnowledgeSourceListProps = {
+  canCrawlWebsite?: boolean;
   siteSlug: string;
   sources: KnowledgeSource[];
   savingKey: string | null;
@@ -14,6 +15,7 @@ type KnowledgeSourceListProps = {
 };
 
 export function KnowledgeSourceList({
+  canCrawlWebsite = false,
   siteSlug,
   sources,
   savingKey,
@@ -36,6 +38,7 @@ export function KnowledgeSourceList({
         <div className="wizard-source-list">
           {sources.map((source) => (
             <KnowledgeSourceCard
+              canCrawlWebsite={canCrawlWebsite}
               key={source.id}
               source={source}
               savingKey={savingKey}

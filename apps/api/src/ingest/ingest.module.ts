@@ -9,6 +9,7 @@ import { SitesModule } from '../sites/sites.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { BillingModule } from '../billing/billing.module';
+import { WebsiteKnowledgeIndexService } from './website-knowledge-index.service';
 
 @Module({
   imports: [KnowledgeSourcesModule, SitesModule, AuditLogsModule, BillingModule],
@@ -16,6 +17,7 @@ import { BillingModule } from '../billing/billing.module';
   providers: [
     IngestService,
     IngestionEmbeddingService,
+    WebsiteKnowledgeIndexService,
     PrismaService,
     VectorService,
     RateLimitService,
