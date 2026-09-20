@@ -109,6 +109,7 @@ export class RuntimeQueryEmbeddingService {
     tenantId: string;
     siteId: string;
     query: string;
+    signal?: AbortSignal;
   }): Promise<RuntimeQueryEmbeddingResult> {
     const tenantId = input.tenantId.trim();
     const siteId = input.siteId.trim();
@@ -166,7 +167,7 @@ export class RuntimeQueryEmbeddingService {
         if (!decision.allowed) {
           throw new RuntimeQueryEmbeddingTransportDeniedError(decision);
         }
-      });
+      }, { signal: input.signal });
     } catch (error) {
       const transportDenial = findTransportDenial(error);
       if (transportDenial) {

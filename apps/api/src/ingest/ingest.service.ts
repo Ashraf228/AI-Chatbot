@@ -707,6 +707,9 @@ export class IngestService {
     }
 
     const config = source.metadata || {};
+    if (source.type === 'url' && config.websiteCrawl) {
+      throw new BadRequestException('Für indexierte Websites bitte „Website durchsuchen & indexieren“ verwenden.');
+    }
     try {
       if (source.type === 'url') {
         await this.knowledgeSources.markFetching(sourceId, {

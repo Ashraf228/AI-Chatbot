@@ -130,6 +130,13 @@ export async function resyncKnowledgeSource(sourceId: string) {
   return readJson(response);
 }
 
+export async function crawlWebsiteSource(sourceId: string, maxPages = 20) {
+  const response = await fetch(`/api/ingest/sources/${encodeURIComponent(sourceId)}/crawl-index`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ maxPages }),
+  });
+  return readJson(response);
+}
+
 export async function deleteKnowledgeSource(sourceId: string) {
   const response = await fetch(`/api/ingest/sources/${encodeURIComponent(sourceId)}`, {
     method: "DELETE",

@@ -10,6 +10,7 @@ import {
   getSite,
   importUrlKnowledgeSource,
   resyncKnowledgeSource,
+  crawlWebsiteSource,
   setKnowledgeSourceActive,
   setSiteGoLive,
   updateAssistantProfileConfig,
@@ -774,8 +775,8 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   async function resyncSource(source: KnowledgeSource) {
     const updated = await runAction(
       `resync-${source.id}`,
-      () => resyncKnowledgeSource(source.id),
-      "Wissensquelle wird aktualisiert.",
+      () => source.type === "url" ? crawlWebsiteSource(source.id) : resyncKnowledgeSource(source.id),
+      source.type === "url" ? "Website durchsucht und im Wissensindex gespeichert." : "Wissensquelle wurde aktualisiert.",
     );
     if (updated) {
       await refreshSources();
@@ -981,6 +982,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
         return (
           <KnowledgeStep
             siteSlug={siteSlug}
+            canCrawlWebsite={dashboardRole === "admin" || dashboardRole === "operator"}
             sources={sources}
             readyActiveSources={readyActiveSources}
             knowledgeMode={goalForm.knowledgeMode}

@@ -131,6 +131,7 @@ export type KnowledgeSource = {
   lastSyncedAt: string | null;
   errorMessage: string;
   ingestErrorMessageSanitized?: string;
+  metadata?: { websiteCrawl?: { pages: number; complete: boolean; maxPages: number } };
   createdAt: string;
 };
 

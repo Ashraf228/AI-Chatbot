@@ -38,7 +38,7 @@ describe("KnowledgeSourceCard", () => {
     expect(screen.getAllByText("Importiert, noch nicht antwortbereit")).toHaveLength(2);
     expect(screen.getByText(/extracted · Index not_requested · Runtime not_ready/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Inhalt extrahiert, aber noch nicht fuer Antworten freigegeben/i),
+      screen.getByText(/Für Antworten die Website durchsuchen und indexieren/i),
     ).toBeInTheDocument();
   });
 });

@@ -5758,6 +5758,46 @@
       "expectedScopeCheck": "signed individual customer session forwarded for authoritative API capability revalidation; existing admin/operator site access proxy otherwise",
       "testCaseId": "SEC-SITE-SCOPE",
       "exception": null
+    },
+    {
+      "id": "API-KNOWLEDGE-WEBSITE-INDEX",
+      "layer": "api",
+      "method": "POST",
+      "path": "/admin/ingest/sources/:sourceId/crawl-index",
+      "source": "apps/api/src/ingest/ingest.controller.ts",
+      "authType": "admin-key-or-dashboard-internal-token",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": true,
+      "sensitiveResponse": false,
+      "expectedScopeCheck": "AdminScopeService asserts source site ownership; BFF requires trusted same-origin mutation",
+      "testCaseId": "SEC-TENANT-SCOPE",
+      "exception": null
+    },
+    {
+      "id": "DASH-KNOWLEDGE-WEBSITE-INDEX",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/ingest/sources/:sourceId/crawl-index",
+      "source": "apps/dashboard/app/api/ingest/sources/[sourceId]/crawl-index/route.ts",
+      "authType": "dashboard-session",
+      "allowedRoles": [
+        "admin",
+        "operator"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": true,
+      "sensitiveResponse": false,
+      "expectedScopeCheck": "AdminScopeService asserts source site ownership; BFF requires trusted same-origin mutation",
+      "testCaseId": "SEC-TENANT-SCOPE",
+      "exception": null
     }
   ]
 }

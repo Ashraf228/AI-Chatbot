@@ -7,6 +7,7 @@ import type { KnowledgeDraftForm, KnowledgeMethod, KnowledgeMode, KnowledgeSourc
 import { SetupStepHeader } from "./SetupStepHeader";
 
 type KnowledgeStepProps = {
+  canCrawlWebsite?: boolean;
   siteSlug: string;
   sources: KnowledgeSource[];
   readyActiveSources: KnowledgeSource[];
@@ -32,6 +33,7 @@ type KnowledgeStepProps = {
 };
 
 export function KnowledgeStep({
+  canCrawlWebsite = false,
   siteSlug,
   sources,
   readyActiveSources,
@@ -165,6 +167,7 @@ export function KnowledgeStep({
         onAddPdf={onAddPdf}
       />
       <KnowledgeSourceList
+        canCrawlWebsite={canCrawlWebsite}
         siteSlug={siteSlug}
         sources={sources}
         savingKey={savingKey}

@@ -9,6 +9,7 @@ import type { KnowledgeSource } from "./setupWizardTypes";
 import { sourceTone } from "./setupWizardValidation";
 
 type KnowledgeSourceCardProps = {
+  canCrawlWebsite?: boolean;
   source: KnowledgeSource;
   savingKey: string | null;
   onToggle: (source: KnowledgeSource) => void;
@@ -92,9 +93,13 @@ function completionLabel(source: KnowledgeSource) {
 function sourceBoundaryLabel(source: KnowledgeSource) {
   const normalizedType = source.type.toLowerCase();
   if (normalizedType === "url" || normalizedType === "website") {
+    if (source.metadata?.websiteCrawl) {
+      const crawl = source.metadata.websiteCrawl;
+      return `${crawl.pages} Website-Seiten indexiert. ${crawl.complete ? "Alle innerhalb der Abrufregeln entdeckten Seiten verarbeitet." : "Unvollständiger Abruf; nicht die gesamte Website ist indexiert."}`;
+    }
     return source.ingestStatus === "extracted" && source.runtimeReadiness !== "ready"
-      ? "Einzelne importierte Webseite. Inhalt extrahiert, aber noch nicht fuer Antworten freigegeben. Kein automatisches Website-Crawling."
-      : "Einzelne importierte Webseite. Kein automatisches Website-Crawling.";
+      ? "Einzelne Seite importiert. Für Antworten die Website durchsuchen und indexieren. Bis zu 20 Seiten derselben Website; gesperrte Seiten werden ausgelassen."
+      : "Einzelne importierte Seite. Website durchsuchen und indexieren verarbeitet bis zu 20 Seiten derselben Website.";
   }
   if (normalizedType === "url_metadata") {
     return "Website-/Domain-Angabe allein wird nicht automatisch als Wissensquelle genutzt.";
@@ -102,7 +107,7 @@ function sourceBoundaryLabel(source: KnowledgeSource) {
   return "Kein Public Widget, kein Deploy, keine automatische Aktivierung.";
 }
 
-export function KnowledgeSourceCard({ source, savingKey, onToggle, onRefresh, onRemove }: KnowledgeSourceCardProps) {
+export function KnowledgeSourceCard({ source, savingKey, onToggle, onRefresh, onRemove, canCrawlWebsite = false }: KnowledgeSourceCardProps) {
   const title = source.title || source.label || "Wissenseintrag";
   const meta = [
     formatKnowledgeSourceType(source.type),
@@ -142,9 +147,10 @@ export function KnowledgeSourceCard({ source, savingKey, onToggle, onRefresh, on
           type="button"
           variant="secondary"
           onClick={() => onRefresh(source)}
-          disabled={savingKey === `resync-${source.id}`}
+          disabled={Boolean(savingKey) || (source.type === "url" && (!source.isActive || !canCrawlWebsite))}
+          title={source.type === "url" && !canCrawlWebsite ? "Website-Indexierung erfordert Admin-/Operatorzugang." : undefined}
         >
-          Neu aktualisieren
+          {source.type === "url" ? "Website durchsuchen & indexieren" : "Neu aktualisieren"}
         </Button>
         <Button type="button" variant="danger" onClick={() => onRemove(source)} disabled={savingKey === `delete-${source.id}`}>
           Entfernen

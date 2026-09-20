@@ -11,6 +11,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -25,6 +26,8 @@ import { RateLimitService } from '../utils/rate-limit.service';
 import { IsArray, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { UsageLimitService } from '../billing/usage-limit.service';
+import { WebsiteKnowledgeIndexService } from './website-knowledge-index.service';
+import { IsInt, IsOptional, Min, Max } from 'class-validator';
 
 class FaqItemDto {
   @IsString()
@@ -100,6 +103,14 @@ class SourceActiveDto {
   isActive!: boolean;
 }
 
+class WebsiteCrawlDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  maxPages?: number;
+}
+
 export const PDF_UPLOAD_OPTIONS = {
   storage: memoryStorage(),
   limits: {
@@ -122,6 +133,7 @@ export class IngestController {
     private scope: AdminScopeService,
     private rateLimit: RateLimitService,
     private usageLimits: UsageLimitService,
+    private websiteIndex: WebsiteKnowledgeIndexService,
   ) {}
 
   @Get('knowledge')
@@ -340,6 +352,29 @@ export class IngestController {
       },
     });
     return result;
+  }
+
+  @Post('sources/:sourceId/crawl-index')
+  async crawlIndex(@Param('sourceId') sourceId: string, @Body() body: WebsiteCrawlDto,
+    @Req() req: { dashboardAuth?: { actorId?: string; role?: string }; aborted?: boolean;
+      on?: (event: string, listener: () => void) => void; removeListener?: (event: string, listener: () => void) => void },
+    @Res({ passthrough: true }) response?: { destroyed?: boolean; on: (event: string, listener: () => void) => void; removeListener: (event: string, listener: () => void) => void }) {
+    const source = await this.ingest.getSource(sourceId);
+    const auth = this.scope.getAuth(req);
+    await this.scope.assertSiteAccess(auth, source.siteId, { allowedRoles: ['admin', 'operator'] });
+    await this.enforceAdminRateLimit(`website-index:${source.siteId}:${auth.actorId || 'dashboard'}`, 2, 60_000);
+    const abort = new AbortController();
+    const onAbort = () => abort.abort();
+    req.on?.('aborted', onAbort);
+    response?.on('close', onAbort);
+    if (req.aborted || response?.destroyed) abort.abort();
+    try {
+      const result = await this.websiteIndex.index(sourceId, { maxPages: body.maxPages, signal: abort.signal });
+      await this.auditLogs.record({ siteId: source.siteId, actorId: req.dashboardAuth?.actorId,
+        actorRole: req.dashboardAuth?.role, action: 'index_website_knowledge', resourceType: 'knowledge_source',
+        resourceId: sourceId, metadata: { pages: result.pages, chunks: result.chunks, complete: result.complete } });
+      return result;
+    } finally { req.removeListener?.('aborted', onAbort); response?.removeListener('close', onAbort); }
   }
 
   private async enforceAdminRateLimit(key: string, limit: number, windowMs: number) {
