@@ -10,7 +10,14 @@ import {
   REQUIRED_FIELD_OPTIONS,
   STATUS_STEP_GROUPS,
 } from "./setupWizardConstants";
-import type { FallbackBehavior, KnowledgeMode, KnowledgeSource, PrimaryGoal, SiteDetails, WizardStepKey } from "./setupWizardTypes";
+import type { AssistantAnswerStyle, FallbackBehavior, KnowledgeMode, KnowledgeSource, PrimaryGoal, SiteDetails, WizardStepKey } from "./setupWizardTypes";
+
+export function normalizeAssistantAnswerStyle(profile: Record<string, unknown> | null): AssistantAnswerStyle {
+  if (profile?.profileKey === "knowledge-assistant") return "knowledge_first";
+  const style = profile?.answerStyle;
+  return style === "short" || style === "structured" || style === "guided" || style === "knowledge_first"
+    ? style : "concise";
+}
 
 export function normalizeDomains(value: string) {
   return value

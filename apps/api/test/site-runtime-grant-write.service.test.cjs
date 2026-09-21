@@ -3,6 +3,7 @@ const test = require('node:test');
 
 const {
   SiteRuntimeGrantWriteService,
+  SiteRuntimeLlmGrantWriteService,
 } = require('../dist/knowledge-sources/site-runtime-grant-write.service.js');
 const {
   ProviderApprovalAuditWriter,
@@ -45,25 +46,25 @@ function terms(overrides = {}) {
   };
 }
 
-function rowFromTerms(id, currentTerms, currentContext = context()) {
+function rowFromTerms(id, currentTerms, currentContext = context(), purpose = 'query_embedding') {
   return {
     id,
     tenant_id: currentContext.tenantId,
     site_id: currentContext.siteId,
     source_id: null,
     source_types: [],
-    usage_contexts: ['query_embedding'],
+    usage_contexts: [purpose],
     scope_kind: 'site_runtime',
     environment: 'non_production',
     provider_key: 'openai',
-    model: 'text-embedding-3-small',
+    model: purpose === 'query_embedding' ? 'text-embedding-3-small' : 'gpt-5.4-mini',
     embedding_dimension: currentTerms.embeddingDimension,
     provider_region: currentTerms.providerRegion,
     data_categories: currentTerms.dataCategories,
     customer_data_approved: currentTerms.customerDataApproved,
     production_approved: currentTerms.productionApproved,
     provider_dpa_approved: currentTerms.providerDpaApproved,
-    purpose: 'query_embedding',
+    purpose,
     retention_policy: currentTerms.retentionPolicy,
     redaction_policy: currentTerms.redactionPolicy,
     logging_policy: currentTerms.loggingPolicy,
@@ -110,24 +111,30 @@ class FakeDatabase {
     }
     if (sql.includes('FROM provider_approval_grants') && sql.includes('SELECT')) {
       if (sql.includes('WHERE id = $1')) {
-        const [id, tenantId, siteId] = params;
-        return { rows: this.grants.filter((grant) => grant.id === id && grant.tenant_id === tenantId && grant.site_id === siteId) };
+        assert.match(sql, /AND purpose = \$4/);
+        const [id, tenantId, siteId, purpose] = params;
+        return { rows: this.grants.filter((grant) => grant.id === id && grant.tenant_id === tenantId && grant.site_id === siteId
+          && grant.scope_kind === 'site_runtime' && grant.purpose === purpose) };
       }
-      const [tenantId, siteId, providerKey, model, environment] = params;
+      assert.match(sql, /AND purpose = \$6/);
+      assert.match(sql, /AND usage_contexts = \$7::jsonb/);
+      const [tenantId, siteId, providerKey, model, environment, purpose, usageContexts] = params;
       return {
         rows: this.grants.filter((grant) => grant.tenant_id === tenantId && grant.site_id === siteId
           && grant.provider_key === providerKey && grant.model === model && grant.environment === environment
-          && grant.revoked_at === null),
+          && grant.scope_kind === 'site_runtime' && grant.purpose === purpose
+          && JSON.stringify(grant.usage_contexts) === usageContexts && grant.source_id === null
+          && grant.source_types.length === 0 && grant.revoked_at === null),
       };
     }
     if (sql.includes('INSERT INTO provider_approval_grants')) {
       if (this.overlapError) throw this.overlapError;
       const row = {
         id: params[0], tenant_id: params[1], site_id: params[2], source_id: null,
-        source_types: [], usage_contexts: ['query_embedding'], scope_kind: 'site_runtime',
+        source_types: [], usage_contexts: JSON.parse(params[24]), scope_kind: 'site_runtime',
         environment: params[3], provider_key: params[4], model: params[5], embedding_dimension: params[6],
         provider_region: params[7], data_categories: JSON.parse(params[8]), customer_data_approved: params[9],
-        production_approved: params[10], provider_dpa_approved: params[11], purpose: 'query_embedding',
+        production_approved: params[10], provider_dpa_approved: params[11], purpose: params[23],
         retention_policy: params[12], redaction_policy: params[13], logging_policy: params[14], deletion_policy: params[15],
         reindex_policy: params[16], rate_limit: params[17], cost_limit: params[18], valid_from: params[19],
         expires_at: params[20], revoked_at: null, revoked_by: null, revocation_reason: null,
@@ -137,9 +144,11 @@ class FakeDatabase {
       return { rows: [row] };
     }
     if (sql.includes('UPDATE provider_approval_grants')) {
-      const [revokedAt, revokedBy, reason, id, tenantId, siteId] = params;
+      assert.match(sql, /AND purpose = \$7/);
+      const [revokedAt, revokedBy, reason, id, tenantId, siteId, purpose] = params;
       const row = this.grants.find((grant) => grant.id === id && grant.tenant_id === tenantId
-        && grant.site_id === siteId && grant.revoked_at === null);
+        && grant.site_id === siteId && grant.scope_kind === 'site_runtime'
+        && grant.purpose === purpose && grant.revoked_at === null);
       if (!row) return { rows: [] };
       row.revoked_at = revokedAt;
       row.revoked_by = revokedBy;
@@ -455,4 +464,241 @@ test('audit writer uses only the supplied queryable client', async () => {
   });
   assert.equal(queries.length, 1);
   assert.match(queries[0].sql, /INSERT INTO provider_approval_audit_events/);
+});
+
+test.describe('fixed-purpose LLM grant administration', () => {
+  const envKeys = ['NODE_ENV', 'APP_ENV', 'OPENAI_MODEL', 'OPENAI_API_KEY', 'OPENAI_BASE_URL'];
+  let previousEnv;
+  let originalFetch;
+  let providerCalls;
+
+  test.beforeEach(() => {
+    previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+    process.env.NODE_ENV = 'test';
+    delete process.env.APP_ENV;
+    process.env.OPENAI_MODEL = '  gpt-5.4-mini  ';
+    process.env.OPENAI_API_KEY = 'synthetic-never-sent-key';
+    delete process.env.OPENAI_BASE_URL;
+    originalFetch = globalThis.fetch;
+    providerCalls = 0;
+    globalThis.fetch = async () => {
+      providerCalls += 1;
+      throw new Error('Grant administration must never call a provider');
+    };
+  });
+
+  test.afterEach(() => {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    assert.equal(providerCalls, 0);
+  });
+
+  function llmTerms(overrides = {}) {
+    return terms({ embeddingDimension: null, ...overrides });
+  }
+
+  function llmService(options = {}) {
+    const db = new FakeDatabase(options);
+    const auditCalls = [];
+    const audit = options.auditWriter || { async record(tx, input) { auditCalls.push({ tx, input }); } };
+    return { db, auditCalls, service: new SiteRuntimeLlmGrantWriteService(db, audit) };
+  }
+
+  test('preview is read-only; create derives normalized runtime binding and safe output', async () => {
+    const { service, db, auditCalls } = llmService();
+    assert.deepEqual(await service.preview(context(), llmTerms()), {
+      kind: 'would_create',
+      runtime: { providerKey: 'openai', model: 'gpt-5.4-mini', environment: 'non_production' },
+    });
+    assert.equal(db.grants.length, 0);
+    assert.equal(auditCalls.length, 0);
+    const created = await service.create(context(), llmTerms());
+    assert.equal(created.kind, 'created');
+    const stored = db.grants[0];
+    assert.equal(stored.model, 'gpt-5.4-mini');
+    assert.equal(stored.purpose, 'llm_generation');
+    assert.deepEqual(stored.usage_contexts, ['llm_generation']);
+    assert.equal(stored.scope_kind, 'site_runtime');
+    assert.equal(stored.source_id, null);
+    assert.deepEqual(stored.source_types, []);
+    assert.equal(stored.embedding_dimension, null);
+    assert.equal(stored.reindex_policy, null);
+    assert.equal(auditCalls[0].tx, db);
+    assert.equal(auditCalls[0].input.sanitizedReason, 'site_runtime_llm_generation_grant_created');
+    assert.deepEqual(Object.keys(created.grant).sort(), [
+      'id', 'providerKey', 'model', 'environment', 'validFrom', 'expiresAt', 'status', 'revokedAt',
+    ].sort());
+    assert.equal(JSON.stringify(created).includes('synthetic-never-sent-key'), false);
+    assert.equal(JSON.stringify(created).includes('synthetic-evidence'), false);
+  });
+
+  test('creation rechecks the model after acquiring the transaction', async () => {
+    const { service, db } = llmService();
+    const transaction = db.transaction.bind(db);
+    db.transaction = async (callback) => {
+      process.env.OPENAI_MODEL = 'gpt-4.1-mini';
+      return transaction(callback);
+    };
+    const created = await service.create(context(), llmTerms());
+    assert.equal(created.kind, 'created');
+    assert.equal(created.grant.model, 'gpt-4.1-mini');
+    assert.equal(db.grants[0].model, 'gpt-4.1-mini');
+  });
+
+  test('missing approvals, evidence, validity or policies cannot create a grant', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.APP_ENV = 'production';
+    for (const overrides of [
+      { customerDataApproved: false }, { providerDpaApproved: false }, { productionApproved: false },
+      { approvalEvidenceRef: '' }, { retentionPolicy: '' }, { deletionPolicy: '' },
+      { loggingPolicy: '' }, { redactionPolicy: '' }, { rateLimit: '' }, { costLimit: '' },
+      { validFrom: '2027-03-01T00:00:00Z', expiresAt: '2027-02-01T00:00:00Z' },
+    ]) {
+      const { service, db, auditCalls } = llmService();
+      const result = await service.create(context(), llmTerms({ productionApproved: true, ...overrides }));
+      assert.equal(result.kind, 'invalid_terms', JSON.stringify(overrides));
+      assert.equal(db.grants.length, 0);
+      assert.equal(auditCalls.length, 0);
+    }
+    const { service, db } = llmService();
+    assert.equal((await service.create(context(), llmTerms({ productionApproved: true }))).kind, 'created');
+    assert.equal(db.grants[0].environment, 'production');
+  });
+
+  test('runtime misconfiguration fails before database access', async () => {
+    for (const [key, value] of [
+      ['OPENAI_API_KEY', ''], ['OPENAI_MODEL', 'invalid model'],
+      ['OPENAI_BASE_URL', 'https://foreign.synthetic.invalid/v1'],
+      ['APP_ENV', ' staging '], ['APP_ENV', 'production'],
+    ]) {
+      const old = process.env[key];
+      process.env[key] = value;
+      try {
+        const { service, db, auditCalls } = llmService();
+        assert.equal((await service.preview(context(), llmTerms())).kind, 'unsupported_runtime_configuration');
+        assert.equal((await service.create(context(), llmTerms())).kind, 'unsupported_runtime_configuration');
+        assert.deepEqual(db.queries, []);
+        assert.equal(db.transactionCalls, 0);
+        assert.equal(auditCalls.length, 0);
+      } finally {
+        if (old === undefined) delete process.env[key];
+        else process.env[key] = old;
+      }
+    }
+  });
+
+  test('model, purpose, actor and scope injection and embedding-only terms fail closed', async () => {
+    const { service, db, auditCalls } = llmService();
+    for (const extra of [
+      { model: 'forged' }, { providerKey: 'forged' }, { purpose: 'query_embedding' },
+      { usageContexts: ['query_embedding'] }, { tenantId: 'foreign' }, { actorId: 'forged' },
+      { scopeKind: 'source' }, { environment: 'production' },
+      { embeddingDimension: 1536 }, { reindexPolicy: 'not-applicable' },
+    ]) {
+      assert.equal((await service.create(context(), llmTerms(extra))).kind, 'invalid_terms');
+    }
+    assert.equal((await service.create(context({ actorRole: 'viewer' }), llmTerms())).kind, 'invalid_context');
+    assert.equal((await service.create(context({ tenantId: 'foreign' }), llmTerms())).kind, 'not_found');
+    assert.equal(db.grants.length, 0);
+    assert.equal(auditCalls.length, 0);
+  });
+
+  test('query and LLM grants cannot be read, revoked, reused or conflicted across purposes', async () => {
+    const queryGrant = { ...rowFromTerms('query', terms()), model: 'gpt-5.4-mini' };
+    const { service, db, auditCalls } = llmService({ grants: [queryGrant] });
+    const notFound = { kind: 'not_found', reason: 'site_runtime_grant_not_found' };
+    assert.deepEqual(await service.status(context(), 'query'), notFound);
+    assert.deepEqual(await service.revoke(context(), { grantId: 'query', revocationReason: 'test' }), notFound);
+    assert.equal((await service.preview(context(), llmTerms())).kind, 'would_create');
+    const created = await service.create(context(), llmTerms());
+    assert.equal(created.kind, 'created');
+    assert.equal(db.grants.length, 2);
+    assert.equal(queryGrant.revoked_at, null);
+    assert.equal(auditCalls.length, 1);
+
+    const query = new SiteRuntimeGrantWriteService(db, {
+      async record() { throw new Error('cross-purpose mutation'); },
+    }, { resolveRuntimeContract: () => ({
+      supported: true, environment: 'non_production', providerKey: 'openai', model: 'gpt-5.4-mini',
+    }) });
+    assert.deepEqual(await query.status(context(), created.grant.id), notFound);
+    assert.deepEqual(await query.revoke(context(), { grantId: created.grant.id, revocationReason: 'test' }), notFound);
+    db.grants = db.grants.filter((row) => row.purpose === 'llm_generation');
+    assert.equal((await query.preview(context(), terms())).kind, 'would_create');
+    assert.equal(db.grants[0].revoked_at, null);
+  });
+
+  test('idempotence and overlap conflicts stay within the LLM binding', async () => {
+    const { service, db, auditCalls } = llmService();
+    const created = await service.create(context(), llmTerms());
+    assert.equal((await service.preview(context(), llmTerms())).kind, 'would_reuse');
+    assert.equal((await service.create(context(), llmTerms())).kind, 'reused');
+    const changed = llmTerms({ approvalEvidenceRef: 'changed-evidence' });
+    assert.equal((await service.preview(context(), changed)).kind, 'would_conflict');
+    assert.equal((await service.create(context(), changed)).kind, 'conflict');
+    assert.equal(db.grants.length, 1);
+    assert.equal(auditCalls.length, 1);
+    assert.equal((await service.status(context(), created.grant.id)).grant.status, 'scheduled');
+  });
+
+  test('status and revoke remain possible after the provider configuration becomes unavailable', async () => {
+    const { service, db, auditCalls } = llmService();
+    const created = await service.create(context(), llmTerms());
+    delete process.env.OPENAI_API_KEY;
+    assert.equal((await service.status(context(), created.grant.id)).kind, 'found');
+    const input = { grantId: created.grant.id, revocationReason: 'synthetic shutdown' };
+    assert.equal((await service.revoke(context(), input)).kind, 'revoked');
+    assert.equal((await service.revoke(context(), input)).kind, 'already_revoked');
+    assert.equal(auditCalls.length, 2);
+    assert.equal(auditCalls[1].input.sanitizedReason, 'site_runtime_llm_generation_grant_revoked');
+    assert.equal(db.grants[0].approved_by, context().actorId);
+  });
+
+  test('foreign tenant/site and unknown grant have the same result', async () => {
+    const foreign = [
+      rowFromTerms('foreign-tenant', llmTerms(), context({ tenantId: 'foreign' }), 'llm_generation'),
+      rowFromTerms('foreign-site', llmTerms(), context({ siteId: 'foreign' }), 'llm_generation'),
+    ];
+    const { service, auditCalls } = llmService({ grants: foreign });
+    for (const grantId of ['foreign-tenant', 'foreign-site', 'unknown']) {
+      const expected = { kind: 'not_found', reason: 'site_runtime_grant_not_found' };
+      assert.deepEqual(await service.status(context(), grantId), expected);
+      assert.deepEqual(await service.revoke(context(), { grantId, revocationReason: 'test' }), expected);
+    }
+    assert.equal(auditCalls.length, 0);
+    assert.ok(foreign.every((grant) => grant.revoked_at === null));
+  });
+
+  test('audit failure rolls back both LLM creation and revocation', async () => {
+    const auditWriter = { async record() { throw new Error('synthetic audit failure'); } };
+    const failedCreate = llmService({ auditWriter });
+    await assert.rejects(() => failedCreate.service.create(context(), llmTerms()), /synthetic audit failure/);
+    assert.equal(failedCreate.db.grants.length, 0);
+    const failedRevoke = llmService({
+      auditWriter, grants: [rowFromTerms('existing', llmTerms(), context(), 'llm_generation')],
+    });
+    await assert.rejects(() => failedRevoke.service.revoke(context(), {
+      grantId: 'existing', revocationReason: 'test',
+    }), /synthetic audit failure/);
+    assert.equal(failedRevoke.db.grants[0].revoked_at, null);
+  });
+
+  test('only the LLM overlap constraint is classified as a conflict', async () => {
+    for (const constraint of [
+      'provider_approval_grants_site_runtime_llm_no_overlap',
+      'provider_approval_grants_site_runtime_no_overlap',
+      'unrelated_constraint',
+    ]) {
+      const overlapError = Object.assign(new Error('synthetic overlap'), { code: '23P01', constraint });
+      const { service } = llmService({ overlapError });
+      if (constraint === 'provider_approval_grants_site_runtime_llm_no_overlap') {
+        assert.deepEqual(await service.create(context(), llmTerms()), { kind: 'conflict', grant: null });
+      } else {
+        await assert.rejects(() => service.create(context(), llmTerms()), (error) => error === overlapError);
+      }
+    }
+  });
 });

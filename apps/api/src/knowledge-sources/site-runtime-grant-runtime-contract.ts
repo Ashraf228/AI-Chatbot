@@ -1,4 +1,5 @@
 import type { ProviderEmbeddingEnvironment } from './provider-embedding-gate';
+import { LLM_PROVIDER_KEY, resolveLlmRuntimeConfig } from '../vector/llm-runtime-config';
 
 export type SupportedSiteRuntimeGrantRuntimeContract = {
   environment: ProviderEmbeddingEnvironment;
@@ -87,4 +88,12 @@ export function buildSiteRuntimeGrantRuntimeContract(
     model: config.model,
     supported: true,
   };
+}
+
+export function resolveSiteRuntimeLlmGrantRuntimeContract(): SiteRuntimeGrantRuntimeContract {
+  const config = resolveLlmRuntimeConfig();
+  return buildSiteRuntimeGrantRuntimeContract(
+    { providerKey: LLM_PROVIDER_KEY, model: config?.model ?? '' },
+    config !== null,
+  );
 }

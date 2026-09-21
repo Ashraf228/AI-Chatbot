@@ -12,6 +12,10 @@ import {
   type SiteRuntimeGrantRouteParams,
 } from "../lib/site-runtime-grant-transport";
 
+for (const resource of ["query_embedding", "llm_generation"] as const) {
+test.describe(resource, () => {
+const namespace = resource === "query_embedding" ? "site-runtime-grants" : "site-runtime-llm-grants";
+
 const SESSION_SECRET = "synthetic-session-secret-for-dashboard-transport";
 const SESSION_TOKEN = "synthetic.unchanged-session-token";
 const DASHBOARD_TOKEN = "synthetic-dashboard-token-for-transport-tests";
@@ -40,7 +44,7 @@ function terms() {
   return {
     validFrom: "2030-01-01T00:00:00.000Z",
     expiresAt: "2030-02-01T00:00:00.000Z",
-    embeddingDimension: 1536,
+    embeddingDimension: resource === "query_embedding" ? 1536 : null,
     providerRegion: "synthetic-region",
     dataCategories: ["synthetic-support-content"],
     customerDataApproved: false,
@@ -89,12 +93,12 @@ function harness(
       calls.push({ input: String(input), init: init || {} });
       return responseFactory();
     }) as typeof fetch,
-  });
+  }, resource);
   return { calls, forward };
 }
 
 function request(method: "GET" | "POST", body?: unknown, headers: Record<string, string> = {}) {
-  return new Request(`${DASHBOARD_ORIGIN}/api/internal/site-runtime-grants`, {
+  return new Request(`${DASHBOARD_ORIGIN}/api/internal/${namespace}`, {
     method,
     headers: {
       ...(method === "POST"
@@ -190,7 +194,7 @@ test("forwards a valid create with only server-selected credentials and no cachi
   assert.equal(current.calls.length, 1);
   assert.equal(
     current.calls[0].input,
-    `${BACKEND_ORIGIN}/internal/site-runtime-grants/tenant%20target/site%2Ftarget`,
+    `${BACKEND_ORIGIN}/internal/${namespace}/tenant%20target/site%2Ftarget`,
   );
   assert.equal(current.calls[0].init.method, "POST");
   assert.equal(current.calls[0].init.cache, "no-store");
@@ -218,7 +222,7 @@ test("maps preview, revoke, and status to fixed methods, URLs, and bodies", asyn
       operation: "preview",
       params: { tenantId: "tenant-target", siteId: "site-target" },
       request: request("POST", terms()),
-      expectedPath: "/internal/site-runtime-grants/tenant-target/site-target/preview",
+      expectedPath: `/internal/${namespace}/tenant-target/site-target/preview`,
       expectedBody: JSON.stringify(terms()),
       response: {
         kind: "would_create",
@@ -229,7 +233,7 @@ test("maps preview, revoke, and status to fixed methods, URLs, and bodies", asyn
       operation: "revoke",
       params: { tenantId: "tenant-target", siteId: "site-target", grantId: "grant-1" },
       request: request("POST", { revocationReason: "synthetic-reason" }),
-      expectedPath: "/internal/site-runtime-grants/tenant-target/site-target/grant-1/revoke",
+      expectedPath: `/internal/${namespace}/tenant-target/site-target/grant-1/revoke`,
       expectedBody: JSON.stringify({ revocationReason: "synthetic-reason" }),
       response: { kind: "revoked", grant: { ...grant(), status: "revoked", revokedAt: "2030-01-02T00:00:00.000Z" } },
     },
@@ -237,7 +241,7 @@ test("maps preview, revoke, and status to fixed methods, URLs, and bodies", asyn
       operation: "status",
       params: { tenantId: "tenant-target", siteId: "site-target", grantId: "grant-1" },
       request: request("GET"),
-      expectedPath: "/internal/site-runtime-grants/tenant-target/site-target/grant-1",
+      expectedPath: `/internal/${namespace}/tenant-target/site-target/grant-1`,
       response: { kind: "found", grant: grant() },
     },
   ];
@@ -295,3 +299,6 @@ test("sanitizes redirects, upstream errors, and malformed success payloads", asy
     assert.equal(serialized.includes("internalPolicy"), false);
   }
 });
+
+});
+}

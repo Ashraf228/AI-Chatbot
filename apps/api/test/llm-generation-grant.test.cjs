@@ -520,6 +520,29 @@ test('the actual SDK uses the same normalized model and fixed endpoint as the gr
   });
 });
 
+test('LLM administration, lookup and actual SDK bind to the same configured model without live HTTP', async () => {
+  await withRuntimeEnv(async () => {
+    const { resolveSiteRuntimeLlmGrantRuntimeContract } = require('../dist/knowledge-sources/site-runtime-grant-runtime-contract.js');
+    process.env.OPENAI_MODEL = '  gpt-5.4-mini  ';
+    process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1/';
+    const contract = resolveSiteRuntimeLlmGrantRuntimeContract();
+    assert.deepEqual(contract, {
+      supported: true, environment: 'non_production', providerKey: 'openai', model: 'gpt-5.4-mini',
+    });
+    assert.equal(JSON.stringify(contract).includes('synthetic-test-key'), false);
+    const { service, calls } = createSdkRuntime({ rows: [grantRow({ model: contract.model })] });
+    const requests = [];
+    await withMockedFetch(async (input, init) => {
+      requests.push({ url: input instanceof Request ? input.url : input.toString(), body: JSON.parse(init.body) });
+      return successfulProviderResponse(contract.model);
+    }, () => service.answer('synthetic system', 'synthetic user', { tenantId: 'tenant-1', siteId: 'site-1' }));
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, 'https://api.openai.com/v1/chat/completions');
+    assert.equal(requests[0].body.model, contract.model);
+    assert.equal(calls.lookup[0].params[3], contract.model);
+  });
+});
+
 test('invalid provider endpoint and model configuration fail closed before any HTTP request', async () => {
   await withRuntimeEnv(async () => {
     let requests = 0;

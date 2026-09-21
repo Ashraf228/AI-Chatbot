@@ -128,8 +128,9 @@ change without verified effect is not a traffic-blocking proof.
 Provider traffic may resume only after gate-enforcing application code is
 restored, its exact build and configuration are verified, the independent block
 remains effective during startup, and a separately authorized check confirms the
-intended grant before that block is removed. This package adds no grant writer,
-provisioning path, or activation.
+intended grant before that block is removed. Migration 033 itself adds no grant writer or activation. The separate fixed-purpose
+administration routes are documented in [the operator transport contract](site-runtime-grant-operator-transport.md).
+Deploying those routes does not create grants or provision operator capabilities.
 
 This migration and its tests are not a staging, production, provider,
 public-widget, enterprise, pilot, or runtime activation approval.

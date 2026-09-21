@@ -9,10 +9,19 @@ const {
 } = require('../dist/knowledge-sources/site-runtime-grant-operator-auth.service.js');
 const {
   SiteRuntimeGrantWriteService,
+  SiteRuntimeLlmGrantWriteService,
 } = require('../dist/knowledge-sources/site-runtime-grant-write.service.js');
 const {
   SiteRuntimeGrantsController,
 } = require('../dist/knowledge-sources/site-runtime-grants.controller.js');
+
+const { SiteRuntimeLlmGrantsController } = require('../dist/knowledge-sources/site-runtime-llm-grants.controller.js');
+
+for (const [namespace, Controller, Writer] of [
+  ['site-runtime-grants', SiteRuntimeGrantsController, SiteRuntimeGrantWriteService],
+  ['site-runtime-llm-grants', SiteRuntimeLlmGrantsController, SiteRuntimeLlmGrantWriteService],
+]) {
+test.describe(namespace, () => {
 
 const SESSION_SECRET = 'synthetic-session-secret-for-controller-tests';
 const DASHBOARD_TOKEN = 'synthetic-dashboard-token-for-controller-tests';
@@ -46,7 +55,7 @@ function terms(overrides = {}) {
   return {
     validFrom: '2030-01-01T00:00:00.000Z',
     expiresAt: '2030-02-01T00:00:00.000Z',
-    embeddingDimension: 1536,
+    embeddingDimension: namespace === 'site-runtime-grants' ? 1536 : null,
     providerRegion: 'synthetic-region',
     dataCategories: ['synthetic-support-content'],
     customerDataApproved: false,
@@ -146,11 +155,11 @@ async function createHarness() {
   const db = new FakeDatabase();
   const writes = new FakeWriteService();
   const moduleRef = await Test.createTestingModule({
-    controllers: [SiteRuntimeGrantsController],
+    controllers: [Controller],
     providers: [
       SiteRuntimeGrantOperatorAuthService,
       { provide: PrismaService, useValue: db },
-      { provide: SiteRuntimeGrantWriteService, useValue: writes },
+      { provide: Writer, useValue: writes },
     ],
   }).compile();
   const app = moduleRef.createNestApplication();
@@ -210,7 +219,7 @@ test.after(async () => {
 });
 
 test('rejects missing credentials and shared-dashboard-key-only before any write call', async () => {
-  const path = `/internal/site-runtime-grants/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`;
+  const path = `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`;
   const missing = await fetch(`${harness.baseUrl}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -224,13 +233,13 @@ test('rejects missing credentials and shared-dashboard-key-only before any write
 });
 
 test('uses the production auth service for missing capability and foreign target scope', async () => {
-  const path = `/internal/site-runtime-grants/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`;
+  const path = `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`;
   harness.db.currentPrincipal = principal({ operator_capability: null });
   const noCapability = await request(harness, path, { token: validToken, body: terms() });
   assert.equal(noCapability.status, 403);
 
   harness.db.currentPrincipal = principal();
-  const foreign = await request(harness, '/internal/site-runtime-grants/tenant-other/site-other', {
+  const foreign = await request(harness, `/internal/${namespace}/tenant-other/site-other`, {
     token: validToken,
     body: terms(),
   });
@@ -238,10 +247,32 @@ test('uses the production auth service for missing capability and foreign target
   assert.equal(harness.writes.calls.length, 0);
 });
 
+test('every operation rechecks the active admin principal and exact capability target', async () => {
+  const root = `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`;
+  for (const overrides of [
+    { role: 'viewer' }, { is_active: false }, { expires_at: '2000-01-01T00:00:00Z' },
+    { has_internal_subscription: false }, { operator_capability: { enabled: false, targets: [] } },
+  ]) {
+    harness.db.currentPrincipal = principal(overrides);
+    for (const [path, method, body] of [
+      [root, 'POST', terms()], [root + '/preview', 'POST', terms()],
+      [root + '/grant-1', 'GET', undefined],
+      [root + '/grant-1/revoke', 'POST', { revocationReason: 'synthetic' }],
+    ]) {
+      const response = await request(harness, path, { method, token: validToken, body });
+      assert.ok(response.status === 401 || response.status === 403, JSON.stringify(overrides));
+    }
+  }
+  harness.db.currentPrincipal = principal();
+  harness.db.sites = [];
+  assert.equal((await request(harness, root, { token: validToken, body: terms() })).status, 404);
+  assert.equal(harness.writes.calls.length, 0);
+});
+
 test('derives the fixed write context and ignores forged actor, role, and tenant headers', async () => {
   const response = await request(
     harness,
-    `/internal/site-runtime-grants/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`,
+    `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`,
     {
       token: validToken,
       body: terms(),
@@ -268,13 +299,15 @@ test('derives the fixed write context and ignores forged actor, role, and tenant
 });
 
 test('rejects unknown and reserved fields before the write service despite global whitelist mode', async () => {
-  const path = `/internal/site-runtime-grants/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`;
+  const path = `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`;
   for (const body of [
     terms({ actorRole: 'admin' }),
     terms({ tenantId: TARGET_TENANT_ID }),
     terms({ providerKey: 'synthetic-provider' }),
     terms({ environment: 'non_production' }),
     terms({ APP_ENV: 'staging' }),
+    terms({ model: 'forged-model' }),
+    terms({ purpose: 'query_embedding' }),
   ]) {
     const response = await request(harness, path, { token: validToken, body });
     assert.equal(response.status, 400);
@@ -283,7 +316,7 @@ test('rejects unknown and reserved fields before the write service despite globa
 });
 
 test('maps preview safely and maps unavailable runtime to conflict', async () => {
-  const path = `/internal/site-runtime-grants/${TARGET_TENANT_ID}/${TARGET_SITE_ID}/preview`;
+  const path = `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}/preview`;
   const preview = await request(harness, path, { token: validToken, body: terms() });
   assert.equal(preview.status, 200);
   assert.deepEqual(await responseBody(preview), harness.writes.results.preview);
@@ -298,7 +331,7 @@ test('maps preview safely and maps unavailable runtime to conflict', async () =>
 });
 
 test('revoke accepts only revocationReason and combines it with the scoped path grant id', async () => {
-  const path = `/internal/site-runtime-grants/${TARGET_TENANT_ID}/${TARGET_SITE_ID}/grant-1/revoke`;
+  const path = `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}/grant-1/revoke`;
   const valid = await request(harness, path, {
     token: validToken,
     body: { revocationReason: 'synthetic-reason' },
@@ -324,7 +357,7 @@ test('returns identical not-found responses for foreign and unknown grant ids', 
   for (const grantId of ['foreign-grant', 'unknown-grant']) {
     const response = await request(
       harness,
-      `/internal/site-runtime-grants/${TARGET_TENANT_ID}/${TARGET_SITE_ID}/${grantId}`,
+      `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}/${grantId}`,
       { method: 'GET', token: validToken },
     );
     responses.push({ status: response.status, body: await responseBody(response) });
@@ -337,7 +370,7 @@ test('does not expose unexpected write-service details in the public 500 respons
   harness.writes.failMethod = 'create';
   const response = await request(
     harness,
-    `/internal/site-runtime-grants/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`,
+    `/internal/${namespace}/${TARGET_TENANT_ID}/${TARGET_SITE_ID}`,
     { token: validToken, body: terms() },
   );
   assert.equal(response.status, 500);
@@ -346,3 +379,6 @@ test('does not expose unexpected write-service details in the public 500 respons
   assert.equal(publicBody.includes(validToken), false);
   assert.equal(publicBody.includes(DASHBOARD_TOKEN), false);
 });
+
+});
+}

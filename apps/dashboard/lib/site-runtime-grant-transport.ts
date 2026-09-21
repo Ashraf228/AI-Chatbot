@@ -124,7 +124,9 @@ function safePathSegment(value: unknown): string | null {
   return encodeURIComponent(value);
 }
 
-function requestPath(operation: SiteRuntimeGrantOperation, params: SiteRuntimeGrantRouteParams) {
+type GrantResource = "query_embedding" | "llm_generation";
+
+function requestPath(operation: SiteRuntimeGrantOperation, params: SiteRuntimeGrantRouteParams, resource: GrantResource) {
   const tenantId = safePathSegment(params.tenantId);
   const siteId = safePathSegment(params.siteId);
   const grantId = params.grantId === undefined ? null : safePathSegment(params.grantId);
@@ -132,7 +134,9 @@ function requestPath(operation: SiteRuntimeGrantOperation, params: SiteRuntimeGr
     return null;
   }
 
-  const base = `/internal/site-runtime-grants/${tenantId}/${siteId}`;
+  if (resource !== "query_embedding" && resource !== "llm_generation") return null;
+  const namespace = resource === "llm_generation" ? "site-runtime-llm-grants" : "site-runtime-grants";
+  const base = `/internal/${namespace}/${tenantId}/${siteId}`;
   if (operation === "preview") return `${base}/preview`;
   if (operation === "revoke") return `${base}/${grantId}/revoke`;
   if (operation === "status") return `${base}/${grantId}`;
@@ -232,6 +236,7 @@ function productionDependencies(): TransportDependencies {
 
 export function createSiteRuntimeGrantTransport(
   dependencies: Partial<TransportDependencies> = {},
+  resource: GrantResource = "query_embedding",
 ) {
   const deps = { ...productionDependencies(), ...dependencies };
 
@@ -262,7 +267,7 @@ export function createSiteRuntimeGrantTransport(
       }
     }
 
-    const path = requestPath(operation, params);
+    const path = requestPath(operation, params, resource);
     if (!path) return safeError(400);
 
     const parsedBody = await requestBody(request, operation);
@@ -309,3 +314,5 @@ export function createSiteRuntimeGrantTransport(
 }
 
 export const forwardSiteRuntimeGrantRequest = createSiteRuntimeGrantTransport();
+
+export const forwardSiteRuntimeLlmGrantRequest = createSiteRuntimeGrantTransport({}, "llm_generation");

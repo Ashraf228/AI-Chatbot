@@ -13,6 +13,14 @@ Die vorhandene Priorität Modul `assistant-profile` → Modul `assistant` → Si
 
 Die Conversation Engine klassifiziert die Frage und liefert ihre Sperrentscheidung. Ihr reiner `preview`-Entscheidungsdienst wird wiederverwendet; es werden weder Agenten-Orchestrator noch Tools, Leads, Tickets oder Zustellungen ausgeführt. Das ist keine neue universelle KI-Modellversion. Antworten verwenden weiterhin das konfigurierte und separat freigegebene LLM.
 
+## Auswahl im Dashboard
+
+Für universelle Assistenten im Einrichtungsschritt **KI-Mitarbeiter → Arbeitsweise → Wissensassistent mit Quellen** wählen und speichern. Die Auswahl speichert `answerStyle=knowledge_first`, `knowledgeMode=strict` und die erforderliche Aufgabe `answer_questions` im kanonischen Assistant-Profil. Bereits gespeicherte Wissensprofile bleiben auch nach erneutem Laden und Speichern der Gesprächslogik erhalten. Andere Antwortstile werden ohne ausdrücklichen Wechsel beibehalten.
+
+Im Wissensmodus zeigt die Gesprächslogik den Wissensablauf. Weitere Aufgaben und Pflichtinformationen bleiben gespeichert, sind aber während dieser Arbeitsweise nicht bearbeitbar und werden vom Wissenspfad nicht ausgeführt. Der Wechsel zurück zu **Konfigurierte Aufgaben und Übergaben** macht diese Einstellungen wieder verfügbar. Branchenvorlagen bleiben auf ihrem bisherigen Konfigurationspfad.
+
+Das Speichern des Profils erstellt keine Providerfreigaben. Frage-Embedding und Antwortgenerierung benötigen jeweils einen eigenen gültigen Grant für Tenant, Site, Umgebung und tatsächlich konfiguriertes Modell. Die internen Verwaltungswege sind unter [Query-Grants](site-runtime-grant-operator-transport.md) und [LLM-Grants](site-runtime-llm-generation-grant.md) dokumentiert. Ohne diese Freigaben bleibt die vorhandene Schutzablehnung bestehen.
+
 ## Datenfluss und Freigaben
 
 | Schritt | Vertrag |
@@ -77,6 +85,8 @@ npx vitest run --config vitest.ui.config.ts apps/dashboard/test/WebsiteKnowledge
 ```
 
 Zusätzlich verpflichtend: API-Smoke, alle Typechecks, Dashboard-/Widget-Build, Authorization Matrix, Security Boundaries, Sensitive Scan und Diff-Check. `test:e2e` bezeichnet hier die vorhandene jsdom-UI-Suite, keinen vollständigen Browser/API/DB-Lauf.
+
+Die Wizard- und Pipeline-Regressionen prüfen Speichern, erneutes Laden sowie die Auswahl des normalen und gestreamten Wissenspfads mit simulierten Speicher-/Providerports. Die CI prüft zusätzlich Erstellung, Wiederholung, Konflikte, Widerruf und Audit-Rollback von Query- und LLM-Grants auf einer eigens gestarteten PostgreSQL-16-Testinstanz (`site-runtime-grant-write.postgres16.test.cjs`). Beide Prüfarten ersetzen keinen echten Widget-Pilot mit dem eingesetzten Provider.
 
 Die echte SQL-Prüfung benötigt eine **eigene lokale PostgreSQL-Datenbank mit pgvector**, benannt `knowledge_core_test_<suffix>`. Anwendungskonfiguration `DATABASE_URL` wird dafür nicht verwendet:
 

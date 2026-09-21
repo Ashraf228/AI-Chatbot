@@ -6,6 +6,7 @@ export type CustomerSetupWizardProps = {
 };
 
 export type KnowledgeMode = "flexible" | "grounded" | "strict";
+export type AssistantAnswerStyle = "concise" | "short" | "structured" | "guided" | "knowledge_first";
 export type FallbackBehavior = "ask_followup" | "collect_contact" | "handoff";
 export type PrimaryGoal =
   | "support_automation"
@@ -76,6 +77,7 @@ export type SetupGoalForm = {
   primaryGoal: SiteDetails["primaryGoal"];
   botType: string;
   tone: SiteDetails["tone"];
+  answerStyle: AssistantAnswerStyle;
   knowledgeMode: KnowledgeMode;
   fallbackBehavior: FallbackBehavior;
   ctaText: string;
