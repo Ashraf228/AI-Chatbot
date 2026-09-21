@@ -72,6 +72,9 @@ jobs:
       - name: NOLIS golden question contract gate
         run: npm run eval:nolis-demo
 
+      - name: Knowledge pilot evaluator regressions (no provider calls)
+        run: node --test test/evaluation/knowledge-pilot.test.mjs
+
       - name: Authorization matrix check
         run: npm run security:check-authorization-matrix
 
