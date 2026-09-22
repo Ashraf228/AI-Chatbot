@@ -12,6 +12,7 @@ export type ProviderApprovalAuditEventInput = {
   decisionCode: 'allowed' | 'revoked';
   providerKey: string;
   model: string;
+  usageContext: 'query_embedding' | 'llm_generation';
   sanitizedReason: string;
 };
 
@@ -27,7 +28,7 @@ export class ProviderApprovalAuditWriter {
        ) VALUES (
          $1, $2, $3, NULL, $4,
          $5, $6, $7, $8,
-         $9, $10, 'query_embedding', $11,
+         $9, $10, $11, $12,
          NULL, NULL, now()
        )`,
       [
@@ -41,6 +42,7 @@ export class ProviderApprovalAuditWriter {
         input.decisionCode,
         input.providerKey,
         input.model,
+        input.usageContext,
         input.sanitizedReason,
       ],
     );

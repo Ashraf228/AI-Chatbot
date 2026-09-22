@@ -447,6 +447,7 @@ class SiteRuntimeGrantAdministration {
           decisionCode: 'allowed',
           providerKey: row.provider_key,
           model: row.model,
+          usageContext: this.purpose,
           sanitizedReason: `site_runtime_${this.purpose}_grant_created`,
         });
         return { kind: 'created', grant: projectGrant(row, now) };
@@ -499,6 +500,7 @@ class SiteRuntimeGrantAdministration {
         decisionCode: 'revoked',
         providerKey: row.provider_key,
         model: row.model,
+        usageContext: this.purpose,
         sanitizedReason: `site_runtime_${this.purpose}_grant_revoked`,
       });
       return { kind: 'revoked', grant: projectGrant(row, now) };
