@@ -7,6 +7,7 @@ import { LlmUsageMeasurement, readProviderUsage } from '../usage/llm-usage';
 import { PrismaService } from '../db/prisma.service';
 import { ProviderApprovalStorageLookupService } from '../knowledge-sources/provider-approval-storage-lookup.service';
 import { resolveSiteRuntimeGrantDeploymentEnvironment } from '../knowledge-sources/site-runtime-grant-runtime-contract';
+import { LLM_PROVIDER_KEY, resolveLlmRuntimeConfig, type LlmRuntimeConfig } from './llm-runtime-config';
 
 export type LlmGenerationRuntimeContext = {
   tenantId: string;
@@ -21,16 +22,7 @@ export type LlmCallOptions = {
 const transportAttempt = new AsyncLocalStorage<{ started: boolean }>();
 
 const LLM_GENERATION_PURPOSE = 'llm_generation';
-const LLM_PROVIDER_KEY = 'openai';
-const OPENAI_BASE_URL = 'https://api.openai.com/v1';
-const DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini';
 const PUBLIC_LLM_DENIAL = 'Die Antwortgenerierung ist derzeit nicht sicher verfuegbar.';
-
-type LlmRuntimeConfig = {
-  apiKey: string;
-  baseUrl: string;
-  model: string;
-};
 
 function isAllowedOpenAiRequestUrl(value: string): boolean {
   try {
@@ -220,19 +212,9 @@ export class LlmService {
   }
 
   private resolveRuntimeConfig(): LlmRuntimeConfig {
-    const model = (process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL).trim();
-    const apiKey = process.env.OPENAI_API_KEY?.trim() || '';
-    const configuredBaseUrl = process.env.OPENAI_BASE_URL?.trim().replace(/\/+$/, '') || OPENAI_BASE_URL;
-
-    if (
-      !apiKey ||
-      !/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/.test(model) ||
-      configuredBaseUrl !== OPENAI_BASE_URL
-    ) {
-      this.denyGeneration();
-    }
-
-    return { apiKey, baseUrl: OPENAI_BASE_URL, model };
+    const config = resolveLlmRuntimeConfig();
+    if (!config) this.denyGeneration();
+    return config;
   }
 
   private getClient(config: LlmRuntimeConfig): OpenAI {

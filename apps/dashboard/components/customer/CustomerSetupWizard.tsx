@@ -55,6 +55,7 @@ import {
   domainFromUrl,
   isValidEmail,
   normalizeDomains,
+  normalizeAssistantAnswerStyle,
   normalizeEnabledTasks,
   normalizeRequiredFields,
   normalizeSite,
@@ -68,6 +69,7 @@ import {
   type KnowledgeSource,
   type InternalTestChatTurn,
   type SiteDetails,
+  type SetupGoalForm,
 } from "./setup-wizard";
 
 const PRIMARY_GOAL_ROLES: Record<string, string> = {
@@ -145,10 +147,11 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     phone: "",
     language: "de" as "de" | "en",
   });
-  const [goalForm, setGoalForm] = useState({
+  const [goalForm, setGoalForm] = useState<SetupGoalForm>({
     primaryGoal: DEFAULT_PRIMARY_GOAL as SiteDetails["primaryGoal"],
     botType: DEFAULT_BOT_TYPE,
     tone: DEFAULT_TONE as SiteDetails["tone"],
+    answerStyle: "concise",
     knowledgeMode: "flexible" as KnowledgeMode,
     fallbackBehavior: "ask_followup" as FallbackBehavior,
     ctaText: "",
@@ -311,7 +314,9 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
         primaryGoal: nextSite.primaryGoal,
         botType: nextSite.botType || "universal-assistant",
         tone: nextSite.tone,
-        knowledgeMode: nextSite.knowledgeMode,
+        answerStyle: normalizeAssistantAnswerStyle(nextSite.assistantProfile),
+        knowledgeMode: normalizeAssistantAnswerStyle(nextSite.assistantProfile) === "knowledge_first"
+          ? "strict" : nextSite.knowledgeMode,
         fallbackBehavior: nextSite.fallbackBehavior,
         ctaText: nextSite.ctaText,
         systemPrompt: nextSite.systemPrompt,
@@ -447,6 +452,8 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   function buildAssistantProfilePayload(nextFlow: ConversationFlowForm = flowForm) {
     const primaryGoal = goalForm.primaryGoal || DEFAULT_PRIMARY_GOAL;
     const tone = goalForm.tone || DEFAULT_TONE;
+    const knowledgeFirst = goalForm.answerStyle === "knowledge_first";
+    const configuredTasks = nextFlow.enabledTasks.length > 0 ? nextFlow.enabledTasks : [...DEFAULT_ENABLED_TASKS];
     const companyName = (profileForm.companyName || site?.companyName || site?.name || "").trim();
     const businessDescription = [
       companyName ? `Unternehmen: ${companyName}` : "",
@@ -457,16 +464,17 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
 
     return {
       assistantProfile: {
-        profileKey: "universal-assistant",
+        profileKey: knowledgeFirst && site?.assistantProfile?.profileKey === "knowledge-assistant"
+          ? "knowledge-assistant" : "universal-assistant",
         profileVersion: 1,
         assistantName: `${companyName || "KI"} Assistent`,
         role: PRIMARY_GOAL_ROLES[primaryGoal] || PRIMARY_GOAL_ROLES[DEFAULT_PRIMARY_GOAL],
         businessDescription,
         targetUsers: ["website_visitors"],
         tone: ASSISTANT_TONE_BY_UI_TONE[tone] || "professional",
-        answerStyle: "concise",
-        knowledgeMode: goalForm.knowledgeMode,
-        enabledTasks: nextFlow.enabledTasks.length > 0 ? nextFlow.enabledTasks : [...DEFAULT_ENABLED_TASKS],
+        answerStyle: goalForm.answerStyle,
+        knowledgeMode: knowledgeFirst ? "strict" : goalForm.knowledgeMode,
+        enabledTasks: knowledgeFirst ? Array.from(new Set(["answer_questions", ...configuredTasks])) : configuredTasks,
         requiredFields: nextFlow.requiredFields.map((key) => ({
           key,
           label: requiredFieldLabel(key),
@@ -520,6 +528,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     const botType = goalForm.botType || DEFAULT_BOT_TYPE;
     const ctaText = goalForm.ctaText.trim() || "Anfrage aufnehmen";
     const legacyMode = isLegacyAssistantMode(botType);
+    const profilePayload = buildAssistantProfilePayload();
     const saved = await runAction(
       "goal",
       async () => {
@@ -538,7 +547,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
         }
 
         const [assistantProfileResult, widgetConfigResult] = await Promise.all([
-          updateAssistantProfileConfig(siteId, buildAssistantProfilePayload()),
+          updateAssistantProfileConfig(siteId, profilePayload),
           updateSiteSettings(siteId, {
             ctaText,
             ...(goalForm.systemPrompt.trim() ? { systemPrompt: goalForm.systemPrompt.trim() } : {}),
@@ -550,6 +559,9 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
     );
     if (!saved) {
       return false;
+    }
+    if (!legacyMode) {
+      setFlowForm((current) => ({ ...current, enabledTasks: profilePayload.assistantProfile.enabledTasks }));
     }
     setSite((current) =>
       current
@@ -566,10 +578,10 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
             ...(legacyMode
               ? {}
               : {
-                  enabledTasks: flowForm.enabledTasks,
+                  enabledTasks: profilePayload.assistantProfile.enabledTasks,
                   assistantProfile: {
                     ...(current.assistantProfile || {}),
-                    ...buildAssistantProfilePayload().assistantProfile,
+                    ...profilePayload.assistantProfile,
                   },
                 }),
           }
@@ -611,12 +623,13 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
   }
 
   async function saveFlow() {
-    if (flowForm.enabledTasks.length === 0) {
+    const legacyMode = isLegacyAssistantMode();
+    if (flowForm.enabledTasks.length === 0 && (legacyMode || goalForm.answerStyle !== "knowledge_first")) {
       setError("Wähle mindestens ein Gesprächsziel oder erledige den Schritt später.");
       return false;
     }
 
-    const legacyMode = isLegacyAssistantMode();
+    const profilePayload = buildAssistantProfilePayload(flowForm);
     const saved = await runAction(
       "flow",
       () => {
@@ -630,12 +643,15 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
           });
         }
 
-        return updateAssistantProfileConfig(siteId, buildAssistantProfilePayload(flowForm));
+        return updateAssistantProfileConfig(siteId, profilePayload);
       },
       "Gesprächslogik gespeichert.",
     );
     if (!saved) {
       return false;
+    }
+    if (!legacyMode) {
+      setFlowForm((current) => ({ ...current, enabledTasks: profilePayload.assistantProfile.enabledTasks }));
     }
     setSite((current) =>
       current
@@ -645,13 +661,13 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
               ...(current.conversationFlow || {}),
               requiredFields: flowForm.requiredFields,
             },
-            enabledTasks: flowForm.enabledTasks,
+            enabledTasks: legacyMode ? flowForm.enabledTasks : profilePayload.assistantProfile.enabledTasks,
             ...(legacyMode
               ? {}
               : {
                   assistantProfile: {
                     ...(current.assistantProfile || {}),
-                    ...buildAssistantProfilePayload(flowForm).assistantProfile,
+                    ...profilePayload.assistantProfile,
                   },
                 }),
           }
@@ -944,6 +960,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
             onProfileChange={setProfileForm}
             goalValue={goalForm}
             onGoalChange={setGoalForm}
+            supportsKnowledgeRuntime={!isLegacyAssistantMode()}
             templates={templates}
             selectedTemplate={selectedTemplate}
             templateAppliedAt={site.templateAppliedAt}
@@ -973,6 +990,7 @@ export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSe
             siteSlug={siteSlug}
             value={flowForm}
             onChange={setFlowForm}
+            knowledgeFirst={!isLegacyAssistantMode() && goalForm.answerStyle === "knowledge_first"}
             explanation={STEP_EXPLANATIONS.flow}
             status={statusForWizardStep(serverStatus, "flow")}
             statusLabel={wizardStepStatusLabel(serverStatus, "flow")}

@@ -105,6 +105,7 @@ describe("CustomerSetupWizard", () => {
     });
     vi.mocked(getSite).mockClear();
     vi.mocked(updateAssistantProfileConfig).mockClear();
+    vi.mocked(updateAssistantProfileConfig).mockImplementation(async () => ({}));
     vi.mocked(updateSiteSettings).mockClear();
     vi.stubGlobal(
       "fetch",
@@ -236,6 +237,132 @@ describe("CustomerSetupWizard", () => {
         });
       }),
     );
+  });
+
+  test.each(["universal-assistant", "knowledge-assistant"])(
+    "keeps the saved %s knowledge runtime through goal, flow and reload saves",
+    async (profileKey) => {
+      let storedProfile: Record<string, unknown> = {
+        profileKey, profileVersion: 1, answerStyle: "knowledge_first",
+        knowledgeMode: "strict", enabledTasks: ["answer_questions"], requiredFields: [],
+      };
+      vi.mocked(getSite).mockImplementationOnce(async () => ({
+        id: "site-1", name: "Wissenskunde", siteKey: "wissen", industry: "generic",
+        botType: "universal-assistant", assistantProfile: storedProfile,
+      }));
+      vi.mocked(updateAssistantProfileConfig).mockImplementation(async (_siteId, payload) => {
+        storedProfile = payload.assistantProfile as Record<string, unknown>;
+        return {};
+      });
+      const view = render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+      await screen.findByText("Setup-Assistent");
+      await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+      await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+      await waitFor(() => expect(updateAssistantProfileConfig).toHaveBeenCalledTimes(1));
+      expect(storedProfile).toMatchObject({ profileKey, answerStyle: "knowledge_first", knowledgeMode: "strict" });
+
+      await userEvent.click(screen.getByRole("button", { name: /Gesprächslogik/i }));
+      const knowledgeTask = within(screen.getByLabelText("Universelle Gesprächsziele")).getByRole("button", { name: /Fragen beantworten/i });
+      expect(knowledgeTask).toBeDisabled();
+      expect(knowledgeTask).toHaveAttribute("aria-pressed", "true");
+      await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+      await waitFor(() => expect(updateAssistantProfileConfig).toHaveBeenCalledTimes(2));
+      expect(storedProfile).toMatchObject({ profileKey, answerStyle: "knowledge_first", enabledTasks: ["answer_questions"] });
+
+      view.unmount();
+      vi.mocked(getSite).mockResolvedValueOnce({
+        id: "site-1", name: "Wissenskunde", siteKey: "wissen", industry: "generic",
+        botType: "universal-assistant", assistantProfile: storedProfile,
+      });
+      render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+      await screen.findByText("Setup-Assistent");
+      await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+      expect(screen.getByLabelText("Arbeitsweise")).toHaveValue("knowledge_first");
+      await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+      await waitFor(() => expect(updateAssistantProfileConfig).toHaveBeenCalledTimes(3));
+      expect(storedProfile).toMatchObject({ profileKey, answerStyle: "knowledge_first", knowledgeMode: "strict" });
+      vi.mocked(updateAssistantProfileConfig).mockImplementation(async () => ({}));
+    },
+  );
+
+  test("selects the knowledge runtime explicitly and requires the knowledge task", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1", name: "Wissenskunde", siteKey: "wissen", industry: "generic",
+      botType: "universal-assistant", assistantProfile: {
+        profileKey: "universal-assistant", answerStyle: "concise", knowledgeMode: "flexible",
+        enabledTasks: ["appointment"], requiredFields: [],
+      },
+    });
+    render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+    expect(screen.getByLabelText("Arbeitsweise")).toHaveValue("configured");
+    await userEvent.selectOptions(screen.getByLabelText("Arbeitsweise"), "knowledge_first");
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+    await waitFor(() => expect(updateAssistantProfileConfig).toHaveBeenCalledWith("site-1", expect.objectContaining({
+      assistantProfile: expect.objectContaining({
+        profileKey: "universal-assistant", answerStyle: "knowledge_first", knowledgeMode: "strict",
+        enabledTasks: expect.arrayContaining(["answer_questions"]),
+      }),
+    })));
+  });
+
+  test("leaves a knowledge profile explicitly and restores task editing", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1", name: "Wissenskunde", siteKey: "wissen", industry: "generic",
+      botType: "universal-assistant", assistantProfile: {
+        profileKey: "knowledge-assistant", answerStyle: "knowledge_first", knowledgeMode: "strict",
+        enabledTasks: ["answer_questions", "appointment"], requiredFields: [],
+      },
+    });
+    render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+    await userEvent.selectOptions(screen.getByLabelText("Arbeitsweise"), "configured");
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+    await waitFor(() => expect(updateAssistantProfileConfig).toHaveBeenCalledWith("site-1", expect.objectContaining({
+      assistantProfile: expect.objectContaining({
+        profileKey: "universal-assistant", answerStyle: "concise",
+        enabledTasks: ["answer_questions", "appointment"],
+      }),
+    })));
+    await userEvent.click(screen.getByRole("button", { name: /Gesprächslogik/i }));
+    const knowledgeTask = within(screen.getByLabelText("Universelle Gesprächsziele")).getByRole("button", { name: /Fragen beantworten/i });
+    expect(knowledgeTask).toBeEnabled();
+    await userEvent.click(knowledgeTask);
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+    await waitFor(() => expect(updateAssistantProfileConfig).toHaveBeenLastCalledWith("site-1", expect.objectContaining({
+      assistantProfile: expect.objectContaining({
+        profileKey: "universal-assistant", answerStyle: "concise", enabledTasks: ["appointment"],
+      }),
+    })));
+  });
+
+  test("does not silently select knowledge mode when saving a configured answer style", async () => {
+    vi.mocked(getSite).mockResolvedValueOnce({
+      id: "site-1", name: "Musterkunde", siteKey: "kunde", industry: "generic",
+      botType: "universal-assistant", assistantProfile: {
+        profileKey: "universal-assistant", answerStyle: "structured", knowledgeMode: "grounded",
+        enabledTasks: ["answer_questions"], requiredFields: [],
+      },
+    });
+    render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+    await waitFor(() => expect(updateAssistantProfileConfig).toHaveBeenCalledWith("site-1", expect.objectContaining({
+      assistantProfile: expect.objectContaining({ answerStyle: "structured", knowledgeMode: "grounded" }),
+    })));
+  });
+
+  test("keeps legacy templates on their existing save path", async () => {
+    render(<CustomerSetupWizard siteId="site-1" dashboardRole="admin" />);
+    await screen.findByText("Setup-Assistent");
+    await userEvent.click(screen.getByRole("button", { name: /KI-Mitarbeiter/i }));
+    expect(screen.getByLabelText("Arbeitsweise")).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: /^Speichern$/ }));
+    await waitFor(() => expect(updateSiteSettings).toHaveBeenCalled());
+    expect(updateAssistantProfileConfig).not.toHaveBeenCalled();
   });
 
   test("loads and saves the lead recipient email in the delivery step", async () => {

@@ -19,6 +19,7 @@ type UseCaseStepProps = {
   onProfileChange: (value: CustomerProfileForm) => void;
   goalValue: SetupGoalForm;
   onGoalChange: (value: SetupGoalForm) => void;
+  supportsKnowledgeRuntime?: boolean;
   templates: IndustryTemplate[];
   selectedTemplate?: IndustryTemplate;
   templateAppliedAt?: string;
@@ -35,6 +36,7 @@ export function UseCaseStep({
   onProfileChange,
   goalValue,
   onGoalChange,
+  supportsKnowledgeRuntime = true,
   templates,
   selectedTemplate,
   templateAppliedAt,
@@ -86,6 +88,30 @@ export function UseCaseStep({
           <span className="dashboard-field-hint">Bestimmt, wie der KI-Mitarbeiter formuliert.</span>
         </label>
       </div>
+      <label className="dashboard-field">
+        <span className="dashboard-field-label">Arbeitsweise</span>
+        <Select
+          aria-label="Arbeitsweise"
+          aria-describedby="assistant-working-mode-hint"
+          disabled={!supportsKnowledgeRuntime}
+          value={goalValue.answerStyle === "knowledge_first" ? "knowledge_first" : "configured"}
+          onChange={(event) => onGoalChange({
+            ...goalValue,
+            answerStyle: event.target.value === "knowledge_first" ? "knowledge_first" : "concise",
+            knowledgeMode: event.target.value === "knowledge_first" ? "strict" : goalValue.knowledgeMode,
+          })}
+        >
+          <option value="configured">Konfigurierte Aufgaben und Übergaben</option>
+          <option value="knowledge_first">Wissensassistent mit Quellen</option>
+        </Select>
+        <span className="dashboard-field-hint" id="assistant-working-mode-hint">
+          {!supportsKnowledgeRuntime
+            ? "Die gewählte Branchenvorlage steuert den Gesprächsablauf."
+            : goalValue.answerStyle === "knowledge_first"
+              ? "Beantwortet Fragen ausschließlich aus freigegebenem Wissen und zeigt Quellen an. Ticket-, Termin- und Versandaktionen werden in dieser Arbeitsweise nicht ausgeführt."
+              : "Verwendet die ausgewählten Aufgaben und Übergaberegeln."}
+        </span>
+      </label>
       <div className="setup-template-panel">
         <strong>Universeller KI-Mitarbeiter</strong>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
@@ -98,6 +124,7 @@ export function UseCaseStep({
           <label className="dashboard-field">
             <span className="dashboard-field-label">Antwortverhalten mit Wissen</span>
             <Select
+              disabled={goalValue.answerStyle === "knowledge_first" && supportsKnowledgeRuntime}
               value={goalValue.knowledgeMode}
               onChange={(event) => onGoalChange({ ...goalValue, knowledgeMode: event.target.value as KnowledgeMode })}
             >

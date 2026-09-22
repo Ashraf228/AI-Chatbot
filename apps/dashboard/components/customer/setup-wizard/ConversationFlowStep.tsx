@@ -10,6 +10,7 @@ type ConversationFlowStepProps = {
   siteSlug: string;
   value: ConversationFlowForm;
   onChange: (value: ConversationFlowForm) => void;
+  knowledgeFirst?: boolean;
   explanation?: string;
   status: CustomerStatusTone;
   statusLabel?: string;
@@ -32,12 +33,13 @@ export function ConversationFlowStep({
   siteSlug,
   value,
   onChange,
+  knowledgeFirst = false,
   explanation,
   status,
   statusLabel,
 }: ConversationFlowStepProps) {
   const hasNoRequiredFields = value.requiredFields.length === 0;
-  const hasNoEnabledTasks = value.enabledTasks.length === 0;
+  const hasNoEnabledTasks = !knowledgeFirst && value.enabledTasks.length === 0;
 
   return (
     <section className="dashboard-card dashboard-stack conversation-flow-step" id="setup-step-flow">
@@ -50,14 +52,16 @@ export function ConversationFlowStep({
       />
 
       <div className="dashboard-card dashboard-card--soft dashboard-stack dashboard-stack--sm conversation-flow-step__preview">
-        <strong>Universeller Ablauf</strong>
+        <strong>{knowledgeFirst ? "Wissensassistent" : "Universeller Ablauf"}</strong>
         <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
-          Anliegen verstehen → Antwort aus Wissen prüfen → sinnvoll nachfragen → Informationen sammeln → Übergabe vorbereiten
+          {knowledgeFirst
+            ? "Frage verstehen → freigegebenes Wissen suchen → Antwort und Quellen prüfen. Weitere Aufgaben und Pflichtinformationen bleiben gespeichert, werden in dieser Arbeitsweise aber nicht ausgeführt."
+            : "Anliegen verstehen → Antwort aus Wissen prüfen → sinnvoll nachfragen → Informationen sammeln → Übergabe vorbereiten"}
         </p>
       </div>
 
       <div className="dashboard-grid dashboard-grid--metrics-3 conversation-flow-step__grid">
-        {CONVERSATION_FLOW_STEPS.map((item) => (
+        {(knowledgeFirst ? ["Frage verstehen", "Wissen durchsuchen", "Quellenantwort prüfen"] : CONVERSATION_FLOW_STEPS).map((item) => (
           <CompactMetricCard key={item} label="Schritt" value={item} />
         ))}
       </div>
@@ -72,6 +76,7 @@ export function ConversationFlowStep({
                 type="button"
                 className={`dashboard-chip dashboard-chip--button${value.requiredFields.includes(item.key) ? " dashboard-chip--selected" : ""}`}
                 aria-pressed={value.requiredFields.includes(item.key)}
+                disabled={knowledgeFirst}
                 onClick={() =>
                   onChange({
                     ...value,
@@ -83,7 +88,7 @@ export function ConversationFlowStep({
               </button>
             ))}
           </div>
-          {hasNoRequiredFields ? (
+          {hasNoRequiredFields && !knowledgeFirst ? (
             <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
               Die KI kann ohne Pflichtinformationen antworten, aber keine strukturierte Übergabe vorbereiten.
             </p>
@@ -96,8 +101,9 @@ export function ConversationFlowStep({
               <button
                 key={item.key}
                 type="button"
-                className={`dashboard-chip dashboard-chip--button${value.enabledTasks.includes(item.key) ? " dashboard-chip--selected" : ""}`}
-                aria-pressed={value.enabledTasks.includes(item.key)}
+                className={`dashboard-chip dashboard-chip--button${(knowledgeFirst && item.key === "answer_questions") || value.enabledTasks.includes(item.key) ? " dashboard-chip--selected" : ""}`}
+                aria-pressed={(knowledgeFirst && item.key === "answer_questions") || value.enabledTasks.includes(item.key)}
+                disabled={knowledgeFirst}
                 onClick={() =>
                   onChange({
                     ...value,

@@ -179,13 +179,15 @@ function runtimeContract() {
   };
 }
 
-function createService(databaseUrl, auditWriter) {
-  const { SiteRuntimeGrantWriteService } = require('../dist/knowledge-sources/site-runtime-grant-write.service.js');
+function createService(databaseUrl, auditWriter, purpose = 'query_embedding') {
+  const { SiteRuntimeGrantWriteService, SiteRuntimeLlmGrantWriteService } = require('../dist/knowledge-sources/site-runtime-grant-write.service.js');
   const { ProviderApprovalAuditWriter } = require('../dist/knowledge-sources/provider-approval-audit-writer.service.js');
   const db = createDatabase(databaseUrl);
   return {
     db,
-    service: new SiteRuntimeGrantWriteService(db, auditWriter || new ProviderApprovalAuditWriter(), runtimeContract()),
+    service: purpose === 'llm_generation'
+      ? new SiteRuntimeLlmGrantWriteService(db, auditWriter || new ProviderApprovalAuditWriter())
+      : new SiteRuntimeGrantWriteService(db, auditWriter || new ProviderApprovalAuditWriter(), runtimeContract()),
   };
 }
 
@@ -252,8 +254,8 @@ async function withPostgresTestResources(run, overrides = {}) {
       postgres,
       tempRoot,
       control,
-      service(name, auditWriter) {
-        const created = createService(withApplicationName(postgres.databaseUrl, name), auditWriter);
+      service(name, auditWriter, purpose) {
+        const created = createService(withApplicationName(postgres.databaseUrl, name), auditWriter, purpose);
         databases.push(created.db);
         return created.service;
       },
@@ -348,26 +350,79 @@ test('setup removes its temp directory and own container when control pool creat
   assert.deepEqual(setupError.cleanupError.errors, [tempCleanupError]);
 });
 
-test('SiteRuntimeGrantWriteService uses PostgreSQL 16 transactions and cleans its disposable resources', { skip: !enabled }, async (t) => {
-  await withPostgresTestResources(async ({ postgres, tempRoot, control, service }) => {
+for (const purpose of ['query_embedding', 'llm_generation']) {
+test(`${purpose} writer uses PostgreSQL 16 transactions and cleans its disposable resources`, { skip: !enabled }, async (t) => {
+  const keys = ['NODE_ENV', 'APP_ENV', 'OPENAI_MODEL', 'OPENAI_API_KEY', 'OPENAI_BASE_URL'];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  process.env.NODE_ENV = 'test';
+  delete process.env.APP_ENV;
+  process.env.OPENAI_MODEL = 'gpt-5.4-mini';
+  process.env.OPENAI_API_KEY = 'synthetic-never-sent-key';
+  delete process.env.OPENAI_BASE_URL;
+  try {
+  await withPostgresTestResources(async ({ postgres, tempRoot, control, service: createWriter }) => {
+    const service = (name, auditWriter) => createWriter(name, auditWriter, purpose);
+    const runtimeTerms = (overrides = {}) => terms({
+      embeddingDimension: purpose === 'llm_generation' ? null : 1536,
+      ...overrides,
+    });
     await t.test('create and exact repeat persist one grant and one audit event', async () => {
       await resetAndMigrate({ control, databaseUrl: postgres.databaseUrl, tempRoot }, 'create-repeat');
       const scope = await seedSite(control);
       const writer = service('write-create-repeat');
-      assert.equal((await writer.create(scope, terms())).kind, 'created');
-      assert.equal((await writer.create(scope, terms())).kind, 'reused');
+      assert.equal((await writer.create(scope, runtimeTerms())).kind, 'created');
+      assert.equal((await writer.create(scope, runtimeTerms())).kind, 'reused');
       assert.equal(await count(control, 'provider_approval_grants'), 1);
       assert.equal(await count(control, 'provider_approval_audit_events'), 1);
     });
+
+    if (purpose === 'llm_generation') {
+      await t.test('separate purpose lifecycles preserve the query grant and scope', async () => {
+        await resetAndMigrate({ control, databaseUrl: postgres.databaseUrl, tempRoot }, 'llm-isolation');
+        const scope = await seedSite(control);
+        const other = await seedSite(control, 'other-tenant', 'other-site');
+        const llm = service('llm-lifecycle');
+        const query = createWriter('query-lifecycle');
+        const queryGrant = await query.create(scope, terms());
+        const preview = await llm.preview(scope, runtimeTerms());
+        assert.equal(preview.kind, 'would_create');
+        assert.equal(await count(control, 'provider_approval_grants'), 1);
+        const created = await llm.create(scope, runtimeTerms());
+        assert.equal(created.kind, 'created');
+        const stored = (await control.query(
+          'SELECT purpose, usage_contexts, model, embedding_dimension, reindex_policy FROM provider_approval_grants WHERE id = $1',
+          [created.grant.id],
+        )).rows[0];
+        assert.deepEqual(stored, {
+          purpose: 'llm_generation', usage_contexts: ['llm_generation'], model: 'gpt-5.4-mini',
+          embedding_dimension: null, reindex_policy: null,
+        });
+        assert.equal((await llm.status(scope, created.grant.id)).kind, 'found');
+        assert.equal((await llm.status(other, created.grant.id)).kind, 'not_found');
+        assert.equal((await query.status(scope, created.grant.id)).kind, 'not_found');
+        assert.equal((await llm.status(scope, queryGrant.grant.id)).kind, 'not_found');
+        assert.equal((await llm.revoke(scope, {
+          grantId: queryGrant.grant.id, revocationReason: 'must not revoke query grant',
+        })).kind, 'not_found');
+        assert.equal((await llm.revoke(scope, {
+          grantId: created.grant.id, revocationReason: 'synthetic completion',
+        })).kind, 'revoked');
+        assert.equal((await query.status(scope, queryGrant.grant.id)).grant.revokedAt, null);
+        assert.equal((await llm.revoke(scope, {
+          grantId: created.grant.id, revocationReason: 'synthetic repeat',
+        })).kind, 'already_revoked');
+        assert.equal(await count(control, 'provider_approval_audit_events'), 3);
+      });
+    }
 
     await t.test('audit failures roll create and revoke back', async () => {
       await resetAndMigrate({ control, databaseUrl: postgres.databaseUrl, tempRoot }, 'audit-rollback');
       const scope = await seedSite(control);
       const failingAudit = { async record() { throw new Error('synthetic audit failure'); } };
-      await assert.rejects(() => service('write-create-audit-failure', failingAudit).create(scope, terms()), /synthetic audit failure/);
+      await assert.rejects(() => service('write-create-audit-failure', failingAudit).create(scope, runtimeTerms()), /synthetic audit failure/);
       assert.equal(await count(control, 'provider_approval_grants'), 0);
 
-      const created = await service('write-create-before-revoke').create(scope, terms());
+      const created = await service('write-create-before-revoke').create(scope, runtimeTerms());
       await assert.rejects(
         () => service('write-revoke-audit-failure', failingAudit).revoke(scope, { grantId: created.grant.id, revocationReason: 'synthetic reason' }),
         /synthetic audit failure/,
@@ -391,9 +446,9 @@ test('SiteRuntimeGrantWriteService uses PostgreSQL 16 transactions and cleans it
       };
       const first = service('parallel-reuse-first', blockingAudit);
       const second = service('parallel-reuse-second');
-      const firstCreate = first.create(scope, terms());
+      const firstCreate = first.create(scope, runtimeTerms());
       await gate.entered;
-      const secondCreate = second.create(scope, terms());
+      const secondCreate = second.create(scope, runtimeTerms());
       const wait = await waitForLock(control, 'parallel-reuse-second');
       assert.ok(wait.blocker_application_names.includes('parallel-reuse-first'));
       gate.release();
@@ -409,9 +464,9 @@ test('SiteRuntimeGrantWriteService uses PostgreSQL 16 transactions and cleans it
       const { ProviderApprovalAuditWriter } = require('../dist/knowledge-sources/provider-approval-audit-writer.service.js');
       const realAudit = new ProviderApprovalAuditWriter();
       const blockingAudit = { async record(tx, input) { gate.signalEntered(); await gate.pending; return realAudit.record(tx, input); } };
-      const firstCreate = service('parallel-conflict-first', blockingAudit).create(scope, terms());
+      const firstCreate = service('parallel-conflict-first', blockingAudit).create(scope, runtimeTerms());
       await gate.entered;
-      const secondCreate = service('parallel-conflict-second').create(scope, terms({ approvalEvidenceRef: 'different-evidence' }));
+      const secondCreate = service('parallel-conflict-second').create(scope, runtimeTerms({ approvalEvidenceRef: 'different-evidence' }));
       const wait = await waitForLock(control, 'parallel-conflict-second');
       assert.ok(wait.blocker_application_names.includes('parallel-conflict-first'));
       gate.release();
@@ -423,7 +478,7 @@ test('SiteRuntimeGrantWriteService uses PostgreSQL 16 transactions and cleans it
     await t.test('revoke serializes a replacement after commit', async () => {
       await resetAndMigrate({ control, databaseUrl: postgres.databaseUrl, tempRoot }, 'revoke-replacement');
       const scope = await seedSite(control);
-      const original = await service('revoke-seed').create(scope, terms());
+      const original = await service('revoke-seed').create(scope, runtimeTerms());
       const gate = deferred();
       const { ProviderApprovalAuditWriter } = require('../dist/knowledge-sources/provider-approval-audit-writer.service.js');
       const realAudit = new ProviderApprovalAuditWriter();
@@ -433,7 +488,7 @@ test('SiteRuntimeGrantWriteService uses PostgreSQL 16 transactions and cleans it
         revocationReason: 'synthetic replacement',
       });
       await gate.entered;
-      const replacement = service('revoke-replacement').create(scope, terms({ approvalEvidenceRef: 'replacement-evidence' }));
+      const replacement = service('revoke-replacement').create(scope, runtimeTerms({ approvalEvidenceRef: 'replacement-evidence' }));
       const wait = await waitForLock(control, 'revoke-replacement');
       assert.ok(wait.blocker_application_names.includes('revoke-first'));
       gate.release();
@@ -445,7 +500,7 @@ test('SiteRuntimeGrantWriteService uses PostgreSQL 16 transactions and cleans it
     await t.test('replacement waits for a revoke and rechecks the rolled-back grant', async () => {
       await resetAndMigrate({ control, databaseUrl: postgres.databaseUrl, tempRoot }, 'revoke-rollback-replacement');
       const scope = await seedSite(control);
-      const original = await service('revoke-rollback-seed').create(scope, terms());
+      const original = await service('revoke-rollback-seed').create(scope, runtimeTerms());
       const gate = deferred();
       const auditError = new Error('synthetic revoke audit failure');
       const failingAudit = {
@@ -462,7 +517,7 @@ test('SiteRuntimeGrantWriteService uses PostgreSQL 16 transactions and cleans it
       await gate.entered;
       const replacement = service('revoke-rollback-replacement').create(
         scope,
-        terms({ approvalEvidenceRef: 'after-rollback' }),
+        runtimeTerms({ approvalEvidenceRef: 'after-rollback' }),
       );
       const wait = await waitForLock(control, 'revoke-rollback-replacement');
       assert.ok(wait.blocker_application_names.includes('revoke-rollback'));
@@ -483,4 +538,11 @@ test('SiteRuntimeGrantWriteService uses PostgreSQL 16 transactions and cleans it
       assert.deepEqual(audits.rows, [{ approval_grant_id: original.grant.id, event_type: 'approval_created' }]);
     });
   });
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
+}

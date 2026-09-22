@@ -71,7 +71,7 @@ administrative credential is not accepted as an execution identity by this auth 
 
 ## Transport routes and request boundary
 
-The Dashboard exposes four server-only BFF routes and maps them to the corresponding internal API
+The query-embedding namespace exposes four server-only BFF routes and maps them to the corresponding internal API
 routes:
 
 | Operation | Dashboard BFF | Internal API |
@@ -80,6 +80,38 @@ routes:
 | Create | `POST /api/internal/site-runtime-grants/:tenantId/:siteId` | `POST /internal/site-runtime-grants/:tenantId/:siteId` |
 | Revoke | `POST /api/internal/site-runtime-grants/:tenantId/:siteId/:grantId/revoke` | `POST /internal/site-runtime-grants/:tenantId/:siteId/:grantId/revoke` |
 | Status | `GET /api/internal/site-runtime-grants/:tenantId/:siteId/:grantId` | `GET /internal/site-runtime-grants/:tenantId/:siteId/:grantId` |
+
+LLM generation has a separate fixed namespace with the same four suffixes and HTTP methods:
+`/api/internal/site-runtime-llm-grants/:tenantId/:siteId` maps to
+`/internal/site-runtime-llm-grants/:tenantId/:siteId`. It uses the same individual operator
+identity and exact site capability. The route selects the purpose; the request cannot select or
+change `purpose`, usage contexts, provider, model, environment, actor, or grant scope.
+
+`SiteRuntimeLlmGrantWriteService` resolves the model and provider from the same pure configuration
+function used by `LlmService`. It accepts only OpenAI's fixed endpoint, a configured key, and a valid
+normalized model. Configuration resolution does not construct an SDK client or issue a provider
+request. Preview and Create revalidate configuration; Create resolves it again after acquiring the
+site lock. Status and Revoke remain available if the model changes or credentials become unavailable.
+
+Both namespaces share transactional site locking, exact-repeat handling, half-open overlap checks,
+and grant/audit atomicity. Every read and mutation includes tenant, site and its fixed purpose;
+query and LLM grants cannot be reused, conflicted, read or revoked across namespaces. PostgreSQL
+constraints remain the final concurrency boundary. No migration is added; LLM administration requires
+the existing migration 033 in addition to the earlier grant schema.
+
+LLM Preview/Create use the existing terms object with `embeddingDimension: null` and
+`reindexPolicy: null`. Other values for these embedding-only fields are rejected. The operator must
+provide actual validity dates, data categories, approvals, policy descriptions and an evidence
+reference; there are no fabricated/default approvals. Required terms and policy validation are shared
+with the existing writer. The stored `rateLimit` and `costLimit` strings describe approved conditions;
+this writer does not implement a monetary counter, automatic stop or rate enforcement. Recording a
+retention/deletion policy also does not enable a deletion job or prove that the described policy is
+operational. Those controls and evidence must be checked separately before granting access.
+
+A successfully created currently valid grant can authorize subsequent runtime calls immediately.
+Preview is read-only; Create is an operational authorization change, even though administration itself
+makes no provider call. A future validity window is not a substitute for the required operational
+approval or a verified cost stop.
 
 The BFF obtains the unchanged token from the verified, HTTP-only `ssb_admin` cookie. It accepts only
 an individual `customer` session with a tenant and `tenantUserId`. It never forwards browser-supplied
@@ -169,7 +201,7 @@ not authorize Production. Production continues to require `productionApproved=tr
 DPA, evidence, retention, redaction, logging, rate, cost, tenant, site, provider, model, scope, and
 purpose requirements remain unchanged.
 
-This binding applies only to the `site_runtime` query-embedding grant writer and runtime resolver.
+This binding applies to the `site_runtime` query-embedding and LLM grant writers and runtime resolvers.
 Ingestion and source/source-type grants retain their existing environment semantics, including their
 Production treatment when `NODE_ENV=production`. Preview and Create resolve the same server-side
 contract; Status and Revoke remain scoped to the authenticated tenant, site, and grant identity.
@@ -182,7 +214,7 @@ printing secrets. Rollback uses the previously approved image/configuration; it 
 ## Remaining operational work
 
 Individual internal users and their exact capability targets still require a separate authorized
-provisioning step. Migration 032 must be applied separately, and runtime configuration and an
+provisioning step. The applicable grant schema (through 033 for LLM) must be verified separately, and runtime configuration and an
 explicit operational release must be validated before grant writes are used. A UI or CLI, if ever
 needed, is separate product work. None of these prerequisites or this transport implementation
 implies deployment, provider use, public-widget activation, production activation, Enterprise
@@ -231,3 +263,28 @@ provisions an operational identity nor applies a migration to an existing databa
 still requires a confirmed Staging target, separately authorized secret distribution, backup and
 restore evidence, Migration 032 execution, individual user and exact capability provisioning, a
 concrete grant approval, environment validation, and an explicit release decision.
+
+## Focused administration regressions
+
+Both namespaces run the same authenticated HTTP controller and Dashboard transport regressions.
+The writer tests additionally cover purpose isolation, current model binding, unsupported runtime,
+missing approval/policy fields, safe response projection, atomic audit rollback and purpose-specific
+exclusion errors. The existing LLM SDK boundary test checks the administrative model against the
+lookup and the actual SDK request using an intercepted fetch; no live provider is called.
+
+```bash
+npm run build:api
+node --test apps/api/test/site-runtime-grant-write.service.test.cjs \
+  apps/api/test/site-runtime-grants.controller.test.cjs \
+  apps/api/test/llm-generation-grant.test.cjs
+(cd apps/dashboard && node --import tsx --test test/SiteRuntimeGrantOperatorTransport.test.ts)
+POSTGRES16_SITE_RUNTIME_GRANT_WRITE_TEST=1 node --test --test-concurrency=1 \
+  apps/api/test/site-runtime-grant-write.postgres16.test.cjs
+```
+
+The PostgreSQL writer suite runs the create/reuse, audit rollback and concurrent create/revoke cases
+for both purposes in disposable PostgreSQL 16 databases, using the existing actual migrations.
+It requires Docker and the already-local `pgvector/pgvector:pg16` image. A skipped suite does not
+establish PostgreSQL correctness. Builds, authorization inventory, security gates and the independent
+review remain separate release requirements. No UI, CLI, capability provisioning or production grant
+is included in this administration change.

@@ -5798,6 +5798,158 @@
       "expectedScopeCheck": "AdminScopeService asserts source site ownership; BFF requires trusted same-origin mutation",
       "testCaseId": "SEC-TENANT-SCOPE",
       "exception": null
+    },
+    {
+      "id": "API-SITE-RUNTIME-GRANT-CREATE-LLM",
+      "layer": "api",
+      "method": "POST",
+      "path": "/internal/site-runtime-llm-grants/:tenantId/:siteId",
+      "source": "apps/api/src/knowledge-sources/site-runtime-llm-grants.controller.ts",
+      "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
+      "allowedRoles": [
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "SiteRuntimeGrantOperatorAuthService persisted principal, capability target, and site ownership checks; fixed llm_generation purpose; model bound to shared LlmService config",
+      "testCaseId": "SITE-RUNTIME-GRANT-OPERATOR-TRANSPORT",
+      "exception": null
+    },
+    {
+      "id": "API-SITE-RUNTIME-GRANT-PREVIEW-LLM",
+      "layer": "api",
+      "method": "POST",
+      "path": "/internal/site-runtime-llm-grants/:tenantId/:siteId/preview",
+      "source": "apps/api/src/knowledge-sources/site-runtime-llm-grants.controller.ts",
+      "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
+      "allowedRoles": [
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "SiteRuntimeGrantOperatorAuthService persisted principal, capability target, and site ownership checks; fixed llm_generation purpose; model bound to shared LlmService config",
+      "testCaseId": "SITE-RUNTIME-GRANT-OPERATOR-TRANSPORT",
+      "exception": null
+    },
+    {
+      "id": "API-SITE-RUNTIME-GRANT-REVOKE-LLM",
+      "layer": "api",
+      "method": "POST",
+      "path": "/internal/site-runtime-llm-grants/:tenantId/:siteId/:grantId/revoke",
+      "source": "apps/api/src/knowledge-sources/site-runtime-llm-grants.controller.ts",
+      "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
+      "allowedRoles": [
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "SiteRuntimeGrantOperatorAuthService persisted principal and capability target checks before scoped grant lookup; fixed llm_generation purpose",
+      "testCaseId": "SITE-RUNTIME-GRANT-OPERATOR-TRANSPORT",
+      "exception": null
+    },
+    {
+      "id": "API-SITE-RUNTIME-GRANT-STATUS-LLM",
+      "layer": "api",
+      "method": "GET",
+      "path": "/internal/site-runtime-llm-grants/:tenantId/:siteId/:grantId",
+      "source": "apps/api/src/knowledge-sources/site-runtime-llm-grants.controller.ts",
+      "authType": "dashboard-internal-token-plus-signed-tenant-user-session",
+      "allowedRoles": [
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "SiteRuntimeGrantOperatorAuthService persisted principal and capability target checks before scoped grant lookup; fixed llm_generation purpose",
+      "testCaseId": "SITE-RUNTIME-GRANT-OPERATOR-TRANSPORT",
+      "exception": null
+    },
+    {
+      "id": "DASH-SITE-RUNTIME-GRANT-CREATE-LLM",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/internal/site-runtime-llm-grants/:tenantId/:siteId",
+      "source": "apps/dashboard/app/api/internal/site-runtime-llm-grants/[tenantId]/[siteId]/route.ts",
+      "authType": "signed-tenant-user-session-plus-exact-same-origin",
+      "allowedRoles": [
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "verified individual session and exact mutation provenance; API rechecks persisted principal and capability target; fixed llm_generation purpose; model bound to shared LlmService config",
+      "testCaseId": "SITE-RUNTIME-GRANT-OPERATOR-TRANSPORT",
+      "exception": null
+    },
+    {
+      "id": "DASH-SITE-RUNTIME-GRANT-PREVIEW-LLM",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/internal/site-runtime-llm-grants/:tenantId/:siteId/preview",
+      "source": "apps/dashboard/app/api/internal/site-runtime-llm-grants/[tenantId]/[siteId]/preview/route.ts",
+      "authType": "signed-tenant-user-session-plus-exact-same-origin",
+      "allowedRoles": [
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "verified individual session and exact mutation provenance; API rechecks persisted principal and capability target; fixed llm_generation purpose; model bound to shared LlmService config",
+      "testCaseId": "SITE-RUNTIME-GRANT-OPERATOR-TRANSPORT",
+      "exception": null
+    },
+    {
+      "id": "DASH-SITE-RUNTIME-GRANT-REVOKE-LLM",
+      "layer": "dashboard",
+      "method": "POST",
+      "path": "/api/internal/site-runtime-llm-grants/:tenantId/:siteId/:grantId/revoke",
+      "source": "apps/dashboard/app/api/internal/site-runtime-llm-grants/[tenantId]/[siteId]/[grantId]/revoke/route.ts",
+      "authType": "signed-tenant-user-session-plus-exact-same-origin",
+      "allowedRoles": [
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": true,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "verified individual session and exact mutation provenance; API rechecks persisted principal, capability target, and grant scope; fixed llm_generation purpose",
+      "testCaseId": "SITE-RUNTIME-GRANT-OPERATOR-TRANSPORT",
+      "exception": null
+    },
+    {
+      "id": "DASH-SITE-RUNTIME-GRANT-STATUS-LLM",
+      "layer": "dashboard",
+      "method": "GET",
+      "path": "/api/internal/site-runtime-llm-grants/:tenantId/:siteId/:grantId",
+      "source": "apps/dashboard/app/api/internal/site-runtime-llm-grants/[tenantId]/[siteId]/[grantId]/route.ts",
+      "authType": "signed-tenant-user-session",
+      "allowedRoles": [
+        "customer"
+      ],
+      "tenantBound": true,
+      "siteBound": true,
+      "ownershipBound": true,
+      "mutation": false,
+      "sensitiveResponse": true,
+      "expectedScopeCheck": "verified individual session; API rechecks persisted principal, capability target, and grant scope; fixed llm_generation purpose",
+      "testCaseId": "SITE-RUNTIME-GRANT-OPERATOR-TRANSPORT",
+      "exception": null
     }
   ]
 }

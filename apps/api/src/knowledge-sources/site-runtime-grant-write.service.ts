@@ -8,13 +8,15 @@ import {
   type ProviderApprovalPolicyDecision,
 } from './provider-approval-policy';
 import { ProviderApprovalAuditWriter } from './provider-approval-audit-writer.service';
-import type { ProviderEmbeddingUsageContext } from './provider-embedding-gate';
 import { RuntimeQueryEmbeddingService } from './runtime-query-embedding.service';
-import type { SupportedSiteRuntimeGrantRuntimeContract } from './site-runtime-grant-runtime-contract';
+import {
+  resolveSiteRuntimeLlmGrantRuntimeContract,
+  type SiteRuntimeGrantRuntimeContract,
+  type SupportedSiteRuntimeGrantRuntimeContract,
+} from './site-runtime-grant-runtime-contract';
 
 const SITE_RUNTIME_SCOPE_KIND = 'site_runtime';
-const QUERY_EMBEDDING_PURPOSE = 'query_embedding';
-const QUERY_EMBEDDING_USAGE_CONTEXTS: ProviderEmbeddingUsageContext[] = ['query_embedding'];
+type SiteRuntimeGrantPurpose = 'query_embedding' | 'llm_generation';
 
 type SiteRuntimeGrantTerms = {
   validFrom: string;
@@ -269,15 +271,16 @@ function isExactRepeat(
   context: SiteRuntimeGrantContext,
   terms: SiteRuntimeGrantTerms,
   runtime: SupportedSiteRuntimeGrantRuntimeContract,
+  purpose: SiteRuntimeGrantPurpose,
 ): boolean {
   return row.revoked_at === null
     && row.tenant_id === context.tenantId
     && row.site_id === context.siteId
     && row.scope_kind === SITE_RUNTIME_SCOPE_KIND
-    && row.purpose === QUERY_EMBEDDING_PURPOSE
+    && row.purpose === purpose
     && row.source_id === null
     && sameJsonArray(row.source_types, [])
-    && sameJsonArray(row.usage_contexts, QUERY_EMBEDDING_USAGE_CONTEXTS)
+    && sameJsonArray(row.usage_contexts, [purpose])
     && row.environment === runtime.environment
     && row.provider_key === runtime.providerKey
     && row.model === runtime.model
@@ -300,10 +303,12 @@ function isExactRepeat(
     && row.approval_evidence_ref === terms.approvalEvidenceRef;
 }
 
-function isExpectedOverlapConstraint(error: unknown): boolean {
+function isExpectedOverlapConstraint(error: unknown, purpose: SiteRuntimeGrantPurpose): boolean {
   return !!error && typeof error === 'object'
     && (error as { code?: unknown }).code === '23P01'
-    && (error as { constraint?: unknown }).constraint === 'provider_approval_grants_site_runtime_no_overlap';
+    && (error as { constraint?: unknown }).constraint === (purpose === 'query_embedding'
+      ? 'provider_approval_grants_site_runtime_no_overlap'
+      : 'provider_approval_grants_site_runtime_llm_no_overlap');
 }
 
 function buildPolicy(
@@ -311,6 +316,7 @@ function buildPolicy(
   context: SiteRuntimeGrantContext,
   terms: SiteRuntimeGrantTerms,
   runtime: SupportedSiteRuntimeGrantRuntimeContract,
+  purpose: SiteRuntimeGrantPurpose,
 ): ProviderApprovalPolicy {
   return {
     approvalId,
@@ -319,7 +325,7 @@ function buildPolicy(
     siteId: context.siteId,
     sourceId: null,
     sourceTypes: [],
-    usageContexts: QUERY_EMBEDDING_USAGE_CONTEXTS,
+    usageContexts: [purpose],
     environment: runtime.environment,
     provider: runtime.providerKey,
     model: runtime.model,
@@ -329,7 +335,7 @@ function buildPolicy(
     customerDataApproved: terms.customerDataApproved,
     productionApproved: terms.productionApproved,
     providerDpaApproved: terms.providerDpaApproved,
-    purpose: QUERY_EMBEDDING_PURPOSE,
+    purpose,
     retentionPolicy: terms.retentionPolicy,
     redactionPolicy: terms.redactionPolicy,
     loggingPolicy: terms.loggingPolicy,
@@ -350,7 +356,11 @@ function validateTerms(
   terms: SiteRuntimeGrantTerms,
   runtime: SupportedSiteRuntimeGrantRuntimeContract,
   now: Date,
+  purpose: SiteRuntimeGrantPurpose,
 ): WriteError | null {
+  if (purpose === 'llm_generation' && (terms.embeddingDimension !== null || terms.reindexPolicy !== null)) {
+    return { kind: 'invalid_terms', reason: 'site_runtime_llm_grant_embedding_terms_not_applicable' };
+  }
   const validFromMs = Date.parse(terms.validFrom);
   const expiresAtMs = Date.parse(terms.expiresAt);
   if (!Number.isFinite(validFromMs) || !Number.isFinite(expiresAtMs) || expiresAtMs <= validFromMs || expiresAtMs <= now.getTime()) {
@@ -358,19 +368,20 @@ function validateTerms(
   }
   const policyNow = new Date(Math.max(now.getTime(), validFromMs));
   const decision: ProviderApprovalPolicyDecision = validateProviderApprovalPolicy({
-    policy: buildPolicy('site-runtime-grant-validation', context, terms, runtime),
+    policy: buildPolicy('site-runtime-grant-validation', context, terms, runtime, purpose),
     environment: runtime.environment,
     now: policyNow,
   });
   return decision.allowed ? null : { kind: 'invalid_terms', reason: decision.reason };
 }
 
-@Injectable()
-export class SiteRuntimeGrantWriteService {
+// Both fixed-purpose wrappers share the transaction, scope and audit implementation.
+class SiteRuntimeGrantAdministration {
   constructor(
     private readonly db: PrismaService,
     private readonly auditWriter: ProviderApprovalAuditWriter,
-    private readonly runtimeQueryEmbedding: RuntimeQueryEmbeddingService,
+    private readonly resolveRuntimeContract: () => SiteRuntimeGrantRuntimeContract,
+    private readonly purpose: SiteRuntimeGrantPurpose,
   ) {}
 
   async preview(contextInput: unknown, termsInput: unknown): Promise<SiteRuntimeGrantPreviewResult> {
@@ -378,17 +389,17 @@ export class SiteRuntimeGrantWriteService {
     if ('kind' in context) return context;
     const terms = parseTerms(termsInput);
     if ('kind' in terms) return terms;
-    const runtime = this.runtimeQueryEmbedding.resolveRuntimeContract();
+    const runtime = this.resolveRuntimeContract();
     if (!runtime.supported) {
       return { kind: 'unsupported_runtime_configuration', reason: 'site_runtime_grant_runtime_configuration_unsupported' };
     }
     const now = new Date();
-    const validationError = validateTerms(context, terms, runtime, now);
+    const validationError = validateTerms(context, terms, runtime, now, this.purpose);
     if (validationError) return validationError;
     if (!(await this.hasSiteInScope(this.db, context))) return { kind: 'not_found', reason: 'site_runtime_grant_not_found' };
 
     const grants = await this.readActiveRuntimeGrants(this.db, context, runtime);
-    const exact = grants.find((grant) => isExactRepeat(grant, context, terms, runtime));
+    const exact = grants.find((grant) => isExactRepeat(grant, context, terms, runtime, this.purpose));
     if (exact) return { kind: 'would_reuse', grant: projectGrant(exact, now) };
     const conflict = grants.find((grant) => overlaps(grant, terms));
     return conflict
@@ -401,7 +412,7 @@ export class SiteRuntimeGrantWriteService {
     if ('kind' in context) return context;
     const terms = parseTerms(termsInput);
     if ('kind' in terms) return terms;
-    const preflightRuntime = this.runtimeQueryEmbedding.resolveRuntimeContract();
+    const preflightRuntime = this.resolveRuntimeContract();
     if (!preflightRuntime.supported) {
       return { kind: 'unsupported_runtime_configuration', reason: 'site_runtime_grant_runtime_configuration_unsupported' };
     }
@@ -412,15 +423,15 @@ export class SiteRuntimeGrantWriteService {
           return { kind: 'not_found', reason: 'site_runtime_grant_not_found' };
         }
         const now = await this.readDatabaseNow(tx);
-        const runtime = this.runtimeQueryEmbedding.resolveRuntimeContract();
+        const runtime = this.resolveRuntimeContract();
         if (!runtime.supported) {
           return { kind: 'unsupported_runtime_configuration', reason: 'site_runtime_grant_runtime_configuration_unsupported' };
         }
-        const validationError = validateTerms(context, terms, runtime, now);
+        const validationError = validateTerms(context, terms, runtime, now, this.purpose);
         if (validationError) return validationError;
 
         const grants = await this.readActiveRuntimeGrants(tx, context, runtime, true);
-        const exact = grants.find((grant) => isExactRepeat(grant, context, terms, runtime));
+        const exact = grants.find((grant) => isExactRepeat(grant, context, terms, runtime, this.purpose));
         if (exact) return { kind: 'reused', grant: projectGrant(exact, now) };
         const conflict = grants.find((grant) => overlaps(grant, terms));
         if (conflict) return { kind: 'conflict', grant: projectGrant(conflict, now) };
@@ -436,12 +447,12 @@ export class SiteRuntimeGrantWriteService {
           decisionCode: 'allowed',
           providerKey: row.provider_key,
           model: row.model,
-          sanitizedReason: 'site_runtime_query_embedding_grant_created',
+          sanitizedReason: `site_runtime_${this.purpose}_grant_created`,
         });
         return { kind: 'created', grant: projectGrant(row, now) };
       });
     } catch (error) {
-      if (isExpectedOverlapConstraint(error)) return { kind: 'conflict', grant: null };
+      if (isExpectedOverlapConstraint(error, this.purpose)) return { kind: 'conflict', grant: null };
       throw error;
     }
   }
@@ -471,10 +482,10 @@ export class SiteRuntimeGrantWriteService {
            AND tenant_id = $5
            AND site_id = $6
            AND scope_kind = 'site_runtime'
-           AND purpose = 'query_embedding'
+           AND purpose = $7
            AND revoked_at IS NULL
          RETURNING ${this.grantColumns()}`,
-        [now.toISOString(), context.actorId, revokeInput.revocationReason, grant.id, context.tenantId, context.siteId],
+        [now.toISOString(), context.actorId, revokeInput.revocationReason, grant.id, context.tenantId, context.siteId, this.purpose],
       );
       const row = updated.rows[0];
       if (!row) return { kind: 'not_found', reason: 'site_runtime_grant_not_found' };
@@ -488,7 +499,7 @@ export class SiteRuntimeGrantWriteService {
         decisionCode: 'revoked',
         providerKey: row.provider_key,
         model: row.model,
-        sanitizedReason: 'site_runtime_query_embedding_grant_revoked',
+        sanitizedReason: `site_runtime_${this.purpose}_grant_revoked`,
       });
       return { kind: 'revoked', grant: projectGrant(row, now) };
     });
@@ -545,13 +556,13 @@ export class SiteRuntimeGrantWriteService {
          AND model = $4
          AND environment = $5
          AND scope_kind = 'site_runtime'
-         AND purpose = 'query_embedding'
+         AND purpose = $6
          AND source_id IS NULL
          AND source_types = '[]'::jsonb
-         AND usage_contexts = '["query_embedding"]'::jsonb
+         AND usage_contexts = $7::jsonb
          AND revoked_at IS NULL
        ORDER BY valid_from ASC, expires_at ASC, id ASC${lockClause}`,
-      [context.tenantId, context.siteId, runtime.providerKey, runtime.model, runtime.environment],
+      [context.tenantId, context.siteId, runtime.providerKey, runtime.model, runtime.environment, this.purpose, JSON.stringify([this.purpose])],
     );
     return result.rows;
   }
@@ -570,8 +581,8 @@ export class SiteRuntimeGrantWriteService {
          AND tenant_id = $2
          AND site_id = $3
          AND scope_kind = 'site_runtime'
-         AND purpose = 'query_embedding'${lockClause}`,
-      [grantId, context.tenantId, context.siteId],
+         AND purpose = $4${lockClause}`,
+      [grantId, context.tenantId, context.siteId, this.purpose],
     );
     return result.rows[0] || null;
   }
@@ -591,10 +602,10 @@ export class SiteRuntimeGrantWriteService {
          reindex_policy, rate_limit, cost_limit, valid_from, expires_at,
          revoked_at, revoked_by, revocation_reason, approved_by, approval_evidence_ref
        ) VALUES (
-         $1, $2, $3, NULL, '[]'::jsonb, '["query_embedding"]'::jsonb, 'site_runtime',
+         $1, $2, $3, NULL, '[]'::jsonb, $25::jsonb, 'site_runtime',
          $4, $5, $6, $7, $8,
          $9::jsonb, $10, $11, $12,
-         'query_embedding', $13, $14, $15, $16,
+         $24, $13, $14, $15, $16,
          $17, $18, $19, $20::timestamptz, $21::timestamptz,
          NULL, NULL, NULL, $22, $23
        ) RETURNING ${this.grantColumns()}`,
@@ -606,6 +617,7 @@ export class SiteRuntimeGrantWriteService {
         terms.providerDpaApproved, terms.retentionPolicy, terms.redactionPolicy,
         terms.loggingPolicy, terms.deletionPolicy, terms.reindexPolicy, terms.rateLimit,
         terms.costLimit, terms.validFrom, terms.expiresAt, context.actorId, terms.approvalEvidenceRef,
+        this.purpose, JSON.stringify([this.purpose]),
       ],
     );
     const row = inserted.rows[0];
@@ -620,5 +632,20 @@ export class SiteRuntimeGrantWriteService {
       purpose, retention_policy, redaction_policy, logging_policy, deletion_policy,
       reindex_policy, rate_limit, cost_limit, valid_from, expires_at,
       revoked_at, revoked_by, revocation_reason, approved_by, approval_evidence_ref`;
+  }
+}
+
+@Injectable()
+export class SiteRuntimeGrantWriteService extends SiteRuntimeGrantAdministration {
+  constructor(db: PrismaService, auditWriter: ProviderApprovalAuditWriter,
+    runtimeQueryEmbedding: RuntimeQueryEmbeddingService) {
+    super(db, auditWriter, () => runtimeQueryEmbedding.resolveRuntimeContract(), 'query_embedding');
+  }
+}
+
+@Injectable()
+export class SiteRuntimeLlmGrantWriteService extends SiteRuntimeGrantAdministration {
+  constructor(db: PrismaService, auditWriter: ProviderApprovalAuditWriter) {
+    super(db, auditWriter, resolveSiteRuntimeLlmGrantRuntimeContract, 'llm_generation');
   }
 }

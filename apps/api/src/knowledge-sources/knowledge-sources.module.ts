@@ -7,8 +7,9 @@ import { ProviderApprovalStorageLookupService } from './provider-approval-storag
 import { ProviderApprovalAuditWriter } from './provider-approval-audit-writer.service';
 import { RuntimeQueryEmbeddingService } from './runtime-query-embedding.service';
 import { SiteRuntimeGrantOperatorAuthService } from './site-runtime-grant-operator-auth.service';
-import { SiteRuntimeGrantWriteService } from './site-runtime-grant-write.service';
+import { SiteRuntimeGrantWriteService, SiteRuntimeLlmGrantWriteService } from './site-runtime-grant-write.service';
 import { SiteRuntimeGrantsController } from './site-runtime-grants.controller';
+import { SiteRuntimeLlmGrantsController } from './site-runtime-llm-grants.controller';
 import { WebsiteAnswerEvaluationService } from './website-answer-evaluation.service';
 import { WebsiteAnswerRuntimeGateService } from './website-answer-runtime-gate.service';
 import { WebsiteAnswerRuntimePilotService } from './website-answer-runtime-pilot.service';
@@ -17,7 +18,7 @@ import { KnowledgeSourcesService } from './knowledge-sources.service';
 
 @Module({
   imports: [SitesModule],
-  controllers: [SiteRuntimeGrantsController],
+  controllers: [SiteRuntimeGrantsController, SiteRuntimeLlmGrantsController],
   providers: [
     KnowledgeSourcesService,
     ProviderApprovalStorageLookupService,
@@ -25,6 +26,7 @@ import { KnowledgeSourcesService } from './knowledge-sources.service';
     RuntimeQueryEmbeddingService,
     SiteRuntimeGrantOperatorAuthService,
     SiteRuntimeGrantWriteService,
+    SiteRuntimeLlmGrantWriteService,
     WebsiteAnswerEvaluationService,
     WebsiteAnswerRuntimeGateService,
     WebsiteAnswerRuntimePilotService,

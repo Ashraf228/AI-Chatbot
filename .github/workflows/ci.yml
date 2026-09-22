@@ -84,6 +84,10 @@ jobs:
       - name: E2E tests
         run: npm run test:e2e
 
+      - name: Dashboard grant and knowledge transport regressions
+        working-directory: apps/dashboard
+        run: node --import tsx --test test/SiteRuntimeGrantOperatorTransport.test.ts test/CustomerKnowledgeTransport.test.ts
+
       - name: Build API
         run: npm run build:api
 
@@ -150,6 +154,13 @@ jobs:
 
       - name: Run isolated PostgreSQL security checks
         run: npm run test:security:postgres
+
+      - name: Verify query and LLM grant lifecycle on PostgreSQL 16
+        env:
+          POSTGRES16_SITE_RUNTIME_GRANT_WRITE_TEST: "1"
+        run: |
+          npm run build:api
+          node --test --test-concurrency=1 apps/api/test/site-runtime-grant-write.postgres16.test.cjs
 
   docker-build:
     name: Docker build

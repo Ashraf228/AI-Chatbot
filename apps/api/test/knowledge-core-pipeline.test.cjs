@@ -10,14 +10,14 @@ const policy = require('../dist/ai/chat-pipeline/knowledge-answer-policy');
 const profileConfig = { assistantProfile: { profileKey: 'knowledge-assistant', profileVersion: 1 } };
 const hit = { id: 'c1', source_id: 'source-1', document_id: 'doc-1', title: 'Handbuch', source_label: 'Handbuch', source_type: 'manual', content: 'Die Sicherung läuft täglich. Wiederherstellung erfolgt durch die Administration.', score: 0.8, metadata: {} };
 const input = { source: 'widget', tenantId: 'tenant-1', siteId: 'site-1', message: 'Wie wird die Sicherung erstellt?', sessionId: 'session-1', siteConfig: profileConfig };
-function runtime({ answer = 'Die Sicherung läuft täglich. [Q1]', hits = [hit], kind = 'embedded', abortAtGeneration } = {}) {
+function runtime({ answer = 'Die Sicherung läuft täglich. [Q1]', hits = [hit], kind = 'embedded', abortAtGeneration, moduleRows = [] } = {}) {
   const calls = { prompts: [], queries: [], messages: [], writes: [], decisions: 0, retrievals: 0 };
   const forbidden = new Proxy({}, { get: () => () => assert.fail('Agent/tool/legacy routing must not execute') });
   const conversation = { async ensureConversation() { return { id: 'conversation-1', sessionId: 'session-1' }; },
     async touchWidgetSession() {}, async appendMessage(m) { calls.messages.push(m); },
     async loadHistory() { return [{ role: 'user', content: 'Wie funktioniert die Sicherung?' }, {role:'assistant',content:'täglich'}, {role:'user',content:input.message}]; },
     async touchConversation() {} };
-  const knowledge = new KnowledgeConversationService(new AssistantProfileResolverService(), { async listForSite() { return []; } }, {
+  const knowledge = new KnowledgeConversationService(new AssistantProfileResolverService(), { async listForSite() { return moduleRows; } }, {
     preview(x) { calls.decisions++; return new ConversationEngineService(...[['conversation-context','ConversationContextService'],['intent-classifier','IntentClassifierService'],['goal-detector','GoalDetectorService'],['agent-selector','AgentSelectorService'],['next-action','NextActionService'],['handoff-readiness','HandoffReadinessService'],['conversation-quality','ConversationQualityService']].map(([file,name])=>new (require('../dist/conversation-engine/'+file+'.service')[name])())).preview(x); }
   });
   const llm = { async answer(system, user, scope, options) {
@@ -38,6 +38,48 @@ test('profile selection requires a deliberately saved knowledge profile, not leg
   assert.equal((await knowledge.resolve(input)).profileKey,'knowledge-assistant');
   assert.equal(await knowledge.resolve({...input,siteConfig:{assistantProfile:{profileKey:'knowledge-assistant',profileVersion:1,conversationEngine:{enabled:false}}}}),null);
   assert.equal((await knowledge.resolve({...input,siteConfig:{assistantProfile:{profileKey:'universal-assistant',profileVersion:1,answerStyle:'knowledge_first'}}})).profileKey,'universal-assistant');
+});
+
+for (const streaming of [false, true]) test(`saved knowledge profile survives reload and selects the ${streaming ? 'streamed' : 'normal'} widget pipeline`, async () => {
+  const { AssistantProfileSaveService } = require('../dist/assistant-profiles/assistant-profile-save.service');
+  const moduleRows = [{ key: 'assistant-profile', config: { assistantProfile: {
+    profileKey: 'universal-assistant', profileVersion: 1, answerStyle: 'concise', enabledTasks: ['answer_questions'],
+  } } }];
+  const { service, calls, knowledge } = runtime({ moduleRows });
+  const staleSiteInput = { ...input, siteConfig: { assistantProfile: {
+    profileKey: 'universal-assistant', profileVersion: 1, answerStyle: 'concise', enabledTasks: ['appointment'],
+  } } };
+  assert.equal(await knowledge.resolve(staleSiteInput), null);
+  const save = new AssistantProfileSaveService(
+    { async getDiagnostics() { return { assistantProfileDebug: {} }; } },
+    { async updateForSite(siteId, updates) {
+      assert.equal(siteId, input.siteId);
+      moduleRows.splice(0, moduleRows.length, ...JSON.parse(JSON.stringify(updates)));
+    } },
+    { async record() {} },
+  );
+  const payload = { assistantProfile: {
+    profileKey: 'universal-assistant', profileVersion: 1, answerStyle: 'knowledge_first',
+    knowledgeMode: 'strict', enabledTasks: ['answer_questions'], requiredFields: [],
+  }, updatedFrom: 'dashboard-wizard' };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const saved = await save.saveAssistantProfile(input.siteId, payload, input.tenantId, 'synthetic-admin');
+    assert.equal(saved.saved, true);
+    assert.equal(saved.storageLocation, 'site_modules[assistant-profile].config.assistantProfile');
+    const resolved = await knowledge.resolve(staleSiteInput);
+    assert.equal(resolved.answerStyle, 'knowledge_first');
+    assert.equal(resolved.conversationEngine.enabled, true);
+    assert.equal(resolved.knowledgeMode, 'strict');
+    assert.equal(resolved.enabledTasks.includes('answer_questions'), true);
+  }
+  const events = [];
+  const result = streaming
+    ? (await service.stream(staleSiteInput, (event) => events.push(event)), events.find((event) => event.type === 'message_end'))
+    : await service.process(staleSiteInput);
+  assert.equal(result.answer, 'Die Sicherung läuft täglich. [Q1]');
+  assert.equal(result.sources[0].sourceId, 'source-1');
+  assert.deepEqual(calls.searchArgs.slice(0, 2), [input.tenantId, input.siteId]);
+  assert.equal(calls.prompts.length, 1);
 });
 
 test('follow-up query includes preceding questions but a fresh topic stands alone', () => {
