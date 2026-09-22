@@ -210,6 +210,7 @@ test('create persists only the fixed site-runtime contract and records audit on 
   assert.equal(auditCalls.length, 1);
   assert.equal(auditCalls[0].tx, db);
   assert.equal(auditCalls[0].input.eventType, 'approval_created');
+  assert.equal(auditCalls[0].input.usageContext, 'query_embedding');
 });
 
 test('writer uses the shared staging resolution and accepts valid non-production terms', async () => {
@@ -368,6 +369,7 @@ test('revoke preserves original approval data and is idempotent', async () => {
   assert.equal(db.grants[0].approved_by, 'synthetic-admin');
   assert.equal(db.grants[0].revoked_by, 'synthetic-admin');
   assert.equal(auditCalls.length, 1);
+  assert.equal(auditCalls[0].input.usageContext, 'query_embedding');
   assert.equal((await service.revoke(context(), { grantId: 'revoke-me', revocationReason: 'second' })).kind, 'already_revoked');
   assert.equal(auditCalls.length, 1);
 });
@@ -460,6 +462,7 @@ test('audit writer uses only the supplied queryable client', async () => {
     decisionCode: 'allowed',
     providerKey: 'openai',
     model: 'text-embedding-3-small',
+    usageContext: 'query_embedding',
     sanitizedReason: 'synthetic',
   });
   assert.equal(queries.length, 1);
@@ -528,6 +531,7 @@ test.describe('fixed-purpose LLM grant administration', () => {
     assert.equal(stored.reindex_policy, null);
     assert.equal(auditCalls[0].tx, db);
     assert.equal(auditCalls[0].input.sanitizedReason, 'site_runtime_llm_generation_grant_created');
+    assert.equal(auditCalls[0].input.usageContext, 'llm_generation');
     assert.deepEqual(Object.keys(created.grant).sort(), [
       'id', 'providerKey', 'model', 'environment', 'validFrom', 'expiresAt', 'status', 'revokedAt',
     ].sort());
@@ -654,6 +658,7 @@ test.describe('fixed-purpose LLM grant administration', () => {
     assert.equal((await service.revoke(context(), input)).kind, 'already_revoked');
     assert.equal(auditCalls.length, 2);
     assert.equal(auditCalls[1].input.sanitizedReason, 'site_runtime_llm_generation_grant_revoked');
+    assert.equal(auditCalls[1].input.usageContext, 'llm_generation');
     assert.equal(db.grants[0].approved_by, context().actorId);
   });
 

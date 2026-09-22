@@ -376,6 +376,50 @@ test(`${purpose} writer uses PostgreSQL 16 transactions and cleans its disposabl
       assert.equal(await count(control, 'provider_approval_audit_events'), 1);
     });
 
+    await t.test('audit persists the fixed purpose and scoped metadata for create and revoke', async () => {
+      await resetAndMigrate({ control, databaseUrl: postgres.databaseUrl, tempRoot }, 'audit-context');
+      const scope = await seedSite(control);
+      const writer = service('write-audit-context');
+      const created = await writer.create(scope, runtimeTerms());
+      assert.equal(created.kind, 'created');
+      const readAudits = async () => (await control.query(
+        `SELECT tenant_id, site_id, approval_grant_id, actor_id, actor_role,
+                event_type, decision_code, provider_key, model, usage_context, sanitized_reason
+         FROM provider_approval_audit_events ORDER BY event_type, id`,
+      )).rows;
+      const common = {
+        tenant_id: scope.tenantId,
+        site_id: scope.siteId,
+        approval_grant_id: created.grant.id,
+        actor_id: scope.actorId,
+        actor_role: scope.actorRole,
+        provider_key: 'openai',
+        model: purpose === 'llm_generation' ? 'gpt-5.4-mini' : 'text-embedding-3-small',
+        usage_context: purpose,
+      };
+      const createdAudit = {
+        ...common,
+        event_type: 'approval_created',
+        decision_code: 'allowed',
+        sanitized_reason: `site_runtime_${purpose}_grant_created`,
+      };
+      assert.deepEqual(await readAudits(), [createdAudit]);
+      assert.equal((await writer.create(scope, runtimeTerms())).kind, 'reused');
+      assert.deepEqual(await readAudits(), [createdAudit]);
+
+      const revokeInput = { grantId: created.grant.id, revocationReason: 'synthetic completion' };
+      assert.equal((await writer.revoke(scope, revokeInput)).kind, 'revoked');
+      const expected = [createdAudit, {
+        ...common,
+        event_type: 'approval_revoked',
+        decision_code: 'revoked',
+        sanitized_reason: `site_runtime_${purpose}_grant_revoked`,
+      }];
+      assert.deepEqual(await readAudits(), expected);
+      assert.equal((await writer.revoke(scope, revokeInput)).kind, 'already_revoked');
+      assert.deepEqual(await readAudits(), expected);
+    });
+
     if (purpose === 'llm_generation') {
       await t.test('separate purpose lifecycles preserve the query grant and scope', async () => {
         await resetAndMigrate({ control, databaseUrl: postgres.databaseUrl, tempRoot }, 'llm-isolation');
