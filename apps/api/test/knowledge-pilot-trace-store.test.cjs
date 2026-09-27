@@ -38,9 +38,9 @@ test('private store writes ordered stages, scopes lookup and deletes only the ex
   const other = { ...identity, tenantId: 'other-tenant', traceId: randomUUID() };
   assert.equal(store.createKnowledgePilotTraceSink(other).write({ ...event, ...other }), true);
   const otherBefore = store.readKnowledgePilotTrace(other);
-  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'session-1'), { traces: [{ traceId: identity.traceId, events: 2 }] });
-  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'other-session'), { traces: [] });
-  assert.deepEqual(store.listKnowledgePilotTraces({ ...scope, siteId: 'other-site' }, 'session-1'), { traces: [] });
+  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'session-1'), { traces: [{ traceId: identity.traceId, events: 2 }], unreadableTraceIds: [], complete: true });
+  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'other-session'), { traces: [], unreadableTraceIds: [], complete: true });
+  assert.deepEqual(store.listKnowledgePilotTraces({ ...scope, siteId: 'other-site' }, 'session-1'), { traces: [], unreadableTraceIds: [], complete: true });
   assert.throws(() => store.readKnowledgePilotTrace({ ...identity, tenantId: 'other-tenant' }));
   assert.deepEqual(store.deleteKnowledgePilotTrace({ ...identity, siteId: 'other-site' }), { deleted: false, absent: true });
   assert.deepEqual(store.readKnowledgePilotTrace(identity).events.map((entry) => entry.phase), ['prepared', 'validated']);
@@ -104,6 +104,65 @@ test('partial first write removes only its newly created file and never logs an 
   assert.equal(error.mock.callCount(), 0);
 });
 
+for (const failure of ['short-write', 'throw-after-write']) test(`partial second event (${failure}) preserves lookup and the prepared record`, (t) => {
+  const { dir, identity, event } = fixture(t);
+  const sink = store.createKnowledgePilotTraceSink(identity);
+  assert.equal(sink.write(event), true);
+  const filename = path.join(dir, fs.readdirSync(dir)[0]);
+  const prepared = fs.readFileSync(filename);
+  const other = { ...identity, traceId: randomUUID() };
+  const otherEvent = { ...event, ...other, sessionId: 'other-session' };
+  assert.equal(store.createKnowledgePilotTraceSink(other).write(otherEvent), true);
+  const write = fs.writeSync;
+  t.mock.method(fs, 'writeSync', (fd, bytes) => {
+    const written = write(fd, bytes.subarray(0, 19));
+    if (failure === 'throw-after-write') throw Object.assign(new Error('PRIVATE_WRITE_ERROR'), { code: 'ENOSPC' });
+    return written;
+  });
+  assert.equal(sink.write({ ...event, phase: 'validated' }), false);
+  // The reported P2: a damaged second stage used to throw here for every session.
+  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'other-session').traces, [{ traceId: other.traceId, events: 1 }]);
+  assert.deepEqual(fs.readFileSync(filename), prepared);
+  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'session-1').traces, [{ traceId: identity.traceId, events: 1 }]);
+  assert.deepEqual(store.readKnowledgePilotTrace(identity).events, [event]);
+  assert.equal(sink.write({ ...event, phase: 'validated' }), false);
+  assert.deepEqual(store.deleteKnowledgePilotTrace(identity), { deleted: true, absent: true });
+  assert.deepEqual(store.readKnowledgePilotTrace(other).events, [otherEvent]);
+});
+
+test('failed append rollback reports the damaged trace without blocking other sessions or exact deletion', (t) => {
+  const { dir, identity, event } = fixture(t);
+  const sink = store.createKnowledgePilotTraceSink(identity);
+  assert.equal(sink.write(event), true);
+  const filename = path.join(dir, fs.readdirSync(dir)[0]);
+  const other = { ...identity, traceId: randomUUID() };
+  const otherEvent = { ...event, ...other, sessionId: 'other-session' };
+  assert.equal(store.createKnowledgePilotTraceSink(other).write(otherEvent), true);
+  const write = fs.writeSync;
+  t.mock.method(fs, 'writeSync', (fd, bytes) => write(fd, bytes.subarray(0, 19)));
+  t.mock.method(fs, 'ftruncateSync', () => { throw new Error('PRIVATE_ROLLBACK_ERROR'); });
+  const log = t.mock.method(console, 'log', () => {});
+  const error = t.mock.method(console, 'error', () => {});
+  assert.equal(sink.write({ ...event, phase: 'validated' }), false);
+  const damaged = fs.readFileSync(filename);
+  assert.throws(() => store.readKnowledgePilotTrace(identity));
+  const result = store.listKnowledgePilotTraces(scope, 'other-session');
+  assert.deepEqual(result, { traces: [{ traceId: other.traceId, events: 1 }], unreadableTraceIds: [identity.traceId], complete: false });
+  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'session-1'), { traces: [], unreadableTraceIds: [identity.traceId], complete: false });
+  for (const otherScope of [{ ...scope, siteId: 'other-site' }, { ...scope, tenantId: 'other-tenant' }]) {
+    assert.deepEqual(store.listKnowledgePilotTraces(otherScope, 'session-1'), { traces: [], unreadableTraceIds: [], complete: true });
+  }
+  assert.deepEqual(fs.readFileSync(filename), damaged, 'Listing must not repair or remove evidence');
+  assert.equal(store.deleteKnowledgePilotTrace({ ...scope, traceId: result.traces[0].traceId }).deleted, true);
+  assert.deepEqual(fs.readFileSync(filename), damaged);
+  // This test knows the damaged attempt's identity independently of the listing.
+  assert.equal(store.deleteKnowledgePilotTrace(identity).deleted, true);
+  assert.equal(sink.write({ ...event, phase: 'validated' }), false);
+  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'session-1'), { traces: [], unreadableTraceIds: [], complete: true });
+  assert.equal(log.mock.callCount(), 0);
+  assert.equal(error.mock.callCount(), 0);
+});
+
 test('a replaced storage directory cannot receive a late generation stage', (t) => {
   const { dir, identity, event } = fixture(t);
   const sink = store.createKnowledgePilotTraceSink(identity);
@@ -149,6 +208,7 @@ for (const attack of ['symlink', 'hardlink', 'permissions']) test(`${attack} can
   assert.equal(sink.write({ ...event, phase: 'validated' }), false);
   assert.throws(() => store.readKnowledgePilotTrace(identity));
   assert.throws(() => store.deleteKnowledgePilotTrace(identity));
+  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'session-1'), { traces: [], unreadableTraceIds: [identity.traceId], complete: false });
   assert.equal(fs.readFileSync(outside, 'utf8'), 'UNRELATED_SYNTHETIC_FILE');
 });
 
@@ -192,6 +252,7 @@ test('corrupt or mismatched evidence is not exported but an owned partial file c
   assert.throws(() => store.readKnowledgePilotTrace(identity));
   fs.writeFileSync(filename, '{incomplete');
   assert.throws(() => store.readKnowledgePilotTrace(identity));
+  assert.deepEqual(store.listKnowledgePilotTraces(scope, 'session-1'), { traces: [], unreadableTraceIds: [identity.traceId], complete: false });
   assert.deepEqual(store.deleteKnowledgePilotTrace(identity), { deleted: true, absent: true });
 });
 
@@ -262,4 +323,26 @@ test('Linux CLI probe exercises real tmpfs with no mocked filesystem and no reta
   assert.deepEqual(JSON.parse(result.stdout), { ready: true, readBack: true, deleted: true, absent: true });
   assert.equal(result.stderr, '');
   assert.deepEqual(fs.readdirSync(dir), []);
+});
+
+test('Linux CLI list returns intact session results and explicit incomplete status for a damaged neighbour', { skip: !nativeTmpfs }, (t) => {
+  const { dir, identity, event } = fixture(t);
+  assert.equal(store.createKnowledgePilotTraceSink(identity).write(event), true);
+  const damagedPath = path.join(dir, fs.readdirSync(dir)[0]);
+  const other = { ...identity, traceId: randomUUID() };
+  assert.equal(store.createKnowledgePilotTraceSink(other).write({ ...event, ...other, sessionId: 'other-session' }), true);
+  fs.appendFileSync(damagedPath, '{"PRIVATE_DAMAGED_EVENT":');
+  const args = ['--tenant-id', scope.tenantId, '--site-id', scope.siteId, '--session-id', 'other-session'];
+  const cli = path.join(__dirname, '../dist/ai/chat-pipeline/knowledge-pilot-trace-cli.js');
+  const run = () => spawnSync(process.execPath, [cli, 'list', ...args], { encoding: 'utf8', env: { ...process.env }, timeout: 5000 });
+  const result = run();
+  assert.equal(result.status, 2);
+  assert.equal(result.stderr, '');
+  assert.deepEqual(JSON.parse(result.stdout), { traces: [{ traceId: other.traceId, events: 1 }], unreadableTraceIds: [identity.traceId], complete: false });
+  assert.equal(result.stdout.includes('PRIVATE_DAMAGED_EVENT'), false);
+  assert.equal(result.stdout.includes(dir), false);
+  assert.deepEqual(store.deleteKnowledgePilotTrace(identity), { deleted: true, absent: true });
+  const complete = run();
+  assert.equal(complete.status, 0, complete.stderr);
+  assert.deepEqual(JSON.parse(complete.stdout), { traces: [{ traceId: other.traceId, events: 1 }], unreadableTraceIds: [], complete: true });
 });

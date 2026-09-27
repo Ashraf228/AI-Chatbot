@@ -29,7 +29,7 @@ if (require.main === module) {
   try {
     const result = runKnowledgePilotTraceCommand(process.argv.slice(2));
     process.stdout.write(`${JSON.stringify(result)}\n`);
-    if ('ready' in result && !result.ready) process.exitCode = 2;
+    if (('ready' in result && !result.ready) || ('complete' in result && !result.complete)) process.exitCode = 2;
   } catch {
     // Never print filesystem paths, file content or raw OS/parser exceptions.
     process.stderr.write('Knowledge pilot trace operation failed.\n');

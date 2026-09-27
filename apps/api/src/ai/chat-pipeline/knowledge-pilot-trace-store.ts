@@ -67,6 +67,7 @@ export function createKnowledgePilotTraceSink(identity: Identity) {
     write(event: Record<string, unknown>): boolean {
       let fd: number | undefined;
       let created = false;
+      let appendStart: fs.Stats | undefined;
       try {
         if (failed || events >= 2 || event.tenantId !== identity.tenantId
           || event.siteId !== identity.siteId || event.traceId !== identity.traceId) return false;
@@ -86,6 +87,7 @@ export function createKnowledgePilotTraceSink(identity: Identity) {
         const stat = fileStat(fd);
         if (original && (stat.dev !== original.dev || stat.ino !== original.ino)) fail();
         if (stat.size + bytes.length > MAX_BYTES) fail();
+        if (!first) appendStart = stat;
         original = stat;
         if (fs.writeSync(fd, bytes) !== bytes.length) fail();
         events++;
@@ -99,6 +101,14 @@ export function createKnowledgePilotTraceSink(identity: Identity) {
             if (opened.isFile() && opened.nlink === 1 && !current.isSymbolicLink()
               && current.dev === opened.dev && current.ino === opened.ino) fs.unlinkSync(filename);
           } catch { /* Preserve unrelated files if ownership cannot be established. */ }
+        } else if (appendStart && fd !== undefined) {
+          try {
+            // Roll back only the attempted append on the same verified open
+            // file. Never reopen a path that may now refer to another trace.
+            const current = fileStat(fd);
+            if (current.dev === appendStart.dev && current.ino === appendStart.ino
+              && current.size >= appendStart.size) fs.ftruncateSync(fd, appendStart.size);
+          } catch { /* Listing reports any unreadable remainder explicitly. */ }
         }
         return false;
       } finally { if (fd !== undefined) fs.closeSync(fd); }
@@ -137,12 +147,20 @@ export function listKnowledgePilotTraces(scope: Scope, sessionId: string) {
   const scopePrefix = prefix(scope);
   const { dir } = directory();
   const result: { traceId: string; events: number }[] = [];
+  const unreadableTraceIds: string[] = [];
   for (const file of entries(dir).filter((entry) => entry.startsWith(scopePrefix))) {
     const traceId = file.slice(scopePrefix.length, -'.jsonl'.length);
-    const trace = readKnowledgePilotTrace({ ...scope, traceId });
-    if (trace.events.every((event) => event.sessionId === sessionId)) result.push({ traceId, events: trace.events.length });
+    try {
+      const trace = readKnowledgePilotTrace({ ...scope, traceId });
+      if (trace.events.every((event) => event.sessionId === sessionId)) result.push({ traceId, events: trace.events.length });
+    } catch {
+      // Preserve valid session results without hiding damaged/unreadable files.
+      // Their session cannot be established; they are not matching traces or
+      // deletion targets for this session unless independently identified.
+      unreadableTraceIds.push(traceId);
+    }
   }
-  return { traces: result };
+  return { traces: result, unreadableTraceIds, complete: unreadableTraceIds.length === 0 };
 }
 
 /** Exact scope + UUID only; no glob, recursive deletion or shared-log mutation. */

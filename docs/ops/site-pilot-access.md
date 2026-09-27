@@ -189,11 +189,31 @@ Nur der freigegebene private Belegsatz darf einen Export erhalten; dessen
 Löschfrist gilt separat. Datei-/Parserfehler werden ohne Pfad oder Inhalt
 ausgegeben. Keine Wildcards oder rekursiven Löschbefehle verwenden.
 
+Ein fehlgeschlagener zweiter Schreibvorgang versucht, nur seinen angehängten
+Teil über denselben geprüften Dateideskriptor zurückzunehmen. Das vorbereitete
+Ereignis bleibt dann lesbar; ein abgeschlossenes Generierungsereignis wird
+nicht behauptet. Scheitert auch die Rücknahme oder bleibt nach einem Abbruch
+eine beschädigte Datei zurück, liefert `list` weiterhin die lesbaren Treffer
+der angefragten Sitzung. `unreadableTraceIds` nennt separat nicht lesbare
+Dateien im angefragten Tenant-/Site-Namensbereich, ohne Inhalte oder Fehlertexte
+auszugeben. Diese IDs sind **keine bestätigte Zuordnung zur angefragten Sitzung**.
+Vor ihrer gezielten Löschung ist die Laufzuordnung unabhängig zu belegen;
+keine automatische Löschung aller dort aufgeführten Dateien.
+
+`list` liefert immer `traces`, `unreadableTraceIds` und `complete`. Bei ungelösten
+Dateien gilt `complete: false` und die CLI beendet sich mit Exitcode 2, gibt
+aber die intakten Treffer und betroffenen IDs als JSON aus. Diese Treffer
+bleiben einzeln lesbar und löschbar. Ein leeres `traces` bei unvollständiger
+Suche ist **kein Abwesenheitsnachweis**. Die Suche ändert keine Dateien; `read`
+weist beschädigte Belege weiterhin ab, und `delete` behält alle bisherigen
+Dateisicherheitsprüfungen bei. Globale Ablagefehler bleiben ein Fehler.
+
 Vor der endgültigen Löschbestätigung Grants schließen, laufende Requests
 abwickeln und Trace-Opt-in entfernen. `delete` meldet bei tatsächlicher Löschung
 `deleted: true, absent: true`; ein wiederholtes Löschen meldet
-`deleted: false, absent: true`. Ein anschließendes `list` darf die Trace-ID nicht
-mehr enthalten. Ein verspätetes Ereignis kann die gelöschte Datei nicht wieder
+`deleted: false, absent: true`. Ein vollständiges anschließendes `list`
+(`complete: true`, `unreadableTraceIds: []`) darf die Trace-ID nicht mehr
+enthalten. Ein verspätetes Ereignis kann die gelöschte Datei nicht wieder
 anlegen. Andere Traces und gemeinsame API-/Auditlogs werden nicht bearbeitet.
 
 Docker entfernt tmpfs-Inhalte beim Stoppen des Containers. Deshalb vor einem
