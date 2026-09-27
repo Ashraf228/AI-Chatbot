@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sha256 } from '../../utils/hash';
-import { logEvent } from '../../utils/logger';
+import { createKnowledgePilotTraceSink } from './knowledge-pilot-trace-store';
 import { readSitePilotAccessRules } from '../../utils/site-pilot-access';
 import type { VectorSearchRow } from '../../vector/vector.service';
 
@@ -43,16 +43,16 @@ export function beginKnowledgePilotTrace(scope: TraceScope, candidates: VectorSe
       schemaVersion: 1, traceId: randomUUID(), tenantId: safeId(scope.tenantId), siteId: safeId(scope.siteId),
       conversationId: safeId(scope.conversationId), sessionId: safeId(scope.sessionId), mode: scope.mode,
     };
+    const sink = createKnowledgePilotTraceSink({ tenantId: scope.tenantId, siteId: scope.siteId, traceId: base.traceId });
     const write = (event: () => Record<string, unknown>) => {
       try {
         const current = activeRule(scope);
         if (!current || current.tokenSha256 !== initialRule.tokenSha256
           || current.validFrom !== initialRule.validFrom || current.expiresAt !== initialRule.expiresAt) return false;
-        logEvent('knowledge_pilot_selection', { ...base, at: new Date().toISOString(), ...event() });
-        return true;
+        return sink.write({ ...base, at: new Date().toISOString(), ...event() });
       } catch {
         // Diagnostics must not turn a successful answer into a failure. A missing
-        // event is not evidence of absence; deployment log retention is external.
+        // event is not evidence of absence. Never fall back to shared logs.
         return false;
       }
     };

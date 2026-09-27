@@ -81,10 +81,13 @@ Request-Header oder dem gespeicherten Assistant-Profil gesteuert. Der Code
 enthält keine aktivierte Regel. Vor einer produktiven Aktivierung müssen Scope,
 Fenster und die Aufbewahrung der Diagnoseausgabe im konkreten Lauf feststehen.
 
-Der Wissenspfad schreibt dann `knowledge_pilot_selection`-Ereignisse über den
-bestehenden API-Logger. Jede Frage erhält eine zufällige `traceId`; UTC-Zeit,
-Tenant, Site, Gespräch, Sitzung und Modus erlauben die Zuordnung. Auch bei
-gleichzeitigen Anfragen derselben Sitzung unterscheiden sich die Trace-IDs.
+Zusätzlich muss `KNOWLEDGE_PILOT_TRACE_DIR` auf ein eigenes, bereits vorhandenes
+privates **tmpfs-Verzeichnis** zeigen. Dann speichert der Wissenspfad pro Frage
+eine eigene Metadatendatei. Ohne geeignete Ablage bleibt die Diagnose aus.
+Die Ereignisse gehen weder an den API-Logger noch an stdout/stderr; es gibt
+keinen Rückfall auf gemeinsame Logs, Datenbank oder Redis. Jede Frage erhält
+eine zufällige `traceId`; UTC-Zeit, Tenant, Site, Gespräch, Sitzung und Modus
+erlauben die Zuordnung. Gleichzeitige Anfragen haben unterschiedliche Trace-IDs.
 
 | Phase | Aussage |
 |---|---|
@@ -113,20 +116,124 @@ negativer Befund ableiten. Die Diagnose ist kein manipulationssicheres Audit.
 Vor jedem Ereignis wird die gültige Opt-in-Regel mit exakt passendem Tenant und
 Site erneut geprüft. Ablauf, Entfernung, Deaktivierung oder Änderung von
 Token-Digest/Fenster unterdrücken weitere Ereignisse des begonnenen Trace.
-Loggingfehler ändern die Chatantwort nicht; unvollständige Logs sind daher
+Speicherfehler ändern die Chatantwort nicht; unvollständige Traces sind daher
 möglich. Die Diagnose verändert weder Retrieval noch Prompt, Modell, öffentliche
 Antwort/SSE-Felder, Providergrants, Verbrauchserfassung oder Abbruchverhalten.
 
 IDs, Sitzungskorrelation und Inhaltshashes bleiben schutzbedürftige Metadaten.
-Der Betreiber muss Zugriff und Löschfrist für API-/Containerlogs und eventuell
-angeschlossene Logsammler, Exporte und Sicherungen vor Aktivierung festlegen
-und die gezielte Löschung nachweisen. Entfernen des Felds löscht keine alten
-Ereignisse; diese Änderung führt keinen neuen automatischen Löschdienst ein.
+Die folgende separate Ablage ermöglicht gezieltes Löschen einzelner Traces.
+Entfernen des Opt-in oder Ablauf der Regel löscht keine schon gespeicherte
+Datei. Der Ablauf enthält deshalb eine ausdrückliche Löschung und eine
+Abwesenheitsprüfung; diese Änderung führt keinen automatischen Löschdienst ein.
 
-Für einen Rückfall auf eine API-Version ohne diese Erweiterung zuerst das
-optionale Feld aus der Konfiguration entfernen, die fünf übrigen Sperrfelder
-erhalten und die Konfiguration gegen den Rückfallbuild validieren. Dessen
-strikte Validierung würde sonst den Start wegen des unbekannten Felds stoppen.
+### Private Ablage und Operatornachweis
+
+Der Code akzeptiert nur einen kanonischen absoluten Pfad ohne Symlinks, Modus
+0700, Eigentümer gleich effektiver API-UID und ein als tmpfs erkanntes
+Dateisystem. Dateien werden exklusiv mit 0600 angelegt; symbolische Links,
+Hardlinks, fremde Eigentümer und unerwartete Berechtigungen werden abgewiesen.
+Dateinamen binden Tenant/Site per SHA-256 und enthalten eine zufällige Trace-ID.
+Die normale API schreibt höchstens 32 Dateien pro dedizierter Ablage, je
+höchstens 64 KiB und zwei Ereignisse. Das ist kein dauerhafter Telemetriespeicher.
+Nur ein API-Prozess darf diese private Ablage beschreiben; Replikas benötigen
+je eine eigene Ablage und einen eigenen Nachweis.
+
+Für einen später genehmigten Betrieb ist eine separate, begrenzte tmpfs-Mount
+im API-Container vorzusehen, beispielsweise `/run/knowledge-pilot-traces` mit
+4 MiB, 0700 und passender UID/GID des `node`-Benutzers. Den **tatsächlichen**
+Benutzer aus dem freigegebenen Image verwenden. Die Variable muss über den
+bestätigten Deploymentweg an diese API-Instanz übergeben werden; die normalen
+Compose-Dateien aktivieren sie nicht. Kein Bind-Mount oder persistentes Volume,
+kein allgemeines `/tmp`, keine Aufnahme in Logsammler oder Backups.
+
+Die lokale CLI wird im API-Image mitgeliefert. Sie benötigt den bestehenden
+OS-/Container-Operatorzugang unter derselben UID wie die API. Sie eröffnet
+keinen HTTP-Endpunkt und erweitert keine Dashboard-Rolle oder Grant-Capability.
+Ein solcher Hostoperator ist privilegiert; Tenant-/Site-Argumente verhindern
+versehentliche breite Operationen, ersetzen aber keine OS-Zugriffssteuerung.
+
+Im API-Container, mit dessen konfigurierter Umgebung:
+
+```sh
+node dist/ai/chat-pipeline/knowledge-pilot-trace-cli.js status
+node dist/ai/chat-pipeline/knowledge-pilot-trace-cli.js probe \
+  --tenant-id "$PILOT_TENANT_ID" --site-id "$PILOT_SITE_ID"
+```
+
+`status` liefert Bereitschaft und Belegung, bei ungeeigneter Ablage Exitcode 2.
+`probe` legt ausschließlich eine neue synthetische Metadatendatei mit zufälliger
+ID an, liest sie zurück und löscht sie sofort. Erfolg muss `ready`, `readBack`,
+`deleted` und `absent` jeweils als `true` ausweisen. Dabei werden weder
+Providergrants noch Embeddings, Antworten oder Datenbankabfragen ausgelöst.
+Der Nachweis ist **vor jeder Aktivierung und auf jeder bedienenden Instanz**
+auszuführen. Ein erfolgreiches `status` allein beweist kein Schreiben/Löschen.
+
+Nach dem freigegebenen Capture ist die echte Sitzungs-ID bekannt. Damit lassen
+sich genau die zugehörigen Traces finden, prüfen und einzeln löschen:
+
+```sh
+node dist/ai/chat-pipeline/knowledge-pilot-trace-cli.js list \
+  --tenant-id "$PILOT_TENANT_ID" --site-id "$PILOT_SITE_ID" \
+  --session-id "$PILOT_SESSION_ID"
+node dist/ai/chat-pipeline/knowledge-pilot-trace-cli.js read \
+  --tenant-id "$PILOT_TENANT_ID" --site-id "$PILOT_SITE_ID" \
+  --trace-id "$PILOT_TRACE_ID"
+node dist/ai/chat-pipeline/knowledge-pilot-trace-cli.js delete \
+  --tenant-id "$PILOT_TENANT_ID" --site-id "$PILOT_SITE_ID" \
+  --trace-id "$PILOT_TRACE_ID"
+```
+
+`read` gibt die geschützten Metadaten für die laufbezogene Prüfung aus. Seine
+Ausgabe nicht in gemeinsame Logs, öffentliche Berichte oder Git umleiten.
+Nur der freigegebene private Belegsatz darf einen Export erhalten; dessen
+Löschfrist gilt separat. Datei-/Parserfehler werden ohne Pfad oder Inhalt
+ausgegeben. Keine Wildcards oder rekursiven Löschbefehle verwenden.
+
+Ein fehlgeschlagener zweiter Schreibvorgang versucht, nur seinen angehängten
+Teil über denselben geprüften Dateideskriptor zurückzunehmen. Das vorbereitete
+Ereignis bleibt dann lesbar; ein abgeschlossenes Generierungsereignis wird
+nicht behauptet. Scheitert auch die Rücknahme oder bleibt nach einem Abbruch
+eine beschädigte Datei zurück, liefert `list` weiterhin die lesbaren Treffer
+der angefragten Sitzung. `unreadableTraceIds` nennt separat nicht lesbare
+Dateien im angefragten Tenant-/Site-Namensbereich, ohne Inhalte oder Fehlertexte
+auszugeben. Diese IDs sind **keine bestätigte Zuordnung zur angefragten Sitzung**.
+Vor ihrer gezielten Löschung ist die Laufzuordnung unabhängig zu belegen;
+keine automatische Löschung aller dort aufgeführten Dateien.
+
+`list` liefert immer `traces`, `unreadableTraceIds` und `complete`. Bei ungelösten
+Dateien gilt `complete: false` und die CLI beendet sich mit Exitcode 2, gibt
+aber die intakten Treffer und betroffenen IDs als JSON aus. Diese Treffer
+bleiben einzeln lesbar und löschbar. Ein leeres `traces` bei unvollständiger
+Suche ist **kein Abwesenheitsnachweis**. Die Suche ändert keine Dateien; `read`
+weist beschädigte Belege weiterhin ab, und `delete` behält alle bisherigen
+Dateisicherheitsprüfungen bei. Globale Ablagefehler bleiben ein Fehler.
+
+Vor der endgültigen Löschbestätigung Grants schließen, laufende Requests
+abwickeln und Trace-Opt-in entfernen. `delete` meldet bei tatsächlicher Löschung
+`deleted: true, absent: true`; ein wiederholtes Löschen meldet
+`deleted: false, absent: true`. Ein vollständiges anschließendes `list`
+(`complete: true`, `unreadableTraceIds: []`) darf die Trace-ID nicht mehr
+enthalten. Ein verspätetes Ereignis kann die gelöschte Datei nicht wieder
+anlegen. Andere Traces und gemeinsame API-/Auditlogs werden nicht bearbeitet.
+
+Docker entfernt tmpfs-Inhalte beim Stoppen des Containers. Deshalb vor einem
+zur Konfigurationsübernahme erforderlichen Container-Neustart prüfen und bei
+Bedarf nur gezielt in den genehmigten befristeten Belegsatz exportieren. Keine
+Containerstopps als Löschabkürzung für einzelne Traces. tmpfs kann Host-Swap
+verwenden; die bestehenden Regeln für Swap, Dumps, Snapshots und Exporte müssen
+auch diesen Speicher abdecken. Der Code verspricht weder forensische Löschung
+noch Löschung bereits exportierter Kopien. Keine neuen Hostberechtigungen oder
+globalen Swap-/Backupänderungen dafür vornehmen.
+
+Technische Referenzen: [Docker tmpfs](https://docs.docker.com/engine/storage/tmpfs/)
+und [Node.js fs](https://nodejs.org/docs/latest-v24.x/api/fs.html).
+
+Vor Rückfall auf den früheren stdout-Trace stets `traceKnowledgeSelection`
+entfernen oder auf `false` setzen, damit keine neuen Ereignisse in gemeinsame
+Logs gelangen. Für einen noch älteren Build ohne Trace-Feld das Feld ganz
+entfernen und die fünf übrigen Sperrfelder erhalten; dessen strikte Validierung
+würde sonst den Start wegen des unbekannten Felds stoppen. Geschützte Dateien
+und etwaige Exporte vor der Rücknahme wie oben bereinigen.
 Anschließend den bestehenden Rollout-/Rücknahmeweg verwenden; diese Diagnose
 allein ist keine Freigabe für Deployment, Pilotgrants oder neue Livefragen.
 

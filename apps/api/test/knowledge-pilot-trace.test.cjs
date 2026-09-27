@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const { beginKnowledgePilotTrace } = require('../dist/ai/chat-pipeline/knowledge-pilot-trace');
 const logger = require('../dist/utils/logger');
+const store = require('../dist/ai/chat-pipeline/knowledge-pilot-trace-store');
 
 const scope = { tenantId: 'synthetic-tenant', siteId: 'synthetic-site', conversationId: 'synthetic-conversation',
   sessionId: 'synthetic-session', mode: 'normal' };
@@ -21,7 +22,11 @@ function setup(t, rules = [rule]) {
     else process.env.SITE_PILOT_ACCESS_RULES_JSON = before; });
   t.mock.method(Date, 'now', () => now);
   const events = [];
-  t.mock.method(logger, 'logEvent', (type, data) => events.push({ type, data }));
+  const sharedLog = t.mock.method(logger, 'logEvent', () => {});
+  t.after(() => assert.equal(sharedLog.mock.callCount(), 0, 'Selection trace must never reach shared logs'));
+  t.mock.method(store, 'createKnowledgePilotTraceSink', () => ({
+    write(data) { events.push({ type: 'knowledge_pilot_selection', data }); return true; },
+  }));
   return events;
 }
 
@@ -128,10 +133,11 @@ test('attempt IDs disambiguate concurrent requests even in the same session', (t
   assert.equal(ids[0], ids[3]);
 });
 
-test('diagnostic logger failure never escapes into the chat path', (t) => {
+test('diagnostic sink failure never escapes into the chat path or shared logs', (t) => {
   setup(t);
   const trace = beginKnowledgePilotTrace(scope, [hit], [hit]);
-  t.mock.method(logger, 'logEvent', () => { throw new Error('PRIVATE_LOGGER_ERROR'); });
+  t.mock.method(store.createKnowledgePilotTraceSink.mock.calls[0].result, 'write', () => { throw new Error('PRIVATE_STORE_ERROR'); });
+  t.mock.method(store, 'createKnowledgePilotTraceSink', () => { throw new Error('PRIVATE_STORE_ERROR'); });
   assert.doesNotThrow(() => trace.validated([hit], true));
   assert.doesNotThrow(() => trace.generationFailed());
   assert.equal(beginKnowledgePilotTrace(scope, [hit], [hit]), undefined);

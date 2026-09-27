@@ -219,9 +219,11 @@ function pilotTrace(t) {
   t.after(() => { if (before === undefined) delete process.env.SITE_PILOT_ACCESS_RULES_JSON;
     else process.env.SITE_PILOT_ACCESS_RULES_JSON = before; });
   const traces = [];
-  t.mock.method(require('../dist/utils/logger'), 'logEvent', (type, data) => {
-    if (type === 'knowledge_pilot_selection') traces.push(data);
-  });
+  const sharedLog = t.mock.method(require('../dist/utils/logger'), 'logEvent', () => {});
+  t.after(() => assert.equal(sharedLog.mock.calls.some(({ arguments: args }) => args[0] === 'knowledge_pilot_selection'), false));
+  t.mock.method(require('../dist/ai/chat-pipeline/knowledge-pilot-trace-store'), 'createKnowledgePilotTraceSink', () => ({
+    write(data) { traces.push(data); return true; },
+  }));
   return traces;
 }
 
@@ -328,11 +330,10 @@ test('pilot trace preserves cancellation without claiming a validated answer', a
   assert.equal(calls.messages.some((message) => message.role === 'assistant'), false);
 });
 
-test('pilot diagnostic logging failure cannot fail a successful answer', async (t) => {
+test('pilot diagnostic storage failure cannot fail a successful answer', async (t) => {
   pilotTrace(t);
-  t.mock.method(require('../dist/utils/logger'), 'logEvent', (type) => {
-    if (type === 'knowledge_pilot_selection') throw new Error('PRIVATE_LOG_FAILURE');
-  });
+  t.mock.method(require('../dist/ai/chat-pipeline/knowledge-pilot-trace-store'), 'createKnowledgePilotTraceSink',
+    () => { throw new Error('PRIVATE_STORE_FAILURE'); });
   const { service, calls } = runtime();
   const result = await service.process(input);
   assert.equal(result.answer, 'Die Sicherung läuft täglich. [Q1]');
