@@ -48,6 +48,28 @@ test('allows the exact token only within the window; expiry keeps the restricted
   }
 });
 
+for (const enabled of [false, true]) test(`optional selection trace ${enabled} never relaxes pilot access`, (t) => {
+  const extended = { ...rule, traceKnowledgeSelection: enabled };
+  configure(t, [extended]);
+  assert.deepEqual(readSitePilotAccessRules(), [extended]);
+  assert.doesNotThrow(() => assertSitePilotAccess(scope, req, start));
+  assert.throws(() => assertSitePilotAccess(scope, undefined, start), status(403));
+  assert.throws(() => assertSitePilotAccess({ ...scope, tenantId: 'other' }, req, start), status(403));
+  assert.throws(() => assertSitePilotAccess(scope, req, start + 3600000), status(403));
+});
+
+test('trace opt-in accepts only a boolean and preserves required and unknown field validation', () => {
+  assert.deepEqual(readSitePilotAccessRules(JSON.stringify([rule])), [rule]);
+  for (const value of [null, 0, 1, 'true', {}, []]) {
+    assert.throws(() => readSitePilotAccessRules(JSON.stringify([{ ...rule, traceKnowledgeSelection: value }])), status(503));
+  }
+  const { tenantId, ...missingTenant } = rule;
+  for (const bad of [{ ...missingTenant, traceKnowledgeSelection: true },
+    { ...rule, traceKnowledgeSelection: true, extra: true }]) {
+    assert.throws(() => readSitePilotAccessRules(JSON.stringify([bad])), status(503));
+  }
+});
+
 test('missing, wrong, duplicate and spoofed credentials cannot reach a restricted site', (t) => {
   configure(t, [rule]);
   for (const request of [undefined, { headers: {} }, { headers: { 'x-site-pilot-token': '0'.repeat(64) } },

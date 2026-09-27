@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 
 const HEADER = 'x-site-pilot-token';
 const RULE_KEYS = ['tenantId', 'siteId', 'tokenSha256', 'validFrom', 'expiresAt'];
+const OPTIONAL_RULE_KEYS = ['traceKnowledgeSelection'];
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const HEX_256 = /^[a-f0-9]{64}$/;
 const MAX_WINDOW_MS = 60 * 60 * 1000;
@@ -13,6 +14,7 @@ type PilotRule = {
   tokenSha256: string;
   validFrom: string;
   expiresAt: string;
+  traceKnowledgeSelection?: boolean;
 };
 
 function utcTimestamp(value: unknown): number {
@@ -32,8 +34,10 @@ export function readSitePilotAccessRules(raw = process.env.SITE_PILOT_ACCESS_RUL
     const sites = new Set<string>();
     for (const rule of rules) {
       if (!rule || typeof rule !== 'object' || Array.isArray(rule)
-        || Object.keys(rule).length !== RULE_KEYS.length
+        || Object.keys(rule).some((key) => !RULE_KEYS.includes(key) && !OPTIONAL_RULE_KEYS.includes(key))
         || !RULE_KEYS.every((key) => Object.prototype.hasOwnProperty.call(rule, key))
+        || (Object.prototype.hasOwnProperty.call(rule, 'traceKnowledgeSelection')
+          && typeof rule.traceKnowledgeSelection !== 'boolean')
         || typeof rule.tenantId !== 'string' || !ID.test(rule.tenantId)
         || typeof rule.siteId !== 'string' || !ID.test(rule.siteId)
         || typeof rule.tokenSha256 !== 'string' || !HEX_256.test(rule.tokenSha256)

@@ -20,7 +20,7 @@ die API weiter. Die Standardkonfiguration ist leer und aktiviert nichts.
 Andere Deployment-Definitionen müssen die Variable ausdrücklich ebenfalls
 an jede API-Instanz weitergeben, die die Ziel-Site bedienen kann.
 
-Jede Regel hat genau diese fünf Felder:
+Jede Regel benötigt diese fünf Felder:
 
 | Feld | Vertrag |
 |---|---|
@@ -29,6 +29,13 @@ Jede Regel hat genau diese fünf Felder:
 | `tokenSha256` | SHA-256 als 64 kleine Hexzeichen über `tenantId + NUL + siteId + NUL + token` |
 | `validFrom` | Kanonisches UTC-ISO-Format wie von `Date.toISOString()` |
 | `expiresAt` | Dasselbe Format, nach `validFrom`, höchstens 60 Minuten später |
+
+Zusätzlich ist ausschließlich das optionale boolesche Feld
+`traceKnowledgeSelection` erlaubt. Ohne dieses Feld oder mit `false` bleibt die
+unten beschriebene Wissensdiagnose aus. `true` ändert keine Zugangsprüfung und
+aktiviert nichts außerhalb dieser Tenant-/Site-Regel. Strings wie `"true"`,
+unbekannte Felder und fehlende Pflichtfelder werden abgewiesen. Bestehende
+Regeln mit den fünf Pflichtfeldern behalten ihr bisheriges Verhalten.
 
 Der Token besteht aus 32 kryptografisch zufälligen Bytes als 64 kleine
 Hexzeichen. Übertragen wird er ausschließlich im Header `X-Site-Pilot-Token`.
@@ -65,6 +72,63 @@ Geschützte administrative Diagnose-/Providerwerkzeuge bleiben unter ihrer
 bestehenden Autorisierung. Während des begrenzten Pilots keine zusätzlichen
 administrativen KI-Läufe auslösen. Diese Zugangsschranke ist keine globale
 Provider-Firewall und stoppt keinen sonstigen Verkehr desselben Providerprojekts.
+
+## Optionale Metadaten zur Wissensauswahl
+
+Für einen ausdrücklich begrenzten Diagnosepilot kann die Serverregel
+`traceKnowledgeSelection: true` enthalten. Das wird nicht vom Browser, einem
+Request-Header oder dem gespeicherten Assistant-Profil gesteuert. Der Code
+enthält keine aktivierte Regel. Vor einer produktiven Aktivierung müssen Scope,
+Fenster und die Aufbewahrung der Diagnoseausgabe im konkreten Lauf feststehen.
+
+Der Wissenspfad schreibt dann `knowledge_pilot_selection`-Ereignisse über den
+bestehenden API-Logger. Jede Frage erhält eine zufällige `traceId`; UTC-Zeit,
+Tenant, Site, Gespräch, Sitzung und Modus erlauben die Zuordnung. Auch bei
+gleichzeitigen Anfragen derselben Sitzung unterscheiden sich die Trace-IDs.
+
+| Phase | Aussage |
+|---|---|
+| `prepared` | Unmittelbar vor dem LLM-Aufruf: geordnete Retrieval-Kandidaten und die für den bereits gebauten Generierungsprompt ausgewählten Chunks. Belegt die Vorbereitung, nicht die Freigabe oder Annahme durch den Provider. |
+| `no_evidence` | Auswahl bleibt leer; dieser Pfad ruft keine Generierung auf. |
+| `validated` | Nach der strukturellen Belegprüfung: zitierte Chunks mit Zuordnung der öffentlichen Q-Nummer zur ursprünglichen Generierungs-Q-Nummer. Belegt weder fachliche Vollständigkeit noch erfolgreiche Speicherung oder Zustellung. |
+| `generation_failed` | Der Generierungsaufruf oder die anschließende Abbruchprüfung ist fehlgeschlagen. Keine Fehlertexte; kein Nachweis, ob bereits Providerverbrauch entstand. |
+
+Kandidaten und Auswahl enthalten ausschließlich Chunk-/Dokument-/Source-IDs,
+Reihenfolge, Score, Zeichenanzahl und SHA-256 des tatsächlich aus dem Speicher
+gelesenen `content`. Damit entspricht der Hash dem vollständigen Textfeld im
+Generierungsprompt, einschließlich seiner vorhandenen Whitespace-Zeichen.
+Ingestion-Metadaten, rekonstruierte PDF-Texte und die gekürzten öffentlichen
+Quellenauszüge sind keine Ersatz-Hashbasis. `rank` ist die einsbasierte Position
+im Retrieval-Ergebnis, **kein ursprünglicher Chunkindex des Dokuments**. Die
+Zuordnung zum Dokument erfolgt über IDs und den passenden Inhaltshash.
+
+Fragen, Antworten, Verlauf, Prompts, Dokumenttexte, Titel, URLs, freie Metadaten,
+Tokens und Token-Digests werden von dieser Diagnose nicht ausgegeben. IDs mit
+unerwartetem Format werden als `null` erfasst. Die Ausgabe ist auf 16 Kandidaten
+und acht ausgewählte beziehungsweise zitierte Chunks begrenzt. Gesamtzahlen und
+`*Truncated`-Felder machen eine Überschreitung sichtbar. Bei gekürztem Trace,
+fehlendem Hash/ID oder fehlendem Ereignis lässt sich aus Abwesenheit kein
+negativer Befund ableiten. Die Diagnose ist kein manipulationssicheres Audit.
+
+Vor jedem Ereignis wird die gültige Opt-in-Regel mit exakt passendem Tenant und
+Site erneut geprüft. Ablauf, Entfernung, Deaktivierung oder Änderung von
+Token-Digest/Fenster unterdrücken weitere Ereignisse des begonnenen Trace.
+Loggingfehler ändern die Chatantwort nicht; unvollständige Logs sind daher
+möglich. Die Diagnose verändert weder Retrieval noch Prompt, Modell, öffentliche
+Antwort/SSE-Felder, Providergrants, Verbrauchserfassung oder Abbruchverhalten.
+
+IDs, Sitzungskorrelation und Inhaltshashes bleiben schutzbedürftige Metadaten.
+Der Betreiber muss Zugriff und Löschfrist für API-/Containerlogs und eventuell
+angeschlossene Logsammler, Exporte und Sicherungen vor Aktivierung festlegen
+und die gezielte Löschung nachweisen. Entfernen des Felds löscht keine alten
+Ereignisse; diese Änderung führt keinen neuen automatischen Löschdienst ein.
+
+Für einen Rückfall auf eine API-Version ohne diese Erweiterung zuerst das
+optionale Feld aus der Konfiguration entfernen, die fünf übrigen Sperrfelder
+erhalten und die Konfiguration gegen den Rückfallbuild validieren. Dessen
+strikte Validierung würde sonst den Start wegen des unbekannten Felds stoppen.
+Anschließend den bestehenden Rollout-/Rücknahmeweg verwenden; diese Diagnose
+allein ist keine Freigabe für Deployment, Pilotgrants oder neue Livefragen.
 
 ## Vorbereitung ohne Provideraufruf
 
