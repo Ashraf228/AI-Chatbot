@@ -209,3 +209,132 @@ test('hybrid SQL binds all tenant/site/source scopes and never accepts orphan so
   assert.match(captured.sql,/ks\.runtime_readiness = 'ready'/);assert.match(captured.sql,/to_tsvector/);
   assert.deepEqual(captured.p.slice(0,2),['t','s']);assert.equal(captured.p[4],true);assert.equal(captured.p[3],'sicherung');
 });
+
+function pilotTrace(t) {
+  const before = process.env.SITE_PILOT_ACCESS_RULES_JSON;
+  const now = Date.now();
+  const rule = { tenantId: input.tenantId, siteId: input.siteId, tokenSha256: 'a'.repeat(64),
+    validFrom: new Date(now - 1000).toISOString(), expiresAt: new Date(now + 60000).toISOString(), traceKnowledgeSelection: true };
+  process.env.SITE_PILOT_ACCESS_RULES_JSON = JSON.stringify([rule]);
+  t.after(() => { if (before === undefined) delete process.env.SITE_PILOT_ACCESS_RULES_JSON;
+    else process.env.SITE_PILOT_ACCESS_RULES_JSON = before; });
+  const traces = [];
+  t.mock.method(require('../dist/utils/logger'), 'logEvent', (type, data) => {
+    if (type === 'knowledge_pilot_selection') traces.push(data);
+  });
+  return traces;
+}
+
+for (const streaming of [false, true]) test(`pilot trace binds actual ${streaming ? 'stream' : 'normal'} generation input, with unchanged public output`, async (t) => {
+  const traces = pilotTrace(t);
+  const hits = Array.from({ length: 9 }, (_, i) => ({ ...hit, id: `synthetic-${i}`,
+    content: `PRIVATE_PASSAGE_${i} ${'Synthetic full passage beyond excerpt length. '.repeat(12)}`,
+    metadata: { contentHash: 'NOT_THE_STORED_CONTENT_HASH' } }));
+  const question = 'PRIVATE_SYNTHETIC_QUESTION';
+  const answer = 'PRIVATE_SYNTHETIC_ANSWER [Q3]';
+  const setup = () => runtime({ hits, answer, history: [{ role: 'user', content: 'PRIVATE_SYNTHETIC_HISTORY' }] });
+  const run = async (service) => {
+    const events = [];
+    const result = streaming
+      ? (await service.stream({ ...input, message: question }, (event) => events.push(event)), events.find((event) => event.type === 'message_end'))
+      : await service.process({ ...input, message: question });
+    return { result, events };
+  };
+  const enabled = setup();
+  const actual = await run(enabled.service);
+  assert.deepEqual(traces.map((trace) => trace.phase), ['prepared', 'validated']);
+  const [prepared, validated] = traces;
+  const prompt = JSON.parse(enabled.calls.prompts[0].user);
+  const hash = (text) => require('node:crypto').createHash('sha256').update(text).digest('hex');
+  assert.equal(prepared.mode, streaming ? 'stream' : 'normal');
+  assert.equal(prepared.sessionId, actual.result.sessionId);
+  assert.equal(prepared.conversationId, actual.result.conversationId);
+  assert.equal(prepared.candidateCount, 9);
+  assert.equal(prepared.selectedCount, 8);
+  assert.equal(prepared.candidates[8].chunkId, 'synthetic-8');
+  assert.equal(prepared.selected.some((entry) => entry.chunkId === 'synthetic-8'), false);
+  assert.deepEqual(prepared.selected.map(({ generationReference, contentSha256, chars }) => ({ generationReference, contentSha256, chars })),
+    prompt.evidence.map(({ reference, text }) => ({ generationReference: reference, contentSha256: hash(text), chars: text.length })));
+  assert.deepEqual(validated.cited, [{ publicReference: 'Q1', generationReference: 'Q3', chunkId: 'synthetic-2', contentSha256: hash(hits[2].content) }]);
+  assert.equal(validated.traceId, prepared.traceId);
+  assert.equal(actual.result.answer, 'PRIVATE_SYNTHETIC_ANSWER [Q1]');
+  const serialized = JSON.stringify(traces);
+  for (const marker of ['PRIVATE_PASSAGE', question, 'PRIVATE_SYNTHETIC_ANSWER', 'PRIVATE_SYNTHETIC_HISTORY',
+    'NOT_THE_STORED_CONTENT_HASH', hit.title, 'UNVALIDATED_PART']) assert.equal(serialized.includes(marker), false);
+  assert.equal(JSON.stringify(actual).includes(prepared.traceId), false);
+
+  // Prove observation neither repeats provider work nor changes public/SSE output.
+  delete process.env.SITE_PILOT_ACCESS_RULES_JSON;
+  const disabled = setup();
+  assert.deepEqual(await run(disabled.service), actual);
+  assert.equal(traces.length, 2);
+  for (const { calls } of [enabled, disabled]) {
+    assert.equal(calls.queries.length, 1);
+    assert.equal(calls.retrievals, 1);
+    assert.equal(calls.prompts.length, 1);
+    assert.deepEqual(calls.searchArgs.slice(0, 2), [input.tenantId, input.siteId]);
+    assert.deepEqual(calls.prompts[0].scope, { tenantId: input.tenantId, siteId: input.siteId });
+  }
+});
+
+test('pilot trace records no-evidence selection without a generation call', async (t) => {
+  const traces = pilotTrace(t);
+  const { service, calls } = runtime({ hits: [{ ...hit, score: -0.2 }] });
+  const result = await service.process(input);
+  assert.equal(result.answer, policy.KNOWLEDGE_NO_ANSWER);
+  assert.equal(calls.prompts.length, 0);
+  assert.deepEqual(traces.map(({ phase, candidateCount, selectedCount }) => ({ phase, candidateCount, selectedCount })),
+    [{ phase: 'no_evidence', candidateCount: 1, selectedCount: 0 }]);
+});
+
+test('denied query grant creates neither a selection trace nor a search or generation call', async (t) => {
+  const traces = pilotTrace(t);
+  const { service, calls } = runtime({ kind: 'denied' });
+  await service.process(input);
+  assert.deepEqual(traces, []);
+  assert.equal(calls.retrievals, 0);
+  assert.equal(calls.prompts.length, 0);
+});
+
+test('invalid streamed citations record rejection, never the generated text or a semantic approval', async (t) => {
+  const traces = pilotTrace(t);
+  const { service } = runtime({ answer: 'PRIVATE_INVALID_ANSWER [Q99]' });
+  const events = [];
+  await service.stream(input, (event) => events.push(event));
+  assert.equal(events.find((event) => event.type === 'message_end').answer, policy.KNOWLEDGE_NO_ANSWER);
+  assert.deepEqual(traces[1].cited, []);
+  assert.equal(traces[1].citationsValid, false);
+  assert.equal(JSON.stringify(traces).includes('PRIVATE_INVALID_ANSWER'), false);
+});
+
+for (const streaming of [false, true]) test(`pilot trace preserves ${streaming ? 'stream' : 'normal'} generation failure and hides error text`, async (t) => {
+  const traces = pilotTrace(t);
+  const failure = new Error('PRIVATE_PROVIDER_ERROR');
+  const { service, calls } = runtime({ abortAtGeneration: () => { throw failure; } });
+  await assert.rejects(streaming ? service.stream(input, () => {}) : service.process(input), (error) => error === failure);
+  assert.deepEqual(traces.map((trace) => trace.phase), ['prepared', 'generation_failed']);
+  assert.equal(JSON.stringify(traces).includes(failure.message), false);
+  assert.equal(calls.prompts.length, 1);
+  assert.equal(calls.messages.some((message) => message.role === 'assistant'), false);
+});
+
+test('pilot trace preserves cancellation without claiming a validated answer', async (t) => {
+  const traces = pilotTrace(t);
+  const controller = new AbortController();
+  const { service, calls } = runtime({ abortAtGeneration: () => controller.abort() });
+  await assert.rejects(service.process(input, controller.signal), { name: 'AbortError' });
+  assert.deepEqual(traces.map((trace) => trace.phase), ['prepared', 'generation_failed']);
+  assert.equal(calls.prompts[0].options.signal, controller.signal);
+  assert.equal(calls.messages.some((message) => message.role === 'assistant'), false);
+});
+
+test('pilot diagnostic logging failure cannot fail a successful answer', async (t) => {
+  pilotTrace(t);
+  t.mock.method(require('../dist/utils/logger'), 'logEvent', (type) => {
+    if (type === 'knowledge_pilot_selection') throw new Error('PRIVATE_LOG_FAILURE');
+  });
+  const { service, calls } = runtime();
+  const result = await service.process(input);
+  assert.equal(result.answer, 'Die Sicherung läuft täglich. [Q1]');
+  assert.equal(calls.prompts.length, 1);
+});

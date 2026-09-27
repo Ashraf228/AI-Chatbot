@@ -29,6 +29,7 @@ import { UsageLimitService } from '../../billing/usage-limit.service';
 import type { AssistantProfile } from '../../assistant-profiles';
 import { KnowledgeConversationService } from './knowledge-conversation.service';
 import { buildKnowledgeQuery, buildKnowledgeUserPrompt, KNOWLEDGE_NO_ANSWER, selectKnowledgeEvidence, validateKnowledgeAnswer } from './knowledge-answer-policy';
+import { beginKnowledgePilotTrace } from './knowledge-pilot-trace';
 
 @Injectable()
 export class ChatPipelineService {
@@ -435,10 +436,16 @@ export class ChatPipelineService {
     if (embedding.kind === 'denied') return fallback(
       'Ich kann diese Anfrage im Moment nicht sicher mit dem freigegebenen Wissen abgleichen. Bitte versuche es spaeter erneut oder kontaktiere einen Mitarbeiter.',
       'rule-based-query-embedding-gate');
-    const hits = embedding.kind === 'embedded' ? selectKnowledgeEvidence(await this.vector.searchKnowledge(
-      input.tenantId, input.siteId, embedding.embedding, query, { demoOnly: input.evaluationMode })) : [];
+    const candidates = embedding.kind === 'embedded' ? await this.vector.searchKnowledge(
+      input.tenantId, input.siteId, embedding.embedding, query, { demoOnly: input.evaluationMode }) : [];
+    const hits = selectKnowledgeEvidence(candidates);
     signal?.throwIfAborted();
-    if (!hits.length) return fallback(KNOWLEDGE_NO_ANSWER, 'rule-based-knowledge-insufficient-evidence');
+    const traceScope = { tenantId: input.tenantId, siteId: input.siteId, conversationId: conversation.id,
+      sessionId: conversation.sessionId, mode: streamed ? 'stream' as const : 'normal' as const };
+    if (!hits.length) {
+      beginKnowledgePilotTrace(traceScope, candidates, hits);
+      return fallback(KNOWLEDGE_NO_ANSWER, 'rule-based-knowledge-insufficient-evidence');
+    }
     let usageRecorded = false;
     const onUsage = async (measurement: LlmUsageMeasurement) => {
       await persistLlmUsage(this.db, { ...input, conversationId: conversation.id, sessionId: conversation.sessionId }, measurement);
@@ -447,11 +454,19 @@ export class ChatPipelineService {
     const scope = { tenantId: input.tenantId, siteId: input.siteId };
     const system = this.knowledgeConversation!.plan(profile, input.message, history, true).systemPrompt;
     const user = buildKnowledgeUserPrompt(input.message, history, hits);
-    const generated = streamed
-      ? await this.llm.streamAnswer(system, user, async () => { signal?.throwIfAborted(); }, scope, { signal, onUsage })
-      : await this.llm.answer(system, user, scope, { signal, onUsage });
-    signal?.throwIfAborted();
+    const trace = beginKnowledgePilotTrace(traceScope, candidates, hits);
+    let generated: Awaited<ReturnType<LlmService['answer']>>;
+    try {
+      generated = streamed
+        ? await this.llm.streamAnswer(system, user, async () => { signal?.throwIfAborted(); }, scope, { signal, onUsage })
+        : await this.llm.answer(system, user, scope, { signal, onUsage });
+      signal?.throwIfAborted();
+    } catch (error) {
+      trace?.generationFailed();
+      throw error;
+    }
     const checked = validateKnowledgeAnswer(sanitizeOutput(generated.text), hits);
+    trace?.validated(checked.hits, checked.grounded);
     const sources = this.responseComposer.buildSources(checked.hits).map((source) => ({ ...source, metadata: {} }));
     await this.persistSuccessfulAssistantResponse({
       tenantId: input.tenantId, siteId: input.siteId, conversationId: conversation.id, sessionId: conversation.sessionId,
