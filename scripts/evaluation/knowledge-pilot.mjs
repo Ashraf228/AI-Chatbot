@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -13,6 +14,33 @@ const MAX_RESPONSE_BYTES = 262144;
 export const digest = (value) => createHash('sha256').update(value).digest('hex');
 const text = (value) => typeof value === 'string' && value.trim().length > 0;
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
+
+function pilotToken(access, target) {
+  if (access === undefined) return undefined;
+  requireValue(access && typeof access === 'object' && !Array.isArray(access)
+    && Object.keys(access).length === 3
+    && ['apiOrigin', 'siteKey', 'token'].every((key) => Object.hasOwn(access, key))
+    && access.apiOrigin === target.apiOrigin && access.siteKey === target.siteKey
+    && typeof access.token === 'string' && /^[a-f0-9]{64}$/.test(access.token),
+  'Pilot credential must match the exact target origin and site');
+  return access.token;
+}
+
+export async function readPilotAccessFile(file) {
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = await handle.stat();
+    requireValue(stat.isFile() && stat.size > 0 && stat.size <= 4096 && (stat.mode & 0o077) === 0
+      && (typeof process.getuid !== 'function' || stat.uid === process.getuid()),
+    'Pilot credential file must be a small private file owned by the operator');
+    const buffer = Buffer.alloc(4097);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    requireValue(bytesRead <= 4096, 'Pilot credential file too large');
+    return JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'));
+  } finally {
+    await handle.close();
+  }
+}
 
 export function validateDataset(dataset, { ready = false } = {}) {
   requireValue(dataset?.schemaVersion === 1 && dataset.suite === 'knowledge-pilot-40', 'Unsupported dataset');
@@ -115,7 +143,7 @@ export async function readReply(response, mode, sessionId) {
 }
 
 // Capture does not grade semantics. Every answer needs source-based review.
-export async function capture({ dataset, corpusBytes, target, modes = MODES, caseIds, maxChatRequests = 6, execute = false },
+export async function capture({ dataset, corpusBytes, target, pilotAccess, modes = MODES, caseIds, maxChatRequests = 6, execute = false },
   { fetchImpl = fetch, now = Date.now, uuid = randomUUID, checkpoint = async () => {} } = {}) {
   validateDataset(dataset, { ready: true });
   requireValue(digest(corpusBytes) === dataset.corpus.sha256, 'Corpus file differs from the reviewed snapshot');
@@ -124,6 +152,7 @@ export async function capture({ dataset, corpusBytes, target, modes = MODES, cas
   requireValue(text(target?.siteKey) && target.siteKey.length <= 120, 'Target site key required');
   const apiOrigin = origin(target.apiOrigin);
   const widgetOrigin = origin(target.widgetOrigin);
+  const token = pilotToken(pilotAccess, { apiOrigin, siteKey: target.siteKey });
   requireValue(Array.isArray(modes) && modes.length > 0 && new Set(modes).size === modes.length && modes.every((mode) => MODES.includes(mode)), 'Invalid modes');
   requireValue(Number.isInteger(maxChatRequests) && maxChatRequests >= 1 && maxChatRequests <= 120, 'Chat request limit must be 1..120');
   const selectedIds = caseIds || dataset.cases.map((item) => item.id);
@@ -139,7 +168,8 @@ export async function capture({ dataset, corpusBytes, target, modes = MODES, cas
     const remaining = 300_000 - (now() - startedAt);
     requireValue(remaining > 0, 'Run time budget exhausted');
     const response = await fetchImpl(`${apiOrigin}${route}`, { method: 'POST', redirect: 'error',
-      headers: { 'Content-Type': 'application/json', Origin: widgetOrigin, Referer: `${widgetOrigin}/` },
+      headers: { 'Content-Type': 'application/json', Origin: widgetOrigin, Referer: `${widgetOrigin}/`,
+        ...(token ? { 'X-Site-Pilot-Token': token } : {}) },
       body: JSON.stringify(body), signal: AbortSignal.timeout(Math.min(20_000, remaining)) });
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
@@ -273,7 +303,7 @@ async function saveJson(file, value) {
 export async function main(argv) {
   const [command, ...args] = argv;
   const options = {};
-  const allowed = new Set(['dataset', 'corpus', 'target', 'out', 'mode', 'max-chat-requests', 'case-ids', 'execute', 'runs', 'review']);
+  const allowed = new Set(['dataset', 'corpus', 'target', 'out', 'mode', 'max-chat-requests', 'case-ids', 'execute', 'runs', 'review', 'pilot-access-file']);
   for (let i = 0; i < args.length; i++) {
     const key = args[i].replace(/^--/, '');
     requireValue(args[i].startsWith('--') && allowed.has(key) && !Object.hasOwn(options, key), 'Unknown or duplicate option');
@@ -292,6 +322,7 @@ export async function main(argv) {
     await output.close();
     const checkpoint = async (run) => writeFile(options.out, `${JSON.stringify(run, null, 2)}\n`, { mode: 0o600 });
     const run = await capture({ dataset: await readJson(options.dataset), corpusBytes: await readFile(options.corpus),
+      pilotAccess: options['pilot-access-file'] === undefined ? undefined : await readPilotAccessFile(options['pilot-access-file']),
       target: await readJson(options.target), modes: options.mode === undefined || options.mode === 'both' ? MODES : [options.mode],
       caseIds: options['case-ids']?.split(','), maxChatRequests: options['max-chat-requests'] === undefined ? 6 : Number(options['max-chat-requests']),
       execute: options.execute === true }, { checkpoint });

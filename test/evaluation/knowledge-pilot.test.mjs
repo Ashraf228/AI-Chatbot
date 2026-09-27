@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { CATEGORY_COUNTS, DIMENSIONS, assess, capture, digest, main, readReply, reviewTemplate, validateDataset } from '../../scripts/evaluation/knowledge-pilot.mjs';
+import { CATEGORY_COUNTS, DIMENSIONS, assess, capture, digest, main, readPilotAccessFile, readReply, reviewTemplate, validateDataset } from '../../scripts/evaluation/knowledge-pilot.mjs';
 
 const corpus = Buffer.from('Synthetisches Handbuch: Sicherung täglich.');
 const target = { apiOrigin: 'https://api.synthetic.invalid', widgetOrigin: 'https://widget.synthetic.invalid', siteKey: 'synthetic', releaseSha: 'a'.repeat(40) };
@@ -167,4 +168,63 @@ test('an existing output is preserved before any live capture could begin', asyn
     await assert.rejects(main(['capture', '--out', file, '--execute']), /EEXIST/);
     assert.equal(await readFile(file, 'utf8'), 'existing');
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('scoped pilot credential reaches session and both chat paths only as a header and never enters captures', async () => {
+  const token = randomBytes(32).toString('hex');
+  const pilotAccess = { apiOrigin: target.apiOrigin, siteKey: target.siteKey, token };
+  const transport = fakeTransport(); const snapshots = [];
+  const run = await capture(options({ pilotAccess, caseIds: ['P01'] }),
+    { ...transport, checkpoint: async (r) => snapshots.push(JSON.stringify(r)) });
+  assert.equal(run.chatRequests, 2);
+  assert.equal(transport.calls.length, 4);
+  for (const call of transport.calls) {
+    assert.equal(call.init.headers['X-Site-Pilot-Token'], token);
+    assert.equal(call.init.redirect, 'error');
+    assert.equal(call.init.body.includes(token), false);
+    assert.equal(call.url.includes(token), false);
+  }
+  assert.equal(JSON.stringify([run, snapshots, reviewTemplate([run])]).includes(token), false);
+  const ordinary = fakeTransport(); await capture(options({ caseIds: ['P01'] }), ordinary);
+  assert.ok(ordinary.calls.every((call) => !Object.hasOwn(call.init.headers, 'X-Site-Pilot-Token')));
+});
+
+test('credential origin or site mismatch, malformed tokens and unknown fields fail before every network call', async () => {
+  const valid = { apiOrigin: target.apiOrigin, siteKey: target.siteKey, token: randomBytes(32).toString('hex') };
+  for (const pilotAccess of [null, {}, { ...valid, apiOrigin: 'https://other.invalid' },
+    { ...valid, apiOrigin: `${target.apiOrigin}/` }, { ...valid, siteKey: 'other' },
+    { ...valid, token: 'short' }, { ...valid, token: `${valid.token}\n` }, { ...valid, rawSecret: 'unexpected' }]) {
+    const transport = fakeTransport();
+    await assert.rejects(capture(options({ pilotAccess }), transport), /Pilot credential/);
+    assert.equal(transport.calls.length, 0);
+  }
+});
+
+test('pilot credential file enforces private ownership permissions, a regular file, bounded size and no symlink', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'pilot-credential-'));
+  try {
+    const file = path.join(directory, 'access.json');
+    const access = { apiOrigin: target.apiOrigin, siteKey: target.siteKey, token: randomBytes(32).toString('hex') };
+    await writeFile(file, JSON.stringify(access), { mode: 0o600 });
+    assert.deepEqual(await readPilotAccessFile(file), access);
+    await chmod(file, 0o644);
+    await assert.rejects(readPilotAccessFile(file), /private file/);
+    await chmod(file, 0o600);
+    const link = path.join(directory, 'link.json'); await symlink(file, link);
+    await assert.rejects(readPilotAccessFile(link));
+    await assert.rejects(readPilotAccessFile(directory), /private file/);
+    await writeFile(file, 'x'.repeat(4097));
+    await assert.rejects(readPilotAccessFile(file), /private file/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('pilot denial cancels capture before any question and cannot echo a token through raw error detail', async () => {
+  const token = randomBytes(32).toString('hex');
+  let calls = 0;
+  const run = await capture(options({ pilotAccess: { apiOrigin: target.apiOrigin, siteKey: target.siteKey, token } }), {
+    fetchImpl: async () => { calls++; return new Response(token, { status: 403 }); },
+  });
+  assert.equal(calls, 1); assert.equal(run.chatRequests, 0);
+  assert.equal(run.stopReason, 'transport_or_contract_error');
+  assert.equal(JSON.stringify(run).includes(token), false);
 });
