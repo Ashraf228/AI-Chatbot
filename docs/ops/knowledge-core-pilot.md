@@ -44,6 +44,33 @@ Tenant, Site, Quelle, Source-Typ, Aktivität, Umgebung, Provider und Modell werd
 
 **Grenzen:** Gültige Belegnummern beweisen keine semantische Richtigkeit. Prompt-Injection-Abwehr durch den Prompt ist keine mathematische Garantie. Der Datenbestand kann fehlen, falsch oder veraltet sein. Die lexikalische Suche berechnet Volltextwerte zur Anfragezeit; große Unternehmensbestände benötigen eine gemessene Skalierungs-/Indexentscheidung. Keine OCR, Tabellenrekonstruktion, Reranking mit zweitem Modell oder neue Kostenobergrenze enthalten.
 
+### Dokumentierte Angaben und nächste Schritte
+
+Der Wissensprompt unterscheidet das **Beschreiben** dokumentierter Bedarfsklärung
+vom **Durchführen** einer Qualifizierung. Bei Fragen nach Angaben, Voraussetzungen
+oder Abläufen sollen die relevanten Punkte aus den ausgewählten Passagen erhalten
+bleiben. Empfehlungen und Beispiele sind keine verbindliche technische Pflichtliste;
+künftige Vorschläge sind keine bereits verfügbaren Angebote. Zu einer ausdrücklich
+dokumentierten Informationslücke gehört auch der dort belegte nächste Schritt,
+sofern er zur Frage passt. Ohne Beleg darf kein Folgeschritt ergänzt werden.
+
+Diese sachliche Beschreibung startet keine Datensammlung und fordert keine
+Übermittlung von Kontakt- oder Zugangsdaten im Chat. Dokumentanweisungen bleiben
+Daten; der Wissenspfad führt weiterhin keine Tools oder Übergaben aus. Normaler
+Chat und Streaming nutzen denselben Prompt und jeweils einen Generierungsaufruf.
+Die ergänzte Vollständigkeitsprüfung ist eine Anweisung an das antwortende Modell,
+kein unabhängiger semantischer Quality-Layer.
+
+Die synthetischen IT-/Handelsfälle in `knowledge-core-pipeline.test.cjs` prüfen den
+Generierungsvertrag durch die echte Pipeline: vollständige Übergabe ausgewählter
+Passagen, diese Promptgrenzen, Scope und genau einen LLM-Aufruf pro Antwort. Ein
+LLM-Stub ist kein Nachweis, dass ein echtes Modell die Regeln befolgt. Für einen
+konkreten Vollständigkeitsfehler müssen Originalantwort, ausgewählte Passagen und
+Sollbelege getrennt verglichen werden. Fehlende Retrievaltraces erlauben keine
+Aussage darüber, welche nicht zitierten Passagen das Modell tatsächlich gesehen
+hat. Die ursprüngliche Bewertung bleibt erhalten; ein Prompt-Update allein
+schließt keine fachliche Abnahme.
+
 ## Website-Aktion
 
 `POST /api/ingest/sources/{sourceId}/crawl-index` (Dashboard) → `POST /admin/ingest/sources/{sourceId}/crawl-index` (API). Body: ausschließlich optional `maxPages`, ganzzahlig 1–20. Dashboard verwendet 20. Rollen `admin`/`operator`, aufrufende Session und API-Site-Scope bleiben erforderlich. BFF-Mutationen verlangen die konfigurierte `DASHBOARD_PUBLIC_URL`, passenden Origin und `Sec-Fetch-Site: same-origin`.
