@@ -6,6 +6,7 @@ import { CreateSessionDto } from '../dto/create-session.dto';
 import { WidgetSessionEntity } from '../entities/widget-session.entity';
 import { PrismaService } from '../../../db/prisma.service';
 import { WidgetConfigService } from './widget-config.service';
+import { assertSitePilotAccess } from '../../../utils/site-pilot-access';
 
 type WidgetSessionRow = {
   id: string;
@@ -31,6 +32,7 @@ export class WidgetSessionService {
     req?: Request,
   ): Promise<WidgetSessionEntity> {
     const site = await this.widgetConfigService.getSiteByKey(dto.siteKey);
+    assertSitePilotAccess({ siteId: site.id, tenantId: site.tenantId }, req);
     const normalizedSourceUrl = this.normalizeSourceUrl(dto.sourceUrl, origin);
     const visitorId = dto.visitorId?.trim() || randomUUID();
     const timestamp = new Date().toISOString();

@@ -9,6 +9,7 @@ import { logEvent } from '../utils/logger';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { sanitizeInput } from '../utils/security';
 import { ChatMessageDto } from './dto';
+import { assertSitePilotAccess } from '../utils/site-pilot-access';
 
 @Injectable()
 export class ChatService {
@@ -30,6 +31,7 @@ export class ChatService {
     }
 
     const tenantId = site.tenant_id;
+    assertSitePilotAccess({ siteId: site.id, tenantId }, req);
     if (!tenantId) {
       throw new HttpException(
         'Site misconfigured (tenant missing)',

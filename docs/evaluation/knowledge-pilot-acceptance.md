@@ -52,6 +52,15 @@ node scripts/evaluation/knowledge-pilot.mjs validate --dataset /private/pilot-ca
 
 Eine private Zieldatei enthält ausschließlich `apiOrigin`, `widgetOrigin`, `siteKey` und den bestätigten 40-stelligen `releaseSha`. Beide Origins müssen exakt passen; HTTPS ist erforderlich, außer auf Loopback. Keine Cookies, Passwörter oder API-Keys eintragen. Der Runner nutzt denselben öffentlichen Session-/Chatvertrag und die bestehende Origin-Prüfung. Er umgeht keine Providergrants.
 
+Bei einer serverseitig auf Pilotzugang begrenzten Site zusätzlich
+`--pilot-access-file /private/pilot-access.json` verwenden. Diese separate
+private Datei enthält ausschließlich `apiOrigin`, `siteKey` und `token` und
+muss dem lokalen Nutzer gehören (0600, reguläre Datei, kein Symlink). Der Runner
+prüft die Bindung an das Target vor jedem Lauf; das Token bleibt aus Capture,
+Review, Request-Body und URL heraus. Einrichtung, Grenzen und Rücknahme stehen
+in [Site-Pilotzugang](../ops/site-pilot-access.md). Ohne diese Option sendet der
+Runner wie bisher keinen zusätzlichen Header.
+
 ```sh
 node scripts/evaluation/knowledge-pilot.mjs capture \
   --dataset /private/pilot-cases.json --corpus /private/pilot.pdf \

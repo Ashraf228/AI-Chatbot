@@ -7,6 +7,7 @@ import { AssistantProfileResolverService } from '../../../assistant-profiles';
 import { PrismaService } from '../../../db/prisma.service';
 import { SiteModulesService } from '../../../site-modules/site-modules.service';
 import { logEvent } from '../../../utils/logger';
+import { assertSitePilotAccess } from '../../../utils/site-pilot-access';
 import { SendMessageDto } from '../dto/send-message.dto';
 import {
   ConversationMessageEntity,
@@ -38,6 +39,7 @@ export class WidgetChatService {
 
   async sendMessage(dto: SendMessageDto, origin?: string, req?: Request) {
     const site = await this.widgetConfigService.getSiteByKey(dto.siteKey);
+    assertSitePilotAccess({ siteId: site.id, tenantId: site.tenantId }, req);
     await this.widgetSecurityService.enforceOrigin(dto.siteKey, origin, req?.headers.referer as string | undefined);
     await this.widgetSecurityService.assertSessionBelongsToSite(site.id, dto.sessionId);
 
@@ -103,6 +105,7 @@ export class WidgetChatService {
     res: Response,
   ) {
     const site = await this.widgetConfigService.getSiteByKey(dto.siteKey);
+    assertSitePilotAccess({ siteId: site.id, tenantId: site.tenantId }, req);
     await this.widgetSecurityService.enforceOrigin(dto.siteKey, origin, req?.headers.referer as string | undefined);
     await this.widgetSecurityService.assertSessionBelongsToSite(site.id, dto.sessionId);
     await this.widgetSecurityService.enforceRateLimit(

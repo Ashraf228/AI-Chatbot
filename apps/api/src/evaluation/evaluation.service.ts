@@ -6,6 +6,7 @@ import { AuditLogService } from '../audit-logs/audit-log.service';
 import { PrismaService } from '../db/prisma.service';
 import { RateLimitService } from '../utils/rate-limit.service';
 import { EvaluationAccessContext } from './evaluation-access.service';
+import { assertSitePilotAccess } from '../utils/site-pilot-access';
 import {
   buildPreviewSummary,
   createPreviewToken,
@@ -270,6 +271,8 @@ export class EvaluationService {
   }
 
   async createChatSession(access: EvaluationAccessContext, body: Record<string, unknown>) {
+    // Viewer evaluation is not an alternative entry to a restricted pilot.
+    assertSitePilotAccess(access);
     assertNoForbiddenKeys(body);
     const id = randomUUID();
     const expiresAt = new Date(Math.min(Date.now() + CHAT_SESSION_TTL_MS, Date.parse(access.accountExpiresAt || '') || Date.now() + CHAT_SESSION_TTL_MS));
@@ -288,6 +291,7 @@ export class EvaluationService {
   }
 
   async sendMessage(access: EvaluationAccessContext, body: Record<string, unknown>, clientIp = 'unknown') {
+    assertSitePilotAccess(access);
     assertNoForbiddenKeys(body);
     const conversationId = typeof body.conversationId === 'string' ? body.conversationId.trim() : '';
     const message = redactEvaluationSensitiveText(typeof body.message === 'string' ? body.message.trim() : '');

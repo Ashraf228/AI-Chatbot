@@ -6,6 +6,7 @@ import compression = require('compression');
 import * as express from 'express';
 import type { Request } from 'express';
 import type { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
+import { readSitePilotAccessRules } from './utils/site-pilot-access';
 
 function normalizeOrigin(origin: string) {
   try {
@@ -93,6 +94,7 @@ function buildCorsOptions(req: Request, allowedOrigins: Set<string>): CorsOption
 }
 
 async function bootstrap() {
+  readSitePilotAccessRules();
   const app = await NestFactory.create(AppModule, { cors: false, bodyParser: false });
   const allowedOrigins = parseAllowedOrigins();
 
