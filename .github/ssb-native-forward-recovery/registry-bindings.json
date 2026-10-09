@@ -1,0 +1,70 @@
+{
+  "utc": "2026-10-09T18:36:13.138Z",
+  "scope": "PUBLIC_REGISTRY_METADATA_ONLY",
+  "images": [
+    {
+      "key": "node",
+      "repository": "library/node",
+      "reference": "library/node@sha256:156b55f92e98ccd5ef49578a8cea0df4679826564bad1c9d4ef04462b9f0ded6",
+      "indexDigest": "sha256:156b55f92e98ccd5ef49578a8cea0df4679826564bad1c9d4ef04462b9f0ded6",
+      "manifestDigest": "sha256:9e04e3f9c9164cb2c913593ba0733fbd0caf4e9bea474d743ca8a32aa36d98c9",
+      "imageId": "sha256:8370d15b7c88fa4df2779fcd9069af17033b0bd4c6f38d397b6922c569928829",
+      "platform": "linux/amd64",
+      "version": "24.17.0",
+      "envVersionFields": {
+        "NODE_VERSION": "24.17.0"
+      },
+      "compressedLayerBytes": 57395209,
+      "runtimeVerified": false
+    },
+    {
+      "key": "nginx",
+      "repository": "library/nginx",
+      "reference": "library/nginx@sha256:582c496ccf79d8aa6f8203a79d32aaf7ffd8b13362c60a701a2f9ac64886c93d",
+      "indexDigest": "sha256:582c496ccf79d8aa6f8203a79d32aaf7ffd8b13362c60a701a2f9ac64886c93d",
+      "manifestDigest": "sha256:c1263cc56873d66f381fd07149aa0dc7244dd7c941334cd18473c46509f08465",
+      "imageId": "sha256:5bd7bd52e5bcab15a093466b90e37472b0d0c0081052522afb8924cbdaf15f56",
+      "platform": "linux/amd64",
+      "version": "1.29.8",
+      "envVersionFields": {
+        "NGINX_VERSION": "1.29.8",
+        "PKG_RELEASE": "1"
+      },
+      "compressedLayerBytes": 25988064,
+      "runtimeVerified": false
+    },
+    {
+      "key": "postgres",
+      "repository": "pgvector/pgvector",
+      "reference": "pgvector/pgvector@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff",
+      "indexDigest": "sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff",
+      "manifestDigest": "sha256:6f2fedef8e4311682b3a5989a21bf527d3310ab5421258ad6e41e52955c16294",
+      "imageId": "sha256:8ed3192326bb9d114cd5ef9acace453d5dae17425bd089d089330584c84c5a34",
+      "platform": "linux/amd64",
+      "version": "16.13-1.pgdg12+1",
+      "envVersionFields": {
+        "PG_MAJOR": "16",
+        "PG_VERSION": "16.13-1.pgdg12+1"
+      },
+      "compressedLayerBytes": 156082088,
+      "runtimeVerified": false
+    },
+    {
+      "key": "redis",
+      "repository": "library/redis",
+      "reference": "library/redis@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065",
+      "indexDigest": "sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065",
+      "manifestDigest": "sha256:4bfd9eca23339865dc14fe75f6d9ae643f714924623978dd2798f1a673b08f43",
+      "imageId": "sha256:aa189b5a1954929c393585e6dc5717a75b18f75a931df8bdcc00a3d3bd546be6",
+      "platform": "linux/amd64",
+      "version": "7.4.8",
+      "envVersionFields": {
+        "REDIS_VERSION": "7.4.8"
+      },
+      "compressedLayerBytes": 17232917,
+      "runtimeVerified": false
+    }
+  ],
+  "retries": 0,
+  "layerDownloads": 0
+}

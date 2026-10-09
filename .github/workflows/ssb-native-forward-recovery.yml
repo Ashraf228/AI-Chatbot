@@ -1,0 +1,73 @@
+name: SSB native forward recovery
+run-name: SSB native forward recovery / ${{ github.sha }} / ${{ inputs.dispatch_nonce }}
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: Exact approved published workflow commit on main
+        required: true
+        type: string
+      dispatch_nonce:
+        description: Unique dispatch nonce persisted by dispatch-once.cjs
+        required: true
+        type: string
+      publication_manifest:
+        description: Approved SHA-256 of publication-manifest.json
+        required: true
+        type: string
+      approval:
+        description: ONE_NATIVE_FORWARD_RECOVERY
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: ssb-native-forward-recovery-once
+  cancel-in-progress: false
+jobs:
+  native:
+    name: Native forward recovery
+    if: github.repository == 'Ashraf228/AI-Chatbot' && github.event.repository.private == false && github.run_attempt == 1 && inputs.approval == 'ONE_NATIVE_FORWARD_RECOVERY' && github.sha == inputs.expected_head
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - name: Bind overall deadline before checkout and tool setup
+        shell: bash
+        run: echo "SSB_JOB_DEADLINE_MS=$(( $(date +%s) * 1000 + 990000 ))" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          path: bundle
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 94a25578e883a6d7bbd03f26c56735739f75e45e
+          path: release
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+      - name: Bound builds and complete native transition
+        shell: bash
+        env:
+          SSB_PUBLICATION_MANIFEST: ${{ inputs.publication_manifest }}
+          SSB_EXECUTION_APPROVAL: ${{ inputs.approval }}
+          SSB_DISPATCH_NONCE: ${{ inputs.dispatch_nonce }}
+          SSB_EXPECTED_HEAD: ${{ inputs.expected_head }}
+          SSB_REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ARCH" = X64
+          test "$RUNNER_OS" = Linux
+          test "$SSB_REPOSITORY_VISIBILITY" = public
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          [[ "$SSB_PUBLICATION_MANIFEST" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$SSB_DISPATCH_NONCE" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$SSB_EXPECTED_HEAD" =~ ^[a-f0-9]{40}$ ]]
+          test "$GITHUB_SHA" = "$SSB_EXPECTED_HEAD"
+          test "$(git -C bundle rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(sha256sum bundle/.github/ssb-native-forward-recovery/publication-manifest.json | cut -d' ' -f1)" = "$SSB_PUBLICATION_MANIFEST"
+          sudo --preserve-env=PATH,HOME,GITHUB_ACTIONS,GITHUB_REPOSITORY,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,RUNNER_ARCH,RUNNER_OS,SSB_PUBLICATION_MANIFEST,SSB_EXECUTION_APPROVAL,SSB_DISPATCH_NONCE,SSB_EXPECTED_HEAD,SSB_REPOSITORY_VISIBILITY,SSB_JOB_DEADLINE_MS \
+            env SSB_RELEASE_ROOT="$GITHUB_WORKSPACE/release" \
+            "$(command -v node)" "$GITHUB_WORKSPACE/bundle/.github/ssb-native-forward-recovery/controller.cjs"
