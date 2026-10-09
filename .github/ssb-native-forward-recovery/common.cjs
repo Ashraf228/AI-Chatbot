@@ -22,7 +22,7 @@ function failureRecord(error){
 }
 class Processes {
   constructor({deadline,privateRoot,now=clock}){this.deadline=deadline;this.privateRoot=privateRoot;this.now=now;this.calls=[];this.children=new Set();this.bytes=0;this.workBytes=0;this.closureBytes=0;}
-  async run(bin,args,{input,ms=10000,allowFailure=false,cwd,env,uid,gid,closure=false,deadline=this.deadline}={}){
+  async run(bin,args,{input,ms=10000,allowFailure=false,cwd,env,uid,gid,closure=false,stateDiagnostic=false,deadline=this.deadline}={}){
     need(Array.isArray(args)&&args.every(a=>typeof a==='string'),'argv_invalid');
     need(Number.isFinite(deadline)&&deadline<=this.deadline,'deadline_binding');
     const limit=Math.min(ms,deadline-this.now()-(closure?0:30000));need(limit>100,'deadline');
@@ -51,6 +51,7 @@ class Processes {
         const out=Buffer.concat(stdout),err=Buffer.concat(stderr);
         let primary;
         if(timeout||overflow||spawnError||(!allowFailure&&code!==0)||signal){primary=new GateError(timeout?'command_timeout':overflow?'output_limit':spawnError?'spawn_failed':'command_failed');primary.process={...rec};}
+        if(primary&&stateDiagnostic&&code===1&&!signal&&!timeout&&!overflow&&!spawnError){try{need(out.length===0,'state_diagnostic_invalid');primary.stateDiagnostic=require('./diagnostics.cjs').decodeState(err);}catch(cause){primary.cause=cause;}}
         try{fs.writeFileSync(`${this.privateRoot}/process-${index}.stdout`,out,{mode:0o600,flag:'wx'});fs.writeFileSync(`${this.privateRoot}/process-${index}.stderr`,err,{mode:0o600,flag:'wx'});}catch(e){const evidence=new GateError('evidence_write_failed');evidence.ioCode=e.code;if(closure&&!primary)evidence.result={stdout:out,stderr:err,code,signal,closed:true};reject(primary?new AggregateError([primary,evidence],'primary_and_evidence_failed'):evidence);return;}
         if(primary){reject(primary);return;}
         resolve({stdout:out,stderr:err,code,signal,closed:true});

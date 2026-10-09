@@ -1,6 +1,7 @@
 'use strict';
 const {need,clock}=require('./common.cjs');
 const {Receipts,phases}=require('./evidence.cjs');
+const {publicFailure}=require('./diagnostics.cjs');
 const SOURCE='94a25578e883a6d7bbd03f26c56735739f75e45e';
 async function main(options,backend){
   need(options?.authorization==='ONE_NATIVE_FORWARD_RECOVERY'&&/^[0-9]+$/.test(options.run||'')&&options.attempt==='1','execution_not_authorized');
@@ -11,9 +12,9 @@ async function main(options,backend){
       const result=await backend.execute(phase);need(result&&result.verified===true,'phase_result_invalid');
       receipts.emit(phase,true,{counts:result.counts===undefined?[]:result.counts,ids:result.ids===undefined?[]:result.ids,hashes:result.hashes===undefined?[]:result.hashes,elapsedMs:Math.round(clock()-started)});
     }
-  }catch(e){primary=e;try{receipts.emit(phase,false,{elapsedMs:Math.round(clock()-started)});}catch(recordError){primary=new AggregateError([primary,recordError],'primary_and_record_failed');}}
-  try{const closed=await backend.close(Boolean(primary));need(closed?.verified===true,'closure_unverified');receipts.emit('closure',true,{counts:closed.counts===undefined?[]:closed.counts,ids:closed.ids===undefined?[]:closed.ids,hashes:closed.hashes===undefined?[]:closed.hashes,elapsedMs:Math.round(clock()-started)});}
-  catch(e){primary=primary?new AggregateError([primary,e],'primary_and_closure_failed'):e;try{receipts.emit('closure',false,{...(e.publicReceipt||{}),elapsedMs:Math.round(clock()-started)});}catch(recordError){primary=new AggregateError([primary,recordError],'closure_and_record_failed');}}
+  }catch(e){primary=e;try{receipts.emit(phase,false,{detail:{failure:publicFailure(e),outcomes:[]},elapsedMs:Math.round(clock()-started)});}catch(recordError){primary=new AggregateError([primary,recordError],'primary_and_record_failed');}}
+  try{const closed=await backend.close(Boolean(primary));need(closed?.verified===true,'closure_unverified');receipts.emit('closure',true,{counts:closed.counts===undefined?[]:closed.counts,ids:closed.ids===undefined?[]:closed.ids,hashes:closed.hashes===undefined?[]:closed.hashes,...(closed.detail?{detail:closed.detail}:{}),elapsedMs:Math.round(clock()-started)});}
+  catch(e){primary=primary?new AggregateError([primary,e],'primary_and_closure_failed'):e;try{receipts.emit('closure',false,{...(e.publicReceipt||{}),detail:{failure:publicFailure(e),outcomes:e.publicReceipt?.detail?.outcomes||[]},elapsedMs:Math.round(clock()-started)});}catch(recordError){primary=new AggregateError([primary,recordError],'closure_and_record_failed');}}
   if(primary)throw primary;
   receipts.emit('complete',true,{elapsedMs:Math.round(clock()-started)});return receipts.records;
 }

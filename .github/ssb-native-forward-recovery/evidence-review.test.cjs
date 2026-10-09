@@ -17,6 +17,7 @@ function fixture(){
     data[g+'-start']={counts:[...generationCounts.start[g]],ids:cohort};data[g+'-e1']={counts:[...generationCounts.e1],hashes:[id(210),id(211)]};
     data[g+'-drain']={counts:[...generationCounts.drain]};data[g+'-shutdown']={counts:[...generationCounts.shutdown],ids:cohort,hashes:[id(220+2*i),id(221+2*i)]};
   }
+  data.closure.detail={failure:null,outcomes:ids.slice(0,19).map((id,i)=>{const cohort=i>=3&&i<18,generation=cohort?['release','forward','normal'][Math.floor((i-3)/5)]:'seed',role=cohort?['api','admin-writer','dashboard','reporter','widget'][(i-3)%5]:['postgres','redis','probe'][i]||'restore-postgres';return{id,role,generation,state:cohort&&(i-3)%5<2?'graceful':'exited',exit:0,code:'none'};})};
   return Object.fromEntries(Object.entries(data).map(([p,r])=>[p,structuredClone(r)]));
 }
 function sample(data=fixture()){
@@ -24,7 +25,7 @@ function sample(data=fixture()){
   return{lines,rows:lines.map(x=>JSON.parse(Buffer.from(x.split(' ')[1],'base64')))};
 }
 function rechain(rows){
-  let previous='0'.repeat(64);return rows.map((row,seq)=>{const bytes=JSON.stringify({...row,seq,previous}),digest=sha(bytes);previous=digest;return 'SSB_PUBLIC_RECEIPT_V1 '+Buffer.from(bytes).toString('base64')+' '+digest;}).join('\n');
+  let previous='0'.repeat(64);return rows.map((row,seq)=>{const bytes=JSON.stringify({...row,seq,previous}),digest=sha(bytes);previous=digest;return 'SSB_PUBLIC_RECEIPT_V2 '+Buffer.from(bytes).toString('base64')+' '+digest;}).join('\n');
 }
 function backend(data){return{async execute(p){return{verified:true,...data[p]};},async close(){return{verified:true,...data.closure};}};}
 function loadActual(file,replacements={},globals={},cli=false){
@@ -59,12 +60,12 @@ test('receiver exports exactly canonical validated lines, replayable with the sa
   assert.doesNotMatch([...h.files.values(),...h.stdout].join('\n'),/SYNTHETIC_PRIVATE_LOG|unrelated log/);
 });
 for(const kind of ['invalid-marker','bare-marker','hidden-duplicate','spaced-prefix','duplicate','trailing-text','leading-space','ansi-prefix'])test('receiver rejects marker smuggling: '+kind,()=>{
-  const {lines}=sample(),first=lines[0],bad={'invalid-marker':'SSB_PUBLIC_RECEIPT_V1 SYNTHETIC_PRIVATE_MARKER','bare-marker':'SSB_PUBLIC_RECEIPT_V1','hidden-duplicate':'debug:'+first,'spaced-prefix':'debug: '+first,duplicate:first,'trailing-text':first+' private','leading-space':' '+first,'ansi-prefix':'\x1b[0m'+first}[kind];
+  const {lines}=sample(),first=lines[0],bad={'invalid-marker':'SSB_PUBLIC_RECEIPT_V2 SYNTHETIC_PRIVATE_MARKER','bare-marker':'SSB_PUBLIC_RECEIPT_V2','hidden-duplicate':'debug:'+first,'spaced-prefix':'debug: '+first,duplicate:first,'trailing-text':first+' private','leading-space':' '+first,'ansi-prefix':'\x1b[0m'+first}[kind];
   const h=receiverHarness([...lines,bad].join('\n'));assert.throws(()=>h.invoke());assert.equal(h.mkdirs,0);assert.equal(h.files.size,0);assert.equal(h.stdout.length,0);
 });
 test('noncanonical JSON cannot smuggle duplicate keys or ignored whitespace into an export',()=>{
   const {rows}=sample();for(const prefix of ['{"run":"SYNTHETIC_PRIVATE_MARKER",','{ ']){
-    const bytes=prefix+JSON.stringify(rows[0]).slice(1),line='SSB_PUBLIC_RECEIPT_V1 '+Buffer.from(bytes).toString('base64')+' '+sha(bytes);
+    const bytes=prefix+JSON.stringify(rows[0]).slice(1),line='SSB_PUBLIC_RECEIPT_V2 '+Buffer.from(bytes).toString('base64')+' '+sha(bytes);
     assert.throws(()=>parseReceipts(line,run,SOURCE,context),/receipt_noncanonical/);
   }
 });
@@ -141,7 +142,7 @@ for(const early of [true,false])test('successful partial cleanup stays true afte
   const stop=early?'preflight':'forward-start',execute=b.execute;
   b.execute=async p=>{if(p===stop)throw primary;return execute(p);};
   const owned=data.inventory.ids.slice(0,8),networks=data.inventory.ids.slice(19);
-  b.close=async failed=>{assert.equal(failed,true);return{verified:true,...(early?{counts:[0]}:{counts:[8,8,100],ids:[...owned,...networks]})};};
+  b.close=async failed=>{assert.equal(failed,true);return{verified:true,...(early?{counts:[0]}:{counts:[8,8,100],ids:[...owned,...networks],detail:{failure:null,outcomes:data.closure.detail.outcomes.slice(0,8)}})};};
   await assert.rejects(main(options(x=>lines.push(x)),b),e=>e===primary);
   const rows=lines.map(x=>JSON.parse(Buffer.from(x.split(' ')[1],'base64')));
   assert.equal(rows.at(-2).phase,stop);assert.equal(rows.at(-2).ok,false);assert.equal(rows.at(-1).phase,'closure');assert.equal(rows.at(-1).ok,true);
@@ -179,7 +180,7 @@ for(const writeFails of [false,true])test('actual CLI hands preserved errors to 
   const consoleMock={log:x=>output.push(x),error:x=>output.push(x)},evidence=loadActual(path.join(__dirname,'evidence.cjs'),{},{console:consoleMock});
   loadActual(path.join(__dirname,'controller.cjs'),{'./native.cjs':{Native:FakeNative},'./evidence.cjs':evidence},{process:proc,console:consoleMock},true);
   await new Promise(resolve=>setImmediate(resolve));assert.equal(saved.errors[0],primary);assert.equal(saved.errors[1],cleanup);assert.equal(proc.exitCode,1);
-  const markers=output.filter(x=>!x.startsWith('SSB_PUBLIC_RECEIPT_V1 '));assert.equal(markers.length,writeFails?2:1);
+  const markers=output.filter(x=>!x.startsWith('SSB_PUBLIC_RECEIPT_V2 '));assert.equal(markers.length,writeFails?2:1);
   if(writeFails)assert.equal(markers[0],'SSB_PRIVATE_DIAGNOSTIC_NOT_PERSISTED');assert.match(markers.at(-1),/^SSB_NATIVE_FORWARD_RECOVERY_FAILED:/);
   assert.doesNotMatch(output.join('\n'),/SYNTHETIC_PRIVATE_|private write failure/);
 });
@@ -192,14 +193,14 @@ function dispatchHarness(mode='matching'){
   const blob=b=>createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex');
   const tree=[...publication.files,{path:'.github/ssb-native-forward-recovery/publication-manifest.json'}].map(f=>({path:f.path,sha:blob(fs.readFileSync(path.join(pub,f.path))),mode:'100644',type:'blob'}));
   const state={posts:[],locks:[],receiver:[],stdout:[],lists:0,headReads:0};let stored,clock=0;
-  const fakeFs={...fs,readFileSync(p,...args){return p===artifactPath?manifestBytes:fs.readFileSync(p,...args);},writeFileSync(p,b,o){assert.equal(p,path.join(root,'../ssb-native-forward-recovery-9wgIuS.spent.json'));assert.equal(o.flag,'wx');assert.equal(o.mode,0o600);if(stored)throw Error('EEXIST');stored=JSON.parse(b);state.locks.push(stored);}};
+  const fakeFs={...fs,readFileSync(p,...args){return p===artifactPath?manifestBytes:fs.readFileSync(p,...args);},writeFileSync(p,b,o){assert.equal(p,path.join(root,'../ssb-native-forward-recovery-tAr8EB.spent.json'));assert.equal(o.flag,'wx');assert.equal(o.mode,0o600);if(stored)throw Error('EEXIST');stored=JSON.parse(b);state.locks.push(stored);}};
   const execFileSync=(bin,args)=>{
     if(bin==='/offline/node'){state.receiver.push(args);return Buffer.from('{"status":"MOCK_RECEIVER"}\n');}
     assert.equal(bin,'gh');const route=args[1];
     if(route==='repos/Ashraf228/AI-Chatbot')return JSON.stringify({private:false,default_branch:'main'});
     if(route.endsWith('/git/ref/heads/main')){state.headReads++;return JSON.stringify({object:{sha:mode==='head-advanced'&&state.headReads>1?'e'.repeat(40):context.workflowHead}});}
     if(route.includes('/git/commits/'))return JSON.stringify({tree:{sha:'c'.repeat(40)}});
-    if(route.includes('/git/trees/bc81'))return JSON.stringify({tree:[],truncated:false});
+    if(route.includes('/git/trees/28c17'))return JSON.stringify({tree:[],truncated:false});
     if(route.includes('/git/trees/'))return JSON.stringify({tree,truncated:false});
     if(route.endsWith('/dispatches')){assert.ok(stored);state.posts.push(args);if(mode==='post-fails')throw Error('SYNTHETIC_PRIVATE_API_ERROR');return '';}
     if(route.includes('/runs?')){
@@ -210,11 +211,11 @@ function dispatchHarness(mode='matching'){
       if(mode==='duplicate')return JSON.stringify({workflow_runs:[matched,{...matched,id:Number(run)+2}]});
       if(mode==='wrong-head')matched.head_sha='e'.repeat(40);
       if(mode==='rerun')matched.run_attempt=2;
-      if(mode==='failed')matched.conclusion='failure';
+      if(['failed','failed-received'].includes(mode))matched.conclusion='failure';
       if(mode==='changed-run'){matched.status=state.lists===1?'in_progress':'completed';if(state.lists>1)matched.id++;}
       return JSON.stringify({workflow_runs:[unrelated,matched]});
     }
-    if(route.endsWith('/runs/'+run+'/jobs'))return JSON.stringify({jobs:[{id:Number(job),conclusion:'success'}]});
+    if(route.endsWith('/runs/'+run+'/jobs'))return JSON.stringify({jobs:[{id:Number(job),conclusion:mode==='failed-received'?'failure':'success'}]});
     throw Error('unapproved_mock_route');
   };
   const proc={argv:['node','dispatch-once.cjs','--execute'],execPath:'/offline/node',env:{SSB_APPROVED_PACKAGE_SHA256:sha(manifestBytes)},stdout:{write:x=>state.stdout.push(x.toString())}};
@@ -231,6 +232,17 @@ test('dispatch persists a random nonce before POST and selects only its exact ti
 test('head changes after tree verification: no spent lock, POST or receipt subprocess',async()=>{
   const h=dispatchHarness('head-advanced');await assert.rejects(h.main(),/head changed before dispatch/);
   assert.equal(h.state.headReads,2);assert.equal(h.state.posts.length,0);assert.equal(h.state.locks.length,0);assert.equal(h.state.receiver.length,0);
+});
+test('failed job receipt is received once but never authorizes PASS or redispatch',async()=>{
+  const h=dispatchHarness('failed-received');await assert.rejects(h.main(),/CI_FAILED/);assert.equal(h.state.posts.length,1);assert.equal(h.state.receiver.length,1);assert.equal(h.state.stdout.length,1);await assert.rejects(h.main(),/EEXIST/);assert.equal(h.state.posts.length,1);
+});
+test('actual receiver stores canonical bounded partial failure, not private logs or a successful acceptance',async()=>{
+  const data=fixture(),lines=[],b=backend(data);b.execute=async p=>{if(p==='initialize')throw Object.assign(Error('PRIVATE_RAW_FAILURE'),{code:'state_operation_failed',stateDiagnostic:{version:1,stage:'initialize-state',code:'EACCES'}});return{verified:true,...data[p]};};
+  const outcomes=data.closure.detail.outcomes.slice(0,3).map(o=>({...o,state:'never_started',exit:null}));
+  b.close=async()=>({verified:true,counts:[3,3,55],ids:data.inventory.ids.slice(0,3),detail:{failure:null,outcomes}});
+  await assert.rejects(main(options(x=>lines.push(x)),b));
+  const h=receiverHarness('PRIVATE_RAW_LOG\n'+lines.join('\n'),{conclusion:'failure'},{conclusion:'failure'});h.invoke();const proof=JSON.parse(h.files.get('Empfang.json'));assert.equal(proof.status,'PARTIAL_FAILURE_RECEIVED');assert.equal(proof.phases,5);assert.equal(h.files.get('receipts.txt'),lines.join('\n')+'\n');assert.doesNotMatch([...h.files.values()].join(''),/PRIVATE_RAW/);
+  for(const log of [lines.slice(0,-1).join('\n'),lines.join('\n').slice(0,-5)]){const missing=receiverHarness(log,{conclusion:'failure'},{conclusion:'failure'});assert.throws(()=>missing.invoke());assert.equal(missing.files.size,0);}
 });
 for(const mode of ['unrelated','duplicate','wrong-head','rerun','failed','changed-run','post-fails'])test('dispatch fails closed without redispatch: '+mode,async()=>{
   const h=dispatchHarness(mode);await assert.rejects(h.main());assert.equal(h.state.posts.length,1);assert.equal(h.state.locks.length,1);assert.equal(h.state.receiver.length,0);assert.equal(h.state.stdout.length,0);
