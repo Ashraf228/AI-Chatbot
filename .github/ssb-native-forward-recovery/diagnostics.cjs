@@ -1,8 +1,7 @@
 'use strict';
 const {need}=require('./common.cjs');
 const {validateBase}=require('./base-diagnostics.cjs');
-const stages=['input','uid','module','initialize-state','initialize-window','initialize-owner','construct','retired-admission','open','snapshot','drained','action'];
-const stateCodes=['EACCES','EPERM','ENOENT','ENOTDIR','EISDIR','EEXIST','ELOOP','EIO','ENOSPC','EMFILE','ENFILE','MODULE_NOT_FOUND','ERR_MODULE_NOT_FOUND','ERR_REQUIRE_ESM','state_owner_required','binding_missing','private_directory_required','state_file_invalid','state_binding_invalid','generation_retired','admission_closed','unsupported_state_operation','invalid_input','other'];
+const {stateStages:stages,stateCodes}=require('./state-launch.cjs');
 const codes=['unclassified','truncated','aggregate','command_failed','command_timeout','output_limit','spawn_failed','process_completion_unverified','evidence_write_failed','state_operation_failed','state_diagnostic_missing','state_diagnostic_invalid','cleanup_identity_unverified','cleanup_preexisting_forbidden','cleanup_ownership','container_completion_unverified','never_started_on_success','infrastructure_shutdown_failed','postgres_clean_shutdown_missing','closure_incomplete','overall_deadline','deadline','deadline_binding','primary_and_closure_failed','primary_and_record_failed','closure_and_record_failed'];
 const signals=['SIGTERM','SIGKILL','SIGINT','SIGABRT','SIGSEGV'];
 const roles=['postgres','redis','probe','restore-postgres','api','admin-writer','dashboard','reporter','widget'];
