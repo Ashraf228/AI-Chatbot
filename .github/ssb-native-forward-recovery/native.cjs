@@ -4,6 +4,7 @@ const {sha,need,json,bound,regular,clock,Processes,failureRecord}=require('./com
 const {services,networks,secrets,write,generation}=require('./fixtures.cjs');
 const {publicFailure}=require('./diagnostics.cjs');
 const {stateArgs}=require('./state-launch.cjs');
+const {prepareStateCode}=require('./state-code.cjs');
 const SOURCE='94a25578e883a6d7bbd03f26c56735739f75e45e',BUILD_DATE='2026-10-09T00:00:00Z';
 const GiB=1024**3,fullId=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 function verifyBase(list,base){need(Array.isArray(list)&&list.length===1,'base_response_invalid');const x=list[0];need(x.Id===base.imageId&&x.Os==='linux'&&x.Architecture==='amd64'&&Array.isArray(x.RepoDigests)&&x.RepoDigests.some(r=>r===base.reference||r===base.reference.replace(/^library\//,'')),'base_identity_invalid');need(x.Config&&typeof x.Config==='object'&&!Array.isArray(x.Config),'base_config_invalid');for(const [k,v]of Object.entries(base.envVersionFields))need(x.Config.Env?.includes(`${k}=${v}`),'base_version_invalid');return x;}
@@ -22,6 +23,7 @@ class Native{
     need(!process.env.DOCKER_CONTEXT&&!process.env.DOCKER_HOST&&!process.env.DOCKER_TLS_VERIFY&&!process.env.DOCKER_CERT_PATH,'daemon_override_forbidden');
     const manifestBytes=regular(path.join(__dirname,'publication-manifest.json'));need(sha(manifestBytes)===process.env.SSB_PUBLICATION_MANIFEST,'publication_manifest_changed');
     for(const f of json(manifestBytes).files)bound(path.resolve(__dirname,'../..',f.path),f);
+    Object.defineProperty(this,'verifiedPublicationManifest',{value:sha(manifestBytes)});
     this.release=fs.realpathSync(process.env.SSB_RELEASE_ROOT);this.source=path.join(this.release,'.github/ssb-capacity-diagnostic/source');
     for(const f of require('./release-source-manifest.json').files)bound(path.join(this.source,f.path),f);
     for(const f of require('./dockerfile-manifest.json'))bound(path.join(this.release,f.path),f);
@@ -36,6 +38,7 @@ class Native{
     this.watch=setInterval(()=>{try{this.resources();}catch{this.resourceFailure=true;for(const child of this.proc.children)try{process.kill(-child.pid,'SIGTERM');}catch{}}},250);
     this.toolsRoot=path.join(this.privateRoot,'host-tools');fs.cpSync(path.join(__dirname,'adapters'),this.toolsRoot,{recursive:true,force:false,errorOnExist:true});
     this.stateRoot=path.join(this.privateRoot,'state');fs.mkdirSync(this.stateRoot,{mode:0o700});fs.chownSync(this.stateRoot,1000,1000);
+    Object.defineProperty(this,'stateEntry',{value:prepareStateCode(__dirname,this.privateRoot,json(manifestBytes))});
     await this.stateLoadCheck(false);
     return{verified:true,counts:[901,4],hashes:[sha(manifestBytes)]};
   }
@@ -76,11 +79,13 @@ class Native{
     if(['database','e1'].includes(action))need(Array.isArray(r.hashes)&&r.hashes.length===(action==='e1'?2:1)&&r.hashes.every(x=>/^[a-f0-9]{64}$/.test(x)),'mandatory_digest_missing');return r;
   }
   async state(action,binding,extra={}){
-    const result=await this.command(process.execPath,stateArgs(path.join(__dirname,'state-agent.cjs')),{input:JSON.stringify({action,binding,toolsRoot:this.toolsRoot,owner:this.synthetic.owner,epoch:this.epoch,...extra}),uid:1000,gid:1000,ms:1000,stateDiagnostic:true});
+    need(typeof this.stateEntry==='string'&&path.isAbsolute(this.stateEntry),'state_entry_unbound');
+    const result=await this.command(process.execPath,stateArgs(this.stateEntry),{input:JSON.stringify({action,binding,toolsRoot:this.toolsRoot,owner:this.synthetic.owner,epoch:this.epoch,...extra}),uid:1000,gid:1000,ms:1000,stateDiagnostic:true});
     need(result.stderr.length===0,'state_diagnostic_invalid');return json(result.stdout);
   }
   async stateLoadCheck(runtime){
-    const result=await this.command(process.execPath,stateArgs(path.join(__dirname,'state-agent.cjs'),runtime?'load-runtime':'load'),{input:JSON.stringify({toolsRoot:this.toolsRoot}),uid:1000,gid:1000,ms:1000,stateDiagnostic:true});
+    need(typeof this.stateEntry==='string'&&path.isAbsolute(this.stateEntry),'state_entry_unbound');
+    const result=await this.command(process.execPath,stateArgs(this.stateEntry,runtime?'load-runtime':'load'),{input:JSON.stringify({toolsRoot:this.toolsRoot}),uid:1000,gid:1000,ms:1000,stateDiagnostic:true});
     need(result.stderr.length===0,'state_diagnostic_invalid');
     const proof=json(result.stdout),expected={loaded:true,uid:1000,gid:1000,node:'v24.17.0',modules:runtime?8:7,runtime};
     need(JSON.stringify(proof)===JSON.stringify(expected),'state_diagnostic_invalid');return proof;
