@@ -1,0 +1,22 @@
+[
+  {
+    "path": ".github/ssb-capacity-diagnostic/dockerfiles/api.Dockerfile",
+    "sha256": "8e12a30fd93df840b11c13c25e0cc60342f55edb665cb07e850b36ce807fe802",
+    "bytes": 948
+  },
+  {
+    "path": ".github/ssb-capacity-diagnostic/dockerfiles/dashboard.Dockerfile",
+    "sha256": "6ea63470e964423b0a6fc571b99ee443bb80ac2aa44c01a7a0befbfea96f70db",
+    "bytes": 985
+  },
+  {
+    "path": ".github/ssb-capacity-diagnostic/dockerfiles/reporter.Dockerfile",
+    "sha256": "f4a5401c13c85f6915a1ddd52854c8264968156e79563db73d24b054522370e5",
+    "bytes": 754
+  },
+  {
+    "path": ".github/ssb-capacity-diagnostic/dockerfiles/widget.Dockerfile",
+    "sha256": "f3a5809a716da60b0df3239931c3d26ce150055c3fdcf78d65afd7aa597937f2",
+    "bytes": 1397
+  }
+]

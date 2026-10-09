@@ -1,0 +1,34 @@
+{
+  "files": [
+    {
+      "path": "scripts/ops/admin-writer-roles.sql",
+      "sha256": "6a27a6099490eed306852805e8dc611897ce477fd9f2908e373edd0d66ccee3b",
+      "bytes": 7456,
+      "gitMode": "100644"
+    },
+    {
+      "path": "scripts/ops/maintenance-executor.cjs",
+      "sha256": "8bfd8418f288592e0dad7df1a341f48f5cd4ef43eb2422f6d626a609479d5443",
+      "bytes": 8846,
+      "gitMode": "100644"
+    },
+    {
+      "path": "scripts/ops/maintenance-privileged-executor.cjs",
+      "sha256": "b10bc6e1c81315b09f4aa34f52cfecf9dc6f3d2baf87929e63d4089fe7c9a2e2",
+      "bytes": 9583,
+      "gitMode": "100644"
+    },
+    {
+      "path": "scripts/ops/maintenance-start-contract.cjs",
+      "sha256": "fd0c2766c8eb5273d7eb870b96be5c6bac594ab86c3b021a838acdbac43d0ad2",
+      "bytes": 20864,
+      "gitMode": "100644"
+    },
+    {
+      "path": "docker-compose.admin-writer.yml",
+      "sha256": "badc5b51ee427fcee84b6234b2b393f5ed01fcf4eda773676aa7b2c0bf2ced1b",
+      "bytes": 7229,
+      "gitMode": "100644"
+    }
+  ]
+}
