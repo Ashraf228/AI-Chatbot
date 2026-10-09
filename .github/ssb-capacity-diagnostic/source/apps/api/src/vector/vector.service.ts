@@ -1,0 +1,216 @@
+import { Injectable } from '@nestjs/common';
+import type { Queryable } from '../db/database.service';
+import { PrismaService } from '../db/prisma.service';
+
+export type VectorChunkMetadata = Record<string, unknown>;
+
+export type VectorSearchRow = {
+  id: string;
+  document_id: string;
+  source_id: string | null;
+  source_type: string | null;
+  source_label: string | null;
+  content: string;
+  metadata: VectorChunkMetadata;
+  title: string | null;
+  source_url: string | null;
+  score: number;
+};
+
+function sanitizePostgresText(value: string): string {
+  return value.replace(/\u0000/g, '');
+}
+
+function sanitizeJsonValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return sanitizePostgresText(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeJsonValue(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        sanitizePostgresText(key),
+        sanitizeJsonValue(item),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function sanitizeMetadata(metadata: VectorChunkMetadata): VectorChunkMetadata {
+  return sanitizeJsonValue(metadata) as VectorChunkMetadata;
+}
+
+@Injectable()
+export class VectorService {
+  constructor(private db: PrismaService) {}
+
+  private toPgVectorLiteral(embedding: number[]): string {
+    return `[${embedding.map((x) => Number(x).toString()).join(',')}]`;
+  }
+
+  async upsertChunk(params: {
+    id: string;
+    tenantId: string;
+    siteId: string;
+    documentId: string;
+    content: string;
+    metadata: VectorChunkMetadata;
+    contentHash: string;
+    embedding: number[];
+  }, db: Queryable = this.db) {
+    const exists = await db.query<{ id: string }>(
+      `SELECT id FROM chunks WHERE tenant_id=$1 AND document_id=$2 AND content_hash=$3 LIMIT 1`,
+      [params.tenantId, params.documentId, params.contentHash],
+    );
+    if (exists.rows[0]) return { id: exists.rows[0].id, skipped: true };
+
+    await db.query(
+      `INSERT INTO chunks(id, tenant_id, site_id, document_id, content, metadata, content_hash, embedding)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::vector)`,
+      [
+        params.id,
+        params.tenantId,
+        params.siteId,
+        params.documentId,
+        sanitizePostgresText(params.content),
+        sanitizeMetadata(params.metadata),
+        params.contentHash,
+        this.toPgVectorLiteral(params.embedding),
+      ],
+    );
+
+    return { id: params.id, skipped: false };
+  }
+
+  async updateChunk(params: {
+    id: string;
+    content: string;
+    metadata: VectorChunkMetadata;
+    contentHash: string;
+    embedding: number[];
+  }) {
+    await this.db.query(
+      `UPDATE chunks
+       SET content = $2,
+           metadata = $3,
+           content_hash = $4,
+           embedding = $5::vector
+       WHERE id = $1`,
+      [
+        params.id,
+        sanitizePostgresText(params.content),
+        sanitizeMetadata(params.metadata),
+        params.contentHash,
+        this.toPgVectorLiteral(params.embedding),
+      ],
+    );
+
+    return { id: params.id, updated: true };
+  }
+
+  async search(
+    tenantId: string,
+    siteId: string,
+    embedding: number[],
+    k = 6,
+    minScore?: number,
+    options: { demoOnly?: boolean } = {},
+  ): Promise<VectorSearchRow[]> {
+    const res = await this.db.query<VectorSearchRow>(
+      `
+      WITH ranked AS (
+        SELECT
+          c.id,
+          c.document_id,
+          d.source_id,
+          ks.source_type,
+          ks.label AS source_label,
+          c.content,
+          c.metadata,
+          d.title,
+          COALESCE(ks.source_url, d.source_url) AS source_url,
+          (1 - (c.embedding <=> $3::vector)) AS score,
+          c.embedding <=> $3::vector AS distance
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        LEFT JOIN knowledge_sources ks ON ks.id = d.source_id
+        WHERE c.tenant_id = $1
+          AND c.site_id = $2
+          AND c.embedding IS NOT NULL
+          AND COALESCE(ks.is_active, true) = true
+          AND COALESCE(ks.runtime_readiness, 'ready') = 'ready'
+          AND (
+            $6::boolean = false
+            OR (
+              c.metadata->>'demo' = 'true'
+              AND c.metadata->>'synthetic' = 'true'
+              AND COALESCE(ks.config->>'demo', 'false') = 'true'
+              AND COALESCE(ks.config->>'synthetic', 'false') = 'true'
+            )
+          )
+      )
+      SELECT
+        id,
+        document_id,
+        source_id,
+        source_type,
+        source_label,
+        content,
+        metadata,
+        title,
+        source_url,
+        score
+      FROM ranked
+      WHERE ($5::double precision IS NULL OR score >= $5::double precision)
+      ORDER BY distance
+      LIMIT $4
+      `,
+      [tenantId, siteId, this.toPgVectorLiteral(embedding), k, minScore ?? null, options.demoOnly === true],
+    );
+
+    return res.rows;
+  }
+
+  async searchKnowledge(tenantId: string, siteId: string, embedding: number[], query: string,
+    options: { demoOnly?: boolean } = {}): Promise<VectorSearchRow[]> {
+    const stop = new Set('aber alle auch auf aus bei das dass dem den der des die dies diese dieser dieses ein eine einer eines fuer für habe ist kann mit nach nicht oder sie sind und von was welche wie wir wird zu zum zur the a an and are do does for how in is it of or that the this to what which with'.split(' '));
+    const terms = [...new Set((query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [])
+      .filter((term) => !stop.has(term)))].slice(-16);
+    const result = await this.db.query<VectorSearchRow>(`
+      WITH eligible AS (
+        SELECT c.id, c.document_id, d.source_id, ks.source_type, ks.label AS source_label,
+          c.content, c.metadata, d.title,
+          CASE WHEN ks.source_type = 'url' THEN COALESCE(c.metadata->>'pageUrl', ks.source_url, d.source_url)
+            ELSE COALESCE(ks.source_url, d.source_url) END AS source_url,
+          1 - (c.embedding <=> $3::vector) AS score,
+          c.embedding <=> $3::vector AS distance
+        FROM chunks c JOIN documents d ON d.id = c.document_id AND d.tenant_id = c.tenant_id AND d.site_id = c.site_id
+        JOIN knowledge_sources ks ON ks.id = d.source_id AND ks.tenant_id = c.tenant_id AND ks.site_id = c.site_id
+        WHERE c.tenant_id = $1 AND c.site_id = $2 AND c.embedding IS NOT NULL
+          AND ks.is_active = true AND ks.runtime_readiness = 'ready'
+          AND ($5::boolean = false OR (c.metadata->>'demo' = 'true' AND c.metadata->>'synthetic' = 'true'
+            AND ks.config->>'demo' = 'true' AND ks.config->>'synthetic' = 'true'))
+      ), semantic AS (
+        SELECT id, row_number() OVER (ORDER BY distance, id) AS rank FROM eligible
+        WHERE score >= 0.30 ORDER BY distance, id LIMIT 16
+      ), lexical AS (
+        SELECT id, row_number() OVER (ORDER BY ts_rank_cd(to_tsvector('simple', content), to_tsquery('simple', $4)) DESC, id) AS rank
+        FROM eligible WHERE $4 <> '' AND score > 0
+          AND to_tsvector('simple', content) @@ to_tsquery('simple', $4)
+        ORDER BY ts_rank_cd(to_tsvector('simple', content), to_tsquery('simple', $4)) DESC, id LIMIT 16
+      ), fused AS (
+        SELECT id, 1.0 / (60 + rank) AS weight FROM semantic
+        UNION ALL SELECT id, 1.0 / (60 + rank) AS weight FROM lexical
+      )
+      SELECT e.* FROM eligible e JOIN (SELECT id, sum(weight) AS relevance FROM fused GROUP BY id) r ON r.id = e.id
+      ORDER BY r.relevance DESC, e.score DESC, e.id LIMIT 16`,
+      [tenantId, siteId, this.toPgVectorLiteral(embedding), terms.join(' | '), options.demoOnly === true]);
+    return result.rows;
+  }
+}

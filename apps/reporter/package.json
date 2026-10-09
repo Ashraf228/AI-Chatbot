@@ -15,7 +15,7 @@
     "lead-digest": "tsx src/jobs/sendLeadDigest.ts"
   },
   "dependencies": {
-    "nodemailer": "9.1.1",
+    "nodemailer": "10.0.13",
     "tsx": "4.22.4"
   },
   "devDependencies": {

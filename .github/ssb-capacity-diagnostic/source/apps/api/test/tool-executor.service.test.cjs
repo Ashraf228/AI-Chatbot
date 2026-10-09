@@ -1,0 +1,711 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { ToolExecutorService } = require('../dist/tools/tool-executor.service.js');
+const { ToolAuditService } = require('../dist/tools/tool-audit.service.js');
+const { ToolRegistryService } = require('../dist/tools/tool-registry.service.js');
+const { ChatPipelineService } = require('../dist/ai/chat-pipeline/chat-pipeline.service.js');
+const { ResponseComposerService } = require('../dist/ai/chat-pipeline/response-composer.service.js');
+
+function normalizeRuntimeQueryEmbeddingResult(result = {}) {
+  if (result.kind) {
+    return result;
+  }
+
+  if (result.allowed === false) {
+    return {
+      kind: 'denied',
+      decisionCode: 'missing_policy',
+      reason: 'provider_approval_storage_grant_missing',
+      sanitizedMessage: 'blocked',
+      environment: 'non_production',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+      ...result,
+    };
+  }
+
+  if (result.skipProviderCall === true) {
+    return {
+      kind: 'no_ready_sources',
+      decisionCode: 'no_ready_sources',
+      reason: 'runtime_query_embedding_no_ready_sources',
+      sanitizedMessage: 'Keine answer-ready Wissensquellen aktiv.',
+      environment: 'non_production',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+      ...result,
+    };
+  }
+
+  return {
+    kind: 'embedded',
+    decisionCode: 'allowed',
+    reason: 'runtime_query_embedding_authorized',
+    sanitizedMessage: 'ok',
+    embedding: [0.1, 0.2],
+    environment: 'non_production',
+    providerKey: 'openai',
+    model: 'text-embedding-3-small',
+    ...result,
+  };
+}
+
+function createToolHarness({
+  usageLimits,
+  integrationDispatchResults,
+  integrationDispatchThrows = false,
+  queryEmbeddingAuthorizationResult,
+} = {}) {
+  const conversations = new Map([
+    ['conversation-1', { id: 'conversation-1', session_id: 'session-1', metadata: {} }],
+  ]);
+  const leads = [];
+  const contactRequests = [];
+  const tickets = [];
+  const agentRuns = [];
+  const toolInvocations = [];
+  const dispatchedEvents = [];
+
+  const db = {
+    async query(sql, params = []) {
+      if (/INSERT INTO agent_runs/i.test(sql)) {
+        agentRuns.push({ id: params[0], tenantId: params[1], siteId: params[2], metadata: params[5] });
+        return { rows: [] };
+      }
+
+      if (/SELECT id\s+FROM agent_runs/i.test(sql)) {
+        const run = agentRuns.find((entry) => entry.id === params[0] && entry.siteId === params[1]);
+        return { rows: run ? [{ id: run.id }] : [] };
+      }
+
+      if (/INSERT INTO tool_invocations/i.test(sql)) {
+        toolInvocations.push({
+          id: params[0],
+          runId: params[1],
+          tenantId: params[2],
+          siteId: params[3],
+          toolName: params[4],
+          input: JSON.parse(params[5]),
+          status: 'queued',
+        });
+        return { rows: [] };
+      }
+
+      if (/UPDATE tool_invocations/i.test(sql)) {
+        const invocation = toolInvocations.find((entry) => entry.id === params[0]);
+        if (invocation) {
+          invocation.status = params[1];
+          invocation.output = JSON.parse(params[2]);
+          invocation.error = params[3];
+        }
+        return { rows: [] };
+      }
+
+      if (/UPDATE agent_runs/i.test(sql)) {
+        return { rows: [] };
+      }
+
+      if (/SELECT id, session_id, metadata\s+FROM conversations/i.test(sql)) {
+        const conversation = conversations.get(params[0]);
+        return { rows: conversation && params[1] === 'site-1' ? [conversation] : [] };
+      }
+
+      if (/UPDATE conversations\s+SET metadata = COALESCE/i.test(sql)) {
+        const conversation = conversations.get(params[0]);
+        if (conversation) {
+          conversation.metadata = {
+            ...(conversation.metadata || {}),
+            ...JSON.parse(params[2]),
+          };
+        }
+        return { rows: [] };
+      }
+
+      if (/SELECT id\s+FROM widget_leads/i.test(sql)) {
+        const existing = leads.find((lead) =>
+          lead.siteId === params[0] &&
+          lead.sessionId === params[1] &&
+          ((params[2] && lead.email === params[2]) || (params[3] && lead.phone === params[3]))
+        );
+        return { rows: existing ? [{ id: existing.id }] : [] };
+      }
+
+      if (/INSERT INTO widget_leads/i.test(sql)) {
+        leads.push({
+          id: params[0],
+          siteId: params[1],
+          sessionId: params[2],
+          name: params[3],
+          email: params[4],
+          phone: params[5],
+          message: params[6],
+        });
+        return { rows: [] };
+      }
+
+      if (/SELECT id\s+FROM agent_contact_requests/i.test(sql)) {
+        return { rows: [] };
+      }
+
+      if (/INSERT INTO agent_contact_requests/i.test(sql)) {
+        contactRequests.push({
+          id: params[0],
+          tenantId: params[1],
+          siteId: params[2],
+          runId: params[3],
+          email: params[5],
+          phone: params[6],
+        });
+        return { rows: [] };
+      }
+
+      if (/INSERT INTO agent_tickets/i.test(sql)) {
+        tickets.push({
+          id: params[0],
+          tenantId: params[1],
+          siteId: params[2],
+          runId: params[3],
+          subject: params[4],
+          description: params[5],
+          reporterName: params[6],
+          email: params[7],
+          location: params[8],
+          priority: params[9],
+          reporterPhone: params[10],
+          category: params[11],
+          issueType: params[12],
+          affectedSystem: params[13],
+          impact: params[14],
+          urgency: params[15],
+          affectedUsers: params[16],
+          device: params[17],
+          operatingSystem: params[18],
+          errorMessage: params[19],
+          alreadyTried: params[20],
+          department: params[21],
+          source: params[22],
+          metadata: JSON.parse(params[23]),
+        });
+        return { rows: [] };
+      }
+
+      return { rows: [] };
+    },
+  };
+
+  const sites = {
+    async getSite(siteId) {
+      if (siteId !== 'site-1') {
+        return null;
+      }
+      return {
+        id: 'site-1',
+        tenant_id: 'tenant-1',
+        name: 'Demo',
+        config: { setupGoal: 'lead_capture', industry: 'it-support' },
+      };
+    },
+  };
+  const integrations = {
+    async getConnectionForSite() {
+      return null;
+    },
+  };
+  const webhookJobs = {
+    async enqueue(input) {
+      return { id: `webhook-${input.providerKey}`, queued: true };
+    },
+  };
+  const integrationEvents = {
+    async dispatch(siteId, eventType, payload, context) {
+      dispatchedEvents.push({ siteId, eventType, payload, context });
+      if (integrationDispatchThrows) {
+        throw new Error('dispatcher failed');
+      }
+      return integrationDispatchResults || [
+        {
+          integrationId: 'integration-1',
+          status: 'queued',
+          providerKey: 'webhook',
+          connectionKey: 'primary',
+          type: 'ticket_webhook',
+          message: 'queued',
+          webhookJobId: 'webhook-job-1',
+        },
+      ];
+    },
+  };
+  const vector = {
+    async search() {
+      vector.calls += 1;
+      return [
+        {
+          id: 'chunk-1',
+          title: 'FAQ',
+          source_url: 'https://example.com/faq',
+          score: 0.91,
+          metadata: {},
+          content: 'Demo Inhalt',
+        },
+      ];
+    },
+    calls: 0,
+  };
+
+  const service = new ToolExecutorService(
+    db,
+    sites,
+    integrations,
+    webhookJobs,
+    vector,
+    new ToolRegistryService(),
+    new ToolAuditService(db),
+    integrationEvents,
+    usageLimits || {
+      async assertWithinLimit() {},
+      async withMonthlyLeadLimit(_tenantId, callback) {
+        return callback(db, async () => undefined);
+      },
+    },
+    {
+      async embedAuthorizedQuery() {
+        return normalizeRuntimeQueryEmbeddingResult(queryEmbeddingAuthorizationResult);
+      },
+    },
+  );
+
+  const context = {
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    conversationId: 'conversation-1',
+    source: 'widget',
+  };
+
+  return {
+    service,
+    context,
+    conversations,
+    leads,
+    contactRequests,
+    tickets,
+    agentRuns,
+    toolInvocations,
+    dispatchedEvents,
+    vector,
+  };
+}
+
+test('ToolExecutorService capture_lead success stores lead and metadata', async () => {
+  const { service, context, conversations, leads, toolInvocations, dispatchedEvents } = createToolHarness();
+
+  const result = await service.executeTool('capture_lead', {
+    name: 'Max Mustermann',
+    email: 'max@example.de',
+    need: 'KI Support',
+  }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(leads.length, 1);
+  assert.equal(conversations.get('conversation-1').metadata.toolExecutor.leadId, leads[0].id);
+  assert.equal(toolInvocations.length, 1);
+  assert.equal(toolInvocations[0].input.email, '[email]');
+  assert.equal(dispatchedEvents[0].eventType, 'lead.created');
+});
+
+test('ToolExecutorService capture_lead returns missing_fields without contact', async () => {
+  const { service, context, leads } = createToolHarness();
+
+  const result = await service.executeTool('capture_lead', { name: 'Max' }, context);
+
+  assert.equal(result.status, 'missing_fields');
+  assert.deepEqual(result.missingFields, ['email', 'phone']);
+  assert.equal(leads.length, 0);
+});
+
+test('ToolExecutorService capture_lead returns limit_exceeded without storing lead', async () => {
+  const { service, context, leads } = createToolHarness({
+    usageLimits: {
+      async assertWithinLimit() {},
+      async withMonthlyLeadLimit(_tenantId, callback) {
+        return callback(
+          {
+            async query(sql, params = []) {
+              if (/SELECT id\s+FROM widget_leads/i.test(sql)) {
+                return { rows: [] };
+              }
+              if (/INSERT INTO widget_leads/i.test(sql)) {
+                leads.push({ id: params[0] });
+                return { rows: [] };
+              }
+              return { rows: [] };
+            },
+          },
+          async () => {
+            const error = new Error('Dein aktueller Plan erlaubt maximal 1 Anfragen pro Monat. Upgrade erforderlich.');
+            error.response = {
+              code: 'limit_exceeded',
+              message: 'Dein aktueller Plan erlaubt maximal 1 Anfragen pro Monat. Upgrade erforderlich.',
+            };
+            throw error;
+          },
+        );
+      },
+    },
+  });
+
+  const result = await service.executeTool('capture_lead', {
+    name: 'Max Mustermann',
+    email: 'max@example.de',
+    need: 'KI Support',
+  }, context);
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error.code, 'limit_exceeded');
+  assert.match(result.message, /maximal 1 Anfragen/i);
+  assert.equal(leads.length, 0);
+});
+
+test('ToolExecutorService schedule_contact returns missing_fields without contact path', async () => {
+  const { service, context, contactRequests } = createToolHarness();
+
+  const result = await service.executeTool('schedule_contact', { topic: 'Demo' }, context);
+
+  assert.equal(result.status, 'missing_fields');
+  assert.deepEqual(result.missingFields, ['email', 'phone']);
+  assert.equal(contactRequests.length, 0);
+});
+
+test('ToolExecutorService create_ticket success stores ticket', async () => {
+  const { service, context, tickets } = createToolHarness();
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'Bestellung defekt',
+    description: 'Paket kam beschaedigt an',
+    customerEmail: 'kunde@example.de',
+  }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.data.status, 'created');
+  assert.equal(result.data.forwardingStatus, 'queued');
+  assert.equal(result.data.webhookJobId, 'webhook-job-1');
+  assert.equal(tickets.length, 1);
+  assert.equal(tickets[0].subject, 'Bestellung defekt');
+});
+
+test('ToolExecutorService create_ticket reports not_configured when no ticket integration is dispatched', async () => {
+  const { service, context, tickets, dispatchedEvents } = createToolHarness({
+    integrationDispatchResults: [],
+  });
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'VPN Problem',
+    description: 'VPN verbindet nicht',
+    customerEmail: 'kunde@example.de',
+  }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.data.status, 'created');
+  assert.equal(result.data.forwardingStatus, 'not_configured');
+  assert.equal(result.data.webhookJobId, undefined);
+  assert.equal(tickets.length, 1);
+  assert.equal(dispatchedEvents.length, 1);
+});
+
+test('ToolExecutorService create_ticket reports failed forwarding when dispatch fails after ticket creation', async () => {
+  const { service, context, tickets, dispatchedEvents } = createToolHarness({
+    integrationDispatchThrows: true,
+  });
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'VPN Problem',
+    description: 'VPN verbindet nicht',
+    customerEmail: 'kunde@example.de',
+  }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.data.status, 'created');
+  assert.equal(result.data.forwardingStatus, 'failed');
+  assert.equal(tickets.length, 1);
+  assert.equal(dispatchedEvents.length, 1);
+});
+
+test('ToolExecutorService create_ticket accepts IT support fields and dispatches structured event payload', async () => {
+  const { service, context, tickets, dispatchedEvents } = createToolHarness();
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'IT-Support: VPN verbindet nicht',
+    description: 'VPN verbindet nicht seit heute Morgen',
+    category: 'it_support',
+    priority: 'normal',
+    issueType: 'vpn',
+    affectedSystem: 'VPN',
+    impact: 'single_user',
+    urgency: 'normal',
+    affectedUsers: '1',
+    reporterEmail: 'max@firma.de',
+    reporterName: 'Max Muster',
+    reporterPhone: '+491234567',
+    company: 'Firma GmbH',
+    department: 'IT',
+    location: 'Berlin',
+    device: 'Windows Laptop',
+    operatingSystem: 'Windows',
+    errorMessage: 'Fehler 809',
+    alreadyTried: 'VPN-App neu gestartet',
+    conversationId: 'conversation-1',
+    metadata: {
+      sourceAgent: 'it-support-agent',
+    },
+  }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(tickets.length, 1);
+  assert.equal(tickets[0].category, 'it_support');
+  assert.equal(tickets[0].issueType, 'vpn');
+  assert.equal(tickets[0].affectedSystem, 'VPN');
+  assert.equal(tickets[0].impact, 'single_user');
+  assert.equal(tickets[0].urgency, 'normal');
+  assert.equal(tickets[0].affectedUsers, '1');
+  assert.equal(tickets[0].email, 'max@firma.de');
+  assert.equal(tickets[0].reporterName, 'Max Muster');
+  assert.equal(tickets[0].reporterPhone, '+491234567');
+  assert.equal(tickets[0].department, 'IT');
+  assert.equal(tickets[0].location, 'Berlin');
+  assert.equal(tickets[0].device, 'Windows Laptop');
+  assert.equal(tickets[0].operatingSystem, 'Windows');
+  assert.equal(tickets[0].metadata.conversationId, 'conversation-1');
+  assert.equal(dispatchedEvents[0].eventType, 'ticket.created');
+  assert.equal(dispatchedEvents[0].payload.ticketId, result.data.ticketId);
+  assert.equal(dispatchedEvents[0].payload.subject, 'IT-Support: VPN verbindet nicht');
+  assert.equal(dispatchedEvents[0].payload.description, 'VPN verbindet nicht seit heute Morgen');
+  assert.equal(dispatchedEvents[0].payload.category, 'it_support');
+  assert.equal(dispatchedEvents[0].payload.priority, 'normal');
+  assert.equal(dispatchedEvents[0].payload.customerEmail, 'max@firma.de');
+  assert.equal(dispatchedEvents[0].payload.customerName, 'Max Muster');
+  assert.equal(dispatchedEvents[0].payload.reporter.email, 'max@firma.de');
+  assert.equal(dispatchedEvents[0].payload.reporter.name, 'Max Muster');
+  assert.equal(dispatchedEvents[0].payload.reporter.phone, '+491234567');
+  assert.equal(dispatchedEvents[0].payload.reporter.department, 'IT');
+  assert.equal(dispatchedEvents[0].payload.reporter.location, 'Berlin');
+  assert.equal(dispatchedEvents[0].payload.technicalContext.device, 'Windows Laptop');
+  assert.equal(dispatchedEvents[0].payload.technicalContext.operatingSystem, 'Windows');
+  assert.equal(dispatchedEvents[0].payload.technicalContext.errorMessage, 'Fehler 809');
+  assert.equal(dispatchedEvents[0].payload.technicalContext.alreadyTried, 'VPN-App neu gestartet');
+  assert.equal(dispatchedEvents[0].payload.urgency, 'normal');
+  assert.equal(dispatchedEvents[0].payload.impact, 'single_user');
+  assert.equal(dispatchedEvents[0].payload.affectedUsers, '1');
+  assert.equal(dispatchedEvents[0].payload.affectedSystem, 'VPN');
+  assert.equal(dispatchedEvents[0].payload.issueType, 'vpn');
+  assert.equal(dispatchedEvents[0].payload.source, 'chat');
+  assert.equal(dispatchedEvents[0].payload.conversationId, 'conversation-1');
+  assert.equal(dispatchedEvents[0].payload.tenantId, 'tenant-1');
+  assert.equal(dispatchedEvents[0].payload.siteId, 'site-1');
+  assert.equal(dispatchedEvents[0].payload.metadata.sourceAgent, 'it-support-agent');
+});
+
+test('ToolExecutorService create_ticket redacts sensitive IT values from ticket, event and audit payloads', async () => {
+  const { service, context, tickets, dispatchedEvents, toolInvocations } = createToolHarness();
+
+  const result = await service.executeTool('create_ticket', {
+    subject: 'API key ist abc123',
+    description: 'Passwort ist Test123 und token ist xyz789',
+    category: 'it_support',
+    issueType: 'security',
+    affectedSystem: 'Login',
+    reporterEmail: 'max@firma.de',
+    errorMessage: 'MFA Code ist 123456',
+    alreadyTried: 'secret ist topsecret',
+    metadata: {
+      nested: {
+        note: 'access_token xyz und refresh_token refresh123',
+        client_secret: 'client123',
+      },
+      attempts: ['Bearer abcdef123456', 'password ist NochGeheimer'],
+    },
+  }, context);
+
+  assert.equal(result.status, 'success');
+  const serializedTicket = JSON.stringify(tickets[0]);
+  const serializedPayload = JSON.stringify(dispatchedEvents[0].payload);
+  const serializedAuditInput = JSON.stringify(toolInvocations[0].input);
+  assert.equal(dispatchedEvents[0].payload.ticketId, result.data.ticketId);
+  assert.doesNotMatch(serializedTicket, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
+  assert.doesNotMatch(serializedPayload, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
+  assert.doesNotMatch(serializedAuditInput, /abc123|Test123|xyz789|123456|topsecret|refresh123|client123|abcdef123456|NochGeheimer/);
+  assert.match(`${serializedTicket} ${serializedPayload} ${serializedAuditInput}`, /\[redacted\]/);
+});
+
+test('ToolExecutorService create_ticket returns missing_fields without description', async () => {
+  const { service, context, tickets } = createToolHarness();
+
+  const result = await service.executeTool('create_ticket', { subject: 'Problem' }, context);
+
+  assert.equal(result.status, 'missing_fields');
+  assert.deepEqual(result.missingFields, ['description']);
+  assert.equal(tickets.length, 0);
+});
+
+test('ToolExecutorService query_knowledge returns sources', async () => {
+  const { service, context } = createToolHarness();
+
+  const result = await service.executeTool('query_knowledge', { query: 'Support KI' }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.data.resultCount, 1);
+  assert.equal(result.data.sources[0].title, 'FAQ');
+});
+
+test('ToolExecutorService query_knowledge denies missing provider authorization without provider details or embedding calls', async () => {
+  const { service, context, vector } = createToolHarness({
+    queryEmbeddingAuthorizationResult: {
+      kind: 'denied',
+      decisionCode: 'missing_policy',
+      reason: 'provider_approval_storage_grant_missing',
+      sanitizedMessage: 'blocked',
+      environment: 'non_production',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+    },
+  });
+
+  const result = await service.executeTool('query_knowledge', { query: 'Support KI' }, context);
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error.code, 'query_knowledge_unavailable');
+  assert.equal(vector.calls, 0);
+  assert.doesNotMatch(result.message, /grant|policy|provider|openai/i);
+});
+
+test('ToolExecutorService query_knowledge returns a controlled empty result when no answer-ready sources are active', async () => {
+  const { service, context, vector } = createToolHarness({
+    queryEmbeddingAuthorizationResult: {
+      kind: 'no_ready_sources',
+      decisionCode: 'no_ready_sources',
+      reason: 'no_answer_ready_sources',
+      sanitizedMessage: 'Keine answer-ready Wissensquellen aktiv.',
+      environment: 'non_production',
+      providerKey: 'openai',
+      model: 'text-embedding-3-small',
+    },
+  });
+
+  const result = await service.executeTool('query_knowledge', { query: 'Support KI' }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(result.data.resultCount, 0);
+  assert.deepEqual(result.data.sources, []);
+  assert.equal(vector.calls, 0);
+  assert.doesNotMatch(result.message, /grant|policy|provider|openai|debug/i);
+});
+
+test('ToolExecutorService handoff updates conversation metadata', async () => {
+  const { service, context, conversations } = createToolHarness();
+
+  const result = await service.executeTool('handoff', { reason: 'Nutzer will Mensch', priority: 'high' }, context);
+
+  assert.equal(result.status, 'success');
+  assert.equal(conversations.get('conversation-1').metadata.handoff.recommended, true);
+  assert.equal(conversations.get('conversation-1').metadata.handoff.priority, 'high');
+});
+
+test('ToolExecutorService rejects invalid tool names', async () => {
+  const { service, context, toolInvocations } = createToolHarness();
+
+  const result = await service.executeTool('delete_everything', {}, context);
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error.code, 'invalid_tool');
+  assert.equal(toolInvocations.length, 0);
+});
+
+test('ChatPipeline executes allowed suggested tools and skips tools with required fields', async () => {
+  const executedTools = [];
+  const db = {
+    async query() {
+      return { rows: [] };
+    },
+  };
+  const conversationState = {
+    async ensureConversation() {
+      return { id: 'conversation-1', sessionId: 'session-1' };
+    },
+    async touchWidgetSession() {},
+    async appendMessage() {},
+    async loadHistory() {
+      return [];
+    },
+    async touchConversation() {},
+  };
+  const toolExecutor = {
+    async executeTool(toolName) {
+      executedTools.push(toolName);
+      return { toolName, status: 'success', message: 'ok' };
+    },
+  };
+  const makePipeline = (decision) => new ChatPipelineService(
+    db,
+    {},
+    {},
+    {},
+    {},
+    {
+      async decide() {
+        return {
+          action: 'normal_answer',
+          handled: true,
+          answer: 'Antwort',
+          decision,
+        };
+      },
+    },
+    conversationState,
+    new ResponseComposerService(),
+    toolExecutor,
+    { async assertWithinLimit() {} },
+    {
+      async embedAuthorizedQuery() {
+        return normalizeRuntimeQueryEmbeddingResult();
+      },
+    },
+  );
+
+  await makePipeline({
+    type: 'capture_lead',
+    confidence: 0.9,
+    reason: 'complete',
+    message: 'ok',
+    metadata: { agentRunId: 'run-1' },
+    suggestedTools: ['capture_lead'],
+    requiredFields: [],
+    collectedFields: { email: 'max@example.de', concern: 'KI' },
+    nextAction: 'prepare_lead_capture',
+  }).process({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    conversationId: 'conversation-1',
+    sessionId: 'session-1',
+    source: 'widget',
+    message: 'Hallo',
+  });
+
+  await makePipeline({
+    type: 'capture_lead',
+    confidence: 0.7,
+    reason: 'missing',
+    message: 'missing',
+    metadata: { agentRunId: 'run-2' },
+    suggestedTools: ['capture_lead'],
+    requiredFields: ['email', 'phone'],
+    collectedFields: { concern: 'KI' },
+    nextAction: 'ask_for_contact_details',
+  }).process({
+    tenantId: 'tenant-1',
+    siteId: 'site-1',
+    conversationId: 'conversation-1',
+    sessionId: 'session-1',
+    source: 'widget',
+    message: 'Hallo',
+  });
+
+  assert.deepEqual(executedTools, ['capture_lead']);
+});

@@ -1,0 +1,369 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { MaintenanceWork } from '../../../maintenance/maintenance-runtime';
+import { resolveSiteKey } from '../../../sites/site-key';
+import { PrismaService } from '../../../db/prisma.service';
+import { sanitizeDeliveryConfigForAdminRead } from '../../../chat/notification-safety.guard';
+
+type SiteConfig = {
+  domain?: string;
+  websiteUrl?: string;
+  brandColor?: string;
+  accentColor?: string;
+  fontFamily?: string;
+  welcomeMessage?: string;
+  privacyUrl?: string;
+  isActive?: boolean;
+  companyName?: string;
+  botName?: string;
+  logoUrl?: string;
+  widgetBundleUrl?: string;
+  consentRequired?: boolean;
+  leadCaptureEnabled?: boolean;
+  leadNotificationEmail?: string;
+  suggestedQuestionsByPath?: Record<string, string[]>;
+  conversationFlow?: Record<string, unknown>;
+  systemPrompt?: string;
+  industry?: string;
+  setupGoal?: string;
+  primaryGoal?: string;
+  botType?: string;
+  tone?: string;
+  knowledgeMode?: 'flexible' | 'grounded' | 'strict';
+  fallbackBehavior?: string;
+  assistantProfile?: Record<string, unknown>;
+  enabledTasks?: string[];
+  conversationEngine?: Record<string, unknown>;
+  ctaText?: string;
+  supportEmail?: string;
+  phone?: string;
+  language?: 'de' | 'en';
+  placeholderText?: string;
+  widgetPosition?: 'bottom_right' | 'bottom_left';
+  launcherLabel?: string;
+  privacyNoticeText?: string;
+  templateId?: string;
+  templateVersion?: number;
+  templateAppliedAt?: string;
+  templateAppliedBy?: string;
+  templateApplyMode?: string;
+  reportKpis?: string[];
+  topTestQuestions?: string[];
+  lastTestQuestion?: string;
+  lastTestAnswer?: string;
+  lastTestFeedback?: string;
+  lastTestedAt?: string;
+  goLiveAt?: string;
+  chatRetentionDays?: number;
+  leadRetentionDays?: number;
+  reportRetentionDays?: number;
+};
+
+type SiteRow = {
+  id: string;
+  site_key: string;
+  tenant_id: string;
+  name: string;
+  public_key: string;
+  allowed_domains: string[] | null;
+  config: unknown;
+  assistant_profile_module_config: unknown;
+  created_at: string;
+};
+
+function parseSiteConfig(value: unknown): SiteConfig {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as SiteConfig;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function sanitizeAssistantProfileForAdminRead(value: unknown) {
+  const profile = asRecord(value);
+  if (!profile) {
+    return null;
+  }
+
+  return sanitizeDeliveryConfigForAdminRead(profile);
+}
+
+function readAssistantProfileFromModule(value: unknown) {
+  const config = parseSiteConfig(value);
+  return sanitizeAssistantProfileForAdminRead(config.assistantProfile);
+}
+
+@Injectable()
+export class WidgetAdminSiteService {
+  constructor(private readonly db: PrismaService) {}
+
+  private async assertUniqueSiteKey(siteKey: string, excludeId?: string) {
+    const values = [siteKey];
+    let query = `
+      SELECT id
+      FROM sites
+      WHERE site_key = $1
+    `;
+
+    if (excludeId) {
+      values.push(excludeId);
+      query += ` AND id <> $2`;
+    }
+
+    query += ` LIMIT 1`;
+
+    const existing = await this.db.query<{ id: string }>(query, values);
+    if (existing.rows[0]) {
+      throw new BadRequestException('siteKey already exists');
+    }
+  }
+
+  async getSite(siteId: string) {
+    const res = await this.db.query<SiteRow>(
+      `SELECT
+         s.id,
+         s.site_key,
+         s.tenant_id,
+         s.name,
+         s.public_key,
+         s.allowed_domains,
+         s.config,
+         sm.config AS assistant_profile_module_config,
+         s.created_at
+       FROM sites s
+       LEFT JOIN site_modules sm
+         ON sm.site_id = s.id
+        AND sm.module_key = 'assistant-profile'
+       WHERE s.id = $1
+       LIMIT 1`,
+      [siteId],
+    );
+
+    const row = res.rows[0];
+    if (!row) {
+      throw new NotFoundException('Site not found');
+    }
+
+    const config = parseSiteConfig(row.config);
+    const moduleAssistantProfile = readAssistantProfileFromModule(row.assistant_profile_module_config);
+    return {
+      id: row.id,
+      tenantId: row.tenant_id,
+      name: row.name,
+      siteKey: row.site_key,
+      publicKey: row.public_key,
+      allowedDomains: row.allowed_domains || [],
+      domain: config.domain || row.allowed_domains?.[0] || '',
+      websiteUrl: config.websiteUrl || config.domain || row.allowed_domains?.[0] || '',
+      brandColor: config.brandColor || '#b55400',
+      accentColor: config.accentColor || '#fff0d9',
+      fontFamily: config.fontFamily || 'system',
+      welcomeMessage: config.welcomeMessage || 'Hi! Wie kann ich helfen?',
+      privacyUrl: config.privacyUrl || '',
+      isActive: config.isActive ?? true,
+      companyName: config.companyName || row.name,
+      botName: config.botName || 'Service-Assistent',
+      logoUrl: config.logoUrl || '',
+      widgetBundleUrl: config.widgetBundleUrl || process.env.PUBLIC_WIDGET_BUNDLE_URL || '',
+      consentRequired: config.consentRequired ?? true,
+      leadCaptureEnabled: config.leadCaptureEnabled ?? true,
+      leadNotificationEmail: config.leadNotificationEmail || '',
+      suggestedQuestionsByPath: config.suggestedQuestionsByPath || {},
+      conversationFlow: config.conversationFlow || {},
+      systemPrompt: config.systemPrompt || '',
+      industry: config.industry || '',
+      setupGoal: config.setupGoal || '',
+      primaryGoal: config.primaryGoal || config.setupGoal || '',
+      botType: config.botType || '',
+      tone: config.tone || '',
+      knowledgeMode: config.knowledgeMode || 'flexible',
+      fallbackBehavior: config.fallbackBehavior || 'ask_followup',
+      assistantProfile: moduleAssistantProfile || sanitizeAssistantProfileForAdminRead(config.assistantProfile),
+      enabledTasks: Array.isArray(config.enabledTasks) ? config.enabledTasks : [],
+      conversationEngine: config.conversationEngine || null,
+      ctaText: config.ctaText || '',
+      supportEmail: config.supportEmail || '',
+      phone: config.phone || '',
+      language: config.language || 'de',
+      placeholderText: config.placeholderText || 'Nachricht schreiben...',
+      widgetPosition: config.widgetPosition || 'bottom_right',
+      launcherLabel: config.launcherLabel || 'Chat',
+      privacyNoticeText: config.privacyNoticeText || '',
+      templateId: config.templateId || '',
+      templateVersion: config.templateVersion || null,
+      templateAppliedAt: config.templateAppliedAt || '',
+      templateAppliedBy: config.templateAppliedBy || '',
+      templateApplyMode: config.templateApplyMode || '',
+      reportKpis: Array.isArray(config.reportKpis) ? config.reportKpis : [],
+      topTestQuestions: Array.isArray(config.topTestQuestions) ? config.topTestQuestions : [],
+      lastTestQuestion: config.lastTestQuestion || '',
+      lastTestAnswer: config.lastTestAnswer || '',
+      lastTestFeedback: config.lastTestFeedback || '',
+      lastTestedAt: config.lastTestedAt || '',
+      goLiveAt: config.goLiveAt || '',
+      chatRetentionDays: Number(config.chatRetentionDays || 90),
+      leadRetentionDays: Number(config.leadRetentionDays || 365),
+      reportRetentionDays: Number(config.reportRetentionDays || 365),
+      createdAt: row.created_at,
+    };
+  }
+
+  @MaintenanceWork('configuration')
+  async updateBranding(
+    siteId: string,
+    payload: {
+      companyName?: string;
+      botName?: string;
+      logoUrl?: string;
+      brandColor?: string;
+      accentColor?: string;
+      fontFamily?: string;
+      welcomeMessage?: string;
+      privacyUrl?: string;
+    },
+  ) {
+    const site = await this.getSite(siteId);
+    const nextConfig = {
+      companyName: payload.companyName ?? site.companyName,
+      botName: payload.botName ?? site.botName,
+      logoUrl: payload.logoUrl ?? site.logoUrl,
+      brandColor: payload.brandColor ?? site.brandColor,
+      accentColor: payload.accentColor ?? site.accentColor,
+      fontFamily: payload.fontFamily ?? site.fontFamily,
+      welcomeMessage: payload.welcomeMessage ?? site.welcomeMessage,
+      privacyUrl: payload.privacyUrl ?? site.privacyUrl,
+    };
+
+    await this.db.query(
+      `UPDATE sites
+       SET config = (config - 'siteKey') || $2::jsonb
+       WHERE id = $1`,
+      [siteId, JSON.stringify(nextConfig)],
+    );
+
+    return this.getSite(siteId);
+  }
+
+  @MaintenanceWork('configuration')
+  async updateWidgetConfig(
+    siteId: string,
+    payload: {
+      siteKey?: string;
+      domain?: string;
+      websiteUrl?: string;
+      isActive?: boolean;
+      widgetBundleUrl?: string;
+      consentRequired?: boolean;
+      leadCaptureEnabled?: boolean;
+      leadNotificationEmail?: string;
+      suggestedQuestionsByPath?: Record<string, string[]>;
+      conversationFlow?: Record<string, unknown>;
+      systemPrompt?: string;
+      industry?: string;
+      setupGoal?: string;
+      primaryGoal?: string;
+      botType?: string;
+      tone?: string;
+      knowledgeMode?: 'flexible' | 'grounded' | 'strict';
+      fallbackBehavior?: string;
+      assistantProfile?: Record<string, unknown>;
+      enabledTasks?: string[];
+      conversationEngine?: Record<string, unknown>;
+      ctaText?: string;
+      supportEmail?: string;
+      phone?: string;
+      language?: 'de' | 'en';
+      placeholderText?: string;
+      widgetPosition?: 'bottom_right' | 'bottom_left';
+      launcherLabel?: string;
+      privacyNoticeText?: string;
+      templateId?: string;
+      templateVersion?: number;
+      templateAppliedAt?: string;
+      templateAppliedBy?: string;
+      templateApplyMode?: string;
+      reportKpis?: string[];
+      topTestQuestions?: string[];
+      lastTestQuestion?: string;
+      lastTestAnswer?: string;
+      lastTestFeedback?: string;
+      lastTestedAt?: string;
+      goLiveAt?: string;
+      chatRetentionDays?: number;
+      leadRetentionDays?: number;
+      reportRetentionDays?: number;
+      allowedDomains?: string[];
+    },
+  ) {
+    const site = await this.getSite(siteId);
+    const nextSiteKey = resolveSiteKey(payload.siteKey, site.siteKey) || site.siteKey;
+    await this.assertUniqueSiteKey(nextSiteKey, siteId);
+    const allowedDomains =
+      payload.allowedDomains && payload.allowedDomains.length > 0
+        ? payload.allowedDomains
+        : payload.domain
+          ? [payload.domain]
+          : site.allowedDomains;
+
+    const nextConfig = {
+      domain: payload.domain ?? site.domain,
+      websiteUrl: payload.websiteUrl ?? site.websiteUrl,
+      isActive: payload.isActive ?? site.isActive,
+      widgetBundleUrl: payload.widgetBundleUrl ?? site.widgetBundleUrl,
+      consentRequired: payload.consentRequired ?? site.consentRequired,
+      leadCaptureEnabled: payload.leadCaptureEnabled ?? site.leadCaptureEnabled,
+      leadNotificationEmail: payload.leadNotificationEmail ?? site.leadNotificationEmail,
+      suggestedQuestionsByPath:
+        payload.suggestedQuestionsByPath ?? site.suggestedQuestionsByPath,
+      conversationFlow: payload.conversationFlow ?? site.conversationFlow,
+      systemPrompt: payload.systemPrompt ?? site.systemPrompt,
+      industry: payload.industry ?? site.industry,
+      setupGoal: payload.setupGoal ?? site.setupGoal,
+      primaryGoal: payload.primaryGoal ?? site.primaryGoal,
+      botType: payload.botType ?? site.botType,
+      tone: payload.tone ?? site.tone,
+      knowledgeMode: payload.knowledgeMode ?? site.knowledgeMode,
+      fallbackBehavior: payload.fallbackBehavior ?? site.fallbackBehavior,
+      assistantProfile: payload.assistantProfile ?? site.assistantProfile,
+      enabledTasks: payload.enabledTasks ?? site.enabledTasks,
+      conversationEngine: payload.conversationEngine ?? site.conversationEngine,
+      ctaText: payload.ctaText ?? site.ctaText,
+      supportEmail: payload.supportEmail ?? site.supportEmail,
+      phone: payload.phone ?? site.phone,
+      language: payload.language ?? site.language,
+      placeholderText: payload.placeholderText ?? site.placeholderText,
+      widgetPosition: payload.widgetPosition ?? site.widgetPosition,
+      launcherLabel: payload.launcherLabel ?? site.launcherLabel,
+      privacyNoticeText: payload.privacyNoticeText ?? site.privacyNoticeText,
+      templateId: payload.templateId ?? site.templateId,
+      templateVersion: payload.templateVersion ?? site.templateVersion,
+      templateAppliedAt: payload.templateAppliedAt ?? site.templateAppliedAt,
+      templateAppliedBy: payload.templateAppliedBy ?? site.templateAppliedBy,
+      templateApplyMode: payload.templateApplyMode ?? site.templateApplyMode,
+      reportKpis: payload.reportKpis ?? site.reportKpis,
+      topTestQuestions: payload.topTestQuestions ?? site.topTestQuestions,
+      lastTestQuestion: payload.lastTestQuestion ?? site.lastTestQuestion,
+      lastTestAnswer: payload.lastTestAnswer ?? site.lastTestAnswer,
+      lastTestFeedback: payload.lastTestFeedback ?? site.lastTestFeedback,
+      lastTestedAt: payload.lastTestedAt ?? site.lastTestedAt,
+      goLiveAt: payload.goLiveAt ?? site.goLiveAt,
+      chatRetentionDays: payload.chatRetentionDays ?? site.chatRetentionDays,
+      leadRetentionDays: payload.leadRetentionDays ?? site.leadRetentionDays,
+      reportRetentionDays: payload.reportRetentionDays ?? site.reportRetentionDays,
+    };
+
+    await this.db.query(
+      `UPDATE sites
+       SET site_key = $2,
+           allowed_domains = $3,
+           config = (config - 'siteKey') || $4::jsonb
+       WHERE id = $1`,
+      [siteId, nextSiteKey, allowedDomains, JSON.stringify(nextConfig)],
+    );
+
+    return this.getSite(siteId);
+  }
+}

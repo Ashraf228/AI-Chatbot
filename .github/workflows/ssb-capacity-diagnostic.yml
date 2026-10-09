@@ -1,0 +1,90 @@
+name: SSB capacity diagnosis only
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_ref:
+        description: Full 40-character reviewed commit containing the bound capacity payload
+        type: string
+        required: true
+      approval:
+        description: Enter CAPACITY_ONLY_ONCE after the separate execution decision
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ssb-native-capacity-only
+  cancel-in-progress: false
+
+jobs:
+  capacity:
+    if: >-
+      github.repository == 'Ashraf228/AI-Chatbot' &&
+      github.event.repository.private == false &&
+      github.run_attempt == 1 &&
+      inputs.approval == 'CAPACITY_ONLY_ONCE'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Validate diagnostic-only dispatch
+        env:
+          BUNDLE_REF: ${{ inputs.bundle_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, time
+          assert re.fullmatch(r'[0-9a-f]{40}', os.environ['BUNDLE_REF'])
+          assert os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
+          assert os.environ.get('RUNNER_ARCH') == 'X64'
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write('CAPACITY_STARTED_BOOTTIME=' + str(time.clock_gettime(time.CLOCK_BOOTTIME)) + '\n')
+          print('CAPACITY_DIAGNOSIS_ONLY_NO_ARTIFACTS')
+          PY
+
+      - name: Read exact prepared payload
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.bundle_ref }}
+          path: capacity-checkout
+          sparse-checkout: .github/ssb-capacity-diagnostic
+          fetch-depth: 1
+          persist-credentials: false
+          submodules: false
+          lfs: false
+
+      - name: Verify bound payload before any Docker command
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('capacity-checkout/.github/ssb-capacity-diagnostic')
+          raw = (root/'payload-manifest.json').read_bytes()
+          expected = '4eb161c5428e7853db28298e1e33424c77ddc1cc3305c55d35f9877459b8338e'
+          assert hashlib.sha256(raw).hexdigest() == expected
+          rows = json.loads(raw)['files']
+          names = set()
+          for r in rows:
+              name = r['path']; p = root/name
+              assert not pathlib.PurePosixPath(name).is_absolute() and '..' not in pathlib.PurePosixPath(name).parts
+              assert name not in names and p.is_file() and not any(v.is_symlink() for v in [p, *p.parents])
+              names.add(name); b = p.read_bytes()
+              assert len(b) == r['bytes'] and hashlib.sha256(b).hexdigest() == r['sha256']
+              assert bool(p.stat().st_mode & 0o111) == (r['gitMode'] == '100755')
+          assert {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file() or p.is_symlink()} == names | {'payload-manifest.json'}
+          print('BOUND_PAYLOAD_VERIFIED')
+          PY
+
+      - name: Measure current builds and synthetic storage only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 capacity-checkout/.github/ssb-capacity-diagnostic/measure.py

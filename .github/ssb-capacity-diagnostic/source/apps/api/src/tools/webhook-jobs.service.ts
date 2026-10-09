@@ -1,0 +1,390 @@
+import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { Cron } from '@nestjs/schedule';
+import { MaintenanceWork, maintenanceWork, maintenanceFetch, observeWorkerKickoff } from '../maintenance/maintenance-runtime';
+import { MaintenanceDenied } from '../maintenance/maintenance-state';
+import { PrismaService } from '../db/prisma.service';
+import { validatePublicIntegrationUrl } from '../integrations/integration-security';
+import { IntegrationSecretsService } from '../integrations/integration-secrets.service';
+import type { WebhookSigningMode } from '../integrations/integrations.service';
+import {
+  buildWebhookHeaders,
+  createWebhookDeliveryId,
+  decodeWebhookSecretB64,
+  serializeWebhookJson,
+} from '../webhooks/webhook-hmac';
+
+type WebhookJobRow = {
+  id: string;
+  tenant_id?: string | null;
+  site_id?: string;
+  agent_run_id?: string | null;
+  provider_key: string;
+  connection_key: string;
+  endpoint_url: string;
+  method: string;
+  headers: Record<string, string>;
+  payload: Record<string, unknown>;
+  payload_body?: string | null;
+  signing_mode?: WebhookSigningMode | string | null;
+  event_id?: string | null;
+  last_delivery_id?: string | null;
+  signing_secret?: Record<string, unknown> | null;
+  signing_secret_encrypted?: boolean | null;
+  retry_count: number;
+  max_attempts: number;
+  status?: string;
+  last_error?: string | null;
+  last_response_status?: number | null;
+  last_response_body?: string | null;
+  created_at?: string;
+  completed_at?: string | null;
+};
+
+function clipText(value: string | null | undefined, maxLength = 4000) {
+  if (!value) {
+    return null;
+  }
+
+  return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value;
+}
+
+@Injectable()
+export class WebhookJobsService {
+  private isProcessing = false;
+
+  constructor(
+    private readonly db: PrismaService,
+    private readonly secretCrypto: IntegrationSecretsService,
+  ) {}
+
+  async enqueue(input: {
+    tenantId: string;
+    siteId: string;
+    agentRunId: string;
+    providerKey: string;
+    connectionKey: string;
+    endpointUrl: string;
+    payload: Record<string, unknown>;
+    headers?: Record<string, string>;
+    signingMode?: WebhookSigningMode;
+    signingSecret?: string;
+    maxAttempts?: number;
+    method?: string;
+  }) {
+    const id = randomUUID();
+    const endpointUrl = await validatePublicIntegrationUrl(input.endpointUrl);
+    const method = normalizeWebhookMethod(input.method);
+    const signingMode = input.signingMode || 'legacy_secret_header';
+    const payloadBody = serializeWebhookJson(input.payload || {}).toString('utf8');
+    const protectedSigningSecret = protectSigningSecret(this.secretCrypto, input.signingSecret || '');
+
+    await this.db.query(
+      `INSERT INTO webhook_jobs(
+         id,
+         tenant_id,
+         site_id,
+         agent_run_id,
+         provider_key,
+         connection_key,
+         endpoint_url,
+         method,
+         headers,
+         payload,
+         signing_mode,
+         event_id,
+         payload_body,
+         signing_secret,
+         signing_secret_encrypted,
+         status,
+         retry_count,
+         max_attempts,
+         available_at,
+         locked_at,
+         completed_at,
+         last_error,
+         last_response_status,
+         last_response_body,
+         created_at,
+         updated_at
+       ) VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14::jsonb, $15, 'queued', 0, $16,
+         now(), null, null, null, null, null, now(), now()
+       )`,
+      [
+        id,
+        input.tenantId || null,
+        input.siteId,
+        input.agentRunId,
+        input.providerKey,
+        input.connectionKey,
+        endpointUrl,
+        method,
+        JSON.stringify(input.headers || {}),
+        payloadBody,
+        signingMode,
+        `evt_${id}`,
+        payloadBody,
+        JSON.stringify(protectedSigningSecret.value),
+        protectedSigningSecret.encrypted,
+        input.maxAttempts ?? 5,
+      ],
+    );
+
+    observeWorkerKickoff(this.processPendingJobs());
+
+    return { id, queued: true };
+  }
+
+  async retry(jobId: string) {
+    const res = await this.db.query<WebhookJobRow>(
+      `UPDATE webhook_jobs
+       SET status = 'queued',
+           retry_count = 0,
+           available_at = now(),
+           locked_at = null,
+           completed_at = null,
+           last_error = null,
+           last_response_status = null,
+           last_response_body = null,
+           updated_at = now()
+       WHERE id = $1
+         AND status = 'failed'
+       RETURNING
+         id,
+         tenant_id,
+         site_id,
+         agent_run_id,
+         provider_key,
+         connection_key,
+         endpoint_url,
+         method,
+         headers,
+         payload,
+         payload_body,
+         signing_mode,
+         event_id,
+         last_delivery_id,
+         signing_secret,
+         signing_secret_encrypted,
+         retry_count,
+         max_attempts,
+         status,
+         last_error,
+         last_response_status,
+         last_response_body,
+         created_at,
+         completed_at`,
+      [jobId],
+    );
+
+    const row = res.rows[0];
+    if (!row) {
+      return null;
+    }
+
+    observeWorkerKickoff(this.processPendingJobs());
+
+    return {
+      id: row.id,
+      tenantId: row.tenant_id || null,
+      siteId: row.site_id || '',
+      agentRunId: row.agent_run_id || null,
+      providerKey: row.provider_key,
+      connectionKey: row.connection_key,
+      status: row.status || 'queued',
+      retryCount: Number(row.retry_count || 0),
+      maxAttempts: Number(row.max_attempts || 0),
+      lastError: row.last_error || null,
+      lastResponseStatus: row.last_response_status ?? null,
+      lastResponseBody: row.last_response_body || null,
+      createdAt: row.created_at || null,
+      completedAt: row.completed_at || null,
+    };
+  }
+
+  @Cron('*/30 * * * * *')
+  @MaintenanceWork('worker')
+  async processPendingJobs() {
+    if (this.isProcessing) {
+      return;
+    }
+
+    this.isProcessing = true;
+
+    try {
+      while (true) {
+        try {
+          const processed = await maintenanceWork('job', async () => {
+            const job = await this.pickNextJob();
+            if (!job) return false;
+            await this.processJob(job);
+            return true;
+          });
+          if (!processed) break;
+        } catch (error) {
+          if (error instanceof MaintenanceDenied && error.code === 'admission_closed') break;
+          throw error;
+        }
+      }
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  private async pickNextJob() {
+    const res = await this.db.query<WebhookJobRow>(
+      `WITH next_job AS (
+         SELECT id
+         FROM webhook_jobs
+         WHERE status = 'queued'
+           AND available_at <= now()
+         ORDER BY available_at ASC, created_at ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE webhook_jobs wj
+       SET status = 'processing',
+           locked_at = now(),
+           updated_at = now()
+       FROM next_job
+       WHERE wj.id = next_job.id
+       RETURNING
+         wj.id,
+         wj.provider_key,
+         wj.connection_key,
+         wj.endpoint_url,
+         wj.method,
+         wj.headers,
+         wj.payload,
+         wj.payload_body,
+         wj.signing_mode,
+         wj.event_id,
+         wj.last_delivery_id,
+         wj.signing_secret,
+         wj.signing_secret_encrypted,
+         wj.retry_count,
+         wj.max_attempts`,
+    );
+
+    return res.rows[0];
+  }
+
+  private async processJob(job: WebhookJobRow) {
+    try {
+      const body = Buffer.from(job.payload_body || JSON.stringify(job.payload || {}), 'utf8');
+      const signingMode = job.signing_mode === 'hmac_sha256' ? 'hmac_sha256' : 'legacy_secret_header';
+      const deliveryId = createWebhookDeliveryId();
+      const headers = { ...(job.headers || {}) };
+      if (signingMode === 'hmac_sha256') {
+        const secretRecord = this.secretCrypto.decryptRecord(
+          job.signing_secret || {},
+          Boolean(job.signing_secret_encrypted),
+        );
+        const secret = decodeWebhookSecretB64(
+          typeof secretRecord.signingSecret === 'string' ? secretRecord.signingSecret : '',
+        );
+        if (!secret) {
+          await this.markJobFailure(job, 'Webhook HMAC signing secret missing or invalid', null, null, deliveryId);
+          return;
+        }
+        Object.assign(headers, buildWebhookHeaders({
+          secret,
+          eventId: job.event_id || `evt_${job.id}`,
+          deliveryId,
+          eventType: typeof job.payload?.eventType === 'string' ? job.payload.eventType : 'webhook.event',
+          timestamp: new Date().toISOString(),
+          body,
+        }));
+        delete headers['x-webhook-secret'];
+      }
+      const response = await maintenanceFetch(job.endpoint_url, {
+        method: job.method || 'POST',
+        headers,
+        body,
+        redirect: 'manual',
+        signal: AbortSignal.timeout(10000),
+      });
+      const responseBody = clipText(await response.text());
+
+      if (!response.ok) {
+        await this.markJobFailure(job, `Webhook returned ${response.status}`, response.status, responseBody, deliveryId);
+        return;
+      }
+
+      await this.db.query(
+        `UPDATE webhook_jobs
+         SET status = 'sent',
+             completed_at = now(),
+             locked_at = null,
+             last_delivery_id = $4,
+             last_error = null,
+             last_response_status = $2,
+             last_response_body = $3,
+             updated_at = now()
+         WHERE id = $1`,
+        [job.id, response.status, responseBody, deliveryId],
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown webhook error';
+      await this.markJobFailure(job, message, null, null);
+    }
+  }
+
+  private async markJobFailure(
+    job: WebhookJobRow,
+    message: string,
+    responseStatus: number | null,
+    responseBody: string | null,
+    deliveryId?: string | null,
+  ) {
+    const nextRetryCount = Number(job.retry_count || 0) + 1;
+    const exhausted = nextRetryCount >= Number(job.max_attempts || 5);
+
+    await this.db.query(
+      `UPDATE webhook_jobs
+       SET status = $2,
+           retry_count = $3,
+           available_at = CASE
+             WHEN $2 = 'queued' THEN now() + ($4 * interval '1 minute')
+             ELSE available_at
+           END,
+           locked_at = null,
+           completed_at = CASE WHEN $2 = 'failed' THEN now() ELSE completed_at END,
+           last_delivery_id = COALESCE($8, last_delivery_id),
+           last_error = $5,
+           last_response_status = $6,
+           last_response_body = $7,
+           updated_at = now()
+       WHERE id = $1`,
+      [
+        job.id,
+        exhausted ? 'failed' : 'queued',
+        nextRetryCount,
+        Math.min(nextRetryCount * 2, 30),
+        message,
+        responseStatus,
+        responseBody,
+        deliveryId || null,
+      ],
+    );
+  }
+}
+
+function normalizeWebhookMethod(method: string | undefined) {
+  const next = (method || 'POST').toUpperCase();
+  return ['POST', 'PUT', 'PATCH'].includes(next) ? next : 'POST';
+}
+
+function protectSigningSecret(secretCrypto: IntegrationSecretsService, secret: string) {
+  if (!secret) {
+    return { value: {}, encrypted: false };
+  }
+  if (secretCrypto.isConfigured()) {
+    return {
+      value: secretCrypto.encryptRecord({ signingSecret: secret }),
+      encrypted: true,
+    };
+  }
+  return { value: { signingSecret: secret }, encrypted: false };
+}

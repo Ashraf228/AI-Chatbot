@@ -9,6 +9,18 @@ const {
 const { LlmService } = require('../dist/vector/llm.service.js');
 
 const FIXTURE_NOW = '2026-09-13T12:00:00.000Z';
+const NativeDate = Date;
+const fixtureTime = (offsetMs) => new NativeDate(NativeDate.parse(FIXTURE_NOW) + offsetMs).toISOString();
+
+// Freeze Date only: SDK deadlines still use real timers; node:test isolates files.
+test.beforeEach((t) => {
+  assert.equal(globalThis.Date, NativeDate, 'the preceding test must restore Date');
+  t.mock.timers.enable({ apis: ['Date'], now: NativeDate.parse(FIXTURE_NOW) });
+  t.after(() => {
+    t.mock.timers.reset();
+    assert.equal(globalThis.Date, NativeDate);
+  });
+});
 
 function grantRow(overrides = {}) {
   return {
@@ -36,8 +48,8 @@ function grantRow(overrides = {}) {
     reindex_policy: null,
     rate_limit: 'synthetic-rate-limit',
     cost_limit: 'synthetic-cost-limit',
-    valid_from: '2026-09-01T00:00:00.000Z',
-    expires_at: '2026-10-01T00:00:00.000Z',
+    valid_from: fixtureTime(-60_000),
+    expires_at: fixtureTime(60_000),
     revoked_at: null,
     approved_by: 'synthetic-security-owner',
     approval_evidence_ref: 'synthetic-evidence-ref',
@@ -217,6 +229,7 @@ test('LLM site-runtime lookup is exact, parameterized, site-owned, and purpose-s
   assert.match(sql, /LIMIT 2/i);
   assert.equal(sql.includes(input.tenantId), false);
   assert.equal(params[0], input.tenantId);
+  assert.equal(params[5], FIXTURE_NOW);
   assert.equal(params[6], 'llm_generation');
   assert.equal(params[7], '["llm_generation"]');
 });
@@ -244,6 +257,7 @@ test('LlmService authorizes one exact normal attempt before calling the provider
     assert.equal(calls.lookup.length, 1);
     assert.equal(calls.lookup[0].params[0], 'tenant-1');
     assert.equal(calls.lookup[0].params[1], 'site-1');
+    assert.equal(calls.lookup[0].params[5], FIXTURE_NOW);
     assert.equal(calls.lookup[0].params[6], 'llm_generation');
     assert.equal(calls.provider.length, 1);
     assert.equal(calls.provider[0].model, 'gpt-4.1-mini');
@@ -290,8 +304,8 @@ test('LlmService denies missing, mismatched, invalid, expired, and revoked grant
     { name: 'wrong site', options: { rows: [grantRow({ site_id: 'site-2' })] } },
     { name: 'wrong provider', options: { rows: [grantRow({ provider_key: 'other-provider' })] } },
     { name: 'wrong model', options: { rows: [grantRow({ model: 'other-model' })] } },
-    { name: 'expired', options: { rows: [grantRow({ expires_at: '2026-01-01T00:00:00.000Z' })] } },
-    { name: 'revoked', options: { rows: [grantRow({ revoked_at: '2026-09-10T00:00:00.000Z' })] } },
+    { name: 'expired', options: { rows: [grantRow({ expires_at: fixtureTime(-1) })] } },
+    { name: 'revoked', options: { rows: [grantRow({ revoked_at: fixtureTime(-1) })] } },
     { name: 'lookup failure', options: { lookupError: new Error('database password=secret') } },
   ];
 
@@ -305,6 +319,45 @@ test('LlmService denies missing, mismatched, invalid, expired, and revoked grant
     }
   });
 });
+
+for (const mode of ['normal', 'stream']) {
+  test(`LLM ${mode} enforces inclusive valid-from and exclusive expiry on the controlled clock`, async (t) => {
+    await withRuntimeEnv(async () => {
+      const { service, calls } = createRuntime({ rows: [grantRow({
+        valid_from: fixtureTime(0), expires_at: fixtureTime(1000),
+      })] });
+      const invoke = () => mode === 'normal'
+        ? service.answer('system', 'user', { tenantId: 'tenant-1', siteId: 'site-1' })
+        : service.streamAnswer('system', 'user', () => {}, { tenantId: 'tenant-1', siteId: 'site-1' });
+      for (const [offset, allowed] of [[-1, false], [0, true], [999, true], [1000, false]]) {
+        t.mock.timers.setTime(NativeDate.parse(fixtureTime(offset)));
+        const before = calls.provider.length;
+        if (allowed) assert.equal((await invoke()).text, 'Sicher beantwortet');
+        else await expectSafeDenial(invoke());
+        assert.equal(calls.provider.length - before, allowed ? 1 : 0, `offset ${offset}`);
+        assert.equal(calls.lookup.at(-1).params[5], fixtureTime(offset));
+      }
+      assert.equal(calls.lookup.length, 4, 'every caller attempt gets a fresh query');
+    });
+  });
+
+  test(`LLM ${mode} rechecks expiry after the database returns and before the provider attempt`, async (t) => {
+    await withRuntimeEnv(async () => {
+      const { service, calls } = createRuntime({ rows: () => {
+        t.mock.timers.setTime(NativeDate.parse(fixtureTime(1000)));
+        return [grantRow({ valid_from: fixtureTime(0), expires_at: fixtureTime(1000) })];
+      } });
+      const attempt = mode === 'normal'
+        ? service.answer('system', 'user', { tenantId: 'tenant-1', siteId: 'site-1' })
+        : service.streamAnswer('system', 'user', () => assert.fail('expired stream emitted'),
+          { tenantId: 'tenant-1', siteId: 'site-1' });
+      await expectSafeDenial(attempt);
+      assert.equal(calls.lookup.length, 1);
+      assert.equal(calls.lookup[0].params[5], FIXTURE_NOW, 'SQL used the still-valid timestamp');
+      assert.equal(calls.provider.length, 0, 'policy must re-evaluate at expiry');
+    });
+  });
+}
 
 test('LlmService binds production approval to the resolved deployment environment', async () => {
   await withRuntimeEnv(async () => {
@@ -424,7 +477,7 @@ test('the actual SDK performs one normal HTTP attempt and a revoked caller retry
     const { service, calls } = createSdkRuntime({
       rows: (lookupCount) => lookupCount === 1
         ? [grantRow()]
-        : [grantRow({ revoked_at: '2026-09-13T12:00:00.000Z' })],
+        : [grantRow({ revoked_at: fixtureTime(0) })],
     });
     const requests = [];
 
@@ -453,7 +506,7 @@ test('the actual SDK performs one streaming HTTP attempt and an expired caller r
     const { service, calls } = createSdkRuntime({
       rows: (lookupCount) => lookupCount === 1
         ? [grantRow()]
-        : [grantRow({ expires_at: '2026-09-13T11:59:59.000Z' })],
+        : [grantRow({ expires_at: fixtureTime(-1) })],
     });
     const requests = [];
 

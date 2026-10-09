@@ -1,0 +1,1142 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { type IndustryTemplate, templatesByKey } from "../../lib/industry-templates";
+import {
+  createManualKnowledgeSource,
+  deleteKnowledgeSource,
+  getKnowledgeSources,
+  getSite,
+  importUrlKnowledgeSource,
+  resyncKnowledgeSource,
+  crawlWebsiteSource,
+  setKnowledgeSourceActive,
+  setSiteGoLive,
+  updateAssistantProfileConfig,
+  updateSiteBasics,
+  updateSiteBranding,
+  updateSiteSettings,
+  uploadKnowledgePdf,
+} from "../../lib/setup-wizard-api";
+import { encodeSiteId } from "../../lib/site-id";
+import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
+import { useCustomerWorkspaceAccess } from "../../lib/use-customer-workspace-access";
+import { ErrorState } from "../shared/ErrorState";
+import { LoadingState } from "../shared/LoadingState";
+import { CustomerStatusBadge } from "./CustomerStatusBadge";
+import {
+  mapOverallStatusToTone,
+  mapStatusSeverityToTone,
+  type CustomerApiStatus,
+  type CustomerOverallStatus,
+} from "./customer-status";
+import {
+  DEFAULT_BOT_TYPE,
+  DEFAULT_ENABLED_TASKS,
+  DEFAULT_PRIMARY_GOAL,
+  DEFAULT_REQUIRED_FIELDS,
+  DEFAULT_TONE,
+  REQUIRED_FIELD_OPTIONS,
+  CustomerDataStep,
+  ConversationFlowStep,
+  DesignPrivacyStep,
+  KnowledgeStep,
+  LaunchStep,
+  LeadDeliveryStep,
+  STATUS_STEP_GROUPS,
+  STEP_EXPLANATIONS,
+  UseCaseStep,
+  WIZARD_STEPS,
+  SetupWizardActions,
+  SetupWizardShell,
+  SetupWizardSidebar,
+  createEmbedCode,
+  domainFromUrl,
+  isValidEmail,
+  normalizeDomains,
+  normalizeAssistantAnswerStyle,
+  normalizeEnabledTasks,
+  normalizeRequiredFields,
+  normalizeSite,
+  statusForWizardStep,
+  wizardStepStatusLabel,
+  type CustomerSetupWizardProps,
+  type FallbackBehavior,
+  type ConversationFlowForm,
+  type KnowledgeMethod,
+  type KnowledgeMode,
+  type KnowledgeSource,
+  type InternalTestChatTurn,
+  type SiteDetails,
+  type SetupGoalForm,
+} from "./setup-wizard";
+
+const PRIMARY_GOAL_ROLES: Record<string, string> = {
+  support_automation: "Support und Kundenhilfe",
+  lead_generation: "Anfragen aufnehmen und qualifizieren",
+  customer_advice: "Kunden beraten",
+  product_questions: "Produkt- und Leistungsfragen beantworten",
+  appointment_requests: "Termine und Rückrufe vorbereiten",
+  internal_knowledge: "Wissen strukturiert bereitstellen",
+};
+
+const ASSISTANT_TONE_BY_UI_TONE: Record<string, string> = {
+  professional: "professional",
+  friendly: "friendly",
+  premium: "professional",
+  direct: "neutral",
+  consultative: "consultative",
+};
+
+const HASH_TO_WIZARD_STEP_KEY: Record<string, (typeof WIZARD_STEPS)[number]["key"]> = {
+  "setup-step-basics": "customer",
+  "setup-step-industry": "bot",
+  "setup-step-delivery": "delivery",
+  "setup-step-flow": "flow",
+  "setup-step-knowledge": "knowledge",
+  "setup-step-design": "design",
+  "setup-step-live": "launch",
+  "customer-test-chat": "launch",
+};
+
+const WIZARD_STEP_HASH: Record<(typeof WIZARD_STEPS)[number]["key"], string> = {
+  customer: "setup-step-basics",
+  bot: "setup-step-industry",
+  delivery: "setup-step-delivery",
+  flow: "setup-step-flow",
+  knowledge: "setup-step-knowledge",
+  design: "setup-step-design",
+  launch: "setup-step-live",
+};
+
+function normalizeWizardStepKey(value: string | null) {
+  return WIZARD_STEPS.find((step) => step.key === value)?.key || null;
+}
+
+function requiredFieldLabel(key: string) {
+  return REQUIRED_FIELD_OPTIONS.find((option) => option.key === key)?.label || key;
+}
+
+export function CustomerSetupWizard({ siteId, dashboardRole = null }: CustomerSetupWizardProps) {
+  const searchParams = useSearchParams();
+  const siteSlug = encodeSiteId(siteId);
+  const [site, setSite] = useState<SiteDetails | null>(null);
+  const [templates, setTemplates] = useState<IndustryTemplate[]>([]);
+  const [sources, setSources] = useState<KnowledgeSource[]>([]);
+  const [overallStatus, setOverallStatus] = useState<CustomerOverallStatus | string>("Setup unvollständig");
+  const [serverStatus, setServerStatus] = useState<CustomerApiStatus | null>(null);
+  const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [loaderUrl, setLoaderUrl] = useState(
+    process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js",
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const hasCustomerWorkspaceAccess = useCustomerWorkspaceAccess(siteId, dashboardRole);
+  const [message, setMessage] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [locationHash, setLocationHash] = useState("");
+  const [profileForm, setProfileForm] = useState({
+    companyName: "",
+    botName: "",
+    industry: "",
+    websiteUrl: "",
+    allowedDomains: "",
+    supportEmail: "",
+    phone: "",
+    language: "de" as "de" | "en",
+  });
+  const [goalForm, setGoalForm] = useState<SetupGoalForm>({
+    primaryGoal: DEFAULT_PRIMARY_GOAL as SiteDetails["primaryGoal"],
+    botType: DEFAULT_BOT_TYPE,
+    tone: DEFAULT_TONE as SiteDetails["tone"],
+    answerStyle: "concise",
+    knowledgeMode: "flexible" as KnowledgeMode,
+    fallbackBehavior: "ask_followup" as FallbackBehavior,
+    ctaText: "",
+    systemPrompt: "",
+  });
+  const [deliveryForm, setDeliveryForm] = useState({
+    leadCaptureEnabled: true,
+    leadNotificationEmail: "",
+  });
+  const [flowForm, setFlowForm] = useState<ConversationFlowForm>({
+    requiredFields: [...DEFAULT_REQUIRED_FIELDS],
+    enabledTasks: [...DEFAULT_ENABLED_TASKS],
+  });
+  const [knowledgeForm, setKnowledgeForm] = useState({
+    title: "FAQ",
+    question: "",
+    content: "",
+    url: "",
+    urlTitle: "",
+  });
+  const [knowledgeMethod, setKnowledgeMethod] = useState<KnowledgeMethod>("manual");
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [designForm, setDesignForm] = useState({
+    brandColor: "#b55400",
+    accentColor: "#fff0d9",
+    logoUrl: "",
+    welcomeMessage: "",
+    placeholderText: "Nachricht schreiben...",
+    widgetPosition: "bottom_right" as "bottom_right" | "bottom_left",
+    launcherLabel: "Chat",
+    privacyUrl: "",
+    privacyNoticeText: "",
+    consentRequired: true,
+  });
+  const [testQuestion, setTestQuestion] = useState("");
+  const [testChatTurns, setTestChatTurns] = useState<InternalTestChatTurn[]>([]);
+  useEffect(() => {
+    setLoaderUrl(resolveWidgetLoaderUrl(process.env.NEXT_PUBLIC_WIDGET_LOADER_URL));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const syncHash = () => setLocationHash(window.location.hash.replace(/^#/, ""));
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    window.addEventListener("popstate", syncHash);
+
+    return () => {
+      window.removeEventListener("hashchange", syncHash);
+      window.removeEventListener("popstate", syncHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    const targetStep =
+      normalizeWizardStepKey(searchParams.get("step")) || HASH_TO_WIZARD_STEP_KEY[locationHash] || null;
+    if (!targetStep) {
+      return;
+    }
+
+    const nextIndex = WIZARD_STEPS.findIndex((step) => step.key === targetStep);
+    if (nextIndex >= 0 && nextIndex !== activeStepIndex) {
+      setActiveStepIndex(nextIndex);
+    }
+  }, [activeStepIndex, locationHash, searchParams]);
+
+  const templateMap = useMemo(() => templatesByKey(templates), [templates]);
+  const activeStep = WIZARD_STEPS[activeStepIndex];
+  const selectedTemplate = profileForm.industry ? templateMap[profileForm.industry] : undefined;
+  const readyActiveSources = sources.filter((source) => source.isActive && source.status === "ready");
+  const processingSources = sources.filter((source) => source.status === "pending" || source.status === "processing");
+  const failedSources = sources.filter((source) => source.status === "failed");
+  const canUseInternalTestTools =
+    dashboardRole === "admin" || dashboardRole === "operator" || hasCustomerWorkspaceAccess;
+  const knowledgeContinueBlockedReason =
+    failedSources.length > 0
+      ? "Wissensquellen mit Fehlern blockieren den Schritt. Bitte behebe, aktualisiere oder entferne die fehlerhaften Einträge, bevor du weitergehst."
+      : processingSources.length > 0
+        ? "Mindestens eine Wissensquelle wird noch verarbeitet. Speichern und weiter ist erst nach erfolgreicher Verarbeitung möglich."
+        : readyActiveSources.length === 0
+          ? "Speichere und aktiviere mindestens eine einsatzbereite Wissensquelle, bevor du zum internen Test oder Review weitergehst."
+          : "";
+  const knowledgeCanContinue = knowledgeContinueBlockedReason.length === 0;
+  const knowledgeContinueHint = knowledgeCanContinue
+    ? "Mindestens eine aktive Wissensquelle ist gespeichert und einsatzbereit. Der nächste Schritt ist Review & interner Test, nicht Deploy oder Public Widget."
+    : knowledgeContinueBlockedReason;
+  const embedCode = site ? createEmbedCode(loaderUrl, site.siteKey) : "";
+  const canGoLive = Boolean(serverStatus?.isLiveReady);
+  const liveDone = serverStatus?.lifecycleStatus === "live" || Boolean(site?.goLiveAt);
+
+  function setWizardStep(index: number, hashOverride?: string) {
+    const boundedIndex = Math.max(0, Math.min(index, WIZARD_STEPS.length - 1));
+    const nextStep = WIZARD_STEPS[boundedIndex];
+    if (!nextStep) {
+      return;
+    }
+
+    setActiveStepIndex(boundedIndex);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("step", nextStep.key);
+    url.hash = `#${hashOverride || WIZARD_STEP_HASH[nextStep.key]}`;
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    setLocationHash(url.hash.replace(/^#/, ""));
+  }
+
+  async function refreshStatus() {
+    const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/status`, { cache: "no-store" });
+    const data = (await response.json().catch(() => ({}))) as CustomerApiStatus & { status?: string };
+    if (response.ok && data?.code) {
+      setOverallStatus(data.status || data.label);
+      setServerStatus(data);
+    }
+  }
+
+  async function refreshSources() {
+    const data = await getKnowledgeSources(siteId);
+    setSources(Array.isArray(data) ? (data as KnowledgeSource[]) : []);
+  }
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const [siteData, sourcesData, templatesResponse, statusResponse] = await Promise.all([
+        getSite(siteId),
+        getKnowledgeSources(siteId),
+        fetch("/api/industry-templates", { cache: "no-store" }),
+        fetch(`/api/sites/${encodeURIComponent(siteId)}/status`, { cache: "no-store" }),
+      ]);
+      const templatesData = await templatesResponse.json().catch(() => []);
+      const statusData = (await statusResponse.json().catch(() => ({}))) as CustomerApiStatus & { status?: string };
+      const nextSite = normalizeSite(siteData as Record<string, unknown>);
+
+      setSite(nextSite);
+      setSources(Array.isArray(sourcesData) ? (sourcesData as KnowledgeSource[]) : []);
+      setTemplates(Array.isArray(templatesData) ? templatesData : []);
+      if (statusResponse.ok && statusData?.code) {
+        setOverallStatus(statusData.status || statusData.label);
+        setServerStatus(statusData);
+      }
+      setProfileForm({
+        companyName: nextSite.companyName || nextSite.name,
+        botName: nextSite.botName,
+        industry: nextSite.industry,
+        websiteUrl: nextSite.websiteUrl,
+        allowedDomains: nextSite.allowedDomains.join("\n"),
+        supportEmail: nextSite.supportEmail,
+        phone: nextSite.phone,
+        language: nextSite.language,
+      });
+      setGoalForm({
+        primaryGoal: nextSite.primaryGoal,
+        botType: nextSite.botType || "universal-assistant",
+        tone: nextSite.tone,
+        answerStyle: normalizeAssistantAnswerStyle(nextSite.assistantProfile),
+        knowledgeMode: normalizeAssistantAnswerStyle(nextSite.assistantProfile) === "knowledge_first"
+          ? "strict" : nextSite.knowledgeMode,
+        fallbackBehavior: nextSite.fallbackBehavior,
+        ctaText: nextSite.ctaText,
+        systemPrompt: nextSite.systemPrompt,
+      });
+      setDeliveryForm({
+        leadCaptureEnabled: nextSite.leadCaptureEnabled,
+        leadNotificationEmail: nextSite.leadNotificationEmail,
+      });
+      setFlowForm({
+        requiredFields: normalizeRequiredFields(nextSite.conversationFlow.requiredFields),
+        enabledTasks: normalizeEnabledTasks(nextSite.enabledTasks),
+      });
+      setDesignForm({
+        brandColor: nextSite.brandColor,
+        accentColor: nextSite.accentColor,
+        logoUrl: nextSite.logoUrl,
+        welcomeMessage: nextSite.welcomeMessage,
+        placeholderText: nextSite.placeholderText,
+        widgetPosition: nextSite.widgetPosition,
+        launcherLabel: nextSite.launcherLabel,
+        privacyUrl: nextSite.privacyUrl,
+        privacyNoticeText: nextSite.privacyNoticeText,
+        consentRequired: nextSite.consentRequired,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Setup konnte nicht geladen werden.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, [siteId]);
+
+  async function runAction<T>(key: string, action: () => Promise<T>, successMessage: string) {
+    setSavingKey(key);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await action();
+      setMessage(successMessage);
+      return result;
+    } catch (err) {
+      const fallback =
+        key === "goal"
+          ? "KI-Mitarbeiter-Einstellungen konnten nicht gespeichert werden."
+          : key === "flow"
+            ? "Gesprächslogik konnte nicht gespeichert werden."
+          : "Aktion konnte nicht ausgeführt werden.";
+      const message = err instanceof Error ? err.message : "";
+      setError(message && message !== "Aktion konnte nicht ausgeführt werden." ? message : fallback);
+      return null;
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function saveProfile() {
+    const rawDomains = normalizeDomains(profileForm.allowedDomains);
+    const websiteDomain = domainFromUrl(profileForm.websiteUrl);
+    const allowedDomains = rawDomains.length > 0 ? rawDomains : websiteDomain ? [websiteDomain] : [];
+    const companyName = profileForm.companyName.trim();
+
+    const saved = await runAction(
+      "profile",
+      async () => {
+        const [siteResult, brandingResult, configResult] = await Promise.all([
+          updateSiteBasics(siteId, { name: companyName || site?.name || siteId, allowedDomains }),
+          updateSiteBranding(siteId, {
+            companyName: companyName || site?.companyName || site?.name || "",
+            botName: profileForm.botName.trim() || site?.botName || "Service-Assistent",
+            welcomeMessage: designForm.welcomeMessage.trim() || site?.welcomeMessage || "",
+          }),
+          updateSiteSettings(siteId, {
+            websiteUrl: profileForm.websiteUrl.trim(),
+            domain: websiteDomain,
+            allowedDomains,
+            supportEmail: profileForm.supportEmail.trim(),
+            phone: profileForm.phone.trim(),
+            language: profileForm.language,
+          }),
+        ]);
+        return { siteResult, brandingResult, configResult };
+      },
+      "Unternehmensprofil gespeichert.",
+    );
+
+    if (!saved) {
+      return false;
+    }
+
+    await load();
+    return true;
+  }
+
+  async function applyIndustryTemplate() {
+    if (!profileForm.industry) {
+      setError("Bitte zuerst ein Legacy-Branchenprofil auswählen.");
+      return false;
+    }
+
+    const template = templateMap[profileForm.industry];
+    if (!template) {
+      setError("Für dieses Legacy-Branchenprofil ist noch keine Vorlage hinterlegt.");
+      return false;
+    }
+
+    const response = await runAction(
+      "template",
+      async () => {
+        const templateResponse = await fetch(`/api/sites/${encodeURIComponent(siteId)}/apply-template`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ templateId: template.key, mode: "fill_missing_only" }),
+        });
+        const data = await templateResponse.json().catch(() => ({}));
+        if (!templateResponse.ok) {
+          throw new Error(typeof data?.message === "string" ? data.message : "Vorlage konnte nicht angewendet werden.");
+        }
+        return data;
+      },
+      `Vorlage „${template.label}“ angewendet.`,
+    );
+
+    if (!response) {
+      return false;
+    }
+    await load();
+    return true;
+  }
+
+  function buildAssistantProfilePayload(nextFlow: ConversationFlowForm = flowForm) {
+    const primaryGoal = goalForm.primaryGoal || DEFAULT_PRIMARY_GOAL;
+    const tone = goalForm.tone || DEFAULT_TONE;
+    const knowledgeFirst = goalForm.answerStyle === "knowledge_first";
+    const configuredTasks = nextFlow.enabledTasks.length > 0 ? nextFlow.enabledTasks : [...DEFAULT_ENABLED_TASKS];
+    const companyName = (profileForm.companyName || site?.companyName || site?.name || "").trim();
+    const businessDescription = [
+      companyName ? `Unternehmen: ${companyName}` : "",
+      profileForm.websiteUrl.trim() ? `Website: ${profileForm.websiteUrl.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      assistantProfile: {
+        profileKey: knowledgeFirst && site?.assistantProfile?.profileKey === "knowledge-assistant"
+          ? "knowledge-assistant" : "universal-assistant",
+        profileVersion: 1,
+        assistantName: `${companyName || "KI"} Assistent`,
+        role: PRIMARY_GOAL_ROLES[primaryGoal] || PRIMARY_GOAL_ROLES[DEFAULT_PRIMARY_GOAL],
+        businessDescription,
+        targetUsers: ["website_visitors"],
+        tone: ASSISTANT_TONE_BY_UI_TONE[tone] || "professional",
+        answerStyle: goalForm.answerStyle,
+        knowledgeMode: knowledgeFirst ? "strict" : goalForm.knowledgeMode,
+        enabledTasks: knowledgeFirst ? Array.from(new Set(["answer_questions", ...configuredTasks])) : configuredTasks,
+        requiredFields: nextFlow.requiredFields.map((key) => ({
+          key,
+          label: requiredFieldLabel(key),
+          required: true,
+        })),
+        handoffRules: {
+          enabled: deliveryForm.leadCaptureEnabled || nextFlow.enabledTasks.includes("prepare_handoff"),
+          requiredBeforeHandoff: nextFlow.requiredFields.length > 0,
+          summaryBeforeHandoff: true,
+          handoffWhenUncertain: goalForm.fallbackBehavior === "handoff",
+          fallbackBehavior: goalForm.fallbackBehavior,
+        },
+        deliveryChannels: {
+          email: {
+            enabled: deliveryForm.leadCaptureEnabled && Boolean(deliveryForm.leadNotificationEmail.trim()),
+            recipientEmail: deliveryForm.leadNotificationEmail.trim() || undefined,
+          },
+          webhook: { enabled: false },
+          system: {
+            enabled: nextFlow.enabledTasks.includes("create_ticket") || nextFlow.enabledTasks.includes("trigger_integration"),
+          },
+        },
+      },
+      updatedFrom: "dashboard-wizard",
+    };
+  }
+
+  function isLegacyAssistantMode(botType = goalForm.botType) {
+    const normalizedIndustry = profileForm.industry.trim();
+    const normalizedBotType = botType.trim();
+    const templateId = site?.templateId?.trim() || "";
+    const assistantProfileKey =
+      typeof site?.assistantProfile?.profileKey === "string" ? site.assistantProfile.profileKey.trim() : "";
+    const isNeutralIndustry = !normalizedIndustry || normalizedIndustry === "generic";
+    const isUniversalBotType = !normalizedBotType || normalizedBotType === DEFAULT_BOT_TYPE;
+
+    if (assistantProfileKey === "local-service-first-contact" || templateId === "local-service-first-contact") {
+      return true;
+    }
+
+    if (normalizedIndustry && !isNeutralIndustry) {
+      return true;
+    }
+
+    return !isUniversalBotType;
+  }
+
+  async function saveGoal() {
+    const primaryGoal = goalForm.primaryGoal || DEFAULT_PRIMARY_GOAL;
+    const tone = goalForm.tone || DEFAULT_TONE;
+    const botType = goalForm.botType || DEFAULT_BOT_TYPE;
+    const ctaText = goalForm.ctaText.trim() || "Anfrage aufnehmen";
+    const legacyMode = isLegacyAssistantMode(botType);
+    const profilePayload = buildAssistantProfilePayload();
+    const saved = await runAction(
+      "goal",
+      async () => {
+        if (legacyMode) {
+          return updateSiteSettings(siteId, {
+            primaryGoal,
+            setupGoal: primaryGoal,
+            industry: profileForm.industry,
+            botType,
+            tone,
+            knowledgeMode: goalForm.knowledgeMode,
+            fallbackBehavior: goalForm.fallbackBehavior,
+            ctaText,
+            systemPrompt: goalForm.systemPrompt.trim(),
+          });
+        }
+
+        const [assistantProfileResult, widgetConfigResult] = await Promise.all([
+          updateAssistantProfileConfig(siteId, profilePayload),
+          updateSiteSettings(siteId, {
+            ctaText,
+            ...(goalForm.systemPrompt.trim() ? { systemPrompt: goalForm.systemPrompt.trim() } : {}),
+          }),
+        ]);
+        return { assistantProfileResult, widgetConfigResult };
+      },
+      "KI-Ziel gespeichert.",
+    );
+    if (!saved) {
+      return false;
+    }
+    if (!legacyMode) {
+      setFlowForm((current) => ({ ...current, enabledTasks: profilePayload.assistantProfile.enabledTasks }));
+    }
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            primaryGoal,
+            setupGoal: primaryGoal,
+            botType,
+            tone,
+            knowledgeMode: goalForm.knowledgeMode,
+            fallbackBehavior: goalForm.fallbackBehavior,
+            ctaText,
+            systemPrompt: goalForm.systemPrompt,
+            ...(legacyMode
+              ? {}
+              : {
+                  enabledTasks: profilePayload.assistantProfile.enabledTasks,
+                  assistantProfile: {
+                    ...(current.assistantProfile || {}),
+                    ...profilePayload.assistantProfile,
+                  },
+                }),
+          }
+        : current,
+    );
+    await refreshStatus();
+    return true;
+  }
+
+  async function saveDelivery() {
+    if (deliveryForm.leadCaptureEnabled && !isValidEmail(deliveryForm.leadNotificationEmail.trim())) {
+      setError("Bitte eine gültige Empfänger-E-Mail für neue Anfragen eintragen.");
+      return false;
+    }
+
+    const saved = await runAction(
+      "delivery",
+      () =>
+        updateSiteSettings(siteId, {
+          leadCaptureEnabled: deliveryForm.leadCaptureEnabled,
+          leadNotificationEmail: deliveryForm.leadNotificationEmail.trim(),
+        }),
+      "Anfrage-Zustellung gespeichert.",
+    );
+    if (!saved) {
+      return false;
+    }
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            leadCaptureEnabled: deliveryForm.leadCaptureEnabled,
+            leadNotificationEmail: deliveryForm.leadNotificationEmail.trim(),
+          }
+        : current,
+    );
+    await refreshStatus();
+    return true;
+  }
+
+  async function saveFlow() {
+    const legacyMode = isLegacyAssistantMode();
+    if (flowForm.enabledTasks.length === 0 && (legacyMode || goalForm.answerStyle !== "knowledge_first")) {
+      setError("Wähle mindestens ein Gesprächsziel oder erledige den Schritt später.");
+      return false;
+    }
+
+    const profilePayload = buildAssistantProfilePayload(flowForm);
+    const saved = await runAction(
+      "flow",
+      () => {
+        if (legacyMode) {
+          return updateSiteSettings(siteId, {
+            conversationFlow: {
+              ...(site?.conversationFlow || {}),
+              requiredFields: flowForm.requiredFields,
+            },
+            enabledTasks: flowForm.enabledTasks,
+          });
+        }
+
+        return updateAssistantProfileConfig(siteId, profilePayload);
+      },
+      "Gesprächslogik gespeichert.",
+    );
+    if (!saved) {
+      return false;
+    }
+    if (!legacyMode) {
+      setFlowForm((current) => ({ ...current, enabledTasks: profilePayload.assistantProfile.enabledTasks }));
+    }
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            conversationFlow: {
+              ...(current.conversationFlow || {}),
+              requiredFields: flowForm.requiredFields,
+            },
+            enabledTasks: legacyMode ? flowForm.enabledTasks : profilePayload.assistantProfile.enabledTasks,
+            ...(legacyMode
+              ? {}
+              : {
+                  assistantProfile: {
+                    ...(current.assistantProfile || {}),
+                    ...profilePayload.assistantProfile,
+                  },
+                }),
+          }
+        : current,
+    );
+    await refreshStatus();
+    return true;
+  }
+
+  async function saveDesign() {
+    const saved = await runAction(
+      "design",
+      async () => {
+        const [branding, config] = await Promise.all([
+          updateSiteBranding(siteId, {
+            brandColor: designForm.brandColor,
+            accentColor: designForm.accentColor,
+            logoUrl: designForm.logoUrl.trim(),
+            welcomeMessage: designForm.welcomeMessage.trim(),
+            privacyUrl: designForm.privacyUrl.trim(),
+          }),
+          updateSiteSettings(siteId, {
+            placeholderText: designForm.placeholderText.trim(),
+            widgetPosition: designForm.widgetPosition,
+            launcherLabel: designForm.launcherLabel.trim(),
+            privacyNoticeText: designForm.privacyNoticeText.trim(),
+            consentRequired: designForm.consentRequired,
+          }),
+        ]);
+        return { branding, config };
+      },
+      "Design gespeichert.",
+    );
+    if (!saved) {
+      return false;
+    }
+    setSite((current) =>
+      current
+        ? {
+            ...current,
+            ...designForm,
+            consentRequired: designForm.consentRequired,
+          }
+        : current,
+    );
+    await refreshStatus();
+    return true;
+  }
+
+  async function addManualKnowledge() {
+    if (!knowledgeForm.content.trim()) {
+      setError("Bitte Inhalt für das Wissen eintragen.");
+      return;
+    }
+
+    const created = await runAction(
+      "manual",
+      () =>
+        createManualKnowledgeSource(siteId, {
+          title: knowledgeForm.title.trim() || "Wissen",
+          question: knowledgeForm.question.trim() || undefined,
+          content: knowledgeForm.content.trim(),
+        }),
+      "Wissen gespeichert.",
+    );
+    if (created) {
+      setKnowledgeForm((current) => ({ ...current, question: "", content: "" }));
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function addUrlKnowledge() {
+    if (!knowledgeForm.url.trim()) {
+      setError("Bitte Website-URL eintragen.");
+      return;
+    }
+
+    const imported = await runAction(
+      "url",
+      () =>
+        importUrlKnowledgeSource(siteId, {
+          url: knowledgeForm.url.trim(),
+          title: knowledgeForm.urlTitle.trim() || undefined,
+        }),
+      "Website-Wissen importiert.",
+    );
+    if (imported) {
+      setKnowledgeForm((current) => ({ ...current, url: "", urlTitle: "" }));
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function addPdfKnowledge() {
+    if (!pdfFile) {
+      setError("Bitte eine PDF-Datei auswählen.");
+      return;
+    }
+
+    const uploaded = await runAction("pdf", () => uploadKnowledgePdf(siteId, pdfFile), "PDF verarbeitet.");
+    if (uploaded) {
+      setPdfFile(null);
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function toggleKnowledgeSource(source: KnowledgeSource) {
+    const updated = await runAction(
+      `source-${source.id}`,
+      () => setKnowledgeSourceActive(source.id, !source.isActive),
+      source.isActive ? "Wissensquelle deaktiviert." : "Wissensquelle aktiviert.",
+    );
+    if (updated) {
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function resyncSource(source: KnowledgeSource) {
+    const updated = await runAction(
+      `resync-${source.id}`,
+      () => source.type === "url" ? crawlWebsiteSource(source.id) : resyncKnowledgeSource(source.id),
+      source.type === "url" ? "Website durchsucht und im Wissensindex gespeichert." : "Wissensquelle wurde aktualisiert.",
+    );
+    if (updated) {
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function removeSource(source: KnowledgeSource) {
+    const confirmed = window.confirm(`Wissensquelle „${source.title || source.label || source.id}“ wirklich löschen?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const deleted = await runAction(
+      `delete-${source.id}`,
+      () => deleteKnowledgeSource(source.id),
+      "Wissensquelle gelöscht.",
+    );
+    if (deleted) {
+      await refreshSources();
+      await refreshStatus();
+    }
+  }
+
+  async function sendTestMessage() {
+    const messageText = testQuestion.trim();
+    if (!messageText) {
+      setError("Bitte eine Testfrage eingeben.");
+      return;
+    }
+    if (!canUseInternalTestTools) {
+      setError("Der interne Testchat ist nur für Admins oder Operatoren verfügbar.");
+      return;
+    }
+
+    setSavingKey("test-chat");
+    setError(null);
+    setTestQuestion("");
+
+    try {
+      const response = await fetch(`/api/sites/${encodeURIComponent(siteId)}/conversation-engine/runtime-pilot`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: messageText,
+          history: testChatTurns.flatMap((turn) => {
+            const history: Array<{ role: "user" | "assistant"; content: string }> = [
+              { role: "user", content: turn.userMessage },
+            ];
+            if (turn.assistantDraft.trim()) {
+              history.push({ role: "assistant", content: turn.assistantDraft });
+            }
+            return history;
+          }),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof data?.message === "string" ? data.message : "Interner Testchat konnte nicht antworten.");
+      }
+      const testedAt = new Date().toISOString();
+      const answer =
+        typeof data?.engineResponsePreview?.draft?.text === "string" && data.engineResponsePreview.draft.text.trim().length > 0
+          ? data.engineResponsePreview.draft.text
+          : "Keine interne Testantwort verfügbar.";
+      setTestChatTurns((current) => [
+        ...current,
+        {
+          id: `${testedAt}-${current.length + 1}`,
+          testedAt,
+          userMessage: messageText,
+          assistantDraft: answer,
+          result: data,
+          usedKnowledgeSnippets: Array.isArray(data?.knowledgeRetrieval?.snippets) ? data.knowledgeRetrieval.snippets : [],
+        },
+      ]);
+      setMessage("Interner Test ausgeführt. Der Transcript bleibt nur lokal im Browser-State.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Interner Testchat konnte nicht ausgeführt werden.");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  function clearTestChat() {
+    setTestChatTurns([]);
+    setMessage("Interner Testchat lokal geleert.");
+  }
+
+  async function copyEmbedCode() {
+    try {
+      await navigator.clipboard.writeText(embedCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError("Einbau-Code konnte nicht kopiert werden.");
+    }
+  }
+
+  async function goLive() {
+    const result = await runAction("live", () => setSiteGoLive(siteId), "Kunde live geschaltet.");
+    if (result) {
+      await load();
+    }
+  }
+
+  async function saveCurrentStep() {
+    switch (activeStep.key) {
+      case "customer":
+        return saveProfile();
+      case "bot":
+        return saveGoal();
+      case "delivery":
+        return saveDelivery();
+      case "flow":
+        return saveFlow();
+      case "design":
+        return saveDesign();
+      default:
+        await refreshStatus();
+        return true;
+    }
+  }
+
+  async function nextStep() {
+    if (activeStep.key === "knowledge" && !knowledgeCanContinue) {
+      setError(knowledgeContinueBlockedReason);
+      return;
+    }
+
+    const saved = await saveCurrentStep();
+    if (saved) {
+      setWizardStep(activeStepIndex + 1);
+    }
+  }
+
+  function jumpToStatusStep(stepKey?: string) {
+    const index = WIZARD_STEPS.findIndex((step) => STATUS_STEP_GROUPS[step.key].includes(stepKey || ""));
+    if (index >= 0) {
+      setWizardStep(index);
+    }
+  }
+
+  function renderStep() {
+    if (!site) {
+      return null;
+    }
+
+    switch (activeStep.key) {
+      case "customer":
+        return (
+          <CustomerDataStep
+            value={profileForm}
+            onChange={setProfileForm}
+            explanation={STEP_EXPLANATIONS.customer}
+            status={statusForWizardStep(serverStatus, "customer")}
+            statusLabel={wizardStepStatusLabel(serverStatus, "customer")}
+          />
+        );
+
+      case "bot":
+        return (
+          <UseCaseStep
+            profileValue={profileForm}
+            onProfileChange={setProfileForm}
+            goalValue={goalForm}
+            onGoalChange={setGoalForm}
+            supportsKnowledgeRuntime={!isLegacyAssistantMode()}
+            templates={templates}
+            selectedTemplate={selectedTemplate}
+            templateAppliedAt={site.templateAppliedAt}
+            hasTemplateApplied={Boolean(site.templateId)}
+            onApplyTemplate={applyIndustryTemplate}
+            isApplyingTemplate={savingKey === "template"}
+            explanation={STEP_EXPLANATIONS.bot}
+            status={statusForWizardStep(serverStatus, "bot")}
+            statusLabel={wizardStepStatusLabel(serverStatus, "bot")}
+          />
+        );
+
+      case "delivery":
+        return (
+          <LeadDeliveryStep
+            value={deliveryForm}
+            onChange={setDeliveryForm}
+            explanation={STEP_EXPLANATIONS.delivery}
+            status={statusForWizardStep(serverStatus, "delivery")}
+            statusLabel={wizardStepStatusLabel(serverStatus, "delivery")}
+          />
+        );
+
+      case "flow":
+        return (
+          <ConversationFlowStep
+            siteSlug={siteSlug}
+            value={flowForm}
+            onChange={setFlowForm}
+            knowledgeFirst={!isLegacyAssistantMode() && goalForm.answerStyle === "knowledge_first"}
+            explanation={STEP_EXPLANATIONS.flow}
+            status={statusForWizardStep(serverStatus, "flow")}
+            statusLabel={wizardStepStatusLabel(serverStatus, "flow")}
+          />
+        );
+      case "knowledge":
+        return (
+          <KnowledgeStep
+            siteSlug={siteSlug}
+            canCrawlWebsite={dashboardRole === "admin" || dashboardRole === "operator"}
+            sources={sources}
+            readyActiveSources={readyActiveSources}
+            knowledgeMode={goalForm.knowledgeMode}
+            selectedMethod={knowledgeMethod}
+            onMethodChange={setKnowledgeMethod}
+            draft={knowledgeForm}
+            onDraftChange={setKnowledgeForm}
+            selectedFile={pdfFile}
+            onFileChange={setPdfFile}
+            savingKey={savingKey}
+            onAddManual={addManualKnowledge}
+            onAddUrl={addUrlKnowledge}
+            onAddPdf={addPdfKnowledge}
+            onToggleSource={toggleKnowledgeSource}
+            onRefreshSource={resyncSource}
+            onRemoveSource={removeSource}
+            explanation={STEP_EXPLANATIONS.knowledge}
+            status={statusForWizardStep(serverStatus, "knowledge")}
+            statusLabel={wizardStepStatusLabel(serverStatus, "knowledge")}
+            canContinue={knowledgeCanContinue}
+            continueHint={knowledgeContinueHint}
+          />
+        );
+
+      case "design":
+        return (
+          <DesignPrivacyStep
+            value={designForm}
+            onChange={setDesignForm}
+            site={site}
+            profileCompanyName={profileForm.companyName}
+            onSave={saveDesign}
+            isSaving={savingKey === "design"}
+            explanation={STEP_EXPLANATIONS.design}
+            status={statusForWizardStep(serverStatus, "design")}
+            statusLabel={wizardStepStatusLabel(serverStatus, "design")}
+          />
+        );
+
+      case "launch":
+        return (
+          <LaunchStep
+            site={site}
+            serverStatus={serverStatus}
+            overallStatus={overallStatus}
+            embedCode={embedCode}
+            copiedEmbedCode={copied}
+            testQuestion={testQuestion}
+            testChatTurns={testChatTurns}
+            savingKey={savingKey}
+            canGoLive={canGoLive}
+            isLive={liveDone}
+            sources={sources}
+            readyActiveSources={readyActiveSources}
+            processingSources={processingSources}
+            failedSources={failedSources}
+            explanation={STEP_EXPLANATIONS.launch}
+            status={statusForWizardStep(serverStatus, "launch")}
+            statusLabel={wizardStepStatusLabel(serverStatus, "launch")}
+            onChangeTestQuestion={setTestQuestion}
+            onSendTestMessage={sendTestMessage}
+            onClearTestChat={clearTestChat}
+            onCopyEmbedCode={copyEmbedCode}
+            onGoLive={goLive}
+            onJumpToStatusStep={jumpToStatusStep}
+            dashboardRole={dashboardRole}
+            canUseWorkspaceTestTools={canUseInternalTestTools}
+          />
+        );
+    }
+  }
+
+  if (loading) {
+    return <LoadingState />;
+  }
+
+  if (!site) {
+    return <ErrorState message={error || "Kundendaten konnten nicht geladen werden."} />;
+  }
+
+  return (
+    <SetupWizardShell
+      title="Setup-Assistent"
+      description="Führe den Kunden in sieben klaren Schritten bis zu Test und Livegang."
+      sidebar={
+        <SetupWizardSidebar
+          siteId={siteId}
+          steps={WIZARD_STEPS}
+          activeStepIndex={activeStepIndex}
+          status={serverStatus}
+          dashboardRole={dashboardRole}
+          hasCustomerWorkspaceAccess={hasCustomerWorkspaceAccess}
+          onStepChange={setWizardStep}
+        />
+      }
+      actions={
+        <SetupWizardActions
+          onBack={() => setWizardStep(activeStepIndex - 1)}
+          onSave={activeStep.key === "launch" ? undefined : saveCurrentStep}
+          onSkip={activeStep.key !== "launch" && activeStep.key !== "knowledge" ? () => setWizardStep(activeStepIndex + 1) : undefined}
+          onPrimary={activeStep.key === "launch" ? undefined : nextStep}
+          primaryLabel="Speichern & weiter"
+          isSaving={Boolean(savingKey)}
+          backDisabled={activeStepIndex === 0}
+          primaryDisabled={
+            activeStep.key === "launch"
+              ? !canGoLive || liveDone
+              : activeStep.key === "knowledge"
+                ? !knowledgeCanContinue
+                : false
+          }
+        />
+      }
+    >
+      <section className="dashboard-card dashboard-card--compact dashboard-stack">
+        <div className="dashboard-inline dashboard-inline--spaced dashboard-wrap">
+          <div>
+            <strong>
+              Schritt {activeStepIndex + 1} von {WIZARD_STEPS.length}: {activeStep.label}
+            </strong>
+            <p className="dashboard-copy dashboard-copy--muted dashboard-no-margin-bottom">
+              {serverStatus?.progress ?? 0}% bereit
+            </p>
+          </div>
+          <CustomerStatusBadge
+            status={serverStatus ? mapStatusSeverityToTone(serverStatus.severity) : mapOverallStatusToTone(overallStatus)}
+            label={serverStatus?.label || overallStatus}
+          />
+        </div>
+        <progress className="dashboard-setup-progress__meter" value={serverStatus?.progress ?? 0} max={100} />
+      </section>
+
+      {message ? <p className="dashboard-status dashboard-status--success">{message}</p> : null}
+      {error ? <ErrorState message={error} /> : null}
+
+      {renderStep()}
+    </SetupWizardShell>
+  );
+}

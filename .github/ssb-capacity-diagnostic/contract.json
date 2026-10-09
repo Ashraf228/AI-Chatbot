@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "purpose": "CAPACITY_DIAGNOSIS_ONLY",
+  "executionAuthorized": false,
+  "sourceManifestSHA256": "a35d874d60faa01cf6128a3af9c89cc0783ba22acf8b43a7c0b8525875a1cd6c",
+  "sourceHead": "42bed1698c80a0e65971a65fecc44df3ea64c24e",
+  "sourceBranch": "fix/shutdown-recovery-p1",
+  "sourceIsDirty": true,
+  "sourceFiles": 1540,
+  "selectedFiles": 901,
+  "excluded": [
+    "four .env.example files",
+    "non-build repository paths"
+  ],
+  "bases": {
+    "node": "node@sha256:156b55f92e98ccd5ef49578a8cea0df4679826564bad1c9d4ef04462b9f0ded6",
+    "nginx": "nginx@sha256:582c496ccf79d8aa6f8203a79d32aaf7ffd8b13362c60a701a2f9ac64886c93d"
+  },
+  "platform": "linux/amd64",
+  "builds": {
+    "api": {
+      "dockerfile": "dockerfiles/api.Dockerfile",
+      "context": "source/apps/api",
+      "sourceDockerfileSHA256": "ccf15b444064bd7c30b4097080d85321fcca1d06b84ec3eed6cb9590c3a2ddf5",
+      "pinnedDockerfileSHA256": "8e12a30fd93df840b11c13c25e0cc60342f55edb665cb07e850b36ce807fe802"
+    },
+    "dashboard": {
+      "dockerfile": "dockerfiles/dashboard.Dockerfile",
+      "context": "source/apps/dashboard",
+      "sourceDockerfileSHA256": "e6af57da7942e9a62de66d3badf61dad1293136b8cc03ca457c5a67a07e0efc8",
+      "pinnedDockerfileSHA256": "6ea63470e964423b0a6fc571b99ee443bb80ac2aa44c01a7a0befbfea96f70db"
+    },
+    "reporter": {
+      "dockerfile": "dockerfiles/reporter.Dockerfile",
+      "context": "source",
+      "sourceDockerfileSHA256": "f4c3549925657f8fefd9204dc98634d73fc55677a508db585997215158bb6c32",
+      "pinnedDockerfileSHA256": "f4a5401c13c85f6915a1ddd52854c8264968156e79563db73d24b054522370e5"
+    },
+    "widget": {
+      "dockerfile": "dockerfiles/widget.Dockerfile",
+      "context": "source",
+      "sourceDockerfileSHA256": "f5a7b6385ffdc2f37e51c70a4ffef959bd0b847f1ae6b870f0e4439daf32fe2d",
+      "pinnedDockerfileSHA256": "f3a5809a716da60b0df3239931c3d26ce150055c3fdcf78d65afd7aa597937f2"
+    }
+  },
+  "limits": {
+    "totalSeconds": 990,
+    "buildWorkSeconds": 270,
+    "closureReserveSeconds": 30,
+    "dataProbeWorkSeconds": 60,
+    "jobTimeoutMinutes": 17,
+    "startFreeBytes": 8589934592,
+    "stopFreeBytes": 3221225472,
+    "minFreeInodes": 100000,
+    "sampleIntervalMilliseconds": 250,
+    "rawOutputCapBytes": 8388608,
+    "basePullSeconds": 120
+  },
+  "maximumCreatedContainers": 6,
+  "maximumRunningContainers": 1,
+  "volumes": 2,
+  "networks": 0,
+  "publicPorts": 0,
+  "syntheticVolumeBytes": [
+    1073741824,
+    67108864
+  ],
+  "syntheticWritableBytes": 536870912,
+  "sourceSetsBuilt": 1,
+  "compatibleRecoverySourceBound": false,
+  "recoveryProof": false,
+  "artifactUpload": false,
+  "registryPush": false,
+  "cacheUpload": false,
+  "externalStorage": false,
+  "cleanupDeletion": false,
+  "sourceComposition": {
+    "kind": "reviewed-runtime-snapshot-with-exact-dependency-overlay",
+    "historicalSourceFiles": 1540,
+    "dependencyCandidateSourceFiles": 1485,
+    "dependencyCandidateHead": "42bed1698c80a0e65971a65fecc44df3ea64c24e",
+    "dependencyOverlayFiles": [
+      "apps/api/package-lock.json",
+      "apps/api/package.json",
+      "apps/dashboard/package-lock.json",
+      "apps/dashboard/package.json",
+      "apps/widget/package-lock.json",
+      "apps/widget/package.json",
+      "packages/widget-sdk/package-lock.json",
+      "packages/widget-sdk/package.json"
+    ],
+    "repositoryOnlyRootFiles": [
+      "package-lock.json",
+      "package.json"
+    ],
+    "scope": "Standalone dependency results inherited; combined native builds not yet executed. Runtime reporter adapter and maintenance fixture retained.",
+    "normalizations": [
+      {
+        "path": "apps/dashboard/public/.gitkeep",
+        "purpose": "EMPTY_DIRECTORY_PLACEHOLDER_ONLY",
+        "beforeSHA256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "beforeBytes": 1,
+        "afterSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "afterBytes": 0,
+        "gitMode": "100644",
+        "pathRetained": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,138 @@
+import { getSessionCookieOptions, SESSION_COOKIE_NAME, verifySessionToken } from "@/lib/auth-core";
+import { isViewerAllowedPath } from "@/lib/viewer-access";
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+
+const LOGIN_PATH = "/login";
+const PUBLIC_PATHS = new Set([
+  LOGIN_PATH,
+  "/healthz",
+  "/api/auth/login",
+  "/api/auth/logout",
+  "/api/auth/session",
+]);
+
+const CUSTOMER_BLOCKED_PREFIXES = [
+  "/settings",
+  "/usage",
+  "/api/usage",
+  "/api/tenants",
+  "/api/agents",
+  "/api/integrations",
+  "/api/site-modules",
+  "/api/widget/optimization",
+];
+
+const CUSTOMER_BLOCKED_SITE_SEGMENTS = new Set([
+  "advanced",
+  "agents",
+  "integrations",
+  "modules",
+  "optimization",
+]);
+
+const OPERATOR_BLOCKED_PREFIXES = [
+  "/settings",
+  "/usage",
+  "/api/usage",
+  "/api/tenants",
+  "/api/agents",
+  "/api/integrations",
+  "/api/site-modules",
+  "/api/widget/optimization",
+];
+
+const OPERATOR_BLOCKED_SITE_SEGMENTS = new Set([
+  "advanced",
+  "agents",
+  "integrations",
+  "modules",
+  "optimization",
+]);
+
+export default async function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+
+  if (PUBLIC_PATHS.has(pathname)) {
+    if (pathname === LOGIN_PATH) {
+      if (request.nextUrl.searchParams.get("loggedOut") === "1") {
+        const response = NextResponse.next();
+        response.cookies.set(SESSION_COOKIE_NAME, "", {
+          ...getSessionCookieOptions(),
+          expires: new Date(0),
+          maxAge: 0,
+        });
+        return response;
+      }
+
+      const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+      const session = await verifySessionToken(token);
+      if (session) {
+        return NextResponse.redirect(new URL(session.role === "viewer" ? "/evaluation" : "/sites", request.url));
+      }
+    }
+
+    return NextResponse.next();
+  }
+
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  const session = await verifySessionToken(token);
+
+  if (session) {
+    if (session.role === "viewer") {
+      if (isViewerAllowedPath(pathname)) {
+        return NextResponse.next();
+      }
+
+      return pathname.startsWith("/api/")
+        ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
+        : NextResponse.redirect(new URL("/evaluation", request.url));
+    }
+
+    if (session.role === "customer") {
+      if (CUSTOMER_BLOCKED_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+        return pathname.startsWith("/api/")
+          ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
+          : NextResponse.redirect(new URL("/sites", request.url));
+      }
+
+      const siteMatch = pathname.match(/^\/sites\/([^/]+)\/([^/]+)(?:\/|$)/);
+      if (siteMatch && CUSTOMER_BLOCKED_SITE_SEGMENTS.has(siteMatch[2] || "")) {
+        return pathname.startsWith("/api/")
+          ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
+          : NextResponse.redirect(new URL(`/sites/${siteMatch[1]}`, request.url));
+      }
+    }
+
+    if (session.role === "operator") {
+      if (OPERATOR_BLOCKED_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+        return pathname.startsWith("/api/")
+          ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
+          : NextResponse.redirect(new URL("/sites", request.url));
+      }
+
+      const siteMatch = pathname.match(/^\/sites\/([^/]+)\/([^/]+)(?:\/|$)/);
+      if (siteMatch && OPERATOR_BLOCKED_SITE_SEGMENTS.has(siteMatch[2] || "")) {
+        return pathname.startsWith("/api/")
+          ? NextResponse.json({ message: "Forbidden" }, { status: 403 })
+          : NextResponse.redirect(new URL(`/sites/${siteMatch[1]}`, request.url));
+      }
+    }
+
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+
+  const loginUrl = new URL(LOGIN_PATH, request.url);
+  loginUrl.searchParams.set("next", `${pathname}${search}`);
+  return NextResponse.redirect(loginUrl);
+}
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map)$).*)",
+  ],
+};
