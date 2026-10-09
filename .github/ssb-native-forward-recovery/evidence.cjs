@@ -1,10 +1,11 @@
 'use strict';
 const {sha,need,json}=require('./common.cjs');
+const {validateDetail,publicFailure}=require('./diagnostics.cjs');
 const phases=['preflight','bases','builds','initialize','roles','release-start','release-e1','release-drain','release-shutdown','forward-start','forward-e1','forward-drain','forward-shutdown','normal-start','normal-e1','normal-drain','normal-shutdown','restore','inventory','closure','complete'];
-const MARKER='SSB_PUBLIC_RECEIPT_V1',LIMIT=2*1024*1024;
+const MARKER='SSB_PUBLIC_RECEIPT_V2',LIMIT=2*1024*1024;
 // Keep the reviewed generation contract together when native/probe obligations change.
 const generationCounts=Object.freeze({start:Object.freeze({release:Object.freeze([5,5,0]),forward:Object.freeze([5,5,8]),normal:Object.freeze([5,5,16])}),e1:Object.freeze([11,7]),drain:Object.freeze([8,1,7]),shutdown:Object.freeze([5,2,0])});
-const fields=['seq','run','source','workflowHead','dispatchNonce','phase','ok','counts','hashes','ids','elapsedMs','utc','previous'];
+const fields=['seq','run','source','workflowHead','dispatchNonce','phase','ok','counts','hashes','ids','elapsedMs','utc','previous','detail'];
 const hex=(s,n)=>typeof s==='string'&&new RegExp('^[a-f0-9]{'+n+'}$').test(s);
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),unique=a=>new Set(a).size===a.length;
 const runId=s=>typeof s==='string'&&/^[1-9][0-9]*$/.test(s)&&Number.isSafeInteger(Number(s));
@@ -23,11 +24,13 @@ function validate(r){
   need(Array.isArray(r.hashes)&&r.hashes.length<=64&&Array.from(r.hashes).every(s=>hex(s,64)),'receipt_hashes');
   need(Array.isArray(r.ids)&&r.ids.length<=64&&Array.from(r.ids).every(s=>typeof s==='string'&&/^(sha256:)?[a-f0-9]{64}$/.test(s)),'receipt_ids');
   need(Number.isFinite(r.elapsedMs)&&r.elapsedMs>=0&&r.elapsedMs<=990000&&typeof r.utc==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(r.utc)&&Number.isFinite(Date.parse(r.utc)),'receipt_time');
+  validateDetail(r);
 }
 function validateEvidence(r,prior){
   const failed=prior.some(x=>!x.ok);
   need((r.phase===phases[prior.length]&&!failed)||(r.phase==='closure'&&failed&&!prior.some(x=>x.phase==='closure')),'receipt_phase_order');
   need(!prior.length||r.elapsedMs>=prior.at(-1).elapsedMs,'receipt_elapsed_order');
+  if(r.phase==='closure')for(const o of r.detail.outcomes.filter(x=>x.state==='graceful')){const shutdown=prior.find(x=>x.ok&&x.phase===o.generation+'-shutdown');need(['api','admin-writer'].includes(o.role)&&shutdown?.ids[['api','admin-writer'].indexOf(o.role)]===o.id,'graceful_shutdown_receipt_missing');}
   if(!r.ok)return;
   if(failed){
     // Cleanup success is independent of work success; it must never authorize complete.
@@ -77,7 +80,9 @@ function validateEvidence(r,prior){
     }
     case 'closure':
       need(r.counts.length===3&&r.counts[0]===19&&r.counts[1]===19&&r.counts[2]>0,'phase_closure_counts');
-      shape(r.counts,24,0);need(same(r.ids,at('inventory').ids),'closure_inventory_changed');break;
+      shape(r.counts,24,0);need(same(r.ids,at('inventory').ids),'closure_inventory_changed');
+      need(r.detail.outcomes.every(o=>['exited','graceful'].includes(o.state)&&o.exit===0),'closure_not_clean');
+      for(const [i,g] of ['release','forward','normal'].entries())for(const [j,role] of ['api','admin-writer','dashboard','reporter','widget'].entries()){const o=r.detail.outcomes[3+i*5+j];need(o.role===role&&o.generation===g&&(j>1||o.state==='graceful'),'closure_generation_shutdown');}break;
     case 'complete':shape([],0,0);break;
     default:need(false,'unknown_phase');
   }
@@ -87,21 +92,22 @@ const receiptLine=(bytes,digest)=>MARKER+' '+Buffer.from(bytes).toString('base64
 class Receipts{
   constructor(run,source,context,output=console.log){binding(run,source,context);this.run=run;this.source=source;this.workflowHead=context.workflowHead;this.dispatchNonce=context.dispatchNonce;this.output=output;this.records=[];this.bytes=0;}
   emit(phase,ok,data={}){
-    need(Object.keys(data).every(k=>['counts','hashes','ids','elapsedMs'].includes(k)),'nonpublic_field');
-    const r={seq:this.records.length,run:this.run,source:this.source,workflowHead:this.workflowHead,dispatchNonce:this.dispatchNonce,phase,ok,counts:[],hashes:[],ids:[],elapsedMs:0,...data,utc:new Date().toISOString(),previous:this.records.at(-1)?.sha256||'0'.repeat(64)};
+    need(Object.keys(data).every(k=>['counts','hashes','ids','elapsedMs','detail'].includes(k)),'nonpublic_field');
+    const r={seq:this.records.length,run:this.run,source:this.source,workflowHead:this.workflowHead,dispatchNonce:this.dispatchNonce,phase,ok,counts:[],hashes:[],ids:[],elapsedMs:0,...data,utc:new Date().toISOString(),previous:this.records.at(-1)?.sha256||'0'.repeat(64),detail:data.detail||{failure:ok?null:publicFailure(null),outcomes:[]}};
     validate(r);validateEvidence(r,this.records);
     const bytes=canonical(r),digest=sha(bytes),line=receiptLine(bytes,digest);
     need(this.bytes+Buffer.byteLength(line)+1<=LIMIT,'receipt_limit');
     this.output(line);this.bytes+=Buffer.byteLength(line)+1;this.records.push({...json(bytes),sha256:digest});return digest;
   }
 }
-function parseReceipts(text,run,source,context){
+function parseReceipts(text,run,source,context,{partial=false}={}){
   binding(run,source,context);need(typeof text==='string','receipt_input');
   const rows=[],lines=[];let bytes=0;
   for(const line of text.split(/\r?\n/)){
+    need(!line.includes('SSB_PUBLIC_RECEIPT_V1'),'historical_receipt_version');
     if(!line.includes(MARKER))continue;
     // Only an unadorned record or GitHub's timestamp prefix is accepted, never arbitrary log prefixes.
-    const m=line.match(/^(?:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,7})?Z )?SSB_PUBLIC_RECEIPT_V1 ([A-Za-z0-9+/]+={0,2}) ([a-f0-9]{64})$/);
+    const m=line.match(/^(?:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,7})?Z )?SSB_PUBLIC_RECEIPT_V2 ([A-Za-z0-9+/]+={0,2}) ([a-f0-9]{64})$/);
     need(m&&m[0]===line,'malformed_receipt_marker');need(rows.length<phases.length,'receipt_limit');
     need(bytes+MARKER.length+m[1].length+67<=LIMIT,'receipt_limit');
     const b=Buffer.from(m[1],'base64');need(b.toString('base64')===m[1]&&sha(b)===m[2],'receipt_hash');
@@ -110,8 +116,9 @@ function parseReceipts(text,run,source,context){
     validateEvidence(r,rows);const clean=receiptLine(canonical(r),m[2]);
     bytes+=Buffer.byteLength(clean)+1;need(bytes<=LIMIT,'receipt_limit');lines.push(clean);rows.push({...r,sha256:m[2]});
   }
-  need(rows.length===phases.length&&rows.every((r,i)=>r.phase===phases[i]&&r.ok),'incomplete_or_failed_receipt');
-  const proof={status:'RECEIVED_AND_VERIFIED',run,source,workflowHead:context.workflowHead,dispatchNonce:context.dispatchNonce,phases:rows.length,publicationManifest:rows[0].hashes[0],finalSha256:rows.at(-1).sha256,bytes};
+  if(partial)need(rows.some(r=>!r.ok)&&rows.at(-1)?.phase==='closure'&&!rows.some(r=>r.phase==='complete'),'incomplete_failure_receipt');
+  else need(rows.length===phases.length&&rows.every((r,i)=>r.phase===phases[i]&&r.ok),'incomplete_or_failed_receipt');
+  const proof={status:partial?'PARTIAL_FAILURE_RECEIVED':'RECEIVED_AND_VERIFIED',run,source,workflowHead:context.workflowHead,dispatchNonce:context.dispatchNonce,phases:rows.length,publicationManifest:rows[0].hashes[0],finalSha256:rows.at(-1).sha256,bytes};
   return{proof,lines};
 }
 function receive(text,run,source,context){return parseReceipts(text,run,source,context).proof;}

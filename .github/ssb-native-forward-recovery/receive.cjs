@@ -7,9 +7,9 @@ function main(args){
   const context={workflowHead:head,dispatchNonce};binding(run,SOURCE,context);
   const api=route=>execFileSync('gh',['api',`repos/Ashraf228/AI-Chatbot/${route}`],{encoding:'utf8',timeout:15000,maxBuffer:4*1024*1024,stdio:['ignore','pipe','pipe']});
   const r=JSON.parse(api(`actions/runs/${run}`)),j=JSON.parse(api(`actions/jobs/${job}`));
-  need(r.id===Number(run)&&r.event==='workflow_dispatch'&&r.run_attempt===1&&r.head_sha===head&&r.display_title===dispatchTitle(head,dispatchNonce)&&r.status==='completed'&&r.conclusion==='success'&&r.path==='.github/workflows/ssb-native-forward-recovery.yml','run_provenance');
-  need(j.id===Number(job)&&j.run_id===Number(run)&&j.conclusion==='success'&&j.name==='Native forward recovery'&&Array.isArray(j.labels)&&j.labels.includes('ubuntu-24.04')&&!j.labels.includes('self-hosted'),'job_provenance');
-  const log=api(`actions/jobs/${job}/logs`),{proof,lines}=parseReceipts(log,run,SOURCE,context);
+  need(r.id===Number(run)&&r.event==='workflow_dispatch'&&r.run_attempt===1&&r.head_sha===head&&r.display_title===dispatchTitle(head,dispatchNonce)&&r.status==='completed'&&['success','failure'].includes(r.conclusion)&&r.path==='.github/workflows/ssb-native-forward-recovery.yml','run_provenance');
+  need(j.id===Number(job)&&j.run_id===Number(run)&&j.conclusion===r.conclusion&&j.name==='Native forward recovery'&&Array.isArray(j.labels)&&j.labels.includes('ubuntu-24.04')&&!j.labels.includes('self-hosted'),'job_provenance');
+  const log=api(`actions/jobs/${job}/logs`),{proof,lines}=parseReceipts(log,run,SOURCE,context,{partial:r.conclusion==='failure'});
   need(proof.publicationManifest===sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json'))),'received_publication_binding');
   // Raw public job logs are deliberately not copied; save only validated receipt records and metadata.
   const receiptLines=lines.join('\n')+'\n';

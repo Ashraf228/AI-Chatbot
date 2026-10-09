@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{randomUUID}=require('node:crypto');
 const {sha,need,json,bound,regular,clock,Processes,failureRecord}=require('./common.cjs');
 const {services,networks,secrets,write,generation}=require('./fixtures.cjs');
+const {publicFailure}=require('./diagnostics.cjs');
 const SOURCE='94a25578e883a6d7bbd03f26c56735739f75e45e',BUILD_DATE='2026-10-09T00:00:00Z';
 const GiB=1024**3,fullId=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 function verifyBase(list,base){need(Array.isArray(list)&&list.length===1,'base_response_invalid');const x=list[0];need(x.Id===base.imageId&&x.Os==='linux'&&x.Architecture==='amd64'&&Array.isArray(x.RepoDigests)&&x.RepoDigests.some(r=>r===base.reference||r===base.reference.replace(/^library\//,'')),'base_identity_invalid');need(x.Config&&typeof x.Config==='object'&&!Array.isArray(x.Config),'base_config_invalid');for(const [k,v]of Object.entries(base.envVersionFields))need(x.Config.Env?.includes(`${k}=${v}`),'base_version_invalid');return x;}
@@ -57,13 +58,13 @@ class Native{
   }
   async create(name,image,args,role){
     need(!this.initial.containers.includes(name)&&this.owned.length<19&&!this.owned.some(x=>x.name===name),'resource_limit');
-    const entry={name,image,role,id:null};this.owned.push(entry);
+    const entry={name,image,role,id:null,startRequested:false};this.owned.push(entry);
     const result=await this.d(['create','--name',name,'--label',`com.ssb.native-run=${this.options.run}`,'--pull=never','--platform=linux/amd64','--restart=no','--security-opt=no-new-privileges:true',...args,image,...(role==='probe'?['node','-e','process.on("SIGTERM",()=>process.exit(0));setInterval(()=>{},1000)']:[])]);
     entry.id=result.stdout.toString().trim();need(fullId(entry.id),'created_id');
     const x=(await this.inspect(entry.id))[0];need(x.Id===entry.id&&x.Image===image&&x.Name==='/'+name&&x.State.Status==='created'&&!x.HostConfig.Privileged&&!Object.keys(x.HostConfig.PortBindings||{}).length&&!x.HostConfig.PublishAllPorts,'created_security');return entry;
   }
   async runningLimit(){const rows=(await this.d(['container','ls','-q','--filter',`label=com.ssb.native-run=${this.options.run}`])).stdout.toString().trim().split('\n').filter(Boolean);need(rows.length<=8,'running_resource_limit');}
-  async start(entry){await this.d(['start',entry.id]);const x=(await this.inspect(entry.id))[0];need(x.State.Status==='running'&&x.State.Running&&!x.State.OOMKilled,'service_not_running');await this.runningLimit();return x;}
+  async start(entry){entry.startRequested=true;await this.d(['start',entry.id]);const x=(await this.inspect(entry.id))[0];need(x.State.Status==='running'&&x.State.Running&&!x.State.OOMKilled,'service_not_running');await this.runningLimit();return x;}
   async probe(action,extra={}){
     const input={...this.synthetic,action,service:this.prefix,generation:this.current?.generation,source:SOURCE,buildDate:BUILD_DATE,imageId:this.images.api,replayId:this.replayId,...extra};
     const result=await this.d(['exec','-i',this.probeContainer.id,'node','/proof/probe.cjs'],{input:JSON.stringify(input),ms:15000});const r=proofResult(result.stdout);
@@ -72,7 +73,10 @@ class Native{
     if(action==='retired-admission')need(r.generation===this.current.generation&&r.retiredGeneration===extra.retiredGeneration&&r.code==='generation_retired','retired_proof_binding');
     if(['database','e1'].includes(action))need(Array.isArray(r.hashes)&&r.hashes.length===(action==='e1'?2:1)&&r.hashes.every(x=>/^[a-f0-9]{64}$/.test(x)),'mandatory_digest_missing');return r;
   }
-  async state(action,binding,extra={}){return json((await this.command(process.execPath,[path.join(__dirname,'state-agent.cjs')],{input:JSON.stringify({action,binding,toolsRoot:this.toolsRoot,owner:this.synthetic.owner,epoch:this.epoch,...extra}),uid:1000,gid:1000,ms:1000})).stdout);}
+  async state(action,binding,extra={}){
+    const result=await this.command(process.execPath,[path.join(__dirname,'state-agent.cjs')],{input:JSON.stringify({action,binding,toolsRoot:this.toolsRoot,owner:this.synthetic.owner,epoch:this.epoch,...extra}),uid:1000,gid:1000,ms:1000,stateDiagnostic:true});
+    need(result.stderr.length===0,'state_diagnostic_invalid');return json(result.stdout);
+  }
   async initialize(){
     // The 90-second native window includes setup, all cohorts and restore; no hidden reset per cohort.
     this.probeDeadline=clock()+90000;
@@ -109,7 +113,7 @@ class Native{
       need(this.owned.length<19,'resource_limit');const contract={...this.current.common,service,imageId:this.images[service]};policy.assertPlan(this.current.binding,contract);policy.verifyFiles(this.current.binding,contract);
       policy.assertImage([this.imageMetadata[service==='admin-writer'?'api':service]],contract);
       const plan=write(path.join(this.current.root,service+'-start.json'),JSON.stringify({...planBase,action:'start-retained-participant',binding:this.current.binding,contract}));
-      const entry={name:this.current.names[service],image:this.images[service],role:service,generation:key,project:this.current.project,id:null};this.owned.push(entry);
+      const entry={name:this.current.names[service],image:this.images[service],role:service,generation:key,project:this.current.project,id:null,startRequested:true};this.owned.push(entry);
       await this.command(process.execPath,[path.join(this.toolsRoot,'scripts/ops/maintenance-privileged-executor.cjs'),plan.path],{ms:10000});
       const x=(await this.inspect(entry.name))[0];entry.id=x.Id;need(fullId(entry.id)&&x.State.Running&&x.Image===entry.image,'started_identity');
       await this.runningLimit();
@@ -141,6 +145,7 @@ class Native{
     }
     const state=await this.state('drained',this.current.binding);need(state.completed===true,'global_drain_missing');
     await this.probe('database',{noPools:true});this.previousGeneration=this.current.generation;
+    for(const entry of cohort)if(['api','admin-writer'].includes(entry.role))entry.orderedShutdown=true;
     return{verified:true,counts:[5,2,0],ids:cohort.map(x=>x.id),hashes:this.previous.filter(x=>x.receipt).map(x=>x.receipt.sha256)};
   }
   async restore(){
@@ -183,19 +188,25 @@ class Native{
   }
   async close(failed){
     clearInterval(this.watch);if(!this.proc)return{verified:true,counts:[0]};
-    let errors=[];const closureStart=clock();this.closureDeadline=Math.min(this.deadline,this.probeDeadline||Infinity,closureStart+30000);
-    await Promise.all(this.owned.map(async entry=>{try{
-      const list=json((await this.d(['container','inspect',entry.id||entry.name],{closure:true,ms:1500})).stdout),x=list[0];need(x.Name==='/'+entry.name&&x.Image===entry.image&&fullId(x.Id),'cleanup_identity_unverified');
-      need(!(this.initial?.containers||[]).includes(x.Id),'cleanup_preexisting_forbidden');
-      const labels=x.Config?.Labels||{},ownedLabel=labels['com.ssb.native-run']===this.options.run;
-      const ownedProject=typeof entry.project==='string'&&entry.project.length>0&&labels['com.docker.compose.project']===entry.project&&labels['com.docker.compose.service']===entry.role;
-      need(ownedLabel&&(!entry.project||ownedProject)&&(!entry.id||entry.id===x.Id),'cleanup_ownership');entry.id=x.Id;
+    let errors=[];const outcomes=this.owned.map(entry=>({id:entry.id,role:entry.role,generation:entry.generation||'seed',state:'unverified',exit:null,code:'unclassified'}));const closureStart=clock();this.closureDeadline=Math.min(this.deadline,this.probeDeadline||Infinity,closureStart+30000);
+    await Promise.all(this.owned.map(async(entry,index)=>{const outcome=outcomes[index];try{
+      const identity=list=>{need(Array.isArray(list)&&list.length===1,'cleanup_identity_unverified');const x=list[0];need(x.Name==='/'+entry.name&&x.Image===entry.image&&fullId(x.Id),'cleanup_identity_unverified');
+        need(!(this.initial?.containers||[]).includes(x.Id),'cleanup_preexisting_forbidden');
+        const labels=x.Config?.Labels||{},ownedLabel=labels['com.ssb.native-run']===this.options.run;
+        const ownedProject=typeof entry.project==='string'&&entry.project.length>0&&labels['com.docker.compose.project']===entry.project&&labels['com.docker.compose.service']===entry.role;
+        need(ownedLabel&&(!entry.project||ownedProject)&&(!entry.id||entry.id===x.Id),'cleanup_ownership');entry.id=x.Id;outcome.id=x.Id;return x;};
+      const neverStarted=x=>entry.startRequested===false&&x.RestartCount===0&&x.State?.Status==='created'&&x.State.Running===false&&x.State.Paused===false&&x.State.Restarting===false&&x.State.Dead===false&&x.State.OOMKilled===false&&x.State.Error===''&&x.State.Pid===0&&x.State.ExitCode===0&&x.State.StartedAt==='0001-01-01T00:00:00Z'&&x.State.FinishedAt==='0001-01-01T00:00:00Z';
+      const x=identity(json((await this.d(['container','inspect',entry.id||entry.name],{closure:true,ms:1500})).stdout));
       if(x.State.Running){await this.d(['stop','--time','8',entry.id],{closure:true,ms:9500});}
-      const end=json((await this.d(['container','inspect',entry.id],{closure:true,ms:1500})).stdout)[0];need(!end.State.Running&&end.State.Status==='exited'&&!end.State.OOMKilled,'container_completion_unverified');
+      const end=identity(json((await this.d(['container','inspect',entry.id],{closure:true,ms:1500})).stdout));
+      if(neverStarted(x)&&neverStarted(end)){need(failed,'never_started_on_success');Object.assign(outcome,{state:'never_started',code:'none'});return;}
+      need(end.State.Running===false&&end.State.Status==='exited'&&!end.State.OOMKilled&&!end.State.Error&&!end.State.Paused&&!end.State.Restarting&&!end.State.Dead&&Number.isInteger(end.State.ExitCode)&&end.State.ExitCode>=0&&end.State.ExitCode<=255,'container_completion_unverified');
+      Object.assign(outcome,{state:end.State.ExitCode===0?'exited':'exited_unclean',exit:end.State.ExitCode,code:end.State.ExitCode===0?'none':'forced_or_nonzero'});
       if(!failed&&['postgres','restore-postgres','redis','probe'].includes(entry.role))need(end.State.ExitCode===0,'infrastructure_shutdown_failed');
       if(!failed&&['postgres','restore-postgres'].includes(entry.role)){const logs=(await this.d(['logs','--tail','30',entry.id],{closure:true,ms:1500}));need(Buffer.concat([logs.stdout,logs.stderr]).toString().includes('database system is shut down'),'postgres_clean_shutdown_missing');}
-    }catch(e){errors.push(e);}}));
-    const publicReceipt={counts:[this.owned.length,this.owned.filter(x=>x.id).length,this.proc.calls.length],ids:[...this.owned.filter(x=>x.id).map(x=>x.id),...Object.values(this.networks).map(x=>x.id)]};
+      if(entry.orderedShutdown===true){need(end.State.ExitCode===0,'container_completion_unverified');outcome.state='graceful';}
+    }catch(e){outcome.state='unverified';outcome.code=publicFailure(e).code;errors.push(e);}}));
+    const publicReceipt={counts:[this.owned.length,this.owned.filter(x=>x.id).length,this.proc.calls.length],ids:[...this.owned.filter(x=>x.id).map(x=>x.id),...Object.values(this.networks).map(x=>x.id)],detail:{failure:null,outcomes}};
     errors.push(...(this.diagnosticFailures||[]));
     try{this.proc.assertClosed();need(clock()<=this.closureDeadline,'overall_deadline');}catch(e){errors.push(e);}
     if(errors.length){const error=new AggregateError(errors,'closure_incomplete');error.publicReceipt=publicReceipt;throw error;}this.closed=true;
