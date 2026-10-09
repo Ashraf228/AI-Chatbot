@@ -1,6 +1,17 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
 const {stateDiagnostic}=require('./diagnostics.cjs');
+function loadCheck(input,runtime=false){
+  let stage='uid';try{
+    if(process.getuid()!==1000||process.getgid()!==1000)throw Object.assign(Error(),{code:'state_owner_required'});
+    if(process.version!=='v24.17.0')throw Object.assign(Error(),{code:'node_version_required'});
+    stage='module';
+    const diagnostics=require('./diagnostics.cjs'),common=require('./common.cjs'),base=require('./base-diagnostics.cjs'),launch=require('./state-launch.cjs'),registry=require('./registry-bindings.json'),probe=require('./probe.cjs');
+    if(typeof diagnostics.decodeState!=='function'||typeof common.Processes!=='function'||typeof base.classifyBase!=='function'||typeof launch.stateArgs!=='function'||registry.images.length!==4||typeof probe.retiredAdmission!=='function')throw Object.assign(Error(),{code:'entry_contract_invalid'});
+    if(runtime&&typeof require(path.join(input.toolsRoot,'apps/api/dist/maintenance/maintenance-state.js')).MaintenanceState!=='function')throw Object.assign(Error(),{code:'entry_contract_invalid'});
+    return{loaded:true,uid:process.getuid(),gid:process.getgid(),node:process.version,modules:runtime?8:7,runtime};
+  }catch(error){error.stateDiagnostic=stateDiagnostic(error,stage);throw error;}
+}
 async function run(input){
   let stage='uid';try{
   if(process.getuid()!==1000)throw Object.assign(Error('state owner required'),{code:'state_owner_required'});
@@ -26,4 +37,4 @@ async function run(input){
   }catch(error){error.stateDiagnostic=stateDiagnostic(error,stage);throw error;}
 }
 if(require.main===module){let b='',oversized=false;process.stdin.on('data',c=>{if(!oversized){b+=c;if(Buffer.byteLength(b)>65536){oversized=true;b='';}}});process.stdin.on('end',async()=>{try{if(oversized)throw Object.assign(Error('input limit'),{code:'invalid_input'});process.stdout.write(JSON.stringify(await run(JSON.parse(b)))+'\n');}catch(error){process.stderr.write('SSB_STATE_DIAGNOSTIC_V1 '+JSON.stringify(error.stateDiagnostic||stateDiagnostic(error,'input'))+'\n');process.exitCode=1;}});}
-module.exports={run};
+module.exports={run,loadCheck};

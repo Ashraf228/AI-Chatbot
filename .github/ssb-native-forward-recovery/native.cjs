@@ -3,6 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{ran
 const {sha,need,json,bound,regular,clock,Processes,failureRecord}=require('./common.cjs');
 const {services,networks,secrets,write,generation}=require('./fixtures.cjs');
 const {publicFailure}=require('./diagnostics.cjs');
+const {stateArgs}=require('./state-launch.cjs');
 const SOURCE='94a25578e883a6d7bbd03f26c56735739f75e45e',BUILD_DATE='2026-10-09T00:00:00Z';
 const GiB=1024**3,fullId=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 function verifyBase(list,base){need(Array.isArray(list)&&list.length===1,'base_response_invalid');const x=list[0];need(x.Id===base.imageId&&x.Os==='linux'&&x.Architecture==='amd64'&&Array.isArray(x.RepoDigests)&&x.RepoDigests.some(r=>r===base.reference||r===base.reference.replace(/^library\//,'')),'base_identity_invalid');need(x.Config&&typeof x.Config==='object'&&!Array.isArray(x.Config),'base_config_invalid');for(const [k,v]of Object.entries(base.envVersionFields))need(x.Config.Env?.includes(`${k}=${v}`),'base_version_invalid');return x;}
@@ -35,6 +36,7 @@ class Native{
     this.watch=setInterval(()=>{try{this.resources();}catch{this.resourceFailure=true;for(const child of this.proc.children)try{process.kill(-child.pid,'SIGTERM');}catch{}}},250);
     this.toolsRoot=path.join(this.privateRoot,'host-tools');fs.cpSync(path.join(__dirname,'adapters'),this.toolsRoot,{recursive:true,force:false,errorOnExist:true});
     this.stateRoot=path.join(this.privateRoot,'state');fs.mkdirSync(this.stateRoot,{mode:0o700});fs.chownSync(this.stateRoot,1000,1000);
+    await this.stateLoadCheck(false);
     return{verified:true,counts:[901,4],hashes:[sha(manifestBytes)]};
   }
   async bases(){
@@ -74,8 +76,14 @@ class Native{
     if(['database','e1'].includes(action))need(Array.isArray(r.hashes)&&r.hashes.length===(action==='e1'?2:1)&&r.hashes.every(x=>/^[a-f0-9]{64}$/.test(x)),'mandatory_digest_missing');return r;
   }
   async state(action,binding,extra={}){
-    const result=await this.command(process.execPath,[path.join(__dirname,'state-agent.cjs')],{input:JSON.stringify({action,binding,toolsRoot:this.toolsRoot,owner:this.synthetic.owner,epoch:this.epoch,...extra}),uid:1000,gid:1000,ms:1000,stateDiagnostic:true});
+    const result=await this.command(process.execPath,stateArgs(path.join(__dirname,'state-agent.cjs')),{input:JSON.stringify({action,binding,toolsRoot:this.toolsRoot,owner:this.synthetic.owner,epoch:this.epoch,...extra}),uid:1000,gid:1000,ms:1000,stateDiagnostic:true});
     need(result.stderr.length===0,'state_diagnostic_invalid');return json(result.stdout);
+  }
+  async stateLoadCheck(runtime){
+    const result=await this.command(process.execPath,stateArgs(path.join(__dirname,'state-agent.cjs'),runtime?'load-runtime':'load'),{input:JSON.stringify({toolsRoot:this.toolsRoot}),uid:1000,gid:1000,ms:1000,stateDiagnostic:true});
+    need(result.stderr.length===0,'state_diagnostic_invalid');
+    const proof=json(result.stdout),expected={loaded:true,uid:1000,gid:1000,node:'v24.17.0',modules:runtime?8:7,runtime};
+    need(JSON.stringify(proof)===JSON.stringify(expected),'state_diagnostic_invalid');return proof;
   }
   async initialize(){
     // The 90-second native window includes setup, all cohorts and restore; no hidden reset per cohort.
@@ -96,6 +104,7 @@ class Native{
     this.probeContainer=await this.create(this.prefix+'-probe',this.images.api,['--network',this.networks.internal.name,'--user=1000:1000','--read-only','--cap-drop=ALL','--tmpfs','/tmp:rw,nosuid,size=64m','--mount',`type=bind,src=${__dirname},dst=/proof,readonly`,'--mount',`type=bind,src=${this.source},dst=/source,readonly`,'--mount',`type=bind,src=${this.stateRoot},dst=/state`,'--memory=1g','--pids-limit=128'],'probe');
     await this.d(['network','connect',this.networks.ingress.id,this.probeContainer.id]);await this.d(['network','connect',this.networks.admin_writer.id,this.probeContainer.id]);
     const dist=path.join(this.toolsRoot,'apps/api/dist/maintenance');fs.mkdirSync(dist,{recursive:true});await this.d(['cp',`${this.probeContainer.id}:/app/dist/maintenance/maintenance-state.js`,path.join(dist,'maintenance-state.js')]);fs.chmodSync(path.join(dist,'maintenance-state.js'),0o644);
+    await this.stateLoadCheck(true);
     await this.state('initialize',{root:this.stateRoot,service:this.prefix,generation:'seed'});
     await this.start(this.pg);await this.start(this.redis);await this.start(this.probeContainer);
     const until=clock()+6000;let ready=false;while(clock()<until){const r=await this.d(['exec',this.pg.id,'pg_isready','-U','postgres','-d','synthetic'],{allowFailure:true});if(r.code===0){ready=true;break;}await new Promise(r=>setTimeout(r,100));}need(ready,'postgres_not_ready');
