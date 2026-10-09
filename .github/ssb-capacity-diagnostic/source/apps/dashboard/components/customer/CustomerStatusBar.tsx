@@ -1,0 +1,298 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import type { DashboardSessionRole } from "../../lib/auth";
+import { findSiteWorkspaceLocation, type SiteNavGroup } from "../../lib/dashboard-config";
+import { getDashboardRoleAccess } from "../../lib/dashboard-role-access";
+import { useCustomerWorkspaceAccess } from "../../lib/use-customer-workspace-access";
+import { encodeSiteId } from "../../lib/site-id";
+import { resolveWidgetLoaderUrl } from "../../lib/widget-loader-url";
+import { Button } from "../shared/Button";
+import { CustomerStatusBadge } from "./CustomerStatusBadge";
+import { mapStatusSeverityToTone, type CustomerApiStatus } from "./customer-status";
+
+type CustomerStatusBarProps = {
+  siteId: string;
+  dashboardRole?: DashboardSessionRole | null;
+  groups: SiteNavGroup[];
+};
+
+type SiteDetails = {
+  name: string;
+  siteKey: string;
+  allowedDomains: string[];
+  goLiveAt: string;
+};
+
+function toPreviewUrl(domain: string) {
+  if (!domain) {
+    return "";
+  }
+
+  if (domain.startsWith("http://") || domain.startsWith("https://")) {
+    return domain;
+  }
+
+  return `https://${domain}`;
+}
+
+function localNextHref(siteId: string, status: CustomerApiStatus | null) {
+  const siteSlug = encodeSiteId(siteId);
+  const firstMissing = status?.missingSteps?.[0];
+
+  if (firstMissing === "knowledge") {
+    return `/sites/${siteSlug}/setup?step=knowledge#setup-step-knowledge`;
+  }
+
+  if (firstMissing === "behavior") {
+    return `/sites/${siteSlug}/setup?step=flow#setup-step-flow`;
+  }
+
+  if (firstMissing === "design") {
+    return `/sites/${siteSlug}/setup?step=design#setup-step-design`;
+  }
+
+  if (firstMissing === "embed") {
+    return `/sites/${siteSlug}/setup?step=launch#setup-step-live`;
+  }
+
+  if (firstMissing === "test") {
+    return `/sites/${siteSlug}/setup?step=launch#customer-test-chat`;
+  }
+
+  return `/sites/${siteSlug}/setup?step=customer#setup-step-basics`;
+}
+
+function primaryAction(siteId: string, status: CustomerApiStatus | null, site: SiteDetails | null) {
+  const siteSlug = encodeSiteId(siteId);
+  const isLive = Boolean(site?.goLiveAt || status?.lifecycleStatus === "live");
+
+  if (isLive) {
+    return { label: "Chat testen", href: `/sites/${siteSlug}/setup?step=launch#customer-test-chat` };
+  }
+
+  if ((status?.knowledgeCount ?? 0) === 0 || status?.missingSteps?.includes("knowledge")) {
+    return { label: "Wissen hinzufügen", href: `/sites/${siteSlug}/setup?step=knowledge#setup-step-knowledge` };
+  }
+
+  return { label: "Einrichtung fortsetzen", href: localNextHref(siteId, status) };
+}
+
+export function CustomerStatusBar({ siteId, dashboardRole = null, groups }: CustomerStatusBarProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const siteSlug = encodeSiteId(siteId);
+  const hasCustomerWorkspaceAccess = useCustomerWorkspaceAccess(siteId, dashboardRole);
+  const roleAccess = getDashboardRoleAccess(dashboardRole, hasCustomerWorkspaceAccess);
+  const [loaded, setLoaded] = useState<{
+    siteId: string;
+    site: SiteDetails | null;
+    status: CustomerApiStatus | null;
+  } | null>(null);
+  const site = loaded?.siteId === siteId ? loaded.site : null;
+  const status = loaded?.siteId === siteId ? loaded.status : null;
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+  const [hash, setHash] = useState("");
+  const [loaderUrl, setLoaderUrl] = useState(
+    process.env.NEXT_PUBLIC_WIDGET_LOADER_URL || "http://localhost:8080/loader.js",
+  );
+
+  useEffect(() => {
+    setLoaderUrl(resolveWidgetLoaderUrl(process.env.NEXT_PUBLIC_WIDGET_LOADER_URL));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const syncHash = () => setHash(window.location.hash);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoaded(null);
+    async function load() {
+      try {
+        const options = { cache: "no-store" as const, signal: controller.signal };
+        const [siteResponse, statusResponse] = await Promise.all([
+          fetch(`/api/widget/sites/${encodeSiteId(siteId)}`, options),
+          fetch(`/api/sites/${encodeSiteId(siteId)}/status`, options),
+        ]);
+        const siteData = await siteResponse.json().catch(() => ({}));
+        const statusData = await statusResponse.json().catch(() => ({}));
+        if (controller.signal.aborted) return;
+        setLoaded({
+          siteId,
+          site: siteResponse.ok ? {
+            name: siteData.name || siteId,
+            siteKey: siteData.siteKey || "",
+            allowedDomains: Array.isArray(siteData.allowedDomains) ? siteData.allowedDomains : [],
+            goLiveAt: siteData.goLiveAt || "",
+          } : null,
+          status: statusResponse.ok && statusData?.status ? statusData : null,
+        });
+      } catch {
+        if (!controller.signal.aborted) setLoaded({ siteId, site: null, status: null });
+      }
+    }
+
+    void load();
+    return () => controller.abort();
+  }, [siteId]);
+
+  const embedCode = useMemo(() => {
+    if (!site?.siteKey) {
+      return "";
+    }
+
+    return `<script src="${loaderUrl}" data-site-key="${site.siteKey}" defer></script>`;
+  }, [loaderUrl, site?.siteKey]);
+  const domain = site?.allowedDomains?.[0] || "";
+  const previewUrl = toPreviewUrl(domain);
+  const isLive = Boolean(site?.goLiveAt || status?.lifecycleStatus === "live");
+  const mainAction = primaryAction(siteId, status, site);
+  const liveBlockedReason = status && !status.isLiveReady && !isLive ? status.nextAction?.label || status.label : "";
+  const { activeGroup, activeItem } = findSiteWorkspaceLocation(
+    groups,
+    siteSlug,
+    pathname,
+    searchParams.toString(),
+    hash,
+  );
+  const activeAreaLabel = activeItem?.label || activeGroup?.label || "Übersicht";
+  const activeAreaDescription = activeItem?.description || activeGroup?.description || "Aktueller Workspace-Bereich.";
+  const boundaryLabels = [
+    ...roleAccess.boundaryBadges,
+    isLive ? "Betriebsfreigabe hier nicht geprüft" : "Produktivbetrieb nicht aktiviert",
+    isLive ? "Gespeicherter Site-Status: live" : "Oeffentliches Chatfenster nicht aktiviert",
+    isLive ? "Erreichbarkeit separat prüfen" : "Livegang nur nach Review",
+  ];
+
+  async function copyEmbedCode() {
+    if (!embedCode) {
+      setError("Einbindungscode fehlt noch.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(embedCode);
+      setCopied(true);
+      setError("");
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setError("Einbindungscode konnte nicht kopiert werden.");
+    }
+  }
+
+  return (
+    <section className="customer-status-bar">
+      <div className="customer-status-bar__identity">
+        <p>Aktiver Workspace</p>
+        <h2>{site?.name || siteId}</h2>
+        <div className="customer-status-bar__context">
+          <span>Site: {siteId}</span>
+          <span>Bereich: {activeAreaLabel}</span>
+          <span>Rolle: {roleAccess.roleLabel}</span>
+        </div>
+        <span>{domain || "Keine Domain hinterlegt"}</span>
+      </div>
+
+      <div className="customer-status-bar__states customer-status-bar__segment">
+        <CustomerStatusBadge
+          status={status ? mapStatusSeverityToTone(status.severity) : "pending"}
+          label={status?.label || "Status wird geladen"}
+        />
+        <span className={isLive ? "dashboard-status dashboard-status--success" : "dashboard-badge"}>
+          {isLive ? "Als live markiert" : "Nicht live"}
+        </span>
+        <span className={site?.siteKey ? "dashboard-status dashboard-status--success" : "dashboard-badge"}>
+          {site?.siteKey ? "Widget bereit" : "Einbindung fehlt"}
+        </span>
+      </div>
+
+      <div className="customer-status-bar__next customer-status-bar__segment">
+        <span>Aktiver Fokus</span>
+        <strong>{activeAreaLabel}</strong>
+        <small>{activeAreaDescription}</small>
+      </div>
+
+      <div className="customer-status-bar__next customer-status-bar__segment">
+        <span>Nächster Schritt</span>
+        <strong>{isLive ? "Gespeicherten Status prüfen" : status?.nextAction?.label || mainAction.label}</strong>
+        <small>
+          {isLive
+            ? "Der gespeicherte Live-Status ist kein Nachweis der Erreichbarkeit oder einer Betriebsfreigabe."
+            : "Die Einrichtung bleibt die verbindliche Arbeitsgrundlage bis zum Review-Gate."}
+        </small>
+      </div>
+
+      <div className="customer-status-bar__next customer-status-bar__segment">
+        <span>Zugriff</span>
+        <strong>{roleAccess.summary}</strong>
+        <small>{roleAccess.description}</small>
+        <div className="customer-status-bar__access-grid" aria-label="Zugriffsübersicht">
+          {roleAccess.capabilities.map((capability) => (
+            <span
+              key={capability.key}
+              className={capability.allowed ? "dashboard-status dashboard-status--success" : "dashboard-badge"}
+            >
+              {capability.label}: {capability.allowed ? "Ja" : "Nein"}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="customer-status-bar__boundaries" aria-label="Workspace-Grenzen">
+        {boundaryLabels.map((label) => (
+          <span key={label} className="dashboard-badge">
+            {label}
+          </span>
+        ))}
+      </div>
+
+      <div className="customer-status-bar__actions">
+        <Link href={mainAction.href} className="dashboard-button dashboard-button--primary customer-status-bar__action">
+          {mainAction.label}
+        </Link>
+        <Button type="button" variant="secondary" onClick={copyEmbedCode} className="customer-status-bar__action">
+          Widget-Code kopieren
+        </Button>
+        {previewUrl ? (
+          <a
+            href={previewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="dashboard-button dashboard-button--secondary customer-status-bar__action"
+          >
+            Vorschau öffnen
+          </a>
+        ) : null}
+        <Link
+          href={`/sites/${siteSlug}/analytics`}
+          className="dashboard-button dashboard-button--secondary customer-status-bar__action"
+        >
+          Analytics ansehen
+        </Link>
+      </div>
+
+      <p className="customer-status-bar__hint">{roleAccess.demoBoundaryCopy}</p>
+
+      {liveBlockedReason ? (
+        <p className="customer-status-bar__hint">
+          Noch nicht bereit fuer den Livegang: {liveBlockedReason}. Kein oeffentliches Chatfenster, kein Self-Service
+          und keine Aktivierung des Produktivbetriebs aus diesem Stand.
+        </p>
+      ) : null}
+      {copied ? <p className="dashboard-status dashboard-status--success">Einbindungscode kopiert.</p> : null}
+      {error ? <p className="dashboard-status dashboard-status--error">{error}</p> : null}
+    </section>
+  );
+}

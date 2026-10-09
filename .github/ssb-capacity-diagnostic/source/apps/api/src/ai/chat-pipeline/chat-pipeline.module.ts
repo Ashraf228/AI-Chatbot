@@ -1,0 +1,59 @@
+import { Module } from '@nestjs/common';
+
+import { ChatAgentOrchestratorService } from '../../chat/chat-agent-orchestrator.service';
+import { ChatRoutingModule } from '../../chat-routing/chat-routing.module';
+import { PrismaService } from '../../db/prisma.service';
+import { IntegrationsModule } from '../../integrations/integrations.module';
+import { KnowledgeSourcesModule } from '../../knowledge-sources/knowledge-sources.module';
+import { EcommerceProductAdvisorModule } from '../../modules/ecommerce-product-advisor/ecommerce-product-advisor.module';
+import { LeadMailerService } from '../../modules/widget/services/lead-mailer.service';
+import { ReportMailerService } from '../../modules/widget/services/report-mailer.service';
+import { OrchestrationModule } from '../orchestration/orchestration.module';
+import { SitesModule } from '../../sites/sites.module';
+import { SiteModulesModule } from '../../site-modules/site-modules.module';
+import { ToolAuditService } from '../../tools/tool-audit.service';
+import { ToolExecutorService } from '../../tools/tool-executor.service';
+import { ToolRegistryService } from '../../tools/tool-registry.service';
+import { WebhookJobsService } from '../../tools/webhook-jobs.service';
+import { LlmService } from '../../vector/llm.service';
+import { VectorService } from '../../vector/vector.service';
+import { ChatPipelineService } from './chat-pipeline.service';
+import { ConversationStateService } from './conversation-state.service';
+import { ResponseComposerService } from './response-composer.service';
+import { BillingModule } from '../../billing/billing.module';
+import { AssistantProfilesModule } from '../../assistant-profiles';
+import { ConversationEngineModule } from '../../conversation-engine/conversation-engine.module';
+import { KnowledgeConversationService } from './knowledge-conversation.service';
+
+@Module({
+  imports: [
+    ChatRoutingModule,
+    EcommerceProductAdvisorModule,
+    SiteModulesModule,
+    OrchestrationModule,
+    SitesModule,
+    IntegrationsModule,
+    KnowledgeSourcesModule,
+    BillingModule,
+    AssistantProfilesModule,
+    ConversationEngineModule,
+  ],
+  providers: [
+    ChatPipelineService,
+    KnowledgeConversationService,
+    ConversationStateService,
+    ResponseComposerService,
+    ChatAgentOrchestratorService,
+    PrismaService,
+    VectorService,
+    LlmService,
+    LeadMailerService,
+    ReportMailerService,
+    ToolExecutorService,
+    ToolAuditService,
+    ToolRegistryService,
+    WebhookJobsService,
+  ],
+  exports: [ChatPipelineService],
+})
+export class ChatPipelineModule {}

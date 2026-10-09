@@ -1,0 +1,8 @@
+import { forwardSiteRuntimeGrantRequest } from "@/lib/site-runtime-grant-transport";
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ tenantId: string; siteId: string }> },
+) {
+  return forwardSiteRuntimeGrantRequest(request, "create", await context.params);
+}

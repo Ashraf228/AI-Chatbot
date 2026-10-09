@@ -1,0 +1,78 @@
+import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { AdminKeyGuard } from '../utils/admin.guard';
+import { RequireDashboardRoles } from '../utils/dashboard-rbac';
+import { AdminScopeService } from '../utils/admin-scope.service';
+import { EvaluationAccessService } from './evaluation-access.service';
+import { EvaluationHandoffService } from './evaluation-handoff.service';
+import { EvaluationService } from './evaluation.service';
+
+function resolveClientIp(req: { ip?: string; headers?: Record<string, unknown> }) {
+  const forwarded = req.headers?.['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0]?.trim() || 'unknown';
+  }
+  return req.ip || 'unknown';
+}
+
+@UseGuards(AdminKeyGuard)
+@RequireDashboardRoles('viewer')
+@Controller('admin/evaluation')
+export class EvaluationController {
+  constructor(
+    private readonly scope: AdminScopeService,
+    private readonly access: EvaluationAccessService,
+    private readonly evaluation: EvaluationService,
+    private readonly handoff: EvaluationHandoffService,
+  ) {}
+
+  @Get('context')
+  async context(@Req() req: { dashboardAuth?: unknown }) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.evaluation.context(access);
+  }
+
+  @Post('chat/session')
+  async createChatSession(@Req() req: { dashboardAuth?: unknown }, @Body() body: Record<string, unknown>) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.evaluation.createChatSession(access, body || {});
+  }
+
+  @Post('chat/message')
+  async sendMessage(
+    @Req() req: { dashboardAuth?: unknown; ip?: string; headers?: Record<string, unknown> },
+    @Body() body: Record<string, unknown>,
+  ) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.evaluation.sendMessage(access, body || {}, resolveClientIp(req));
+  }
+
+  @Post('chat/ticket/confirm')
+  async confirmTicket(@Req() req: { dashboardAuth?: unknown }, @Body() body: Record<string, unknown>) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.evaluation.confirmTicket(access, body || {});
+  }
+
+  @Post('chat/ticket/cancel')
+  async cancelTicket(@Req() req: { dashboardAuth?: unknown }, @Body() body: Record<string, unknown>) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.evaluation.cancelTicketPreview(access, body || {});
+  }
+
+  @Post('chat/ticket/handoff')
+  async requestHandoff(@Req() req: { dashboardAuth?: unknown }, @Body() body: Record<string, unknown>) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.handoff.requestHandoff(access, body || {});
+  }
+
+  @Post('chat/ticket/handoff/status')
+  async handoffStatus(@Req() req: { dashboardAuth?: unknown }, @Body() body: Record<string, unknown>) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.handoff.handoffStatus(access, body || {});
+  }
+
+  @Get('chat/ticket/handoff/status')
+  async getHandoffStatus(@Req() req: { dashboardAuth?: unknown }, @Query('conversationId') conversationId?: string) {
+    const access = await this.access.resolve(this.scope.getAuth(req));
+    return this.handoff.handoffStatus(access, { conversationId });
+  }
+}
