@@ -29,6 +29,7 @@ function validate(r){
 function validateEvidence(r,prior){
   const failed=prior.some(x=>!x.ok);
   need((r.phase===phases[prior.length]&&!failed)||(r.phase==='closure'&&failed&&!prior.some(x=>x.phase==='closure')),'receipt_phase_order');
+  if(r.phase==='preflight'&&!r.ok)need(r.counts.length===0&&r.ids.length===0&&r.hashes.length<=1,'failed_preflight_shape');
   need(!prior.length||r.elapsedMs>=prior.at(-1).elapsedMs,'receipt_elapsed_order');
   if(r.phase==='closure')for(const o of r.detail.outcomes.filter(x=>x.state==='graceful')){const shutdown=prior.find(x=>x.ok&&x.phase===o.generation+'-shutdown');need(['api','admin-writer'].includes(o.role)&&shutdown?.ids[['api','admin-writer'].indexOf(o.role)]===o.id,'graceful_shutdown_receipt_missing');}
   if(!r.ok)return;
