@@ -15,6 +15,7 @@ function failureRecord(error){
     if(typeof e?.ioCode==='string'&&/^[A-Z][A-Z0-9_]{0,31}$/.test(e.ioCode))r.ioCode=e.ioCode;
     r.frames=String(e?.stack||'').split('\n').slice(1,9).flatMap(line=>{const m=line.match(/([A-Za-z0-9_.-]+\.(?:cjs|mjs|js|ts)):(\d+):(\d+)\)?$/);return m?[{file:m[1],line:Number(m[2]),column:Number(m[3])}]:[];});
     if(e?.process){r.process={};for(const key of ['index','code','signal','closed','timeout','overflow','completionUnverified']){const value=e.process[key];if(typeof value==='boolean'||Number.isSafeInteger(value)||value===null||key==='signal'&&/^SIG[A-Z0-9]+$/.test(value||''))r.process[key]=value;}}
+    if(e?.baseDiagnostic){try{const b=require('./base-diagnostics.cjs').validateBase(e.baseDiagnostic);r.base={reference:b.reference,category:b.category,httpStatus:b.httpStatus};}catch{}}
     if(Array.isArray(e?.errors))r.causes=e.errors.slice(0,64).map(x=>visit(x,depth+1));
     if(e?.cause)r.cause=visit(e.cause,depth+1);return r;
   };
@@ -22,8 +23,9 @@ function failureRecord(error){
 }
 class Processes {
   constructor({deadline,privateRoot,now=clock}){this.deadline=deadline;this.privateRoot=privateRoot;this.now=now;this.calls=[];this.children=new Set();this.bytes=0;this.workBytes=0;this.closureBytes=0;}
-  async run(bin,args,{input,ms=10000,allowFailure=false,cwd,env,uid,gid,closure=false,stateDiagnostic=false,deadline=this.deadline}={}){
+  async run(bin,args,{input,ms=10000,allowFailure=false,cwd,env,uid,gid,closure=false,stateDiagnostic=false,baseReference,deadline=this.deadline}={}){
     need(Array.isArray(args)&&args.every(a=>typeof a==='string'),'argv_invalid');
+    if(baseReference!==undefined){require('./base-diagnostics.cjs').boundReference(baseReference);need(bin==='/usr/bin/docker'&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','pull','--platform=linux/amd64',baseReference])&&!allowFailure&&!closure&&!stateDiagnostic,'base_diagnostic_binding');}
     need(Number.isFinite(deadline)&&deadline<=this.deadline,'deadline_binding');
     const limit=Math.min(ms,deadline-this.now()-(closure?0:30000));need(limit>100,'deadline');
     const index=this.calls.length;const rec={index,bin,argc:args.length,startedAt:new Date().toISOString(),closed:false};this.calls.push(rec);
@@ -51,6 +53,7 @@ class Processes {
         const out=Buffer.concat(stdout),err=Buffer.concat(stderr);
         let primary;
         if(timeout||overflow||spawnError||(!allowFailure&&code!==0)||signal){primary=new GateError(timeout?'command_timeout':overflow?'output_limit':spawnError?'spawn_failed':'command_failed');primary.process={...rec};}
+        if(primary&&baseReference!==undefined&&primary.code==='command_failed'&&Number.isInteger(code)&&code!==0&&!signal){primary.baseDiagnostic=require('./base-diagnostics.cjs').classifyBase(out,err,baseReference);}
         if(primary&&stateDiagnostic&&code===1&&!signal&&!timeout&&!overflow&&!spawnError){try{need(out.length===0,'state_diagnostic_invalid');primary.stateDiagnostic=require('./diagnostics.cjs').decodeState(err);}catch(cause){primary.cause=cause;}}
         try{fs.writeFileSync(`${this.privateRoot}/process-${index}.stdout`,out,{mode:0o600,flag:'wx'});fs.writeFileSync(`${this.privateRoot}/process-${index}.stderr`,err,{mode:0o600,flag:'wx'});}catch(e){const evidence=new GateError('evidence_write_failed');evidence.ioCode=e.code;if(closure&&!primary)evidence.result={stdout:out,stderr:err,code,signal,closed:true};reject(primary?new AggregateError([primary,evidence],'primary_and_evidence_failed'):evidence);return;}
         if(primary){reject(primary);return;}

@@ -39,7 +39,7 @@ class Native{
   }
   async bases(){
     for(const base of require('./registry-bindings.json').images){
-      await this.d(['pull','--platform=linux/amd64',base.reference],{ms:60000});this.pullCount++;
+      await this.d(['pull','--platform=linux/amd64',base.reference],{ms:60000,baseReference:base.reference});this.pullCount++;
       verifyBase(json((await this.d(['image','inspect',base.reference])).stdout),base);
     }
     return{verified:true,counts:[this.pullCount],ids:require('./registry-bindings.json').images.map(x=>x.imageId)};
