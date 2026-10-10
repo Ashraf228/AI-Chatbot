@@ -193,14 +193,14 @@ function dispatchHarness(mode='matching'){
   const blob=b=>createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex');
   const tree=[...publication.files,{path:'.github/ssb-native-forward-recovery/publication-manifest.json'}].map(f=>({path:f.path,sha:blob(fs.readFileSync(path.join(pub,f.path))),mode:'100644',type:'blob'}));
   const state={posts:[],locks:[],receiver:[],stdout:[],lists:0,headReads:0};let stored,clock=0;
-  const fakeFs={...fs,readFileSync(p,...args){return p===artifactPath?manifestBytes:fs.readFileSync(p,...args);},writeFileSync(p,b,o){assert.equal(p,path.join(root,'../ssb-native-forward-recovery-L6MXNJ.spent.json'));assert.equal(o.flag,'wx');assert.equal(o.mode,0o600);if(stored)throw Error('EEXIST');stored=JSON.parse(b);state.locks.push(stored);}};
+  const fakeFs={...fs,readFileSync(p,...args){return p===artifactPath?manifestBytes:fs.readFileSync(p,...args);},writeFileSync(p,b,o){assert.equal(p,path.join(root,'../ssb-native-forward-recovery-pPlMqN.spent.json'));assert.equal(o.flag,'wx');assert.equal(o.mode,0o600);if(stored)throw Error('EEXIST');stored=JSON.parse(b);state.locks.push(stored);}};
   const execFileSync=(bin,args)=>{
     if(bin==='/offline/node'){state.receiver.push(args);return Buffer.from('{"status":"MOCK_RECEIVER"}\n');}
     assert.equal(bin,'gh');const route=args[1];
     if(route==='repos/Ashraf228/AI-Chatbot')return JSON.stringify({private:false,default_branch:'main'});
     if(route.endsWith('/git/ref/heads/main')){state.headReads++;return JSON.stringify({object:{sha:mode==='head-advanced'&&state.headReads>1?'e'.repeat(40):context.workflowHead}});}
     if(route.includes('/git/commits/'))return JSON.stringify({tree:{sha:'c'.repeat(40)}});
-    if(route.includes('/git/trees/6a294f6142de13a0bfe02b908e64a5ee43793dc6'))return JSON.stringify({tree:[],truncated:false});
+    if(route.includes('/git/trees/0812fd2be6df72fce16a7603a7ec83bc96d5053f'))return JSON.stringify({tree:[],truncated:false});
     if(route.includes('/git/trees/'))return JSON.stringify({tree,truncated:false});
     if(route.endsWith('/dispatches')){assert.ok(stored);state.posts.push(args);if(mode==='post-fails')throw Error('SYNTHETIC_PRIVATE_API_ERROR');return '';}
     if(route.includes('/runs?')){
