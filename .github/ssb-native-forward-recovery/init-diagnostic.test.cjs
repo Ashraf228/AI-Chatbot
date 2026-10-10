@@ -6,13 +6,13 @@ const {parseReceipts,dispatchTitle}=require('./evidence.cjs'),{publicFailure,val
 const fixtures=require('./fixtures.cjs'),opts={authorization:'ONE_NATIVE_FORWARD_RECOVERY',run:'12345678',attempt:'1',workflowHead:'a'.repeat(40),dispatchNonce:'b'.repeat(64)},job='87654321';
 const marker='SYNTHETIC_PRIVATE_MARKER',tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'ssb-init-diagnostic-'));
 function load(file,replacements={},globals={}){const m={exports:{}},req=createRequire(file);const globalsForModule={module:m,exports:m.exports,__dirname:path.dirname(file),__filename:file,require:id=>Object.hasOwn(replacements,id)?replacements[id]:req(id),process,Buffer,performance,setTimeout,clearTimeout,setInterval,clearInterval,console,Error,TypeError,SyntaxError,RangeError,ReferenceError,AggregateError,...globals};vm.compileFunction(fs.readFileSync(file,'utf8'),Object.keys(globalsForModule),{filename:file})(...Object.values(globalsForModule));return m.exports;}
-function harness({fault=null,old=false,processFailure=null}={}){
+function harness({fault=null,old=false,processFailure=null,now}={}){
  const root=tmp(),raw=path.join(root,'raw'),state=path.join(root,'state');fs.mkdirSync(raw);fs.mkdirSync(state);
  const calls=[],snapshots=new Map(),nets=new Map(),volumes=[],hit=(name)=>{if(fault?.at===name)throw fault.error;},id=i=>i.toString(16).padStart(64,'0');let serial=10;
  const fakeFS={...fs,mkdirSync(p,o){hit('mkdir');return fs.mkdirSync(p,o);},chmodSync(p,m){hit('chmod');return fs.chmodSync(p,m);}};
  const fakeFixtures={...fixtures,write(p,b){hit('env');fs.writeFileSync(p,b,{flag:'wx',mode:0o600});return{path:p,sha256:sha(b)};}};
  const file=path.join(old?path.resolve(__dirname,old==='diagnostic'?'../../../../ssb-init-diagnostic-followup-20261010.HV5QFt/publication/.github/ssb-native-forward-recovery':'../../../../ssb-helper-access-binding-followup-20261010.2oRmpy/publication/.github/ssb-native-forward-recovery'):__dirname,'native.cjs');
- const C=load(file,{'node:fs':fakeFS,'./fixtures.cjs':fakeFixtures}).Native,n=new C(opts);
+ const C=load(file,{'node:fs':fakeFS,'./fixtures.cjs':fakeFixtures,...(now?{'./common.cjs':{...common,clock:now}}:{})}).Native,n=new C(opts);
  Object.assign(n,{privateRoot:root,toolsRoot:path.join(root,'tools'),stateRoot:state,stateEntry:path.join(__dirname,'state-agent.cjs'),source:path.join(root,'source'),prefix:'ssb-native-'+opts.run,docker:'/usr/bin/docker',synthetic:{owner:marker,passwords:{postgres:marker}},images:{api:'sha256:'+id(100)},initial:{containers:[],volumes:[]},proc:{calls:[],assertClosed(){assert.ok(this.calls.every(x=>x.closed));}}});
  if(!old){Object.defineProperty(n,'verifiedPublicationManifest',{value:sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')))});assert.equal(n.start,C.prototype.start);assert.equal(Object.hasOwn(n,'start'),false);assert.equal(typeof n.startedAt,'number');}
  const response=(stdout='',code=0)=>({stdout:Buffer.from(stdout),stderr:Buffer.alloc(0),code,signal:null,closed:true});
@@ -47,7 +47,9 @@ function harness({fault=null,old=false,processFailure=null}={}){
   if(a[0]==='exec'&&a.includes('pg_dumpall'))return response('CREATE ROLE postgres;\nCREATE ROLE synthetic_runtime;\n');
   if(a[0]==='exec'&&a.includes('psql')){assert.equal(o.input,'CREATE ROLE synthetic_runtime;\n');return response();}
   if(a[0]==='exec'&&a.includes('pg_restore')){assert.equal(o.input.toString(),'SYNTHETIC_DUMP');return response();}
-  if(a[0]==='exec'&&a.includes('/proof/probe.cjs')){const input=JSON.parse(o.input);assert.ok(['initialize','database','restore-logins'].includes(input.action));hit('probe');await new Promise(r=>setImmediate(r));return response(fault?.at==='probe-json'?'SSB_PROOF_JSON {':'SSB_PROOF_JSON '+JSON.stringify({verified:true,counts:input.action==='initialize'?[34,4,1]:input.action==='restore-logins'?[2,2]:[1],hashes:['c'.repeat(64)]}));}
+  if(a[0]==='exec'&&a.includes('/proof/probe.cjs')){const input=JSON.parse(o.input);
+   if(['postgres-ready-init','postgres-ready-restore'].includes(input.action))return response('SSB_PROOF_JSON '+JSON.stringify({verified:true,counts:[1,1],ready:true,closed:true,target:input.readiness,binding:input.diagnostic}));
+   assert.ok(['initialize','database','restore-logins'].includes(input.action));hit('probe');await new Promise(r=>setImmediate(r));return response(fault?.at==='probe-json'?'SSB_PROOF_JSON {':'SSB_PROOF_JSON '+JSON.stringify({verified:true,counts:input.action==='initialize'?[34,4,1]:input.action==='restore-logins'?[2,2]:[1],hashes:['c'.repeat(64)]}));}
   assert.fail('unapproved offline command');
  };
  const actual=n.execute.bind(n),pm=sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')));

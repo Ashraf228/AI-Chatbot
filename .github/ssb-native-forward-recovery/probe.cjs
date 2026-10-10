@@ -9,7 +9,7 @@ async function http(url,options={}){
   const r=await fetch(url,{...options,redirect:'manual',signal:AbortSignal.timeout(3500)}),text=await r.text();assert.ok(Buffer.byteLength(text)<2*1024*1024);
   return{status:r.status,headers:r.headers,text};
 }
-function pool(input,role='postgres',host='db'){const {Pool}=require('/app/node_modules/pg');return new Pool({host,user:role,password:input.passwords[role],database:'synthetic',connectionTimeoutMillis:2500,statement_timeout:3000,max:2});}
+function pool(input,role='postgres',host='db'){const {Pool}=require('/app/node_modules/pg');return new Pool({host,port:5432,user:role,password:input.passwords[role],database:'synthetic',connectionTimeoutMillis:2500,statement_timeout:3000,max:2});}
 function writerRequest(input,route,id=randomUUID(),principal={role:'admin',sub:'dashboard-admin'},body={name:'Synthetic retained'}){
   const now=Date.now(),session={...principal,exp:now+60000};
   const encoded=Buffer.from(JSON.stringify({...session,iat:now,sessionIssuedAt:new Date(now).toISOString(),sessionExpiresAt:new Date(session.exp).toISOString(),jti:randomUUID()})).toString('base64url');
@@ -193,6 +193,7 @@ async function main(input){
     }finally{await p.end();}
   }
   if(input.action==='retired-admission')return retiredAdmission(input,require('/app/dist/maintenance/maintenance-state').MaintenanceState);
+  if(input.action==='postgres-ready-init'||input.action==='postgres-ready-restore')return require('./postgres-readiness.cjs').check(input);
   if(input.action==='initialize')return initialize(input);
   if(input.action==='roles'){const r=await require('./real-pools.cjs')({...input,host:'db'});assert.equal(r.status,'PASS');assert.equal(r.poolCleanup.completed,true);assert.equal(r.checks.length,32);return{verified:true,counts:[32]};}
   if(input.action==='e1')return e1(input);

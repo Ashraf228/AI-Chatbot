@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{randomUUID}=require('node:crypto');
-const {sha,need,json,bound,regular,clock,Processes,failureRecord}=require('./common.cjs');
+const {sha,need,json,bound,regular,clock,Processes,failureRecord,GateError}=require('./common.cjs');
 const {services,networks,secrets,write,generation}=require('./fixtures.cjs');
 const {publicFailure,InitProgress}=require('./diagnostics.cjs');
 const {stateArgs}=require('./state-launch.cjs');
@@ -70,16 +70,30 @@ class Native{
   }
   async runningLimit(){const rows=(await this.d(['container','ls','-q','--filter',`label=com.ssb.native-run=${this.options.run}`])).stdout.toString().trim().split('\n').filter(Boolean);need(rows.length<=8,'running_resource_limit');}
   async start(entry){entry.startRequested=true;await this.d(['start',entry.id]);const x=(await this.inspect(entry.id))[0];need(x.State.Status==='running'&&x.State.Running&&!x.State.OOMKilled,'service_not_running');await this.runningLimit();return x;}
-  async probe(action,extra={}){
+  async probe(action,extra={},ms=15000){
     const input={...this.synthetic,action,service:this.prefix,generation:this.current?.generation,source:SOURCE,buildDate:BUILD_DATE,imageId:this.images.api,replayId:this.replayId,...extra};
-    const diagnostic=action==='initialize'?{version:1,action,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:sha(randomUUID())}:undefined;
+    const ready=['postgres-ready-init','postgres-ready-restore'].includes(action);
+    const diagnostic=action==='initialize'||ready?{version:1,action,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:sha(randomUUID())}:undefined;
     if(diagnostic){require('./diagnostics.cjs').validateProbeBinding(diagnostic);input.diagnostic=diagnostic;}
-    const result=await this.d(['exec','-i',this.probeContainer.id,'node','/proof/probe.cjs'],{input:JSON.stringify(input),ms:15000,...(diagnostic?{probeDiagnostic:{binding:diagnostic,container:this.probeContainer.id}}:{})});const r=proofResult(result.stdout);
+    if(ready){need(Number.isInteger(ms)&&ms>800&&ms<=1500,'readiness_deadline');input.readinessTimeoutMs=ms-400;}
+    const result=await this.d(['exec','-i',this.probeContainer.id,'node','/proof/probe.cjs'],{input:JSON.stringify(input),ms,...(diagnostic?{probeDiagnostic:{binding:diagnostic,container:this.probeContainer.id}}:{})});const r=proofResult(result.stdout);
     if(diagnostic)need(result.stderr.length===0,'probe_diagnostic_invalid');
+    if(ready)return require('./postgres-readiness.cjs').validateResult(r,input);
     const expected={initialize:[34,4,1],roles:[32],'closed-ready':[3,2],e1:[11,7],drain:[8,1,7],'restore-logins':[2,2],'retired-admission':[8,1]};
     if(expected[action])need(JSON.stringify(r.counts)===JSON.stringify(expected[action]),'mandatory_proof_missing');
     if(action==='retired-admission')need(r.generation===this.current.generation&&r.retiredGeneration===extra.retiredGeneration&&r.code==='generation_retired','retired_proof_binding');
     if(['database','e1'].includes(action))need(Array.isArray(r.hashes)&&r.hashes.length===(action==='e1'?2:1)&&r.hashes.every(x=>/^[a-f0-9]{64}$/.test(x)),'mandatory_digest_missing');return r;
+  }
+  async postgresReady(stage){
+    const readiness=require('./postgres-readiness.cjs'),binding=readiness.target(stage),action='postgres-ready-'+stage;
+    const until=Math.min(clock()+(stage==='init'?6000:5000),this.deadline-30000,this.probeDeadline-30000);let last;
+    while(true){
+      const remaining=Math.floor(until-clock());
+      if(remaining<=800){const error=new GateError('readiness_deadline');if(last)error.cause=last;throw error;}
+      try{const result=await this.probe(action,{readiness:binding},Math.min(1500,remaining));need(clock()<=until,'readiness_deadline');return result;}
+      catch(error){if(!readiness.retryable(error,action))throw error;last=error;}
+      await new Promise(resolve=>setTimeout(resolve,Math.min(100,Math.max(0,until-clock()-800))));
+    }
   }
   async state(action,binding,extra={}){
     need(typeof this.stateEntry==='string'&&path.isAbsolute(this.stateEntry),'state_entry_unbound');
@@ -130,7 +144,7 @@ class Native{
     await this.state('initialize',{root:this.stateRoot,service:this.prefix,generation:'seed'});
     trace.confirm();trace.enter('postgres-start');await this.start(this.pg);trace.confirm();trace.enter('redis-start');await this.start(this.redis);trace.confirm();trace.enter('probe-start');await this.start(this.probeContainer);trace.confirm();
     trace.enter('postgres-ready');
-    const until=clock()+6000;let ready=false;while(clock()<until){const r=await this.d(['exec',this.pg.id,'pg_isready','-U','postgres','-d','synthetic'],{allowFailure:true});if(r.code===0){ready=true;break;}await new Promise(r=>setTimeout(r,100));}need(ready,'postgres_not_ready');trace.confirm();
+    await this.postgresReady('init');trace.confirm();
     trace.enter('redis-ping');
     need((await this.d(['exec',this.redis.id,'redis-cli','PING'])).stdout.toString().trim()==='PONG','redis_not_ready');trace.confirm();
     trace.enter('redis-version');
@@ -188,7 +202,7 @@ class Native{
     const dump=(await this.d(['exec',this.pg.id,'pg_dump','-U','postgres','-d','synthetic','--format=custom'],{ms:5000})).stdout;need(dump.length>0&&dump.length<=16*1024*1024,'dump_limit');
     const base=require('./registry-bindings.json').images.find(x=>x.key==='postgres');
     const env=path.join(this.privateRoot,'postgres.env');this.restorePg=await this.create(this.prefix+'-restore-postgres',base.imageId,['--network',this.networks.internal.name,'--network-alias','restore-db','--env-file',env,'--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=1g','--memory=1g','--pids-limit=128'],'restore-postgres');await this.start(this.restorePg);
-    const until=clock()+5000;let ready=false;while(clock()<until){if((await this.d(['exec',this.restorePg.id,'pg_isready','-U','postgres','-d','synthetic'],{allowFailure:true})).code===0){ready=true;break;}await new Promise(r=>setTimeout(r,100));}need(ready,'restore_not_ready');
+    await this.postgresReady('restore');
     const globals=(await this.d(['exec',this.pg.id,'pg_dumpall','-U','postgres','--roles-only','--no-role-passwords'])).stdout.toString();
     // Existing bootstrap role is the only intentionally omitted role declaration.
     const sql=globals.replace(/^CREATE ROLE postgres;\n/m,'');
