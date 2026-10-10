@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{randomUUID}=require('node:crypto');
 const {sha,need,json,bound,regular,clock,Processes,failureRecord}=require('./common.cjs');
 const {services,networks,secrets,write,generation}=require('./fixtures.cjs');
-const {publicFailure}=require('./diagnostics.cjs');
+const {publicFailure,InitProgress}=require('./diagnostics.cjs');
 const {stateArgs}=require('./state-launch.cjs');
 const {prepareStateCode}=require('./state-code.cjs');
 const SOURCE='94a25578e883a6d7bbd03f26c56735739f75e45e',BUILD_DATE='2026-10-09T00:00:00Z';
@@ -10,7 +10,7 @@ const GiB=1024**3,fullId=x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x);
 function verifyBase(list,base){need(Array.isArray(list)&&list.length===1,'base_response_invalid');const x=list[0];need(x.Id===base.imageId&&x.Os==='linux'&&x.Architecture==='amd64'&&Array.isArray(x.RepoDigests)&&x.RepoDigests.some(r=>r===base.reference||r===base.reference.replace(/^library\//,'')),'base_identity_invalid');need(x.Config&&typeof x.Config==='object'&&!Array.isArray(x.Config),'base_config_invalid');for(const [k,v]of Object.entries(base.envVersionFields))need(x.Config.Env?.includes(`${k}=${v}`),'base_version_invalid');return x;}
 function proofResult(stdout){const lines=stdout.toString().split('\n').filter(x=>x.startsWith('SSB_PROOF_JSON '));need(lines.length===1,'proof_receipt_missing');const r=json(lines[0].slice(15));need(r.verified===true,'proof_failed');return r;}
 class Native{
-  constructor(options){this.options=options;this.start=clock();this.jobRemaining=process.env.SSB_JOB_DEADLINE_MS?Number(process.env.SSB_JOB_DEADLINE_MS)-Date.now():990000;this.deadline=this.start+Math.min(990000,this.jobRemaining);this.owned=[];this.networks={};this.volumes=[];this.images={};this.previous=[];this.previousGeneration='seed';this.epoch=0;this.closed=false;this.pullCount=0;}
+  constructor(options){this.options=options;this.startedAt=clock();this.jobRemaining=process.env.SSB_JOB_DEADLINE_MS?Number(process.env.SSB_JOB_DEADLINE_MS)-Date.now():990000;this.deadline=this.startedAt+Math.min(990000,this.jobRemaining);this.owned=[];this.networks={};this.volumes=[];this.images={};this.previous=[];this.previousGeneration='seed';this.epoch=0;this.closed=false;this.pullCount=0;}
   async command(bin,args,options={}){if(!options.closure){this.resources();need(!this.resourceFailure,'resource_floor_observed');if(this.probeDeadline){const left=this.probeDeadline-clock()-30000;need(left>250,'probe_work_deadline');options={...options,ms:Math.min(options.ms||10000,left)};}}else options={...options,deadline:Math.min(this.deadline,this.probeDeadline||Infinity,this.closureDeadline||Infinity)};try{return await this.proc.run(bin,args,options);}catch(e){if(options.closure&&e.code==='evidence_write_failed'&&e.result?.closed&&e.result.code===0&&!e.result.signal){(this.diagnosticFailures??=[]).push(e);return e.result;}throw e;}}
   resources(){if(!this.proc)return;const s=fs.statfsSync(this.privateRoot);need(s.bavail*s.bsize>=4*GiB&&s.ffree>=200000,'disk_floor');const m=fs.readFileSync('/proc/meminfo','utf8').match(/^MemAvailable:\s+(\d+) kB/m);need(m&&Number(m[1])*1024>=GiB,'memory_floor');}
   async d(args,options={}){if(!options.closure&&this.probeDeadline)need(clock()+250<this.probeDeadline-30000,'probe_work_deadline');const ms=this.probeDeadline&&!options.closure?Math.min(options.ms||10000,this.probeDeadline-clock()-30000):options.ms;return this.command(this.docker,['--host','unix:///var/run/docker.sock',...args],{...options,...(ms?{ms}:{})});}
@@ -91,31 +91,49 @@ class Native{
     need(JSON.stringify(proof)===JSON.stringify(expected),'state_diagnostic_invalid');return proof;
   }
   async initialize(){
+    const trace=new InitProgress();
+    try{
+    trace.enter('probe-window');
     // The 90-second native window includes setup, all cohorts and restore; no hidden reset per cohort.
-    this.probeDeadline=clock()+90000;
+    this.probeDeadline=clock()+90000;trace.confirm();
+    trace.enter('volume-preflight');
     const volumeNames=['postgres','redis'].map(role=>`${this.prefix}-${role}-data`);
-    need(Array.isArray(this.initial.volumes)&&volumeNames.every(name=>!this.initial.volumes.includes(name)),'preexisting_volume_forbidden');
-    for(const key of networks){const name=`${this.prefix}-${key}`;const id=(await this.d(['network','create','--internal','--driver=bridge','--label',`com.ssb.native-run=${this.options.run}`,name])).stdout.toString().trim();need(fullId(id),'network_id');this.networks[key]={name,id,internal:true};const x=json((await this.d(['network','inspect',id])).stdout)[0];need(x.Id===id&&x.Name===name&&x.Internal===true&&x.Driver==='bridge','internal_network_required');}
+    need(Array.isArray(this.initial.volumes)&&volumeNames.every(name=>!this.initial.volumes.includes(name)),'preexisting_volume_forbidden');trace.confirm();
+    for(const key of networks){trace.enter('network-create');const name=`${this.prefix}-${key}`;const id=(await this.d(['network','create','--internal','--driver=bridge','--label',`com.ssb.native-run=${this.options.run}`,name])).stdout.toString().trim();need(fullId(id),'network_id');this.networks[key]={name,id,internal:true};trace.confirm();trace.enter('network-inspect');const x=json((await this.d(['network','inspect',id])).stdout)[0];need(x.Id===id&&x.Name===name&&x.Internal===true&&x.Driver==='bridge','internal_network_required');trace.confirm();}
     for(const name of volumeNames){
-      const existing=(await this.d(['volume','ls','-q'])).stdout.toString().trim().split('\n');need(!existing.includes(name),'preexisting_volume_forbidden');
-      const created=(await this.d(['volume','create','--driver','local','--label',`com.ssb.native-run=${this.options.run}`,name])).stdout.toString().trim();need(created===name,'volume_name_changed');
+      trace.enter('volume-list');
+      const existing=(await this.d(['volume','ls','-q'])).stdout.toString().trim().split('\n');need(!existing.includes(name),'preexisting_volume_forbidden');trace.confirm();
+      trace.enter('volume-create');
+      const created=(await this.d(['volume','create','--driver','local','--label',`com.ssb.native-run=${this.options.run}`,name])).stdout.toString().trim();need(created===name,'volume_name_changed');trace.confirm();
+      trace.enter('volume-inspect');
       const list=json((await this.d(['volume','inspect',name])).stdout);need(Array.isArray(list)&&list.length===1,'volume_inspect_invalid');const v=list[0];
-      need(v.Name===name&&v.Driver==='local'&&v.Scope==='local'&&v.Labels?.['com.ssb.native-run']===this.options.run&&!Object.keys(v.Options||{}).length,'volume_ownership_invalid');this.volumes.push(name);
+      need(v.Name===name&&v.Driver==='local'&&v.Scope==='local'&&v.Labels?.['com.ssb.native-run']===this.options.run&&!Object.keys(v.Options||{}).length,'volume_ownership_invalid');this.volumes.push(name);trace.confirm();
     }
+    trace.enter('postgres-env-write');
     const bases=require('./registry-bindings.json').images,base=k=>bases.find(x=>x.key===k).imageId;
     const pgEnv=write(path.join(this.privateRoot,'postgres.env'),`POSTGRES_USER=postgres\nPOSTGRES_DB=synthetic\nPOSTGRES_PASSWORD=${this.synthetic.passwords.postgres}\n`);
+    trace.confirm();trace.enter('postgres-create');
     this.pg=await this.create(this.prefix+'-postgres',base('postgres'),['--network',this.networks.internal.name,'--network-alias','db','--env-file',pgEnv.path,'--mount',`type=volume,src=${this.volumes[0]},dst=/var/lib/postgresql/data`,'--memory=1g','--pids-limit=128'],'postgres');
+    trace.confirm();trace.enter('redis-create');
     this.redis=await this.create(this.prefix+'-redis',base('redis'),['--network',this.networks.internal.name,'--network-alias','redis','--mount',`type=volume,src=${this.volumes[1]},dst=/data`,'--memory=256m','--pids-limit=128'],'redis');
+    trace.confirm();trace.enter('probe-create');
     this.probeContainer=await this.create(this.prefix+'-probe',this.images.api,['--network',this.networks.internal.name,'--user=1000:1000','--read-only','--cap-drop=ALL','--tmpfs','/tmp:rw,nosuid,size=64m','--mount',`type=bind,src=${__dirname},dst=/proof,readonly`,'--mount',`type=bind,src=${this.source},dst=/source,readonly`,'--mount',`type=bind,src=${this.stateRoot},dst=/state`,'--memory=1g','--pids-limit=128'],'probe');
-    await this.d(['network','connect',this.networks.ingress.id,this.probeContainer.id]);await this.d(['network','connect',this.networks.admin_writer.id,this.probeContainer.id]);
-    const dist=path.join(this.toolsRoot,'apps/api/dist/maintenance');fs.mkdirSync(dist,{recursive:true});await this.d(['cp',`${this.probeContainer.id}:/app/dist/maintenance/maintenance-state.js`,path.join(dist,'maintenance-state.js')]);fs.chmodSync(path.join(dist,'maintenance-state.js'),0o644);
-    await this.stateLoadCheck(true);
+    trace.confirm();trace.enter('probe-ingress-connect');
+    await this.d(['network','connect',this.networks.ingress.id,this.probeContainer.id]);trace.confirm();trace.enter('probe-writer-connect');await this.d(['network','connect',this.networks.admin_writer.id,this.probeContainer.id]);
+    trace.confirm();trace.enter('maintenance-directory');
+    const dist=path.join(this.toolsRoot,'apps/api/dist/maintenance');fs.mkdirSync(dist,{recursive:true});trace.confirm();trace.enter('maintenance-copy');await this.d(['cp',`${this.probeContainer.id}:/app/dist/maintenance/maintenance-state.js`,path.join(dist,'maintenance-state.js')]);trace.confirm();trace.enter('maintenance-permissions');fs.chmodSync(path.join(dist,'maintenance-state.js'),0o644);
+    trace.confirm();trace.enter('runtime-load');
+    await this.stateLoadCheck(true);trace.confirm();trace.enter('state-initialize');
     await this.state('initialize',{root:this.stateRoot,service:this.prefix,generation:'seed'});
-    await this.start(this.pg);await this.start(this.redis);await this.start(this.probeContainer);
-    const until=clock()+6000;let ready=false;while(clock()<until){const r=await this.d(['exec',this.pg.id,'pg_isready','-U','postgres','-d','synthetic'],{allowFailure:true});if(r.code===0){ready=true;break;}await new Promise(r=>setTimeout(r,100));}need(ready,'postgres_not_ready');
-    need((await this.d(['exec',this.redis.id,'redis-cli','PING'])).stdout.toString().trim()==='PONG','redis_not_ready');
-    const version=(await this.d(['exec',this.redis.id,'redis-server','--version'])).stdout.toString();need(/v=7\.4\.8\b/.test(version),'redis_version');
-    return this.probe('initialize');
+    trace.confirm();trace.enter('postgres-start');await this.start(this.pg);trace.confirm();trace.enter('redis-start');await this.start(this.redis);trace.confirm();trace.enter('probe-start');await this.start(this.probeContainer);trace.confirm();
+    trace.enter('postgres-ready');
+    const until=clock()+6000;let ready=false;while(clock()<until){const r=await this.d(['exec',this.pg.id,'pg_isready','-U','postgres','-d','synthetic'],{allowFailure:true});if(r.code===0){ready=true;break;}await new Promise(r=>setTimeout(r,100));}need(ready,'postgres_not_ready');trace.confirm();
+    trace.enter('redis-ping');
+    need((await this.d(['exec',this.redis.id,'redis-cli','PING'])).stdout.toString().trim()==='PONG','redis_not_ready');trace.confirm();
+    trace.enter('redis-version');
+    const version=(await this.d(['exec',this.redis.id,'redis-server','--version'])).stdout.toString();need(/v=7\.4\.8\b/.test(version),'redis_version');trace.confirm();
+    trace.enter('database-initialize');const result=await this.probe('initialize');trace.confirm();return result;
+    }catch(error){throw trace.failure(error);}
   }
   async startGeneration(key){
     this.current=generation(this,key,this.previousGeneration,this.previous);
