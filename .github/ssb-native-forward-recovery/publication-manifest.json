@@ -101,11 +101,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/diagnostics.cjs",
-      "sha256": "0414ab957797bb8bb492ae4127c4c9b06875dd79f0770440ae42e4340093a358",
-      "bytes": 6140,
+      "sha256": "d251a0a931a2b476c4a92429b08fe76f4b19e0e496faf3067ecf0ccc1aeee97f",
+      "bytes": 9826,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "1054d1d5ed78aeed08a0864ffacbe1244e8a8099"
+      "gitBlob": "a54deb06101a867448e9153fc96211a2b043059b"
     },
     {
       "path": ".github/ssb-native-forward-recovery/dockerfile-manifest.json",
@@ -117,11 +117,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/evidence-review.test.cjs",
-      "sha256": "81e87cfad5d656e73aaefd31e581317bb8ae3956701464ff8cbd242f0fb85b23",
+      "sha256": "296694a5a65808f9cfbed3fb7236ddecf33b683214c0af98c18fac935487c84d",
       "bytes": 26502,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "b207e4c019d63a86f9b24c64de083b17a5200281"
+      "gitBlob": "321a439b5f110e78e944da064956c30cd53464cf"
     },
     {
       "path": ".github/ssb-native-forward-recovery/evidence.cjs",
@@ -148,12 +148,20 @@
       "gitBlob": "b94badf7196fcc93296211bf2dc1cfd08d573c83"
     },
     {
-      "path": ".github/ssb-native-forward-recovery/native.cjs",
-      "sha256": "1a1fb7bd5e4d554c773d060fe04af6a491e1efe418596d7f0ff2c14b4a21c567",
-      "bytes": 30433,
+      "path": ".github/ssb-native-forward-recovery/init-diagnostic.test.cjs",
+      "sha256": "9003317e1f03594209a6138ec9869ced1b9fbc81191ef908b494ecfc148599ce",
+      "bytes": 26714,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "41f33200581b57d44a2dadf5984d81614941f6e3"
+      "gitBlob": "63db5fa52ed41e695ec616a5f1437b26d48ecdd1"
+    },
+    {
+      "path": ".github/ssb-native-forward-recovery/native.cjs",
+      "sha256": "9f448291f907cefa5f001fa1c813f09eef96262894ca151d2faa890af1b5f398",
+      "bytes": 31826,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "923898788cb9f6b48fa8ecfca5ccf1d9d9f0d77b"
     },
     {
       "path": ".github/ssb-native-forward-recovery/offline.test.cjs",
