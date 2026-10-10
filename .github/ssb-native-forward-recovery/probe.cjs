@@ -59,21 +59,51 @@ function retiredAdmission(input,MaintenanceState){
   return{verified:true,counts:[8,1],generation:binding.generation,retiredGeneration:input.retiredGeneration,code:'generation_retired'};
 }
 async function initialize(input){
-  const p=pool(input);try{
+  const {ProbeProgress,probeMigrations}=require('./diagnostics.cjs'),{need,bound}=require('./common.cjs');
+  const trace=new ProbeProgress(input.diagnostic);let p,result,primary;
+  const step=async(name,fn,migration=null)=>{trace.enter(name,migration);const value=await fn();trace.confirm();return value;};
+  const cleanup=async(name,fn,migration=null)=>{try{await step(name,fn,migration);}catch(error){trace.capture(error);primary=primary?new AggregateError([primary,error],'probe_cleanup_failed'):error;}};
+  try{
+    const pm=fs.readFileSync(path.join(__dirname,'publication-manifest.json'));
+    need(input.action==='initialize'&&input.source===trace.binding.source&&input.service==='ssb-native-'+trace.binding.run&&sha(pm)===trace.binding.publication,'probe_binding_invalid');
+    const manifest=JSON.parse(pm),binding=manifest.files.find(f=>f.path==='.github/ssb-native-forward-recovery/release-source-manifest.json');
+    need(binding,'probe_manifest_invalid');bound(path.join(__dirname,'release-source-manifest.json'),binding);trace.confirm();
+    p=await step('pool-create',()=>pool(input));
+    trace.enter('migration-list');
     const files=fs.readdirSync('/source/apps/api/migrations').filter(x=>/^\d{3}_[a-zA-Z0-9_-]+\.sql$/.test(x)).sort();assert.equal(files.length,34);
-    await p.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())');
-    for(const file of files){const c=await p.connect();try{await c.query('BEGIN');await c.query(fs.readFileSync('/source/apps/api/migrations/'+file,'utf8'));await c.query('INSERT INTO schema_migrations(version) VALUES($1)',[file]);await c.query('COMMIT');}finally{c.release();}}
-    await p.query(fs.readFileSync('/proof/adapters/scripts/ops/admin-writer-roles.sql','utf8'));
-    for(const role of ['ssb_runtime','ssb_admin_writer','ssb_reporter','ssb_migrator']){
-      assert.match(input.passwords[role],/^[a-f0-9]{64}$/);await p.query(`ALTER ROLE ${role} ${['ssb_runtime','ssb_admin_writer'].includes(role)?'LOGIN':'NOLOGIN'} PASSWORD '${input.passwords[role]}'`);
+    const migrations=probeMigrations();need(JSON.stringify(files)===JSON.stringify(migrations.map(f=>path.basename(f.path))),'probe_migration_invalid');trace.confirm();
+    await step('schema-ledger',()=>p.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())'));
+    for(const file of files){const number=Number(file.slice(0,3)),c=await step('migration-connect',()=>p.connect(),number);
+      try{
+        await step('migration-begin',()=>c.query('BEGIN'),number);
+        const sql=await step('migration-read',()=>bound('/source/apps/api/migrations/'+file,migrations.find(f=>path.basename(f.path)===file)).toString('utf8'),number);
+        await step('migration-execute',()=>c.query(sql),number);
+        await step('migration-record',()=>c.query('INSERT INTO schema_migrations(version) VALUES($1)',[file]),number);
+        await step('migration-commit',()=>c.query('COMMIT'),number);
+      }catch(error){trace.capture(error);primary=error;}
+      await cleanup('client-release',()=>c.release(),number);if(primary)break;
     }
+    if(primary)throw primary;
+    const rolesSql=await step('roles-read',()=>fs.readFileSync('/proof/adapters/scripts/ops/admin-writer-roles.sql','utf8'));
+    await step('roles-apply',()=>p.query(rolesSql));
+    for(const role of ['ssb_runtime','ssb_admin_writer','ssb_reporter','ssb_migrator']){
+      trace.enter('role-password-check');assert.match(input.passwords[role],/^[a-f0-9]{64}$/);trace.confirm();
+      trace.enter('role-password-apply');await p.query(`ALTER ROLE ${role} ${['ssb_runtime','ssb_admin_writer'].includes(role)?'LOGIN':'NOLOGIN'} PASSWORD '${input.passwords[role]}'`);trace.confirm();
+    }
+    trace.enter('tenant-site-fixture');
     await p.query("INSERT INTO tenants(id,name) VALUES('synthetic-tenant','Synthetic'),('foreign-tenant','Foreign synthetic'); INSERT INTO sites(id,tenant_id,name,site_key,allowed_domains) VALUES('synthetic-site','synthetic-tenant','Synthetic','synthetic-key',ARRAY['synthetic.invalid']),('foreign-site','foreign-tenant','Foreign','foreign-key',ARRAY['foreign.invalid'])");
+    trace.confirm();trace.enter('user-fixture');
     await p.query("INSERT INTO tenant_users(id,tenant_id,email,display_name,role,is_active) VALUES('synthetic-operator','synthetic-tenant','operator@example.invalid','Synthetic operator','editor',true)");
+    trace.confirm();trace.enter('site-config-fixture');
     await p.query("UPDATE sites SET config=$1::jsonb WHERE id='synthetic-site'",[JSON.stringify({welcomeMessage:'Synthetic widget greeting',brandColor:'#123456',systemPrompt:'synthetic-private-prompt',leadNotificationEmail:'private@example.invalid',conversationFlow:{syntheticPrivate:true}})]);
+    trace.confirm();trace.enter('database-readback');
     const row=(await p.query("SELECT current_setting('server_version_num') AS version,(SELECT extversion FROM pg_extension WHERE extname='vector') AS vector,(SELECT count(*)::integer FROM schema_migrations) AS migrations")).rows[0];
+    trace.confirm();trace.enter('database-assertions');
     assert.equal(row.version,'160013');assert.ok(row.vector);assert.equal(row.migrations,34);
-    return{verified:true,counts:[34,4,1],hashes:[sha(row.vector)]};
-  }finally{await p.end();}
+    trace.confirm();result={verified:true,counts:[34,4,1],hashes:[sha(row.vector)]};
+  }catch(error){if(!trace.primary)trace.capture(error);if(!primary)primary=error;}
+  if(p)await cleanup('pool-close',()=>p.end());
+  if(primary){const error=new Error('probe_initialize_failed',{cause:primary});error.probeDiagnostic=trace.diagnostic();throw error;}return result;
 }
 async function e1(input){
   const p=pool(input);let checks=0;const check=async(name,fn)=>{phase=name;await fn();checks++;};
@@ -170,5 +200,10 @@ async function main(input){
   if(input.action==='database')return database(input);
   throw Error('unsupported proof');
 }
-if(require.main===module){let b='';process.stdin.on('data',x=>{b+=x;if(b.length>65536)throw Error('input limit');});process.stdin.on('end',async()=>{try{const r=await main(JSON.parse(b));process.stdout.write('\nSSB_PROOF_JSON '+JSON.stringify(r)+'\n');}catch(e){process.stderr.write(JSON.stringify({status:'FAIL',phase:/^[a-z-]{1,40}$/.test(phase)?phase:'invalid',kind:e instanceof assert.AssertionError?'assertion':'operation',code:typeof e.code==='string'&&/^[A-Z0-9_]{1,24}$/.test(e.code)?e.code:null})+'\n');process.exitCode=1;}});}
+if(require.main===module){let b='';process.stdin.on('data',x=>{b+=x;if(b.length>65536)throw Error('input limit');});process.stdin.on('end',async()=>{try{const r=await main(JSON.parse(b));process.stdout.write('\nSSB_PROOF_JSON '+JSON.stringify(r)+'\n');}catch(e){
+ process.exitCode=1;
+ // A diagnostic write failure never replaces the primary error or produces raw stderr.
+ try{if(e.probeDiagnostic){const d=require('./diagnostics.cjs');fs.writeSync(2,d.probeMarker+JSON.stringify(d.validateProbe(e.probeDiagnostic))+'\n');}
+ else fs.writeSync(2,JSON.stringify({status:'FAIL',phase:/^[a-z-]{1,40}$/.test(phase)?phase:'invalid',kind:e instanceof assert.AssertionError?'assertion':'operation',code:phase!=='initialize'&&typeof e.code==='string'&&/^[A-Z0-9_]{1,24}$/.test(e.code)?e.code:null})+'\n');}catch{}
+}});}
 module.exports={main,drain,e1,http,kinds,writerRequest,SessionCookieJar,retiredAdmission};

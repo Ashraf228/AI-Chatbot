@@ -14,7 +14,7 @@ function harness({fault=null,old=false,processFailure=null}={}){
  const file=path.join(old?path.resolve(__dirname,old==='diagnostic'?'../../../../ssb-init-diagnostic-followup-20261010.HV5QFt/publication/.github/ssb-native-forward-recovery':'../../../../ssb-helper-access-binding-followup-20261010.2oRmpy/publication/.github/ssb-native-forward-recovery'):__dirname,'native.cjs');
  const C=load(file,{'node:fs':fakeFS,'./fixtures.cjs':fakeFixtures}).Native,n=new C(opts);
  Object.assign(n,{privateRoot:root,toolsRoot:path.join(root,'tools'),stateRoot:state,stateEntry:path.join(__dirname,'state-agent.cjs'),source:path.join(root,'source'),prefix:'ssb-native-'+opts.run,docker:'/usr/bin/docker',synthetic:{owner:marker,passwords:{postgres:marker}},images:{api:'sha256:'+id(100)},initial:{containers:[],volumes:[]},proc:{calls:[],assertClosed(){assert.ok(this.calls.every(x=>x.closed));}}});
- if(!old){assert.equal(n.start,C.prototype.start);assert.equal(Object.hasOwn(n,'start'),false);assert.equal(typeof n.startedAt,'number');}
+ if(!old){Object.defineProperty(n,'verifiedPublicationManifest',{value:sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')))});assert.equal(n.start,C.prototype.start);assert.equal(Object.hasOwn(n,'start'),false);assert.equal(typeof n.startedAt,'number');}
  const response=(stdout='',code=0)=>({stdout:Buffer.from(stdout),stderr:Buffer.alloc(0),code,signal:null,closed:true});
  n.command=async(bin,args,o={})=>{
   calls.push({bin,args,o});n.proc.calls.push({closed:true});

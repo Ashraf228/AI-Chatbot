@@ -1,6 +1,6 @@
 'use strict';
 const {sha,need,json}=require('./common.cjs');
-const {validateDetail,publicFailure}=require('./diagnostics.cjs');
+const {validateDetail,publicFailure,probeCallsInFailure}=require('./diagnostics.cjs');
 const phases=['preflight','bases','builds','initialize','roles','release-start','release-e1','release-drain','release-shutdown','forward-start','forward-e1','forward-drain','forward-shutdown','normal-start','normal-e1','normal-drain','normal-shutdown','restore','inventory','closure','complete'];
 const MARKER='SSB_PUBLIC_RECEIPT_V2',LIMIT=2*1024*1024;
 // Keep the reviewed generation contract together when native/probe obligations change.
@@ -27,6 +27,7 @@ function validate(r){
   validateDetail(r);
 }
 function validateEvidence(r,prior){
+  for(const probe of probeCallsInFailure(r.detail.failure))need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
   const failed=prior.some(x=>!x.ok);
   need((r.phase===phases[prior.length]&&!failed)||(r.phase==='closure'&&failed&&!prior.some(x=>x.phase==='closure')),'receipt_phase_order');
   if(r.phase==='preflight'&&!r.ok)need(r.counts.length===0&&r.ids.length===0&&r.hashes.length<=1,'failed_preflight_shape');

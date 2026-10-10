@@ -266,11 +266,13 @@ test('retired action rejects closed current generation, unknown old generation a
 });
 
 test('initialize seeds scoped principal and private/public widget config without changing [34,4,1]',async()=>{
-  const queries=[],mem={readdirSync:()=>Array.from({length:34},(_,i)=>String(i+1).padStart(3,'0')+'_mock.sql'),readFileSync:()=> '-- offline SQL fixture'};
+  const map=p=>p.startsWith('/source/')?path.join(process.env.SSB_PROBE_TEST_SOURCE,p.slice(8)):p.startsWith('/proof/')?path.join(target,p.slice(7)):p;
+  const queries=[],mem={readdirSync:p=>fs.readdirSync(map(p)),readFileSync:(p,...a)=>fs.readFileSync(map(p),...a)},common=require('./common.cjs');
   const query=async(sql,args)=>{queries.push({sql,args});return{rows:sql.includes("current_setting('server_version_num')")?[{version:'160013',vector:'synthetic-vector',migrations:34}]:[]};};
   class Pool{query=query;async connect(){return{query,release(){}};}async end(){}}
-  const probe=loadCjs(path.join(target,'probe.cjs'),{'node:fs':mem,'/app/node_modules/pg':{Pool}});
-  const result=await probe.main({...input,action:'initialize',passwords:Object.fromEntries(['ssb_runtime','ssb_admin_writer','ssb_reporter','ssb_migrator'].map(r=>[r,'a'.repeat(64)]))});
+  const probe=loadCjs(path.join(target,'probe.cjs'),{'node:fs':mem,'/app/node_modules/pg':{Pool},'./common.cjs':{...common,bound:(p,f)=>common.bound(map(p),f)}});
+  const diagnostic={version:1,action:'initialize',run:'12345',source:'94a25578e883a6d7bbd03f26c56735739f75e45e',publication:common.sha(fs.readFileSync(path.join(target,'publication-manifest.json'))),call:'e'.repeat(64)};
+  const result=await probe.main({...input,action:'initialize',diagnostic,source:diagnostic.source,service:'ssb-native-'+diagnostic.run,passwords:Object.fromEntries(['ssb_runtime','ssb_admin_writer','ssb_reporter','ssb_migrator'].map(r=>[r,'a'.repeat(64)]))});
   assert.deepEqual(plain(result.counts),[34,4,1]);
   assert.ok(queries.some(q=>q.sql.includes('INSERT INTO tenant_users')&&q.sql.includes("'synthetic-operator','synthetic-tenant'")&&q.sql.includes("'editor',true")));
   const config=queries.find(q=>q.sql.startsWith('UPDATE sites SET config='));assert.ok(config);assert.equal(JSON.parse(config.args[0]).welcomeMessage,'Synthetic widget greeting');assert.equal(JSON.parse(config.args[0]).systemPrompt,'synthetic-private-prompt');
