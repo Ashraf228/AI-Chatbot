@@ -21,6 +21,29 @@ async function writerEffects(p){
   return{sites:(await p.query('SELECT row_to_json(s) AS row FROM sites s ORDER BY id')).rows,
     receipts:(await p.query('SELECT id,request_sha256,completed_at FROM maintenance_admin.writer_receipts ORDER BY id')).rows};
 }
+async function closedReady(input){
+  const {ProbeProgress}=require('./diagnostics.cjs'),{need}=require('./common.cjs');
+  const trace=new ProbeProgress(input.diagnostic);let p,result,primary;
+  const step=async(name,fn)=>{trace.enter(name);const value=await fn();trace.confirm();return value;};
+  const status=async(name,url,options,expected)=>step(name,async()=>{const r=await http(url,options);trace.httpStatus=r.status;assert.equal(r.status,expected);});
+  try{
+    need(input.action==='closed-ready'&&input.source===trace.binding.source&&input.service==='ssb-native-'+trace.binding.run&&input.generation===trace.binding.generation&&sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')))===trace.binding.publication,'probe_binding_invalid');trace.confirm();
+    p=await step('pool-create',()=>pool(input));
+    const before=await step('closed-before',()=>writerEffects(p)),until=performance.now()+4500;let last,lastPoint;
+    while(performance.now()<until){try{
+      await status('closed-api','http://api:5000/admin/sites',{headers:{'x-admin-key':input.admin}},503);
+      await status('closed-writer','http://admin-writer:3011/v1/write',writerRequest(input,'/admin/sites/synthetic-site'),503);
+      await status('closed-dashboard','http://dashboard:3000/login',{},200);
+      const after=await step('closed-after',()=>writerEffects(p));
+      await step('closed-sites',()=>assert.deepEqual(after.sites,before.sites));
+      await step('closed-receipts',()=>assert.deepEqual(after.receipts,before.receipts));
+      result={verified:true,counts:[3,2]};break;
+    }catch(error){last=error;lastPoint={step:trace.step,lastConfirmed:trace.lastConfirmed,httpStatus:trace.httpStatus};await new Promise(resolve=>setTimeout(resolve,50));}}
+    if(!result){if(lastPoint)Object.assign(trace,lastPoint);throw last||Error('readiness deadline');}
+  }catch(error){primary=error;trace.capture(error);}
+  if(p){try{await step('pool-close',()=>p.end());}catch(error){trace.capture(error);primary=primary?new AggregateError([primary,error],'probe_cleanup_failed'):error;}}
+  if(primary){primary.probeDiagnostic=trace.diagnostic();throw primary;}return result;
+}
 const sessionCookieNames=['ssb_admin','ssb_writer_session'];
 function sessionCookie(line){
   const [pair,...parts]=line.split(';'),index=pair.indexOf('=');assert.ok(index>0);
@@ -179,19 +202,7 @@ async function main(input){
       const p=pool(input,role,'restore-db');try{assert.equal((await p.query('SELECT session_user AS name')).rows[0].name,role);await assert.rejects(p.query('SET ROLE postgres'),e=>e.code==='42501');}finally{await p.end();}
     }return{verified:true,counts:[2,2]};}finally{await admin.end();}
   }
-  if(input.action==='closed-ready'){
-    const p=pool(input);try{
-    const before=await writerEffects(p),until=performance.now()+4500;let last;
-    while(performance.now()<until){try{
-      assert.equal((await http('http://api:5000/admin/sites',{headers:{'x-admin-key':input.admin}})).status,503);
-      assert.equal((await http('http://admin-writer:3011/v1/write',writerRequest(input,'/admin/sites/synthetic-site'))).status,503);
-      assert.equal((await http('http://dashboard:3000/login')).status,200);
-      const after=await writerEffects(p);assert.deepEqual(after.sites,before.sites);assert.deepEqual(after.receipts,before.receipts);
-      return{verified:true,counts:[3,2]};
-    }catch(e){last=e;await new Promise(r=>setTimeout(r,50));}}
-    throw last||Error('readiness deadline');
-    }finally{await p.end();}
-  }
+  if(input.action==='closed-ready')return closedReady(input);
   if(input.action==='retired-admission')return retiredAdmission(input,require('/app/dist/maintenance/maintenance-state').MaintenanceState);
   if(input.action==='postgres-ready-init'||input.action==='postgres-ready-restore')return require('./postgres-readiness.cjs').check(input);
   if(input.action==='initialize')return initialize(input);

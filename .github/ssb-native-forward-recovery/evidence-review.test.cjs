@@ -1,4 +1,8 @@
 'use strict';
+function closureObservation(status='exited'){
+ const zero='0001-01-01T00:00:00Z',before=require('./diagnostics.cjs').closureSnapshot({State:{Status:status,Running:false,ExitCode:0,StartedAt:status==='created'?zero:'2026-10-10T00:00:00Z',FinishedAt:status==='created'?zero:'2026-10-10T00:00:01Z'}});
+ return{before,stop:{requested:false,completed:false},after:{...before}};
+}
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const {createRequire}=require('node:module'),{createHash}=require('node:crypto');
 const {main,reportFailure,SOURCE}=require('./controller.cjs');
@@ -17,7 +21,7 @@ function fixture(){
     data[g+'-start']={counts:[...generationCounts.start[g]],ids:cohort};data[g+'-e1']={counts:[...generationCounts.e1],hashes:[id(210),id(211)]};
     data[g+'-drain']={counts:[...generationCounts.drain]};data[g+'-shutdown']={counts:[...generationCounts.shutdown],ids:cohort,hashes:[id(220+2*i),id(221+2*i)]};
   }
-  data.closure.detail={failure:null,outcomes:ids.slice(0,19).map((id,i)=>{const cohort=i>=3&&i<18,generation=cohort?['release','forward','normal'][Math.floor((i-3)/5)]:'seed',role=cohort?['api','admin-writer','dashboard','reporter','widget'][(i-3)%5]:['postgres','redis','probe'][i]||'restore-postgres';return{id,role,generation,state:cohort&&(i-3)%5<2?'graceful':'exited',exit:0,code:'none'};})};
+  data.closure.detail={failure:null,outcomes:ids.slice(0,19).map((id,i)=>{const cohort=i>=3&&i<18,generation=cohort?['release','forward','normal'][Math.floor((i-3)/5)]:'seed',role=cohort?['api','admin-writer','dashboard','reporter','widget'][(i-3)%5]:['postgres','redis','probe'][i]||'restore-postgres';return{id,role,generation,state:cohort&&(i-3)%5<2?'graceful':'exited',exit:0,code:'none',observation:closureObservation()};})};
   return Object.fromEntries(Object.entries(data).map(([p,r])=>[p,structuredClone(r)]));
 }
 function sample(data=fixture()){
@@ -130,10 +134,11 @@ test('producer retains a snapshot, not mutable aliases of native evidence',()=>{
 test('retired-cohort obligations and E1 counts match the reviewed native generation contract',async()=>{
   assert.deepEqual(generationCounts.start,{release:[5,5,0],forward:[5,5,8],normal:[5,5,16]});assert.deepEqual(generationCounts.e1,[11,7]);
   const {Native}=require('./native.cjs'),n=new Native(options(()=>{}));n.synthetic={};n.current={generation:'normal'};n.probeContainer={id:'a'.repeat(64)};n.images={api:'sha256:'+'b'.repeat(64)};
-  let result; n.d=async()=>({stdout:Buffer.from('SSB_PROOF_JSON '+JSON.stringify(result)+'\n')});
+  n.verifiedPublicationManifest='e'.repeat(64);
+  let result; n.d=async()=>({stdout:Buffer.from('SSB_PROOF_JSON '+JSON.stringify(result)+'\n'),stderr:Buffer.alloc(0)});
   result={verified:true,counts:[11,7],hashes:fixture()['release-e1'].hashes};await n.probe('e1');
   result.counts=[10,6];await assert.rejects(n.probe('e1'),/mandatory_proof_missing/);
-  result={verified:true,counts:[3,2]};await n.probe('closed-ready');
+  result={verified:true,counts:[3,2]};await n.startStep('closed-ready','probe','normal',b=>n.probe('closed-ready',{},15000,b));
   result={verified:true,counts:[8,1],generation:'normal',retiredGeneration:'release',code:'generation_retired'};await n.probe('retired-admission',{retiredGeneration:'release'});
   result.retiredGeneration='forward';await assert.rejects(n.probe('retired-admission',{retiredGeneration:'release'}),/retired_proof_binding/);
 });
@@ -187,7 +192,7 @@ for(const writeFails of [false,true])test('actual CLI hands preserved errors to 
 
 function dispatchHarness(mode='matching'){
   // Refresh hashes in memory only. Package manifests on disk remain deliberately unfinalized.
-  const artifactPath=path.join(root,'artifact-manifest.json'),manifest=JSON.parse(fs.readFileSync(artifactPath));
+  const artifactPath=path.join(root,'artifact-manifest.json'),manifest={files:[...JSON.parse(fs.readFileSync(manifestPath)).files,{path:'.github/ssb-native-forward-recovery/publication-manifest.json'}].map(f=>({path:'publication/'+f.path}))};
   manifest.files=manifest.files.map(f=>{const p=path.join(root,f.path),s=fs.statSync(p);return{...f,bytes:s.size,mode:s.mode&0o777,sha256:sha(fs.readFileSync(p))};});
   const manifestBytes=Buffer.from(JSON.stringify(manifest)),publication=JSON.parse(fs.readFileSync(manifestPath));
   const blob=b=>createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex');
@@ -219,7 +224,7 @@ function dispatchHarness(mode='matching'){
     throw Error('unapproved_mock_route');
   };
   const proc={argv:['node','dispatch-once.cjs','--execute'],execPath:'/offline/node',env:{SSB_APPROVED_PACKAGE_SHA256:sha(manifestBytes)},stdout:{write:x=>state.stdout.push(x.toString())}};
-  const dispatch=loadActual(path.join(root,'dispatch-once.cjs'),{'node:fs':fakeFs,'node:child_process':{execFileSync}},{process:proc,performance:{now:()=>{const n=clock;clock+=400000;return n;}},setTimeout:fn=>{queueMicrotask(fn);return 0;}});
+  const dispatch=loadActual(path.resolve(root,'../ssb-postgres-readiness-followup-20261010.TDO7TA/dispatch-once.cjs'),{'node:fs':fakeFs,'node:child_process':{execFileSync},'./publication/.github/ssb-native-forward-recovery/evidence.cjs':require('./evidence.cjs')},{__dirname:root,process:proc,performance:{now:()=>{const n=clock;clock+=400000;return n;}},setTimeout:fn=>{queueMicrotask(fn);return 0;}});
   return{state,main:dispatch.main};
 }
 test('dispatch persists a random nonce before POST and selects only its exact title',async()=>{
@@ -238,7 +243,7 @@ test('failed job receipt is received once but never authorizes PASS or redispatc
 });
 test('actual receiver stores canonical bounded partial failure, not private logs or a successful acceptance',async()=>{
   const data=fixture(),lines=[],b=backend(data);b.execute=async p=>{if(p==='initialize')throw Object.assign(Error('PRIVATE_RAW_FAILURE'),{code:'state_operation_failed',stateDiagnostic:{version:1,stage:'initialize-state',code:'EACCES'}});return{verified:true,...data[p]};};
-  const outcomes=data.closure.detail.outcomes.slice(0,3).map(o=>({...o,state:'never_started',exit:null}));
+  const outcomes=data.closure.detail.outcomes.slice(0,3).map(o=>({...o,state:'never_started',exit:null,observation:closureObservation('created')}));
   b.close=async()=>({verified:true,counts:[3,3,55],ids:data.inventory.ids.slice(0,3),detail:{failure:null,outcomes}});
   await assert.rejects(main(options(x=>lines.push(x)),b));
   const h=receiverHarness('PRIVATE_RAW_LOG\n'+lines.join('\n'),{conclusion:'failure'},{conclusion:'failure'});h.invoke();const proof=JSON.parse(h.files.get('Empfang.json'));assert.equal(proof.status,'PARTIAL_FAILURE_RECEIVED');assert.equal(proof.phases,5);assert.equal(h.files.get('receipts.txt'),lines.join('\n')+'\n');assert.doesNotMatch([...h.files.values()].join(''),/PRIVATE_RAW/);

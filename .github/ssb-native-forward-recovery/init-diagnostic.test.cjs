@@ -1,4 +1,8 @@
 'use strict';
+function historicalPrimary(error){
+ // Historical closures lack the new mandatory observation schema; never hide the original error.
+ if(error instanceof AggregateError){require('node:assert/strict').equal(error.errors.length,2);require('node:assert/strict').equal(error.errors[1].code,'closure_outcome_invalid');return error.errors[0];}return error;
+}
 // Offline transport only. Real Native.initialize/main/receipt/receiver code; no Docker or GitHub process.
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),{createRequire}=require('node:module'),{EventEmitter}=require('node:events');
 const common=require('./common.cjs'),{sha,GateError}=common,{main,SOURCE,reportFailure}=require('./controller.cjs');
@@ -86,7 +90,7 @@ for(const [name,fault,step,lastConfirmed,gate,errorClass,fsCode]of cases)test('a
 });
 test('old actual initialize loses TypeError progress; new diagnostic does not claim historical cause',async()=>{const old=await runFailure({old:true,fault:{at:'network-empty'}});assert.equal(old.error instanceof TypeError,true);assert.equal(decode(old.lines)[3].detail.failure.code,'unclassified');assert.equal(decode(old.lines)[3].detail.failure.init,undefined);const next=await runFailure({fault:{at:'network-empty'}});assert.equal(decode(next.lines)[3].detail.failure.init.errorClass,'TypeError');});
 test('historical start collision is reproduced without workaround; corrected constructor reaches all three actual starts',async()=>{
- const before=await runFailure({old:true}),after=harness();assert.equal(typeof before.n.start,'number');assert.equal(typeof Object.getPrototypeOf(before.n).start,'function');assert.ok(before.error instanceof TypeError);assert.match(before.error.message,/this.start is not a function/);
+ const before=await runFailure({old:true}),after=harness();assert.equal(typeof before.n.start,'number');assert.equal(typeof Object.getPrototypeOf(before.n).start,'function');assert.ok(historicalPrimary(before.error) instanceof TypeError);assert.match(historicalPrimary(before.error).message,/this.start is not a function/);
  assert.equal(decode(before.lines)[3].detail.failure.code,'unclassified');assert.ok(!before.calls.some(c=>c.args[2]==='start'));
  const result=await after.n.initialize();assert.equal(result.verified,true);assert.equal(after.n.start,Object.getPrototypeOf(after.n).start);assert.equal(Object.hasOwn(after.n,'start'),false);
  assert.deepEqual(after.calls.filter(c=>c.args[2]==='start').map(c=>c.args[3]),[after.n.pg.id,after.n.redis.id,after.n.probeContainer.id]);assert.ok(after.n.owned.every(e=>e.startRequested&&after.snapshots.get(e.id).State.Running));
@@ -123,7 +127,7 @@ test('fixed vocabulary rejects counterfeit gate classes and never reads free mes
 
 test('HV5QFt actual constructor fails at postgres-start; current constructor succeeds with untouched prototype method',async()=>{
  const before=await runFailure({old:'diagnostic'}),d=decode(before.lines)[3].detail.failure;
- assert.equal(d.init.step,'postgres-start');assert.equal(d.init.lastConfirmed,'state-initialize');assert.equal(d.init.errorClass,'TypeError');assert.ok(before.error.cause instanceof TypeError);
+ assert.equal(d.init.step,'postgres-start');assert.equal(d.init.lastConfirmed,'state-initialize');assert.equal(d.init.errorClass,'TypeError');assert.ok(historicalPrimary(before.error).cause instanceof TypeError);
  const after=harness();assert.ok((await after.n.initialize()).verified);assert.equal(after.n.start,Object.getPrototypeOf(after.n).start);assert.equal(Object.hasOwn(after.n,'start'),false);
 });
 test('actual restore creates its own PostgreSQL resource and starts it with the unchanged method',async()=>{

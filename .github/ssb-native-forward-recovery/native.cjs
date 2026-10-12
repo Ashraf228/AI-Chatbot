@@ -70,10 +70,14 @@ class Native{
   }
   async runningLimit(){const rows=(await this.d(['container','ls','-q','--filter',`label=com.ssb.native-run=${this.options.run}`])).stdout.toString().trim().split('\n').filter(Boolean);need(rows.length<=8,'running_resource_limit');}
   async start(entry){entry.startRequested=true;await this.d(['start',entry.id]);const x=(await this.inspect(entry.id))[0];need(x.State.Status==='running'&&x.State.Running&&!x.State.OOMKilled,'service_not_running');await this.runningLimit();return x;}
-  async probe(action,extra={},ms=15000){
+  async probe(action,extra={},ms=15000,operation){
     const input={...this.synthetic,action,service:this.prefix,generation:this.current?.generation,source:SOURCE,buildDate:BUILD_DATE,imageId:this.images.api,replayId:this.replayId,...extra};
     const ready=['postgres-ready-init','postgres-ready-restore'].includes(action);
-    const diagnostic=action==='initialize'||ready?{version:1,action,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:sha(randomUUID())}:undefined;
+    if(action==='closed-ready'){
+      const b=require('./diagnostics.cjs').startProtocol().binding(operation);
+      need(b.operation==='closed-ready'&&b.service==='probe'&&b.generation===this.current.generation&&b.run===this.options.run&&b.source===SOURCE&&b.publication===this.verifiedPublicationManifest,'probe_binding_invalid');
+    }
+    const diagnostic=action==='initialize'||ready||action==='closed-ready'?{version:1,action,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:operation?.call||sha(randomUUID()),...(action==='closed-ready'?{generation:this.current.generation}:{})}:undefined;
     if(diagnostic){require('./diagnostics.cjs').validateProbeBinding(diagnostic);input.diagnostic=diagnostic;}
     if(ready){need(Number.isInteger(ms)&&ms>800&&ms<=1500,'readiness_deadline');input.readinessTimeoutMs=ms-400;}
     const result=await this.d(['exec','-i',this.probeContainer.id,'node','/proof/probe.cjs'],{input:JSON.stringify(input),ms,...(diagnostic?{probeDiagnostic:{binding:diagnostic,container:this.probeContainer.id}}:{})});const r=proofResult(result.stdout);
@@ -154,7 +158,11 @@ class Native{
   }
   startBinding(operation,service,generation){
     const actions={'activation-helper':'activate-retained-generation','participant-helper':'start-retained-participant','participant-postinspect':'inspect-participant','closure-inspect':'inspect-closure','closure-inventory':'list-closure-name'};
-    return require('./diagnostics.cjs').startProtocol().binding({version:1,operation,action:actions[operation],phase:operation.startsWith('closure-')?'closure':generation+'-start',service,generation,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:sha(randomUUID())});
+    return require('./diagnostics.cjs').startProtocol().binding({version:1,operation,action:actions[operation]||operation,phase:operation.startsWith('closure-')?'closure':generation+'-start',service,generation,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:sha(randomUUID())});
+  }
+  async startStep(operation,service,key,fn){
+    const binding=this.startBinding(operation,service,key);
+    try{return await fn(binding);}catch(error){if(!error.startOperation)error.startOperation=binding;throw error;}
   }
   async privilegedStart(plan,binding,entry){
     const {startProtocol,startArgs}=require('./diagnostics.cjs'),protocol=startProtocol(),helper=path.join(this.toolsRoot,'scripts/ops/maintenance-privileged-executor.cjs');
@@ -166,30 +174,31 @@ class Native{
     }
   }
   async startGeneration(key){
-    this.current=generation(this,key,this.previousGeneration,this.previous);
+    this.current=await this.startStep('generation-prepare','generation',key,()=>generation(this,key,this.previousGeneration,this.previous));
     const planBase={version:1,uid:1000,gid:1000,epoch:this.epoch,ownerSha256:sha(this.synthetic.owner),timeoutMs:10000};
-    const activate=write(path.join(this.current.root,'activate.json'),JSON.stringify({...planBase,action:'activate-retained-generation',binding:{...this.current.binding,generation:this.previousGeneration},nextGeneration:key}));
-    await this.privilegedStart(activate.path,this.startBinding('activation-helper','generation',key));
-    const policy=require(path.join(this.toolsRoot,'scripts/ops/maintenance-start-contract.cjs'));
+    const activate=await this.startStep('activation-plan','generation',key,()=>write(path.join(this.current.root,'activate.json'),JSON.stringify({...planBase,action:'activate-retained-generation',binding:{...this.current.binding,generation:this.previousGeneration},nextGeneration:key})));
+    await this.startStep('activation-helper','generation',key,b=>this.privilegedStart(activate.path,b));
+    const policy=await this.startStep('policy-load','generation',key,()=>require(path.join(this.toolsRoot,'scripts/ops/maintenance-start-contract.cjs')));
     for(const service of services){
+      const plan=await this.startStep('participant-contract',service,key,()=>{
       need(this.owned.length<19,'resource_limit');const contract={...this.current.common,service,imageId:this.images[service]};policy.assertPlan(this.current.binding,contract);policy.verifyFiles(this.current.binding,contract);
       policy.assertImage([this.imageMetadata[service==='admin-writer'?'api':service]],contract);
-      const plan=write(path.join(this.current.root,service+'-start.json'),JSON.stringify({...planBase,action:'start-retained-participant',binding:this.current.binding,contract}));
+      return write(path.join(this.current.root,service+'-start.json'),JSON.stringify({...planBase,action:'start-retained-participant',binding:this.current.binding,contract}));});
       const entry={name:this.current.names[service],image:this.images[service],role:service,generation:key,project:this.current.project,id:null,startRequested:true};this.owned.push(entry);
-      await this.privilegedStart(plan.path,this.startBinding('participant-helper',service,key),entry);
+      await this.startStep('participant-helper',service,key,b=>this.privilegedStart(plan.path,b,entry));
       const operation=this.startBinding('participant-postinspect',service,key);
       try{const x=(await this.inspect(entry.name,{startOperation:{binding:operation,target:entry.name}}))[0];need(fullId(x.Id)&&x.Id===entry.id&&x.State.Running&&x.Image===entry.image,'started_identity');}
       catch(error){error.startOperation=operation;throw error;}
-      await this.runningLimit();
+      await this.startStep('running-limit',service,key,()=>this.runningLimit());
       // Check real mount readability from each application, not only the inspect metadata.
-      if(service!=='widget')await this.d(['exec',entry.id,'node','-e',`const fs=require('fs'),assert=require('assert');assert.equal(process.getuid(),1000);for(const p of ${JSON.stringify(service==='admin-writer'?['/run/ssb-writer-db','/run/ssb-writer-signing-key']:service==='dashboard'?['/run/ssb-writer-signing-key']:[])})assert.ok(fs.readFileSync(p).length);for(const p of ${JSON.stringify(service==='admin-writer'?[]:service==='dashboard'?['/run/ssb-writer-db','/run/ssb-maintenance/runtime-state.json']:['/run/ssb-writer-db','/run/ssb-writer-signing-key'])})assert.throws(()=>fs.readFileSync(p));`]);
+      if(service!=='widget')await this.startStep('mount-readability',service,key,()=>this.d(['exec',entry.id,'node','-e',`const fs=require('fs'),assert=require('assert');assert.equal(process.getuid(),1000);for(const p of ${JSON.stringify(service==='admin-writer'?['/run/ssb-writer-db','/run/ssb-writer-signing-key']:service==='dashboard'?['/run/ssb-writer-signing-key']:[])})assert.ok(fs.readFileSync(p).length);for(const p of ${JSON.stringify(service==='admin-writer'?[]:service==='dashboard'?['/run/ssb-writer-db','/run/ssb-maintenance/runtime-state.json']:['/run/ssb-writer-db','/run/ssb-writer-signing-key'])})assert.throws(()=>fs.readFileSync(p));`]));
     }
-    const reporter=this.owned.find(x=>x.generation===key&&x.role==='reporter');need((await this.inspect(reporter.id))[0].State.Running,'reporter_closed_start_failed');
-    await this.probe('closed-ready');
-    const closed=await this.state('snapshot',this.current.binding);need(closed.phase==='closed'&&Object.values(closed.work).every(x=>x.state==='completed'),'closed_start_admitted_work');
-    await this.state('open',this.current.binding);
+    await this.startStep('reporter-closed-inspect','reporter',key,async()=>{const reporter=this.owned.find(x=>x.generation===key&&x.role==='reporter');need((await this.inspect(reporter.id))[0].State.Running,'reporter_closed_start_failed');});
+    await this.startStep('closed-ready','probe',key,b=>this.probe('closed-ready',{},15000,b));
+    await this.startStep('state-snapshot','generation',key,async()=>{const closed=await this.state('snapshot',this.current.binding);need(closed.phase==='closed'&&Object.values(closed.work).every(x=>x.state==='completed'),'closed_start_admitted_work');});
+    await this.startStep('state-open','generation',key,()=>this.state('open',this.current.binding));
     const retired=['release','forward','normal'].slice(0,['release','forward','normal'].indexOf(key));
-    for(const retiredGeneration of retired)await this.probe('retired-admission',{retiredGeneration});
+    for(const retiredGeneration of retired)await this.startStep('retired-admission','probe',key,()=>this.probe('retired-admission',{retiredGeneration}));
     return{verified:true,counts:[5,5,retired.length*8],ids:this.owned.filter(x=>x.generation===key).map(x=>x.id)};
   }
   async e1(){const result=await this.probe('e1');const r=this.owned.find(x=>x.generation===this.current.generation&&x.role==='reporter');const x=(await this.inspect(r.id))[0];need(x.State.Status==='exited'&&x.State.ExitCode===0&&!x.State.OOMKilled,'reporter_completion_failed');const state=await this.state('snapshot',this.current.binding);need(Object.values(state.work).some(w=>w.generation===this.current.generation&&w.kind==='worker'&&w.state==='completed'),'reporter_work_missing');
@@ -252,7 +261,7 @@ class Native{
   }
   async close(failed){
     clearInterval(this.watch);if(!this.proc)return{verified:true,counts:[0]};
-    let errors=[];const outcomes=this.owned.map(entry=>({id:entry.id,role:entry.role,generation:entry.generation||'seed',state:'unverified',exit:null,code:'unclassified'}));const closureStart=clock();this.closureDeadline=Math.min(this.deadline,this.probeDeadline||Infinity,closureStart+30000);
+    let errors=[];const outcomes=this.owned.map(entry=>({id:entry.id,role:entry.role,generation:entry.generation||'seed',state:'unverified',exit:null,code:'unclassified',observation:{before:null,stop:{requested:false,completed:false},after:null}}));const closureStart=clock();this.closureDeadline=Math.min(this.deadline,this.probeDeadline||Infinity,closureStart+30000);
     await Promise.all(this.owned.map(async(entry,index)=>{const outcome=outcomes[index];try{
       if(entry.id===null&&entry.preCreateFailure){
         const protocol=require('./diagnostics.cjs').startProtocol(),record=entry.preCreateFailure,b=record.binding;
@@ -277,8 +286,16 @@ class Native{
         catch(error){if(operation)error.startOperation=operation;throw error;}
       };
       const x=await inspect(entry.id||entry.name);
-      if(x.State.Running){await this.d(['stop','--time','8',entry.id],{closure:true,ms:9500});}
+      outcome.observation.before=require('./diagnostics.cjs').closureSnapshot(x);
+      if(x.State.Running){
+        const stop=()=>this.d(['stop','--time','8',entry.id],{closure:true,ms:9500});
+        outcome.observation.stop.requested=true;
+        // Like closure inspect, early cleanup must not depend on a completed publication preflight.
+        if(this.verifiedPublicationManifest)await this.startStep('closure-stop',entry.role,entry.generation||'seed',stop);else await stop();
+        outcome.observation.stop.completed=true;
+      }
       const end=await inspect(entry.id);
+      outcome.observation.after=require('./diagnostics.cjs').closureSnapshot(end);
       if(neverStarted(x)&&neverStarted(end)){need(failed,'never_started_on_success');Object.assign(outcome,{state:'never_started',code:'none'});return;}
       need(end.State.Running===false&&end.State.Status==='exited'&&!end.State.OOMKilled&&!end.State.Error&&!end.State.Paused&&!end.State.Restarting&&!end.State.Dead&&Number.isInteger(end.State.ExitCode)&&end.State.ExitCode>=0&&end.State.ExitCode<=255,'container_completion_unverified');
       Object.assign(outcome,{state:end.State.ExitCode===0?'exited':'exited_unclean',exit:end.State.ExitCode,code:end.State.ExitCode===0?'none':'forced_or_nonzero'});
