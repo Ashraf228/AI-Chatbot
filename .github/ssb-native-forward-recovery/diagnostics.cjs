@@ -61,19 +61,39 @@ function classifyProbe(error){
  return{errorClass,sqlstate:probeSqlStates.includes(error?.code)?error.code:'unknown',nodeCode:probeNodeCodes.includes(error?.code)?error.code:'unknown',assertionCode:error instanceof A&&error.code==='ERR_ASSERTION'?'ERR_ASSERTION':'unknown',gate:error instanceof GateError&&probeGates.includes(error.code)?error.code:'unknown'};
 }
 function validateProbePoint(v){
- need(own(v,['step','lastConfirmed','migration','lastMigration','errorClass','sqlstate','nodeCode','assertionCode','gate',...(Object.hasOwn(v,'httpStatus')?['httpStatus']:[])])&&probeSteps.includes(v.step)&&(v.lastConfirmed==='none'||probeSteps.includes(v.lastConfirmed))&&probeClasses.includes(v.errorClass)&&(v.sqlstate==='unknown'||probeSqlStates.includes(v.sqlstate))&&(v.nodeCode==='unknown'||probeNodeCodes.includes(v.nodeCode))&&(v.assertionCode==='unknown'||v.assertionCode==='ERR_ASSERTION')&&(v.gate==='unknown'||probeGates.includes(v.gate)),'probe_diagnostic_invalid');
+ need(own(v,['step','lastConfirmed','migration','lastMigration','errorClass','sqlstate','nodeCode','assertionCode','gate',...(Object.hasOwn(v,'httpStatus')?['httpStatus','httpStage','httpConfirmed','causeNodeCode']:[])])&&probeSteps.includes(v.step)&&(v.lastConfirmed==='none'||probeSteps.includes(v.lastConfirmed))&&probeClasses.includes(v.errorClass)&&(v.sqlstate==='unknown'||probeSqlStates.includes(v.sqlstate))&&(v.nodeCode==='unknown'||probeNodeCodes.includes(v.nodeCode))&&(v.assertionCode==='unknown'||v.assertionCode==='ERR_ASSERTION')&&(v.gate==='unknown'||probeGates.includes(v.gate)),'probe_diagnostic_invalid');
  for(const [step,n]of [[v.step,v.migration],[v.lastConfirmed,v.lastMigration]]){const isMigration=step.startsWith('migration-')&&step!=='migration-list'||step==='client-release';need(isMigration?Number.isInteger(n)&&probeMigrations().some(f=>Number(f.path.split('/').at(-1).slice(0,3))===n):n===null,'probe_migration_invalid');}
  if(Object.hasOwn(v,'httpStatus'))need(v.httpStatus===null||['closed-api','closed-writer','closed-dashboard'].includes(v.step)&&Number.isInteger(v.httpStatus)&&v.httpStatus>=100&&v.httpStatus<=599,'probe_diagnostic_invalid');
+ if(Object.hasOwn(v,'httpStatus')){
+  need(v.causeNodeCode==='unknown'||probeNodeCodes.includes(v.causeNodeCode),'probe_diagnostic_invalid');
+  const stages={none:['none',false],request:['none',false],headers:['headers',true],body:['headers',true],complete:['body',true]};
+  need(typeof v.httpStage==='string'&&Object.hasOwn(stages,v.httpStage)&&v.httpConfirmed===stages[v.httpStage][0]&&(v.httpStatus!==null)===stages[v.httpStage][1],'probe_diagnostic_invalid');
+  need(['closed-api','closed-writer','closed-dashboard'].includes(v.step)||v.httpStage==='none','probe_diagnostic_invalid');
+ }
  need(v.assertionCode==='unknown'||v.errorClass==='AssertionError','probe_diagnostic_invalid');need(v.gate==='unknown'||v.errorClass==='GateError','probe_diagnostic_invalid');return v;
 }
 function validateProbe(v,expected){
- need(own(v,['version','binding','primary','cleanup'])&&v.version===1&&Array.isArray(v.cleanup)&&v.cleanup.length<=2,'probe_diagnostic_invalid');validateProbeBinding(v.binding);
+ need(own(v,['version','binding','primary','cleanup',...(v?.binding?.action==='closed-ready'?['readiness']:[])])&&v.version===1&&Array.isArray(v.cleanup)&&v.cleanup.length<=2,'probe_diagnostic_invalid');validateProbeBinding(v.binding);
  if(expected)need(JSON.stringify(v.binding)===JSON.stringify(validateProbeBinding(expected)),'probe_diagnostic_misbound');
  validateProbePoint(v.primary);
  for(const p of [v.primary,...v.cleanup])need(v.binding.action==='closed-ready'?Object.hasOwn(p,'httpStatus')&&!p.migration&&!p.lastMigration:!Object.hasOwn(p,'httpStatus'),'probe_diagnostic_invalid');
  const closed=v.binding.action==='closed-ready',ready=!closed&&v.binding.action!=='initialize',validStep=step=>closed?['binding','pool-create','pool-close',...probeSteps.filter(s=>s.startsWith('closed-'))].includes(step):ready?(step==='binding'||step.startsWith('readiness-')):!step.startsWith('readiness-')&&!step.startsWith('closed-');
  need(validStep(v.primary.step)&&(v.primary.lastConfirmed==='none'||validStep(v.primary.lastConfirmed)),'probe_diagnostic_invalid');
- for(const c of v.cleanup){validateProbePoint(c);need((ready?['readiness-close']:['client-release','pool-close']).includes(c.step)&&(c.lastConfirmed==='none'||validStep(c.lastConfirmed)),'probe_diagnostic_invalid');}return v;
+ for(const c of v.cleanup){validateProbePoint(c);need((ready?['readiness-close']:['client-release','pool-close']).includes(c.step)&&(c.lastConfirmed==='none'||validStep(c.lastConfirmed)),'probe_diagnostic_invalid');}
+ if(closed){
+  const r=v.readiness,samePoint=(a,b)=>Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(k=>a[k]===b[k]);
+  need(own(r,['attempts','firstFailure','lastFailure'])&&Number.isSafeInteger(r.attempts)&&r.attempts>=0&&r.attempts<=10000,'probe_diagnostic_invalid');
+  need((r.firstFailure===null)===(r.lastFailure===null),'probe_diagnostic_invalid');
+  for(const f of [r.firstFailure,r.lastFailure])if(f!==null){
+   need(own(f,['attempt','point'])&&Number.isSafeInteger(f.attempt)&&f.attempt>=1&&f.attempt<=r.attempts,'probe_diagnostic_invalid');validateProbePoint(f.point);
+   need(f.point.step.startsWith('closed-')&&f.point.step!=='closed-before'&&validStep(f.point.lastConfirmed)&&Object.hasOwn(f.point,'httpStatus')&&f.point.migration===null&&f.point.lastMigration===null,'probe_diagnostic_invalid');
+  }
+  if(r.firstFailure!==null){need(r.firstFailure.attempt===1&&r.firstFailure.attempt<=r.lastFailure.attempt,'probe_diagnostic_invalid');if(r.firstFailure.attempt===r.lastFailure.attempt)need(samePoint(r.firstFailure.point,r.lastFailure.point),'probe_diagnostic_invalid');}
+  if(v.primary.step.startsWith('closed-')&&v.primary.step!=='closed-before')need(r.lastFailure!==null&&r.lastFailure.attempt===r.attempts&&samePoint(r.lastFailure.point,v.primary),'probe_diagnostic_invalid');
+  if(['binding','pool-create','closed-before'].includes(v.primary.step))need(r.attempts===0&&r.firstFailure===null,'probe_diagnostic_invalid');
+  if(v.primary.step==='pool-close')need(v.primary.lastConfirmed==='closed-receipts'&&r.attempts>=1&&(r.lastFailure===null?r.attempts===1:r.lastFailure.attempt===r.attempts-1),'probe_diagnostic_invalid');
+ }
+ return v;
 }
 function decodeProbe(stderr,expected){
  need(Buffer.isBuffer(stderr)&&stderr.length>0,'probe_diagnostic_missing');
@@ -83,11 +103,15 @@ function decodeProbe(stderr,expected){
  validateProbe(v,expected);need(s===probeMarker+JSON.stringify(v)+'\n','probe_diagnostic_invalid');return v;
 }
 class ProbeProgress{
- constructor(binding){this.binding=validateProbeBinding(binding);this.step='binding';this.lastConfirmed='none';this.migration=null;this.lastMigration=null;this.primary=null;this.cleanup=[];}
- enter(step,migration=null){need(probeSteps.includes(step),'probe_diagnostic_invalid');this.step=step;this.migration=migration;this.httpStatus=null;}
+ constructor(binding){this.binding=validateProbeBinding(binding);this.step='binding';this.lastConfirmed='none';this.migration=null;this.lastMigration=null;this.primary=null;this.cleanup=[];this.httpStatus=null;this.httpStage='none';this.httpConfirmed='none';this.readiness={attempts:0,firstFailure:null,lastFailure:null};}
+ enter(step,migration=null){need(probeSteps.includes(step),'probe_diagnostic_invalid');this.step=step;this.migration=migration;this.httpStatus=null;this.httpStage='none';this.httpConfirmed='none';}
  confirm(){this.lastConfirmed=this.step;this.lastMigration=this.migration;}
- capture(error){const point={step:this.step,lastConfirmed:this.lastConfirmed,migration:this.migration,lastMigration:this.lastMigration,...classifyProbe(error),...(this.binding.action==='closed-ready'?{httpStatus:this.httpStatus??null}:{})};validateProbePoint(point);if(!this.primary)this.primary=point;else this.cleanup.push(point);}
- diagnostic(){return validateProbe({version:1,binding:this.binding,primary:this.primary,cleanup:this.cleanup});}
+ httpEvent(stage,status){this.httpStage=stage;if(stage==='headers'){this.httpStatus=status;this.httpConfirmed='headers';}if(stage==='complete')this.httpConfirmed='body';}
+ beginAttempt(){this.readiness.attempts++;}
+ point(error){const point={step:this.step,lastConfirmed:this.lastConfirmed,migration:this.migration,lastMigration:this.lastMigration,...classifyProbe(error),...(this.binding.action==='closed-ready'?{httpStatus:this.httpStatus,httpStage:this.httpStage,httpConfirmed:this.httpConfirmed,causeNodeCode:probeNodeCodes.includes(error?.cause?.code)?error.cause.code:'unknown'}:{})};validateProbePoint(point);return point;}
+ attemptFailure(error){const failure={attempt:this.readiness.attempts,point:this.point(error)};this.readiness.firstFailure??=failure;this.readiness.lastFailure=failure;}
+ capture(error){const point=this.point(error);if(!this.primary)this.primary=point;else this.cleanup.push(point);}
+ diagnostic(){return validateProbe({version:1,binding:this.binding,primary:this.primary,cleanup:this.cleanup,...(this.binding.action==='closed-ready'?{readiness:this.readiness}:{})});}
 }
 function probeCallsInFailure(v){return v?[...(v.probe?[v.probe]:[]),...v.causes.flatMap(probeCallsInFailure)]:[];}
 module.exports={InitProgress,classifyInit,validateInit,initSteps,initGates,initFsCodes,stateDiagnostic,validateState,decodeState,publicFailure,validateFailure,validateDetail,stages,stateCodes,codes,ProbeProgress,validateProbeBinding,validateProbe,decodeProbe,probeMarker,probeMigrations,probeSteps,probeSqlStates,probeNodeCodes,probeCallsInFailure};

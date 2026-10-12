@@ -4,9 +4,13 @@ const {randomUUID,createHash,createHmac}=require('node:crypto');
 const sha=b=>createHash('sha256').update(b).digest('hex');
 const kinds=['http','handler','import','worker','job','database','provider','configuration'];
 let phase='input';
-async function http(url,options={}){
+async function http(url,options={},observe){
   const u=new URL(url);assert.ok(['api','dashboard','admin-writer','widget'].includes(u.hostname));assert.equal(u.protocol,'http:');
-  const r=await fetch(url,{...options,redirect:'manual',signal:AbortSignal.timeout(3500)}),text=await r.text();assert.ok(Buffer.byteLength(text)<2*1024*1024);
+  observe?.('request');
+  const r=await fetch(url,{...options,redirect:'manual',signal:AbortSignal.timeout(3500)});
+  observe?.('headers',r.status);observe?.('body');
+  const text=await r.text();assert.ok(Buffer.byteLength(text)<2*1024*1024);
+  observe?.('complete');
   return{status:r.status,headers:r.headers,text};
 }
 function pool(input,role='postgres',host='db'){const {Pool}=require('/app/node_modules/pg');return new Pool({host,port:5432,user:role,password:input.passwords[role],database:'synthetic',connectionTimeoutMillis:2500,statement_timeout:3000,max:2});}
@@ -25,12 +29,12 @@ async function closedReady(input){
   const {ProbeProgress}=require('./diagnostics.cjs'),{need}=require('./common.cjs');
   const trace=new ProbeProgress(input.diagnostic);let p,result,primary;
   const step=async(name,fn)=>{trace.enter(name);const value=await fn();trace.confirm();return value;};
-  const status=async(name,url,options,expected)=>step(name,async()=>{const r=await http(url,options);trace.httpStatus=r.status;assert.equal(r.status,expected);});
+  const status=async(name,url,options,expected)=>step(name,async()=>{const r=await http(url,options,(stage,status)=>trace.httpEvent(stage,status));assert.equal(r.status,expected);});
   try{
     need(input.action==='closed-ready'&&input.source===trace.binding.source&&input.service==='ssb-native-'+trace.binding.run&&input.generation===trace.binding.generation&&sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')))===trace.binding.publication,'probe_binding_invalid');trace.confirm();
     p=await step('pool-create',()=>pool(input));
     const before=await step('closed-before',()=>writerEffects(p)),until=performance.now()+4500;let last,lastPoint;
-    while(performance.now()<until){try{
+    while(performance.now()<until){trace.beginAttempt();try{
       await status('closed-api','http://api:5000/admin/sites',{headers:{'x-admin-key':input.admin}},503);
       await status('closed-writer','http://admin-writer:3011/v1/write',writerRequest(input,'/admin/sites/synthetic-site'),503);
       await status('closed-dashboard','http://dashboard:3000/login',{},200);
@@ -38,7 +42,7 @@ async function closedReady(input){
       await step('closed-sites',()=>assert.deepEqual(after.sites,before.sites));
       await step('closed-receipts',()=>assert.deepEqual(after.receipts,before.receipts));
       result={verified:true,counts:[3,2]};break;
-    }catch(error){last=error;lastPoint={step:trace.step,lastConfirmed:trace.lastConfirmed,httpStatus:trace.httpStatus};await new Promise(resolve=>setTimeout(resolve,50));}}
+    }catch(error){last=error;trace.attemptFailure(error);lastPoint={step:trace.step,lastConfirmed:trace.lastConfirmed,httpStatus:trace.httpStatus,httpStage:trace.httpStage,httpConfirmed:trace.httpConfirmed};await new Promise(resolve=>setTimeout(resolve,50));}}
     if(!result){if(lastPoint)Object.assign(trace,lastPoint);throw last||Error('readiness deadline');}
   }catch(error){primary=error;trace.capture(error);}
   if(p){try{await step('pool-close',()=>p.end());}catch(error){trace.capture(error);primary=primary?new AggregateError([primary,error],'probe_cleanup_failed'):error;}}
