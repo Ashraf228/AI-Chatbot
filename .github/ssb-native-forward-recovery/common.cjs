@@ -39,7 +39,7 @@ class Processes {
     }
     if(probeDiagnostic!==undefined){
       const {validateProbeBinding}=require('./diagnostics.cjs'),b=validateProbeBinding(probeDiagnostic.binding),request=json(input);
-      need(bin==='/usr/bin/docker'&&/^[a-f0-9]{64}$/.test(probeDiagnostic.container)&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','exec','-i',probeDiagnostic.container,'node','/proof/probe.cjs'])&&!allowFailure&&!closure&&!stateDiagnostic&&baseReference===undefined&&request.action===b.action&&request.source===b.source&&request.service==='ssb-native-'+b.run&&JSON.stringify(request.diagnostic)===JSON.stringify(b),'probe_binding_invalid');
+      need(bin==='/usr/bin/docker'&&/^[a-f0-9]{64}$/.test(probeDiagnostic.container)&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','exec','-i',probeDiagnostic.container,'node','/proof/probe.cjs'])&&!allowFailure&&!closure&&!stateDiagnostic&&baseReference===undefined&&request.action===b.action&&request.source===b.source&&request.service==='ssb-native-'+b.run&&(b.action!=='closed-ready'||request.generation===b.generation)&&JSON.stringify(request.diagnostic)===JSON.stringify(b),'probe_binding_invalid');
     }
     if(baseReference!==undefined){require('./base-diagnostics.cjs').boundReference(baseReference);need(bin==='/usr/bin/docker'&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','pull','--platform=linux/amd64',baseReference])&&!allowFailure&&!closure&&!stateDiagnostic,'base_diagnostic_binding');}
     need(Number.isFinite(deadline)&&deadline<=this.deadline,'deadline_binding');

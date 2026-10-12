@@ -171,22 +171,27 @@ function transport(h,mutation={}){
 }
 function probes(h,wire){
   const widget=loadCjs(path.join(target,'widget-proof.cjs'),{}, {fetch:wire.fetch});let ticks=0;
+  h.mem.writeFileSync(path.join(target,'publication-manifest.json'),fs.readFileSync(path.join(target,'publication-manifest.json')));
   const probe=loadCjs(path.join(target,'probe.cjs'),{'node:fs':h.mem,'/app/node_modules/pg':{Pool:h.Pool},'./widget-proof.cjs':widget,'/app/dist/maintenance/maintenance-state':{MaintenanceState:h.MaintenanceState}},
     {fetch:wire.fetch,performance:{now:()=>ticks+=1000},setTimeout:fn=>fn()});
   return{probe,widget};
+}
+function closedInput(){
+ const source='94a25578e883a6d7bbd03f26c56735739f75e45e',run='12345678',publication=crypto.createHash('sha256').update(fs.readFileSync(path.join(target,'publication-manifest.json'))).digest('hex');
+ return{...input,action:'closed-ready',source,service:'ssb-native-'+run,diagnostic:{version:1,action:'closed-ready',run,source,publication,call:'f'.repeat(64),generation:input.generation}};
 }
 
 test('closed-ready reaches real writer maintenance admission with valid signed payload and zero DB/ledger effects',async()=>{
   const h=await releaseHarness({closed:true}),wire=transport(h,{closed:true}),{probe}=probes(h,wire),before=plain(h.db);
   assert.equal((await h.writerHttp()).status,401);
-  const result=await probe.main({...input,action:'closed-ready'});
+  const result=await probe.main(closedInput());
   assert.deepEqual(plain(result),{verified:true,counts:[3,2]});assert.deepEqual(h.db,before);assert.equal(h.poolEnds(),1);
   const request=wire.calls.find(c=>c.url.includes('/v1/write')).options;
   assert.equal(h.verifyWriterRequest(request.body,request.headers['x-admin-writer-signature'],input.writerKey).path,'/admin/sites/synthetic-site');
 });
 for(const effect of ['sites','receipts'])test('closed-ready rejects 503 that changes '+effect,async()=>{
   const h=await releaseHarness({closed:true}),wire=transport(h,{closed:true,closedEffect:effect}),{probe}=probes(h,wire);
-  await assert.rejects(probe.main({...input,action:'closed-ready'}));
+  await assert.rejects(probe.main(closedInput()));
   assert.ok(wire.calls.some(c=>c.url.includes('/v1/write')&&c.options.headers?.['x-admin-writer-signature']));assert.equal(h.poolEnds(),1);
 });
 

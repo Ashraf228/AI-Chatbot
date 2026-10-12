@@ -1,4 +1,8 @@
 'use strict';
+function closureObservation(status='exited'){
+ const zero='0001-01-01T00:00:00Z',before=require('./diagnostics.cjs').closureSnapshot({State:{Status:status,Running:false,ExitCode:0,StartedAt:status==='created'?zero:'2026-10-10T00:00:00Z',FinishedAt:status==='created'?zero:'2026-10-10T00:00:01Z'}});
+ return{before,stop:{requested:false,completed:false},after:{...before}};
+}
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {main,SOURCE}=require('./controller.cjs'),{Native,verifyBase,proofResult}=require('./native.cjs');
 const {phases,Receipts,receive,generationCounts}=require('./evidence.cjs'),{expand}=require('./fixtures.cjs');
@@ -18,7 +22,7 @@ function nativeEvidence(){
     result[g+'-start']={counts:[...generationCounts.start[g]],ids};result[g+'-e1']={counts:[...generationCounts.e1],hashes:[id(220),id(221)]};
     result[g+'-drain']={counts:[...generationCounts.drain]};result[g+'-shutdown']={counts:[...generationCounts.shutdown],ids,hashes:[id(230+i*2),id(231+i*2)]};
   }
-  result.closure.detail={failure:null,outcomes:all.slice(0,19).map((id,i)=>{const cohort=i>=3&&i<18,generation=cohort?['release','forward','normal'][Math.floor((i-3)/5)]:'seed',role=cohort?['api','admin-writer','dashboard','reporter','widget'][(i-3)%5]:['postgres','redis','probe'][i]||'restore-postgres';return{id,role,generation,state:cohort&&(i-3)%5<2?'graceful':'exited',exit:0,code:'none'};})};
+  result.closure.detail={failure:null,outcomes:all.slice(0,19).map((id,i)=>{const cohort=i>=3&&i<18,generation=cohort?['release','forward','normal'][Math.floor((i-3)/5)]:'seed',role=cohort?['api','admin-writer','dashboard','reporter','widget'][(i-3)%5]:['postgres','redis','probe'][i]||'restore-postgres';return{id,role,generation,state:cohort&&(i-3)%5<2?'graceful':'exited',exit:0,code:'none',observation:closureObservation()};})};
   return result;
 }
 function backend(fault){
