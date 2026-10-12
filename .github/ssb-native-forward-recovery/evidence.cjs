@@ -30,6 +30,15 @@ function validateEvidence(r,prior){
   const checkStart=v=>{if(!v)return;if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
   for(const probe of probeCallsInFailure(r.detail.failure))need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
   const failed=prior.some(x=>!x.ok);
+  const absent=r.phase==='closure'?r.detail.outcomes.filter(o=>o.state==='not_created'):[];
+  const startFailures=v=>v?[...(v.start?[v.start]:[]),...v.causes.flatMap(startFailures)]:[];
+  need(unique(absent.map(o=>o.generation+':'+o.role)),'not_created_duplicate');
+  for(const o of absent){
+    const preceding=prior.find(p=>!p.ok&&p.phase===o.generation+'-start');
+    need(failed&&startFailures(preceding?.detail.failure).some(d=>require('./diagnostics.cjs').startProtocol().preCreateFailure(d)
+      &&d.binding.service===o.role&&d.binding.generation===o.generation&&d.binding.run===r.run
+      &&d.binding.source===r.source&&d.binding.publication===prior[0]?.hashes[0]),'not_created_evidence_missing');
+  }
   need((r.phase===phases[prior.length]&&!failed)||(r.phase==='closure'&&failed&&!prior.some(x=>x.phase==='closure')),'receipt_phase_order');
   if(r.phase==='preflight'&&!r.ok)need(r.counts.length===0&&r.ids.length===0&&r.hashes.length<=1,'failed_preflight_shape');
   need(!prior.length||r.elapsedMs>=prior.at(-1).elapsedMs,'receipt_elapsed_order');
@@ -41,7 +50,7 @@ function validateEvidence(r,prior){
     if(same(r.counts,[0])){
       need(prior.length===1&&prior[0].phase==='preflight'&&!prior[0].ok&&r.ids.length===0,'partial_closure_empty');return;
     }
-    need(r.counts.length===3&&r.counts[0]<=19&&r.counts[1]===r.counts[0],'partial_closure_counts');
+    need(r.counts.length===3&&r.counts[0]<=19&&r.counts[1]===r.counts[0]-absent.length,'partial_closure_counts');
     need(r.ids.length>=r.counts[1]&&r.ids.length<=r.counts[1]+5&&r.ids.every(s=>hex(s,64))&&unique(r.ids),'partial_closure_ids');
     const cohorts=prior.filter(x=>x.ok&&x.phase.endsWith('-start')).flatMap(x=>x.ids);
     if(cohorts.length)need(r.counts[1]>=3+cohorts.length&&same(r.ids.slice(3,3+cohorts.length),cohorts),'partial_closure_cohorts');

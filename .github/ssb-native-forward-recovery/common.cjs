@@ -33,7 +33,9 @@ class Processes {
     }
     if(startOperation!==undefined){
       const b=require('./diagnostics.cjs').startProtocol().binding(startOperation.binding),target=startOperation.target;
-      need(['participant-postinspect','closure-inspect'].includes(b.operation)&&closure===(b.operation==='closure-inspect')&&!allowFailure&&!stateDiagnostic&&!probeDiagnostic&&!baseReference&&!startDiagnostic&&bin==='/usr/bin/docker'&&typeof target==='string'&&(/^[a-f0-9]{64}$/.test(target)||target===`ssb-native-${b.run}-${b.generation==='seed'?'':b.generation+'-'}${b.service}`)&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','container','inspect',target]),'start_binding_invalid');
+      const name=`ssb-native-${b.run}-${b.generation==='seed'?'':b.generation+'-'}${b.service}`,inventory=b.operation==='closure-inventory';
+      const expected=inventory?['container','ls','--all','--no-trunc','--filter',`name=^/${name}$`,'--format','{{.ID}}']:['container','inspect',target];
+      need(['participant-postinspect','closure-inspect','closure-inventory'].includes(b.operation)&&closure===b.operation.startsWith('closure-')&&!allowFailure&&!stateDiagnostic&&!probeDiagnostic&&!baseReference&&!startDiagnostic&&bin==='/usr/bin/docker'&&typeof target==='string'&&(inventory?target===name:/^[a-f0-9]{64}$/.test(target)||target===name)&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock',...expected]),'start_binding_invalid');
     }
     if(probeDiagnostic!==undefined){
       const {validateProbeBinding}=require('./diagnostics.cjs'),b=validateProbeBinding(probeDiagnostic.binding),request=json(input);

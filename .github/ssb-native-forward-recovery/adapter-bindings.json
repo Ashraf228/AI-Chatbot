@@ -8,8 +8,8 @@
     },
     {
       "path": "scripts/ops/maintenance-executor.cjs",
-      "sha256": "c1db79442ca3f581ed2a71571a74736ba13091f57c547938683b6c376417345e",
-      "bytes": 9613,
+      "sha256": "2377c684d71cc54194267282917daf86ce407142c137e2652ad1bc62bac8c85a",
+      "bytes": 9896,
       "gitMode": "100644"
     },
     {
@@ -20,8 +20,8 @@
     },
     {
       "path": "scripts/ops/maintenance-start-contract.cjs",
-      "sha256": "fd0c2766c8eb5273d7eb870b96be5c6bac594ab86c3b021a838acdbac43d0ad2",
-      "bytes": 20864,
+      "sha256": "0a7f641bcd3833bd5631ad9254f595f31e0cbb045e7638a6387048b950074571",
+      "bytes": 21372,
       "gitMode": "100644"
     },
     {
