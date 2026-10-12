@@ -22,7 +22,7 @@ function generation(native,generation,previous,predecessors,policyOverride){
   const binding={root:native.stateRoot,service:native.prefix,generation};
   const project=`${native.prefix}-${generation}`,s=native.synthetic,images=native.images;
   const names=Object.fromEntries(services.map(k=>[k,`${project}-${k}`]));
-  const mountFiles={runtime:write(path.join(root,'runtime.json'),JSON.stringify({version:1,service:native.prefix,generation,environment:'production',query_embedding:{providerKey:'openai',model:'text-embedding-3-small',supported:true},llm_generation:{providerKey:'openai',model:'synthetic-disabled',supported:false}}),1000),writerKey:write(path.join(root,'writer-key'),s.writerKey,1000),writerDb:write(path.join(root,'writer-db'),`postgresql://ssb_admin_writer:${s.passwords.ssb_admin_writer}@db:5432/synthetic`,1000)};
+  const mountFiles={runtime:write(path.join(root,'runtime.json'),JSON.stringify({version:1,service:native.prefix,generation,environment:'production',query_embedding:{providerKey:'openai',model:'text-embedding-3-small',supported:true},llm_generation:{providerKey:'openai',model:'synthetic-disabled',supported:true}}),1000),writerKey:write(path.join(root,'writer-key'),s.writerKey,1000),writerDb:write(path.join(root,'writer-db'),`postgresql://ssb_admin_writer:${s.passwords.ssb_admin_writer}@db:5432/synthetic`,1000)};
   const values={
     MAINTENANCE_HOST_STATE:native.stateRoot,MAINTENANCE_SERVICE:native.prefix,MAINTENANCE_GENERATION:generation,
     RETAINED_API_NAME:names.api,RETAINED_WRITER_NAME:names['admin-writer'],RETAINED_DASHBOARD_NAME:names.dashboard,RETAINED_REPORTER_NAME:names.reporter,RETAINED_WIDGET_NAME:names.widget,
