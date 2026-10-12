@@ -141,11 +141,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/fixtures.cjs",
-      "sha256": "bea201f79bc905b1444e8771372246423339d291f0f13c0394c047c7541665ba",
-      "bytes": 6486,
+      "sha256": "d8be9165b4c60f737942c1c4ec61b862dba087ef3caa840ec33678868f651a03",
+      "bytes": 6485,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "8ad214cc795c2b45a0ae963bc350a3d2d49cac81"
+      "gitBlob": "1c2749c227f3cecaa3cda2bc637360fb452a8a66"
     },
     {
       "path": ".github/ssb-native-forward-recovery/init-closure.test.cjs",
