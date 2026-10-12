@@ -66,7 +66,25 @@ if(process.env.SSB_START_OFFLINE_CHILD){
   if(a[0]==='info'){if(fault==='daemon-json')return{stdout:'{'};result={ID:fault==='daemon'?'wrong':c.daemonId,OSType:'linux',Architecture:'amd64'};}
   else if(a[0]==='image'){if(fault==='image')image.User='0';result=[{Id:c.imageId,Os:'linux',Architecture:'amd64',Config:image}];}
   else if(a[0]==='network'){const n=Object.values(c.networks).find(n=>n.id===a[2]);result=[{Id:n.id,Name:n.name,Internal:fault!=='network',Driver:'bridge',Scope:'local'}];}
-  else if(a.includes('config')){if(fault==='compose')config.services.api.ports=['5000:5000'];result=config;}
+  else if(a.includes('config')){
+   if(fault==='compose')config.services.api.ports=['5000:5000'];
+   // Exact v2.38.2 rendering: false bind fields are omitted; literal dollars are doubled.
+   for(const service of Object.values(config.services))for(const v of service.volumes||[])if(v.bind?.create_host_path===false)delete v.bind.create_host_path;
+   const mount=s.volumes?.[0];
+   if(fault==='mount-create')mount.bind.create_host_path=true;
+   if(fault==='mount-type')mount.bind=[];
+   if(fault==='mount-source')mount.source='/synthetic-unbound';
+   if(fault==='mount-extra')mount.bind.propagation='rshared';
+   if(cfg.mountMutation){
+    const m=cfg.mountMutation;
+    if(Object.hasOwn(m,'replacement'))s.volumes[m.index]=m.replacement;
+    else {Object.assign(s.volumes[m.index],m.fields||{});if(m.omitReadOnly)delete s.volumes[m.index].read_only;}
+   }
+   if(fault==='compose-value')config.services.dashboard.environment.ADMIN_PANEL_PASSWORD_HASH+='x';
+   if(fault==='compose-invalid')return{stdout:'{'};
+   const rendered=JSON.stringify(config).replace(/\$/g,()=> '$$');
+   return{stdout:fault==='compose-unpaired'?rendered.replace(/\$\$/,()=> '$'):rendered};
+  }
   else if(a[0]==='container'&&a[1]==='ls'){if(fault==='inventory')throw error('EACCES');return{stdout:fault==='inventory-json'?'{':fault==='collision'?'[{}]':''};}
   else if(a.includes('create')){if(fault==='create')throw error('EACCES');container=base;return{stdout:''};}
   else if(a[0]==='container'&&a[1]==='inspect'){
@@ -106,6 +124,7 @@ if(process.env.SSB_START_OFFLINE_CHILD){
   const fakeFS={...fs,chownSync(){}};const f=load('fixtures.cjs',{'node:fs':fakeFS});
   const C=load('native.cjs',{'./fixtures.cjs':f}).Native,n=new C(opts);
   Object.assign(n,{privateRoot:root,stateRoot:path.join(root,'state'),toolsRoot,prefix:'ssb-native-'+opts.run,docker:'/usr/bin/docker',daemonId:'synthetic-bound-daemon',synthetic:f.secrets(),images:{api:'sha256:'+'1'.repeat(64),'admin-writer':'sha256:'+'1'.repeat(64),dashboard:'sha256:'+'2'.repeat(64),reporter:'sha256:'+'3'.repeat(64),widget:'sha256:'+'4'.repeat(64)},networks:Object.fromEntries(f.networks.map((k,i)=>[k,{name:'ssb-native-'+k,id:String(i+5).repeat(64),internal:true}])),initial:{containers:[]},verifiedPublicationManifest:publication});n.synthetic.owner='s'.repeat(64);n.resources=()=>{};
+  if(fault==='dollar-pairs')n.synthetic.passwordHash+='$$synthetic';
   class MaintenanceDenied extends Error{constructor(code){super(code);this.code=code;}}
   const policy=load('adapters/scripts/ops/maintenance-start-contract.cjs',{'../../apps/api/dist/maintenance/maintenance-state':{MaintenanceDenied}});
   const predecessorStates={};
@@ -132,8 +151,9 @@ if(process.env.SSB_START_OFFLINE_CHILD){
   n.proc=new P({deadline:n.deadline,privateRoot:path.join(root,'raw')});const e={name:n.current.names.api,image:n.images.api,id:null,role:'api',generation:key,project:n.current.project,startRequested:true};
   return{root,n,e,c,entry,plan,b,cfg,events,f,C};
  }
- async function invoke(t,fault=''){
+ async function invoke(t,fault='',mountMutation){
   const h=setup(t,fault);if(fault==='entry-missing')fs.renameSync(h.entry,h.entry+'.retained');
+  if(mountMutation)h.cfg.mountMutation=mountMutation;
   let result,failure;try{result=await h.n.privilegedStart(h.plan,h.b,h.e);}catch(e){failure=e;}
   h.n.proc.assertClosed();const publicError=failure?publicFailure(failure):null;
   assert.doesNotMatch(JSON.stringify(publicError),/SYNTHETIC_PRIVATE|ssb-start-offline|postgresql:|ownerSha256/);
@@ -143,6 +163,50 @@ if(process.env.SSB_START_OFFLINE_CHILD){
  for(const fault of ['', 'delayed'])test('actual Node launcher -> helper -> IPC owner -> compose adapter -> process: '+(fault||'success'),async t=>{
   const h=await invoke(t,fault);assert.equal(h.failure,undefined,JSON.stringify(h.publicError));assert.equal(h.result.startDiagnostic.ok,true);assert.equal(h.e.id,id);assert.equal(h.result.startDiagnostic.resource.state,'running_verified');
   assert.equal(h.eventsRead.filter(e=>e.kind==='docker'&&e.value==='create').length,1);assert.equal(h.eventsRead.filter(e=>e.kind==='docker'&&e.value==='container:start').length,1);assert.equal(h.eventsRead.filter(e=>e.kind==='start-complete').length,1);assert.ok(h.eventsRead.some(e=>e.kind==='state'&&e.value==='complete'));
+ });
+ for(const [fault,code]of [['mount-create','start_mount_invalid'],['mount-type','start_mount_invalid'],['mount-source','start_mount_invalid'],['mount-extra','start_mount_invalid'],['compose-unpaired','compose_interpolation_invalid'],['compose-invalid','unknown']])test('v2.38.2 config still rejects unsafe rendering: '+fault,async t=>{
+  const h=await invoke(t,fault);assert.ok(h.failure);const d=diagnosis(h.failure);
+  assert.equal(d.primary.step,'compose-config');assert.equal(d.primary.code,code);assert.equal(d.resource.state,'planned');
+  assert.ok(!h.eventsRead.some(e=>e.kind==='docker'&&['create','container:start'].includes(e.value)));
+ });
+ test('only false or omitted create_host_path in a real bind object is accepted for every mounted service',t=>{
+  const h=setup(t);class MaintenanceDenied extends Error{constructor(code){super(code);this.code=code;}}
+  const p=load('adapters/scripts/ops/maintenance-start-contract.cjs',{'../../apps/api/dist/maintenance/maintenance-state':{MaintenanceDenied}});
+  for(const service of ['api','admin-writer','dashboard','reporter']){
+   const c={...h.n.current.common,service,imageId:h.n.images[service]};
+   for(const binding of [{},{create_host_path:false}]){const config=structuredClone(h.n.current.config);for(const v of config.services[service].volumes)v.bind=binding;assert.doesNotThrow(()=>p.assertCompose(h.n.current.binding,c,config,metadata(service)));}
+   for(const binding of [undefined,null,[],false,'', {create_host_path:null},{create_host_path:'false'},{create_host_path:0},{create_host_path:true},{propagation:'rprivate'},{selinux:'z'},{unknown:false}]){const config=structuredClone(h.n.current.config);config.services[service].volumes[0].bind=binding;assert.throws(()=>p.assertCompose(h.n.current.binding,c,config,metadata(service)),e=>e.code==='start_mount_invalid');}
+  }
+ });
+ for(const index of [0,1])for(const [label,value]of [['string','false'],['zero',0],['one',1],['null',null],['array',[]],['object',{}]])
+ test(`mount schema rejects ${index===0?'RW':'RO'} read_only ${label} before create`,async t=>{
+  const h=await invoke(t,'',{index,fields:{read_only:value}}),d=diagnosis(h.failure);
+  assert.ok(h.failure);assert.equal(d.primary.step,'compose-config');assert.equal(d.primary.code,'start_mount_invalid');assert.equal(d.resource.state,'planned');
+  assert.ok(!h.eventsRead.some(e=>e.kind==='docker'&&['create','container:start'].includes(e.value)));
+ });
+ for(const [label,mutation]of [
+  ['unknown field',{index:0,fields:{unreviewed:false}}],['consistency',{index:0,fields:{consistency:'cached'}}],
+  ['volume options',{index:0,fields:{volume:{nocopy:true}}}],['tmpfs options',{index:0,fields:{tmpfs:{size:1024}}}],
+  ['missing RO flag',{index:1,omitReadOnly:true}],['null mount',{index:0,replacement:null}],['array mount',{index:0,replacement:[]}],
+ ])test('mount schema rejects '+label+' before create',async t=>{
+  const h=await invoke(t,'',mutation),d=diagnosis(h.failure);
+  assert.ok(h.failure);assert.equal(d.primary.step,'compose-config');assert.equal(d.primary.code,'start_mount_invalid');assert.equal(d.resource.state,'planned');
+  assert.ok(!h.eventsRead.some(e=>e.kind==='docker'&&['create','container:start'].includes(e.value)));
+ });
+ for(const [label,mutation]of [['explicit RW false',{index:0,fields:{read_only:false}}],['omitted RW flag',{index:0,omitReadOnly:true}],['explicit RO true',{index:1,fields:{read_only:true}}]])
+ test('mount schema accepts '+label+' through the actual helper',async t=>{
+  const h=await invoke(t,'',mutation);assert.equal(h.failure,undefined,JSON.stringify(h.publicError));
+  assert.equal(h.result.startDiagnostic.ok,true);assert.equal(h.eventsRead.filter(e=>e.kind==='docker'&&e.value==='create').length,1);
+  assert.equal(h.eventsRead.filter(e=>e.kind==='docker'&&e.value==='container:start').length,1);
+ });
+ test('mount schema accepts exact v2.38.2 shapes for every mounted service',t=>{
+  const h=setup(t);class MaintenanceDenied extends Error{constructor(code){super(code);this.code=code;}}
+  const p=load('adapters/scripts/ops/maintenance-start-contract.cjs',{'../../apps/api/dist/maintenance/maintenance-state':{MaintenanceDenied}});
+  for(const service of ['api','admin-writer','dashboard','reporter']){
+   const c={...h.n.current.common,service,imageId:h.n.images[service]},config=structuredClone(h.n.current.config);
+   for(const v of config.services[service].volumes){v.bind={};if(v.read_only===false)delete v.read_only;}
+   assert.doesNotThrow(()=>p.assertCompose(h.n.current.binding,c,config,metadata(service)));
+  }
  });
  const cases=[['entry-missing','entry-access','ENOENT',false],['entry-access','entry-access','EACCES',false],['module-missing','module-load','MODULE_NOT_FOUND',false],['module-type','module-load','unknown',false],['plan-json','plan-read','unknown',false],['plan-access','plan-read','EACCES',false],['state-begin','state-begin','admission_closed',false],['state-check','state-begin','generation_retired',false],['daemon-json','daemon','unknown',false],['daemon','daemon','daemon_binding_invalid',false],['image','image','image_user_invalid',false],['network','network','network_identity_invalid',false],['compose','compose-config','start_ports_invalid',false],['inventory','name-inventory','EACCES',false],['inventory-json','name-inventory','unknown',false],['collision','name-inventory','container_name_not_fresh',false],['create','create','EACCES',false],['created-inspect','created-inspect','EIO',false],['created-identity','created-inspect','container_identity_invalid',false],['start','start','EACCES',true],['running-identity','running-inspect','container_identity_invalid',true],['accounting','accounting','EIO',true],['success-write','output','ENOSPC',true],['raw-write',null,null,true]];
  for(const [fault,step,code,retained]of cases)test('actual process preserves fail-closed diagnosis: '+fault,async t=>{
@@ -179,25 +243,31 @@ if(process.env.SSB_START_OFFLINE_CHILD){
   await assert.rejects(proc.run(process.execPath,startArgs(h.entry,h.plan,h.b),{startDiagnostic:{entry:h.entry,plan:h.plan,binding:h.b}}),e=>{assert.equal(e.code,'command_failed');assert.equal(e.startDiagnostic,undefined);assert.equal(e.process.signal,'SIGKILL');assert.equal(e.startOperation.call,h.b.call);return true;});proc.assertClosed();
   const expired=new P({deadline:performance.now()+30000,privateRoot:h.root});await assert.rejects(expired.run(process.execPath,startArgs(h.entry,h.plan,h.b),{startDiagnostic:{entry:h.entry,plan:h.plan,binding:h.b}}),e=>e.code==='deadline');assert.equal(expired.calls.length,0);
  });
- function generationHarness(t,{fault='',key='release',readiness=3,closureFault='',writeFailure=false}={}){
-  const h=setup(t,'',key),calls=[],operations=[],stopped=new Set(),stateCalls=[];
+ function generationHarness(t,{fault='',key='release',readiness=3,closureFault='',writeFailure=false,dashboardFault='',dollarPairs=false}={}){
+  const h=setup(t,dollarPairs?'dollar-pairs':'',key),calls=[],operations=[],stopped=new Set(),stateCalls=[];
   const fds=new Map(),model={...fs,openSync(p,...a){const fd=fs.openSync(p,...a);fds.set(fd,p);return fd;},fstatSync(fd){const s=fs.fstatSync(fd);s.uid=h.cfg.userFiles.includes(fds.get(fd))?1000:0;return s;},lstatSync(p){const s=fs.lstatSync(p);s.uid=p===h.n.stateRoot?1000:0;return s;}};
   class MaintenanceDenied extends Error{constructor(code){super(code);this.code=code;}}
   const policy=load('adapters/scripts/ops/maintenance-start-contract.cjs',{'node:fs':model,'../../apps/api/dist/maintenance/maintenance-state':{MaintenanceDenied}});
   const C=load('native.cjs',{'./fixtures.cjs':{...h.f,generation(n,g,previous,predecessors){assert.equal(g,key);assert.equal(previous,h.c.previousGeneration);assert.deepEqual(predecessors,h.c.predecessors);return n.current;}},[path.join(h.n.toolsRoot,'scripts/ops/maintenance-start-contract.cjs')]:policy}).Native;
   Object.setPrototypeOf(h.n,C.prototype);
   h.n.imageMetadata=Object.fromEntries(['api','dashboard','reporter','widget'].map(s=>[s,{Id:h.n.images[s],Os:'linux',Architecture:'amd64',Config:metadata(s)}]));
-  const syntheticChild=(stdout='',code=0)=>{const E=require('node:events').EventEmitter,c=new E();c.stdout=new E();c.stderr=new E();c.stdin=new E();c.stdin.end=()=>queueMicrotask(()=>{if(stdout)c.stdout.emit('data',Buffer.from(stdout));c.emit('close',code,null);});return c;};
+  const syntheticChild=(stdout='',code=0,stderr='')=>{const E=require('node:events').EventEmitter,c=new E();c.stdout=new E();c.stderr=new E();c.stdin=new E();c.stdin.end=()=>queueMicrotask(()=>{if(stdout)c.stdout.emit('data',Buffer.from(stdout));if(stderr)c.stderr.emit('data',Buffer.from(stderr));c.emit('close',code,null);});return c;};
   const transport={spawn(bin,args,o){
    calls.push({bin,args});
    if(bin===process.execPath){
     const b=JSON.parse(args.at(-1)),plan=args.at(-2);assert.deepEqual(args,startArgs(h.entry,plan,b));operations.push({binding:b,index:h.n.proc.calls.length-1});
-    const cfg={...h.cfg,plan,containerId:sha(b.service),fault:b.service==='api'?fault==='helper'?'start':fault==='accounting'?'accounting':['state-check-late','state-check-accounting','state-check-after-id','predecessor'].includes(fault)?fault:'':''};
+    const cfg={...h.cfg,plan,containerId:sha(b.service),fault:b.service==='dashboard'?dashboardFault:b.service==='api'?fault==='helper'?'start':fault==='accounting'?'accounting':fault:''};
     return cp.spawn(bin,args,{...o,env:{...o.env,NODE_OPTIONS:'--require '+JSON.stringify(__filename),SSB_START_OFFLINE_CHILD:JSON.stringify(cfg)}});
    }
    assert.equal(bin,'/usr/bin/docker');assert.deepEqual(args.slice(0,2),['--host','unix:///var/run/docker.sock']);const a=args.slice(2);
    if(a[0]==='exec')return syntheticChild();
-   if(a[0]==='container'&&a[1]==='ls')return syntheticChild(h.n.owned.map(e=>e.id).join('\n'));
+   if(a[0]==='container'&&a[1]==='ls'){
+    if(a.includes('--all')){
+     assert.deepEqual(a,['container','ls','--all','--no-trunc','--filter',`name=^/${h.n.owned[0].name}$`,'--format','{{.ID}}']);
+     return syntheticChild(closureFault==='inventory-present'?sha('foreign')+'\n':closureFault==='inventory-invalid'?'\n':'',closureFault==='inventory-error'?1:0,closureFault==='inventory-stderr'?'SYNTHETIC_PRIVATE_DO_NOT_EXPORT':'');
+    }
+    return syntheticChild(h.n.owned.map(e=>e.id).join('\n'));
+   }
    if(a[0]==='stop'){assert.equal(a[1],'--time');assert.equal(a[2],'8');assert.ok(h.n.owned.some(e=>e.id===a[3]));stopped.add(a[3]);return syntheticChild();}
    assert.deepEqual(a.slice(0,2),['container','inspect']);const entry=h.n.owned.find(e=>e.name===a[2]||e.id===a[2]);assert.ok(entry);
    const closing=!!h.n.closureDeadline;
@@ -218,6 +288,15 @@ if(process.env.SSB_START_OFFLINE_CHILD){
  }
  for(const readiness of [3,4])test('unchanged full startGeneration with '+readiness+' readiness records awaits all five real helper processes',async t=>{
   const h=generationHarness(t,{readiness}),result=await h.n.startGeneration('release');assert.deepEqual(result.counts,[5,5,0]);assert.equal(h.operations.length,6);assert.equal(h.operations[0].binding.operation,'activation-helper');assert.equal(h.operations[1].index,readiness+1);assert.deepEqual(h.stateCalls,['snapshot','open']);assert.equal(h.n.owned.length,5);assert.ok(h.n.owned.every(e=>e.id===sha(e.role)));h.n.proc.assertClosed();
+ });
+ test('dashboard doubled literal dollars are decoded exactly once through the actual helper',async t=>{
+  const h=generationHarness(t,{dollarPairs:true}),r=await h.n.startGeneration('release');assert.deepEqual(r.counts,[5,5,0]);
+  const dashboard=h.operations.find(x=>x.binding.service==='dashboard');assert.ok(dashboard);h.n.proc.assertClosed();
+ });
+ test('rendered dashboard environment mismatch remains blocked before dashboard create',async t=>{
+  const h=generationHarness(t,{dashboardFault:'compose-value'});
+  await assert.rejects(h.n.startGeneration('release'),e=>{const d=diagnosis(e);assert.equal(d.binding.service,'dashboard');assert.equal(d.primary.code,'operating_binding_changed');assert.equal(d.resource.state,'planned');return true;});
+  assert.deepEqual(h.stateCalls,[]);assert.equal(h.n.owned[2].id,null);h.n.proc.assertClosed();
  });
  test('forward entry verifies five retained release predecessors through every actual participant helper',async t=>{
   const h=generationHarness(t,{key:'forward'}),r=await h.n.startGeneration('forward');
@@ -256,8 +335,43 @@ if(process.env.SSB_START_OFFLINE_CHILD){
   assert.ok(begin>=0&&denied>begin);assert.equal(h.eventsRead.filter(e=>e.kind==='state'&&e.value==='begin').length,1);
   assert.ok(h.eventsRead.some(e=>e.kind==='state'&&e.value==='ipc-check-after-begin'));assert.ok(h.eventsRead.some(e=>e.kind==='state'&&e.value==='uncertain'));
   assert.equal(h.eventsRead.filter(e=>e.kind==='docker').length,0);assert.equal(h.operations.length,2);assert.equal(h.n.owned[0].id,null);assert.equal(h.stopped.size,0);
-  assert.equal(h.rows.at(-1).detail.outcomes[0].state,'unverified');assert.deepEqual(diagnosis(h.primary).primary,h.d.primary);
+  assert.equal(h.rows.at(-1).detail.outcomes[0].state,'not_created');assert.equal(h.rows.at(-1).ok,true);assert.deepEqual(diagnosis(h.primary).primary,h.d.primary);
   if(fault==='state-check-accounting')assert.ok(h.d.cleanup.some(p=>p.step==='accounting'&&p.code==='EIO'));else assert.deepEqual(h.d.cleanup,[]);
+ });
+ for(const closureFault of ['', 'inventory-error','inventory-present','inventory-invalid','inventory-stderr'])test('pre-create refusal -> exact closure inventory -> receiver: '+(closureFault||'confirmed absent'),async t=>{
+  const h=await actualFailureToReceiver(t,{fault:'mount-create',closureFault}),closure=h.rows.at(-1);
+  assert.equal(h.d.primary.code,'start_mount_invalid');assert.equal(h.d.resource.state,'planned');assert.equal(h.stopped.size,0);
+  assert.equal(closure.ok,!closureFault);assert.equal(closure.detail.outcomes[0].state,closureFault?'unverified':'not_created');
+  assert.equal(h.calls.filter(c=>c.bin==='/usr/bin/docker'&&c.args.includes('--all')).length,1);
+  assert.ok(!h.calls.some(c=>c.bin==='/usr/bin/docker'&&c.args[3]==='inspect'));
+  if(closureFault){assert.equal(closure.detail.failure.causes[0].operation.operation,'closure-inventory');}
+  else{
+   const {validate,validateEvidence}=require('./evidence.cjs'),prior=h.rows.slice(0,-1);
+   for(const mutate of [o=>{o.id='a'.repeat(64);},o=>{o.exit=0;},o=>{o.role='widget';},o=>{o.generation='normal';}]){const bad=structuredClone(closure);mutate(bad.detail.outcomes[0]);assert.throws(()=>{validate(bad);validateEvidence(bad,prior);});}
+   for(const mutate of [d=>{d.primary.step='create';},d=>{d.truncated=true;},d=>{d.binding.publication='f'.repeat(64);},d=>{d.binding.run='87654321';}]){const bad=structuredClone(prior);mutate(wireDiagnosis(bad.at(-1).detail.failure));assert.throws(()=>validateEvidence(closure,bad));}
+  }
+ });
+ test('created-attempt and truncated diagnoses cannot certify no resource was created',()=>{
+  const n=new Native(opts);n.verifiedPublicationManifest=publication;
+  const p=new proto.Progress(n.startBinding('participant-helper','api','release'));p.enter('compose-config');p.capture(error('EACCES'));
+  const before=p.result(false);assert.equal(proto.preCreateFailure(before),true);
+  for(const alter of [d=>{d.resource.state='create_requested';},d=>{d.primary.step='create';},d=>{d.primary.lastConfirmed='start';},d=>{d.truncated=true;}]){const d=structuredClone(before);alter(d);assert.equal(proto.preCreateFailure(d),false);}
+ });
+ test('closure inventory rejects widened argv, wrong daemon or work-phase execution before spawning',async()=>{
+  const n=new Native(opts);n.verifiedPublicationManifest=publication;const binding=n.startBinding('closure-inventory','api','release'),target=`ssb-native-${opts.run}-release-api`;
+  const args=['--host','unix:///var/run/docker.sock','container','ls','--all','--no-trunc','--filter',`name=^/${target}$`,'--format','{{.ID}}'];
+  const options={closure:true,startOperation:{binding,target}};
+  const P=load('common.cjs',{'node:child_process':{spawn(){assert.fail('must not spawn');}}}).Processes;
+  for(const alter of [x=>{x.args[1]='unix:///foreign.sock';},x=>{x.args[7]='name=ssb-native';},x=>{x.args.splice(4,1);},x=>{x.args.push('--last','1');},x=>{x.options.closure=false;},x=>{x.options.allowFailure=true;},x=>{x.options.startOperation.target='foreign';}]){
+   const x=structuredClone({args,options});alter(x);const proc=new P({deadline:performance.now()+40000,privateRoot:'/unused'});
+   await assert.rejects(proc.run('/usr/bin/docker',x.args,x.options),e=>e.code==='start_binding_invalid');assert.equal(proc.calls.length,0);
+  }
+ });
+ test('pre-create primary remains received when closure inventory recording also fails',async t=>{
+  const h=await actualFailureToReceiver(t,{fault:'mount-create',writeFailure:true});
+  assert.equal(h.d.primary.code,'start_mount_invalid');assert.equal(h.rows.at(-1).ok,false);
+  assert.equal(h.rows.at(-1).detail.outcomes[0].state,'not_created');assert.equal(h.stopped.size,0);
+  assert.ok(h.rows.at(-1).detail.failure.causes.some(c=>c.code==='evidence_write_failed'));
  });
  for(const closureFault of ['', 'id'])test('later IPC check retains strictly verified ID without bypassing closure ownership: '+(closureFault||'owned'),async t=>{
   const h=await actualFailureToReceiver(t,{fault:'state-check-after-id',closureFault}),retained=sha('api');
@@ -271,7 +385,7 @@ if(process.env.SSB_START_OFFLINE_CHILD){
   assert.equal(h.calls.filter(c=>c.bin==='/usr/bin/docker'&&c.args[2]==='stop').length,closureFault?0:1);
  });
  test('nonempty release predecessor refusal travels through actual helper and regular receiver before create',async t=>{
-  const h=await actualFailureToReceiver(t,{fault:'predecessor',key:'forward'});
+  const h=await actualFailureToReceiver(t,{fault:'predecessor',key:'forward',closureFault:'inventory-error'});
   assert.equal(h.c.bootstrap,false);assert.equal(h.c.previousGeneration,'release');assert.equal(h.c.predecessors.length,5);
   assert.deepEqual(h.d.primary,{step:'predecessor-check',lastConfirmed:'state-check',errorClass:'MaintenanceDenied',code:'predecessor_not_stopped'});
   assert.equal(h.d.resource.state,'planned');assert.equal(h.d.resource.id,null);

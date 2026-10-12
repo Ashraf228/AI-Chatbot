@@ -132,7 +132,10 @@ async function composeParticipant(binding, contract, check, execute = promisify(
         confirm();
       }
       const prefix = ['compose','--env-file',contract.envFile.path, ...contract.files.flatMap((f) => ['-f', f.path]), '-p', contract.project];
-      enter('compose-config');const config = JSON.parse((await checkedExecute([...prefix, 'config', '--format', 'json'])).stdout);
+      enter('compose-config');const rendered = (await checkedExecute([...prefix, 'config', '--format', 'json'])).stdout;
+      // Compose escapes every literal dollar again when rendering config, not when creating containers.
+      if (rendered.replace(/\$\$/g, '').includes('$')) throw new MaintenanceDenied('compose_interpolation_invalid');
+      const config = JSON.parse(rendered.replace(/\$\$/g, () => '$'));
       startContract.assertCompose(binding, contract, config, imageConfig);
       confirm();
       const predecessors = async () => {

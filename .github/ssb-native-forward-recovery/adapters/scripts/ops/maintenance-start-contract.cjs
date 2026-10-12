@@ -167,8 +167,15 @@ function assertCompose(binding, c, config, cfg) {
   const expected = mounts[c.service].map(key=>({type:'bind',source:key==='state'?binding.root:c.mountFiles[key].path,target:targets[key],read_only:key!=='state'}));
   const volumes = s.volumes || [];
   deny(Array.isArray(volumes) && volumes.length === expected.length && expected.every(w=>volumes.some(v=>
-    v.type===w.type && v.source===w.source && v.target===w.target && Boolean(v.read_only)===w.read_only
-    && v.bind?.create_host_path===false && !v.bind?.propagation && !v.bind?.selinux)), 'start_mount_invalid');
+    v && typeof v==='object' && !Array.isArray(v)
+    && keys(v).every(k=>['type','source','target','read_only','bind'].includes(k))
+    && v.type===w.type && v.source===w.source && v.target===w.target
+    // Compose omits false read_only; an explicit flag must remain a Boolean.
+    && (Object.hasOwn(v,'read_only') ? typeof v.read_only==='boolean' && v.read_only===w.read_only : w.read_only===false)
+    // compose-go 2.7.1 omits false create_host_path when serializing its bind object.
+    && v.bind && typeof v.bind==='object' && !Array.isArray(v.bind)
+    && keys(v.bind).every(k=>k==='create_host_path')
+    && (!Object.hasOwn(v.bind,'create_host_path') || v.bind.create_host_path===false))), 'start_mount_invalid');
   deny(same(keys(s.networks), [...c.serviceNetworks[c.service]].sort()), 'start_network_invalid');
   for (const n of c.serviceNetworks[c.service]) {
     const net=config.networks?.[n];deny(net?.name===c.networks[n].name && net.external===true, 'compose_network_invalid');

@@ -153,12 +153,12 @@ class Native{
     }catch(error){throw trace.failure(error);}
   }
   startBinding(operation,service,generation){
-    const actions={'activation-helper':'activate-retained-generation','participant-helper':'start-retained-participant','participant-postinspect':'inspect-participant','closure-inspect':'inspect-closure'};
-    return require('./diagnostics.cjs').startProtocol().binding({version:1,operation,action:actions[operation],phase:operation==='closure-inspect'?'closure':generation+'-start',service,generation,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:sha(randomUUID())});
+    const actions={'activation-helper':'activate-retained-generation','participant-helper':'start-retained-participant','participant-postinspect':'inspect-participant','closure-inspect':'inspect-closure','closure-inventory':'list-closure-name'};
+    return require('./diagnostics.cjs').startProtocol().binding({version:1,operation,action:actions[operation],phase:operation.startsWith('closure-')?'closure':generation+'-start',service,generation,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:sha(randomUUID())});
   }
   async privilegedStart(plan,binding,entry){
     const {startProtocol,startArgs}=require('./diagnostics.cjs'),protocol=startProtocol(),helper=path.join(this.toolsRoot,'scripts/ops/maintenance-privileged-executor.cjs');
-    const retain=record=>{protocol.validate(record,binding);if(entry&&record.resource.id){need(!entry.id||entry.id===record.resource.id,'started_identity');entry.id=record.resource.id;}};
+    const retain=record=>{protocol.validate(record,binding);if(entry&&record.resource.id){need(!entry.id||entry.id===record.resource.id,'started_identity');entry.id=record.resource.id;}if(entry&&protocol.preCreateFailure(record))entry.preCreateFailure=structuredClone(record);};
     try{const result=await this.command(process.execPath,startArgs(helper,plan,binding),{ms:10000,startDiagnostic:{entry:helper,plan,binding}});retain(result.startDiagnostic);return result;}
     catch(error){
       const visit=(e,depth=0)=>{need(depth<8,'start_diagnostic_invalid');if(e?.startDiagnostic)retain(e.startDiagnostic);for(const c of Array.isArray(e?.errors)?e.errors:e?.cause?[e.cause]:[])visit(c,depth+1);};
@@ -254,6 +254,17 @@ class Native{
     clearInterval(this.watch);if(!this.proc)return{verified:true,counts:[0]};
     let errors=[];const outcomes=this.owned.map(entry=>({id:entry.id,role:entry.role,generation:entry.generation||'seed',state:'unverified',exit:null,code:'unclassified'}));const closureStart=clock();this.closureDeadline=Math.min(this.deadline,this.probeDeadline||Infinity,closureStart+30000);
     await Promise.all(this.owned.map(async(entry,index)=>{const outcome=outcomes[index];try{
+      if(entry.id===null&&entry.preCreateFailure){
+        const protocol=require('./diagnostics.cjs').startProtocol(),record=entry.preCreateFailure,b=record.binding;
+        need(failed&&protocol.preCreateFailure(record)&&b.run===this.options.run&&b.source===SOURCE&&b.publication===this.verifiedPublicationManifest
+          &&b.service===entry.role&&b.generation===entry.generation&&entry.name===`ssb-native-${b.run}-${b.generation}-${b.service}`,'cleanup_identity_unverified');
+        const operation=this.startBinding('closure-inventory',entry.role,entry.generation);
+        try{
+          const result=await this.d(['container','ls','--all','--no-trunc','--filter',`name=^/${entry.name}$`,'--format','{{.ID}}'],{closure:true,ms:1500,startOperation:{binding:operation,target:entry.name}});
+          need(result.stdout.length===0&&result.stderr.length===0,'cleanup_identity_unverified');
+        }catch(error){error.startOperation=operation;throw error;}
+        Object.assign(outcome,{state:'not_created',code:'none'});return;
+      }
       const identity=list=>{need(Array.isArray(list)&&list.length===1,'cleanup_identity_unverified');const x=list[0];need(x.Name==='/'+entry.name&&x.Image===entry.image&&fullId(x.Id),'cleanup_identity_unverified');
         need(!(this.initial?.containers||[]).includes(x.Id),'cleanup_preexisting_forbidden');
         const labels=x.Config?.Labels||{},ownedLabel=labels['com.ssb.native-run']===this.options.run;
