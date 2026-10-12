@@ -14,7 +14,7 @@ class Native{
   async command(bin,args,options={}){if(!options.closure){this.resources();need(!this.resourceFailure,'resource_floor_observed');if(this.probeDeadline){const left=this.probeDeadline-clock()-30000;need(left>250,'probe_work_deadline');options={...options,ms:Math.min(options.ms||10000,left)};}}else options={...options,deadline:Math.min(this.deadline,this.probeDeadline||Infinity,this.closureDeadline||Infinity)};try{return await this.proc.run(bin,args,options);}catch(e){if(options.closure&&e.code==='evidence_write_failed'&&e.result?.closed&&e.result.code===0&&!e.result.signal){(this.diagnosticFailures??=[]).push(e);return e.result;}throw e;}}
   resources(){if(!this.proc)return;const s=fs.statfsSync(this.privateRoot);need(s.bavail*s.bsize>=4*GiB&&s.ffree>=200000,'disk_floor');const m=fs.readFileSync('/proc/meminfo','utf8').match(/^MemAvailable:\s+(\d+) kB/m);need(m&&Number(m[1])*1024>=GiB,'memory_floor');}
   async d(args,options={}){if(!options.closure&&this.probeDeadline)need(clock()+250<this.probeDeadline-30000,'probe_work_deadline');const ms=this.probeDeadline&&!options.closure?Math.min(options.ms||10000,this.probeDeadline-clock()-30000):options.ms;return this.command(this.docker,['--host','unix:///var/run/docker.sock',...args],{...options,...(ms?{ms}:{})});}
-  async inspect(id){return json((await this.d(['container','inspect',id])).stdout);}
+  async inspect(id,options={}){return json((await this.d(['container','inspect',id],options)).stdout);}
   async inventory(){const r={};for(const [key,args]of Object.entries({containers:['container','ls','-aq','--no-trunc'],networks:['network','ls','-q','--no-trunc'],volumes:['volume','ls','-q'],images:['image','ls','-q','--no-trunc']})){r[key]=(await this.d(args)).stdout.toString().trim().split('\n').filter(Boolean).sort();}return r;}
   async preflight(){
     need(process.platform==='linux'&&process.arch==='x64'&&process.getuid()===0&&process.version==='v24.17.0','native_host_required');
@@ -152,19 +152,34 @@ class Native{
     trace.enter('database-initialize');const result=await this.probe('initialize');trace.confirm();return result;
     }catch(error){throw trace.failure(error);}
   }
+  startBinding(operation,service,generation){
+    const actions={'activation-helper':'activate-retained-generation','participant-helper':'start-retained-participant','participant-postinspect':'inspect-participant','closure-inspect':'inspect-closure'};
+    return require('./diagnostics.cjs').startProtocol().binding({version:1,operation,action:actions[operation],phase:operation==='closure-inspect'?'closure':generation+'-start',service,generation,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:sha(randomUUID())});
+  }
+  async privilegedStart(plan,binding,entry){
+    const {startProtocol,startArgs}=require('./diagnostics.cjs'),protocol=startProtocol(),helper=path.join(this.toolsRoot,'scripts/ops/maintenance-privileged-executor.cjs');
+    const retain=record=>{protocol.validate(record,binding);if(entry&&record.resource.id){need(!entry.id||entry.id===record.resource.id,'started_identity');entry.id=record.resource.id;}};
+    try{const result=await this.command(process.execPath,startArgs(helper,plan,binding),{ms:10000,startDiagnostic:{entry:helper,plan,binding}});retain(result.startDiagnostic);return result;}
+    catch(error){
+      const visit=(e,depth=0)=>{need(depth<8,'start_diagnostic_invalid');if(e?.startDiagnostic)retain(e.startDiagnostic);for(const c of Array.isArray(e?.errors)?e.errors:e?.cause?[e.cause]:[])visit(c,depth+1);};
+      try{visit(error);}catch(diagnostic){throw new AggregateError([error,diagnostic],'primary_and_diagnostic_failed');}throw error;
+    }
+  }
   async startGeneration(key){
     this.current=generation(this,key,this.previousGeneration,this.previous);
     const planBase={version:1,uid:1000,gid:1000,epoch:this.epoch,ownerSha256:sha(this.synthetic.owner),timeoutMs:10000};
     const activate=write(path.join(this.current.root,'activate.json'),JSON.stringify({...planBase,action:'activate-retained-generation',binding:{...this.current.binding,generation:this.previousGeneration},nextGeneration:key}));
-    await this.command(process.execPath,[path.join(this.toolsRoot,'scripts/ops/maintenance-privileged-executor.cjs'),activate.path],{ms:10000});
+    await this.privilegedStart(activate.path,this.startBinding('activation-helper','generation',key));
     const policy=require(path.join(this.toolsRoot,'scripts/ops/maintenance-start-contract.cjs'));
     for(const service of services){
       need(this.owned.length<19,'resource_limit');const contract={...this.current.common,service,imageId:this.images[service]};policy.assertPlan(this.current.binding,contract);policy.verifyFiles(this.current.binding,contract);
       policy.assertImage([this.imageMetadata[service==='admin-writer'?'api':service]],contract);
       const plan=write(path.join(this.current.root,service+'-start.json'),JSON.stringify({...planBase,action:'start-retained-participant',binding:this.current.binding,contract}));
       const entry={name:this.current.names[service],image:this.images[service],role:service,generation:key,project:this.current.project,id:null,startRequested:true};this.owned.push(entry);
-      await this.command(process.execPath,[path.join(this.toolsRoot,'scripts/ops/maintenance-privileged-executor.cjs'),plan.path],{ms:10000});
-      const x=(await this.inspect(entry.name))[0];entry.id=x.Id;need(fullId(entry.id)&&x.State.Running&&x.Image===entry.image,'started_identity');
+      await this.privilegedStart(plan.path,this.startBinding('participant-helper',service,key),entry);
+      const operation=this.startBinding('participant-postinspect',service,key);
+      try{const x=(await this.inspect(entry.name,{startOperation:{binding:operation,target:entry.name}}))[0];need(fullId(x.Id)&&x.Id===entry.id&&x.State.Running&&x.Image===entry.image,'started_identity');}
+      catch(error){error.startOperation=operation;throw error;}
       await this.runningLimit();
       // Check real mount readability from each application, not only the inspect metadata.
       if(service!=='widget')await this.d(['exec',entry.id,'node','-e',`const fs=require('fs'),assert=require('assert');assert.equal(process.getuid(),1000);for(const p of ${JSON.stringify(service==='admin-writer'?['/run/ssb-writer-db','/run/ssb-writer-signing-key']:service==='dashboard'?['/run/ssb-writer-signing-key']:[])})assert.ok(fs.readFileSync(p).length);for(const p of ${JSON.stringify(service==='admin-writer'?[]:service==='dashboard'?['/run/ssb-writer-db','/run/ssb-maintenance/runtime-state.json']:['/run/ssb-writer-db','/run/ssb-writer-signing-key'])})assert.throws(()=>fs.readFileSync(p));`]);
@@ -245,9 +260,14 @@ class Native{
         const ownedProject=typeof entry.project==='string'&&entry.project.length>0&&labels['com.docker.compose.project']===entry.project&&labels['com.docker.compose.service']===entry.role;
         need(ownedLabel&&(!entry.project||ownedProject)&&(!entry.id||entry.id===x.Id),'cleanup_ownership');entry.id=x.Id;outcome.id=x.Id;return x;};
       const neverStarted=x=>entry.startRequested===false&&x.RestartCount===0&&x.State?.Status==='created'&&x.State.Running===false&&x.State.Paused===false&&x.State.Restarting===false&&x.State.Dead===false&&x.State.OOMKilled===false&&x.State.Error===''&&x.State.Pid===0&&x.State.ExitCode===0&&x.State.StartedAt==='0001-01-01T00:00:00Z'&&x.State.FinishedAt==='0001-01-01T00:00:00Z';
-      const x=identity(json((await this.d(['container','inspect',entry.id||entry.name],{closure:true,ms:1500})).stdout));
+      const inspect=async target=>{
+        const operation=this.verifiedPublicationManifest?this.startBinding('closure-inspect',entry.role,entry.generation||'seed'):undefined;
+        try{return identity(json((await this.d(['container','inspect',target],{closure:true,ms:1500,...(operation?{startOperation:{binding:operation,target}}:{})})).stdout));}
+        catch(error){if(operation)error.startOperation=operation;throw error;}
+      };
+      const x=await inspect(entry.id||entry.name);
       if(x.State.Running){await this.d(['stop','--time','8',entry.id],{closure:true,ms:9500});}
-      const end=identity(json((await this.d(['container','inspect',entry.id],{closure:true,ms:1500})).stdout));
+      const end=await inspect(entry.id);
       if(neverStarted(x)&&neverStarted(end)){need(failed,'never_started_on_success');Object.assign(outcome,{state:'never_started',code:'none'});return;}
       need(end.State.Running===false&&end.State.Status==='exited'&&!end.State.OOMKilled&&!end.State.Error&&!end.State.Paused&&!end.State.Restarting&&!end.State.Dead&&Number.isInteger(end.State.ExitCode)&&end.State.ExitCode>=0&&end.State.ExitCode<=255,'container_completion_unverified');
       Object.assign(outcome,{state:end.State.ExitCode===0?'exited':'exited_unclean',exit:end.State.ExitCode,code:end.State.ExitCode===0?'none':'forced_or_nonzero'});
