@@ -27,6 +27,7 @@ function validate(r){
   validateDetail(r);
 }
 function validateEvidence(r,prior){
+  const checkStart=v=>{if(!v)return;if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
   for(const probe of probeCallsInFailure(r.detail.failure))need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
   const failed=prior.some(x=>!x.ok);
   need((r.phase===phases[prior.length]&&!failed)||(r.phase==='closure'&&failed&&!prior.some(x=>x.phase==='closure')),'receipt_phase_order');

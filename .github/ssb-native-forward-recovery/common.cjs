@@ -17,6 +17,7 @@ function failureRecord(error){
     if(e?.process){r.process={};for(const key of ['index','code','signal','closed','timeout','overflow','completionUnverified']){const value=e.process[key];if(typeof value==='boolean'||Number.isSafeInteger(value)||value===null||key==='signal'&&/^SIG[A-Z0-9]+$/.test(value||''))r.process[key]=value;}}
     if(e?.baseDiagnostic){try{const b=require('./base-diagnostics.cjs').validateBase(e.baseDiagnostic);r.base={reference:b.reference,category:b.category,httpStatus:b.httpStatus};}catch{}}
     if(e?.probeDiagnostic){try{r.probe=JSON.parse(JSON.stringify(require('./diagnostics.cjs').validateProbe(e.probeDiagnostic)));}catch{r.probeRejected=true;}}
+    if(e?.startOperation||e?.startDiagnostic){try{const p=require('./diagnostics.cjs').startProtocol();r.operation=p.binding(e.startOperation);if(e.startDiagnostic)r.start=p.validate(e.startDiagnostic,r.operation);}catch{r.startRejected=true;}}
     if(Array.isArray(e?.errors))r.causes=e.errors.slice(0,64).map(x=>visit(x,depth+1));
     if(e?.cause)r.cause=visit(e.cause,depth+1);return r;
   };
@@ -24,8 +25,16 @@ function failureRecord(error){
 }
 class Processes {
   constructor({deadline,privateRoot,now=clock}){this.deadline=deadline;this.privateRoot=privateRoot;this.now=now;this.calls=[];this.children=new Set();this.bytes=0;this.workBytes=0;this.closureBytes=0;}
-  async run(bin,args,{input,ms=10000,allowFailure=false,cwd,env,uid,gid,closure=false,stateDiagnostic=false,probeDiagnostic,baseReference,deadline=this.deadline}={}){
+  async run(bin,args,{input,ms=10000,allowFailure=false,cwd,env,uid,gid,closure=false,stateDiagnostic=false,probeDiagnostic,baseReference,startDiagnostic,startOperation,deadline=this.deadline}={}){
     need(Array.isArray(args)&&args.every(a=>typeof a==='string'),'argv_invalid');
+    if(startDiagnostic!==undefined){
+      const {startArgs,startProtocol}=require('./diagnostics.cjs');startProtocol().binding(startDiagnostic.binding);
+      need(bin===process.execPath&&JSON.stringify(args)===JSON.stringify(startArgs(startDiagnostic.entry,startDiagnostic.plan,startDiagnostic.binding))&&!allowFailure&&!closure&&!stateDiagnostic&&!probeDiagnostic&&!baseReference&&!startOperation&&input===undefined,'start_binding_invalid');
+    }
+    if(startOperation!==undefined){
+      const b=require('./diagnostics.cjs').startProtocol().binding(startOperation.binding),target=startOperation.target;
+      need(['participant-postinspect','closure-inspect'].includes(b.operation)&&closure===(b.operation==='closure-inspect')&&!allowFailure&&!stateDiagnostic&&!probeDiagnostic&&!baseReference&&!startDiagnostic&&bin==='/usr/bin/docker'&&typeof target==='string'&&(/^[a-f0-9]{64}$/.test(target)||target===`ssb-native-${b.run}-${b.generation==='seed'?'':b.generation+'-'}${b.service}`)&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','container','inspect',target]),'start_binding_invalid');
+    }
     if(probeDiagnostic!==undefined){
       const {validateProbeBinding}=require('./diagnostics.cjs'),b=validateProbeBinding(probeDiagnostic.binding),request=json(input);
       need(bin==='/usr/bin/docker'&&/^[a-f0-9]{64}$/.test(probeDiagnostic.container)&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','exec','-i',probeDiagnostic.container,'node','/proof/probe.cjs'])&&!allowFailure&&!closure&&!stateDiagnostic&&baseReference===undefined&&request.action===b.action&&request.source===b.source&&request.service==='ssb-native-'+b.run&&JSON.stringify(request.diagnostic)===JSON.stringify(b),'probe_binding_invalid');
@@ -44,7 +53,7 @@ class Processes {
         if(settled)return;settled=true;timeout=true;kill('SIGKILL');
         Object.assign(rec,{closed:false,timeout:true,completionUnverified:true,endedAt:new Date().toISOString()});
         child.unref();for(const stream of [child.stdin,child.stdout,child.stderr])stream.unref?.();
-        const error=new GateError('process_completion_unverified');error.process={...rec};reject(error);
+        const error=new GateError('process_completion_unverified');error.process={...rec};if(startDiagnostic||startOperation)error.startOperation=startDiagnostic?.binding||startOperation.binding;reject(error);
       },limit);
       for(const [stream,list] of [[child.stdout,stdout],[child.stderr,stderr]])stream.on('data',b=>{
         size+=b.length;this.bytes+=b.length;this[closure?'closureBytes':'workBytes']+=b.length;
@@ -58,13 +67,22 @@ class Processes {
         const out=Buffer.concat(stdout),err=Buffer.concat(stderr);
         let primary;
         if(timeout||overflow||spawnError||(!allowFailure&&code!==0)||signal){primary=new GateError(timeout?'command_timeout':overflow?'output_limit':spawnError?'spawn_failed':'command_failed');primary.process={...rec};}
+        let startRecord;
+        if(startDiagnostic&&closedNormally()){
+          try{const ok=code===0;need(ok?err.length===0:out.length===0,'start_diagnostic_invalid');startRecord=require('./diagnostics.cjs').startProtocol().decode(ok?out:err,startDiagnostic.binding,ok);}
+          catch(cause){if(primary)primary.cause=cause;else{primary=cause;primary.process={...rec};}}
+        }
+        function closedNormally(){return !timeout&&!overflow&&!spawnError&&!signal&&(code===0||code===1);}
+        const operation=startDiagnostic?.binding||startOperation?.binding;
+        if(primary&&operation)primary.startOperation=operation;
+        if(primary&&startRecord)primary.startDiagnostic=startRecord;
         if(primary&&baseReference!==undefined&&primary.code==='command_failed'&&Number.isInteger(code)&&code!==0&&!signal){primary.baseDiagnostic=require('./base-diagnostics.cjs').classifyBase(out,err,baseReference);}
         if(primary&&stateDiagnostic&&code===1&&!signal&&!timeout&&!overflow&&!spawnError){try{need(out.length===0,'state_diagnostic_invalid');primary.stateDiagnostic=require('./diagnostics.cjs').decodeState(err);}catch(cause){primary.cause=cause;}}
         if(primary&&probeDiagnostic&&primary.code==='command_failed'&&code===1&&!signal&&!timeout&&!overflow&&!spawnError){try{need(out.length===0,'probe_diagnostic_invalid');primary.probeDiagnostic=require('./diagnostics.cjs').decodeProbe(err,probeDiagnostic.binding);}catch(cause){primary.cause=cause;}}
         if(!primary&&probeDiagnostic&&err.length){primary=new GateError('probe_diagnostic_invalid');primary.process={...rec};}
-        try{fs.writeFileSync(`${this.privateRoot}/process-${index}.stdout`,out,{mode:0o600,flag:'wx'});fs.writeFileSync(`${this.privateRoot}/process-${index}.stderr`,err,{mode:0o600,flag:'wx'});}catch(e){const evidence=new GateError('evidence_write_failed');evidence.ioCode=e.code;if(closure&&!primary)evidence.result={stdout:out,stderr:err,code,signal,closed:true};reject(primary?new AggregateError([primary,evidence],'primary_and_evidence_failed'):evidence);return;}
+        try{fs.writeFileSync(`${this.privateRoot}/process-${index}.stdout`,out,{mode:0o600,flag:'wx'});fs.writeFileSync(`${this.privateRoot}/process-${index}.stderr`,err,{mode:0o600,flag:'wx'});}catch(e){const evidence=new GateError('evidence_write_failed');evidence.ioCode=e.code;if(operation)evidence.startOperation=operation;if(startRecord)evidence.startDiagnostic=startRecord;if(closure&&!primary)evidence.result={stdout:out,stderr:err,code,signal,closed:true};reject(primary?new AggregateError([primary,evidence],'primary_and_evidence_failed'):evidence);return;}
         if(primary){reject(primary);return;}
-        resolve({stdout:out,stderr:err,code,signal,closed:true});
+        resolve({stdout:out,stderr:err,code,signal,closed:true,...(startRecord?{startDiagnostic:startRecord}:{})});
       });
     });
   }

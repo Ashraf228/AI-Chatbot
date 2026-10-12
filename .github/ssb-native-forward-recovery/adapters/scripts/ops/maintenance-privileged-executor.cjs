@@ -3,7 +3,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { fork } = require('node:child_process');
 const { createHash, randomUUID } = require('node:crypto');
-const { MaintenanceExecutor, replacePrivateSecret, composeParticipant } = require('./maintenance-executor.cjs');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 
 function privateBytes(file, uid) {
@@ -19,10 +18,14 @@ function privateBytes(file, uid) {
 }
 
 // A short-lived root operator, NOT a service endpoint. State authority stays with the application UID.
-async function executePlan(file) {
+async function executePlan(file, diagnostic) {
   const start = performance.now();
+  diagnostic?.enter('module-load');
+  const { replacePrivateSecret, composeParticipant } = require('./maintenance-executor.cjs');
+  diagnostic?.confirm();diagnostic?.enter('plan-read');
   if (process.getuid() !== 0) throw Error('privileged operator required');
   const bytes = privateBytes(file, 0), plan = JSON.parse(bytes);
+  diagnostic?.confirm();diagnostic?.enter('plan-validate');
   if (plan.version !== 1 || !Number.isSafeInteger(plan.uid) || plan.uid <= 0 || !Number.isSafeInteger(plan.gid) || plan.gid <= 0
     || !['replace-provider-field', 'start-retained-participant', 'activate-retained-generation'].includes(plan.action)
     || !Number.isSafeInteger(plan.epoch) || !/^[a-f0-9]{64}$/.test(plan.ownerSha256 || '')
@@ -32,6 +35,15 @@ async function executePlan(file) {
     || plan.action === 'start-retained-participant' && plan.contract?.version !== 3
     || plan.action === 'activate-retained-generation' && !/^[a-zA-Z0-9_-]{1,128}$/.test(plan.nextGeneration || ''))) {
     throw Error('role-bound start plan required');
+  }
+  if(diagnostic){
+    const b=diagnostic.binding;
+    if(b.action!==plan.action||plan.binding?.service!=='ssb-native-'+b.run
+      ||(plan.action==='activate-retained-generation'?plan.nextGeneration!==b.generation
+        :plan.binding?.generation!==b.generation||plan.contract?.service!==b.service)) {
+      throw Object.assign(Error(),{code:'start_binding_invalid'});
+    }
+    diagnostic.confirm();
   }
   let secret;
   if (plan.action === 'replace-provider-field') {
@@ -50,7 +62,10 @@ async function executePlan(file) {
   child.on('message', message => {
     if (!pending || message.nonce !== nonce || message.id !== pending.id) return;
     const request = pending; pending = undefined;
-    if (message.error) request.reject(Error(message.error)); else request.resolve(message.result);
+    if (message.error) {
+      const error=new Error();error.name=typeof message.error.name==='string'?message.error.name:'Error';
+      error.code=typeof message.error.code==='string'?message.error.code:'unknown';request.reject(error);
+    } else request.resolve(message.result);
   });
   function request(action) {
     if (pending || performance.now() >= workDeadline || !child.connected) return Promise.reject(Error('operator deadline or channel unavailable'));
@@ -65,18 +80,25 @@ async function executePlan(file) {
     });
   }
   const check = async () => {
-    if (!privateBytes(file, 0).equals(bytes)) throw Error('private plan changed');
-    await request('check');
+    const step=diagnostic?.step;diagnostic?.enter('state-check');
+    try{if (!privateBytes(file, 0).equals(bytes)) throw Error('private plan changed');
+      await request('check');diagnostic?.confirm();
+    }catch(error){diagnostic?.capture(error);throw error;}
+    finally{if(step)diagnostic.enter(step);}
   };
   let registered = false, effectCompleted = false, primary;
   timer = setTimeout(() => {
     controller.abort(); pending?.reject(Error('operator deadline')); pending = undefined; child.kill();
   }, Math.max(0, workDeadline-performance.now()));
   try {
+    diagnostic?.enter('state-begin');
     const identity = await request('begin'); registered = plan.action !== 'activate-retained-generation';
     if (identity.uid !== plan.uid || identity.gid !== plan.gid || identity.groups.some(group => group !== plan.gid)) throw Error('unexpected state owner identity');
+    diagnostic?.confirm();
     if (plan.action === 'activate-retained-generation') {
+      diagnostic?.enter('postcheck');
       if (performance.now()>=workDeadline || !privateBytes(file,0).equals(bytes)) throw Error('activation postcheck failed');
+      diagnostic?.confirm();
       return { generation: identity.activation, stateOwner: identity, privilegedOperator: 0, admissionOpen: false };
     }
     let result;
@@ -85,26 +107,32 @@ async function executePlan(file) {
     } else {
       result = await composeParticipant(plan.binding, { ...plan.contract,
         timeoutMs: Math.floor(workDeadline-performance.now()) }, check, undefined,
-      { deadline: workDeadline, signal: controller.signal });
+      { deadline: workDeadline, signal: controller.signal, diagnostic });
     }
     // Record the observed outcome before fallible postchecks. Failed accounting never reclassifies success.
     effectCompleted = true;
+    diagnostic?.enter('accounting');
     await request('complete'); registered = false;
+    diagnostic?.confirm();diagnostic?.enter('postcheck');
     if (performance.now() >= workDeadline) throw Error('operator deadline');
     if (!privateBytes(file, 0).equals(bytes)) throw Error('private plan changed');
     if (performance.now() >= workDeadline) throw Error('operator deadline');
+    diagnostic?.confirm();
     return { ...result, stateOwner: identity, privilegedOperator: 0 };
   } catch (error) {
     primary = error;
+    diagnostic?.capture(error);
     if (registered && !effectCompleted) {
+      diagnostic?.enter('accounting');
       try { await request('uncertain'); }
-      catch (cleanup) { primary = new AggregateError([primary, cleanup], 'Operator effect and accounting unverified'); throw primary; }
+      catch (cleanup) { diagnostic?.capture(cleanup);primary = new AggregateError([primary, cleanup], 'Operator effect and accounting unverified'); throw primary; }
     }
     throw primary;
   } finally {
     clearTimeout(timer);
-    try { await finishStateOwner(child,exited,deadline); }
-    catch (cleanup) { throw primary ? new AggregateError([primary,cleanup],'Operator and child completion failed') : cleanup; }
+    diagnostic?.enter('state-owner-completion');
+    try { await finishStateOwner(child,exited,deadline);diagnostic?.confirm(); }
+    catch (cleanup) { diagnostic?.capture(cleanup);throw primary ? new AggregateError([primary,cleanup],'Operator and child completion failed') : cleanup; }
   }
 }
 
@@ -127,6 +155,7 @@ if (process.argv[2] === 'state-owner' && process.send && process.getuid() !== 0)
     try {
       let result = {};
       if (message.action === 'begin' && !executor) {
+        const {MaintenanceExecutor}=require('./maintenance-executor.cjs');
         nonce = message.nonce; epoch = message.epoch; executor = new MaintenanceExecutor(message.binding);
         const record = JSON.parse(privateBytes(path.join(message.binding.root, 'maintenance-window/owner.json'), process.getuid()));
         owner = record.owner;
@@ -150,7 +179,7 @@ if (process.argv[2] === 'state-owner' && process.send && process.getuid() !== 0)
         } else throw Error('unsupported state action');
       }
       process.send({ id: message.id, nonce: message.nonce, result });
-    } catch (error) { process.send({ id: message.id, nonce: message.nonce, error: error.code || error.message }); }
+    } catch (error) { process.send({ id: message.id, nonce: message.nonce, error: {name:error?.constructor?.name,code:error?.code} }); }
   });
   process.on('disconnect', () => process.exit(0));
 } else if (require.main === module) {

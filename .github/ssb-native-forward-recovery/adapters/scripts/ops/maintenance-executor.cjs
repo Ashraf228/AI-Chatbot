@@ -95,8 +95,11 @@ async function replacePrivateSecret(file, expectedHash, value, check) {
 
 async function composeParticipant(binding, contract, check, execute = promisify(execFile), budget = {}) {
       const start = performance.now();
+      const diagnostic=budget.diagnostic,enter=s=>diagnostic?.enter(s),confirm=()=>diagnostic?.confirm();
+      enter('plan-validate');
       startContract.assertPlan(binding, contract);
       startContract.verifyFiles(binding, contract);
+      confirm();
       const deadline = Math.min(start + contract.timeoutMs, budget.deadline ?? Infinity);
       const checkedExecute = async (args) => {
         if (performance.now() >= deadline || budget.signal?.aborted) throw new MaintenanceDenied('deployment_deadline');
@@ -111,39 +114,54 @@ async function composeParticipant(binding, contract, check, execute = promisify(
         if (performance.now() >= deadline || budget.signal?.aborted) throw new MaintenanceDenied('deployment_deadline');
         return result;
       };
-      const daemon = JSON.parse((await checkedExecute(['info','--format','{{json .}}'])).stdout);
+      enter('daemon');const daemon = JSON.parse((await checkedExecute(['info','--format','{{json .}}'])).stdout);
       if (daemon.ID !== contract.daemonId || daemon.OSType !== 'linux' || !['x86_64','amd64'].includes(daemon.Architecture)) {
         throw new MaintenanceDenied('daemon_binding_invalid');
       }
+      confirm();enter('image');
       const image = JSON.parse((await checkedExecute(['image', 'inspect', contract.imageId])).stdout);
       const imageConfig = startContract.assertImage(image, contract);
+      confirm();
       for (const name of contract.serviceNetworks[contract.service]) {
+        enter('network');
         const expected = contract.networks[name];
         const networks = JSON.parse((await checkedExecute(['network','inspect',expected.id])).stdout);
         if (networks.length !== 1 || networks[0].Id !== expected.id || networks[0].Name !== expected.name
           || networks[0].Internal !== expected.internal || networks[0].Driver !== 'bridge'
           || networks[0].Scope !== 'local') throw new MaintenanceDenied('network_identity_invalid');
+        confirm();
       }
       const prefix = ['compose','--env-file',contract.envFile.path, ...contract.files.flatMap((f) => ['-f', f.path]), '-p', contract.project];
-      const config = JSON.parse((await checkedExecute([...prefix, 'config', '--format', 'json'])).stdout);
+      enter('compose-config');const config = JSON.parse((await checkedExecute([...prefix, 'config', '--format', 'json'])).stdout);
       startContract.assertCompose(binding, contract, config, imageConfig);
+      confirm();
       const predecessors = async () => {
+        enter('predecessor-check');
         for (const p of contract.predecessors) startContract.assertPredecessor(binding,contract,p,
           JSON.parse((await checkedExecute(['container','inspect',p.id])).stdout));
+        confirm();
       };
       await predecessors();
       // A failed inventory is not absence. Never take over a stopped predecessor or reused name.
-      const inventory=JSON.parse((await checkedExecute(['container','ls','--all','--filter',`name=^/${contract.containerNames[contract.service]}$`,'--format','json'])).stdout||'[]');
+      enter('name-inventory');const inventory=JSON.parse((await checkedExecute(['container','ls','--all','--filter',`name=^/${contract.containerNames[contract.service]}$`,'--format','json'])).stdout||'[]');
       if (!Array.isArray(inventory)||inventory.length) throw new MaintenanceDenied('container_name_not_fresh');
+      confirm();enter('create');diagnostic?.observe('create_requested');
       await checkedExecute([...prefix,'create','--no-build','--no-recreate','--pull','never',contract.service]);
+      confirm();enter('created-inspect');
       const inspect = async id => JSON.parse((await checkedExecute(['container','inspect',id])).stdout);
       const id=startContract.assertContainer(binding,contract,config,imageConfig,await inspect(contract.containerNames[contract.service]),'created');
+      diagnostic?.observe('created_verified',id);confirm();
       await predecessors();
+      enter('start');diagnostic?.observe('start_requested',id);
       await checkedExecute(['container','start',id]);
+      confirm();enter('running-inspect');
       startContract.assertContainer(binding,contract,config,imageConfig,await inspect(id),'running',id);
+      diagnostic?.observe('running_verified',id);confirm();
       await predecessors();
+      enter('postcheck');
       startContract.verifyFiles(binding, contract);
       if (performance.now() >= deadline || budget.signal?.aborted) throw new MaintenanceDenied('deployment_deadline');
+      confirm();
       return { commandCompleted: true, runtimeVerified: false, containerId: id, predecessorsRetained: true };
 }
 
