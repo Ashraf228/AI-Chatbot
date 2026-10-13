@@ -68,6 +68,12 @@ if(process.env.SSB_CLOSED_OFFLINE){
  }
  async function receiptFailure(t,config={}){
   const h=harness(t,config),lines=[],values=nativeEvidence(),execute=h.n.execute.bind(h.n);let primary;
+  values.builds.ids=['api','dashboard','reporter','widget','admin-writer'].map(k=>h.n.images[k]);
+  if(['forward','normal'].includes(config.generation)){
+   // Match the already simulated successful cohorts with their retained closure evidence.
+   const close=h.n.close.bind(h.n),prefix=values.closure.detail.outcomes.slice(0,3+5*['release','forward','normal'].indexOf(config.generation));
+   h.n.close=async failed=>{const r=await close(failed),count=prefix.length;return{...r,counts:[r.counts[0]+count,r.counts[1]+count,r.counts[2]],ids:[...prefix.map(o=>o.id),...r.ids],detail:{...r.detail,outcomes:[...prefix,...r.detail.outcomes]}};};
+  }
   h.n.execute=async p=>p==='release-start'?execute(p):{verified:true,...values[p]};
   await assert.rejects(main({...opts,output:l=>{if(config.receiptFailure&&lines.length===5)throw Object.assign(Error(privateMarker),{code:'ENOSPC'});lines.push(l);}},h.n),e=>{primary=e;return true;});h.n.proc.assertClosed();
   const rows=lines.map(l=>JSON.parse(Buffer.from(l.split(' ')[1],'base64'))),failed=rows.find(r=>r.phase==='release-start');
