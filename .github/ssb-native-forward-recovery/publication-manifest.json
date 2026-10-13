@@ -85,11 +85,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/common.cjs",
-      "sha256": "03e5421256ba7423ce2c1f8887d773d88aa5182972804f2a61c0bab289636a00",
-      "bytes": 11399,
+      "sha256": "1566e2ae4872ca487513da9fbbe99907355980717f41a9e45b10cee7257775a8",
+      "bytes": 11600,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "9e796df899341d8e91659e1d0369756cc22a5850"
+      "gitBlob": "ebdf568779d9d0c0f2de4eaf926ed7d4f6cb8045"
     },
     {
       "path": ".github/ssb-native-forward-recovery/compose-template.json",
@@ -133,11 +133,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/diagnostics.cjs",
-      "sha256": "138a90e0d23ec5eae5f6b369711c76400d8c3a9ac6e28bae27b240de47f999a5",
-      "bytes": 38714,
+      "sha256": "54cceb776b4550401e0f84f75d279df726bdc9c3004f583b54ea2d99f7727737",
+      "bytes": 40454,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "a66c189098b4e84e5c7b70c37e08341cf3639752"
+      "gitBlob": "74bcfac822d8ea01d80f81eae2a4574333468629"
     },
     {
       "path": ".github/ssb-native-forward-recovery/dockerfile-manifest.json",
@@ -157,11 +157,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/evidence.cjs",
-      "sha256": "89e69fc1209614bf8f2d7ba29ada66475bac2d1ad08745c61c2ed6fffb58513e",
-      "bytes": 13078,
+      "sha256": "fcf07ab09ccdb7d0446046a47e493ac6d9507eafe2ed93625bb492090b4758f5",
+      "bytes": 13175,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "fee04dd6336113e072448874f680328e2dc4f39a"
+      "gitBlob": "1cd88fde22b8d4c320c90f65549d202ac2c49fab"
     },
     {
       "path": ".github/ssb-native-forward-recovery/fixtures.cjs",
@@ -197,11 +197,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/native.cjs",
-      "sha256": "771d19cf01e6155f93e54bd54886326d8f645141f9690003816bf798ae7d01f7",
-      "bytes": 39351,
+      "sha256": "16b35575b398703a13e9ebaf637b60877a676285e7f26a026a0b107c2051c1fb",
+      "bytes": 40137,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "64446dbca17dc0e397ff81556bb21732c944ab29"
+      "gitBlob": "765401572e8dbf2476c9b515c950d52b2acd897f"
     },
     {
       "path": ".github/ssb-native-forward-recovery/offline.test.cjs",
@@ -261,11 +261,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/probe.cjs",
-      "sha256": "eda03ed5e63b8577cb98b4b1832b4d3ce5f81cf2555e423b6a05be19f1cd4870",
-      "bytes": 24090,
+      "sha256": "dd5d82c1afbf75c5b9bbc209848dae95817c2b7380c9de1b3d499fe5919872c6",
+      "bytes": 24926,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "0a2e4f5a6e910df585a0faba8242cab1fb3917fb"
+      "gitBlob": "aaa3a8d4fd0614d619dc3404f58a2300e5d06981"
     },
     {
       "path": ".github/ssb-native-forward-recovery/real-pools.cjs",
@@ -370,6 +370,30 @@
       "mode": 420,
       "gitMode": "100644",
       "gitBlob": "9a2ca8bb30d6e9e349064621113c6a12f72c0f49"
+    },
+    {
+      "path": ".github/ssb-native-forward-recovery/restore-diagnostic.cjs",
+      "sha256": "5be80dacbf6a5cffe5c78387c0e7fc73f83eba304ae7def66b7d89d85354c8b1",
+      "bytes": 5165,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "9f545e94360900fdd0332bd7a879592a25b5e15b"
+    },
+    {
+      "path": ".github/ssb-native-forward-recovery/restore-diagnostic.test.cjs",
+      "sha256": "4a529ce887401f66ff5379a045f68b37e164c3dd83a2673d7f82d168c455cd65",
+      "bytes": 21227,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "bdee306a422881ae9dccd0a1650e8597da1de44e"
+    },
+    {
+      "path": ".github/ssb-native-forward-recovery/restore-offline-preload.cjs",
+      "sha256": "de23322d94dbb9197745fff25cd2406adae7469af2a5d73878eefeb7c129fd0d",
+      "bytes": 5416,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "bfea8208708f1ee15b019c0955b42b727463bbf1"
     },
     {
       "path": ".github/ssb-native-forward-recovery/review-regression.test.cjs",

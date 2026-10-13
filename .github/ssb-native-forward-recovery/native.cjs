@@ -80,7 +80,8 @@ class Native{
       const b=require('./diagnostics.cjs').startProtocol().binding(operation);
       need(b.operation==='closed-ready'&&b.service==='probe'&&b.generation===this.current.generation&&b.run===this.options.run&&b.source===SOURCE&&b.publication===this.verifiedPublicationManifest,'probe_binding_invalid');
     }
-    const diagnostic=action==='initialize'||ready||action==='closed-ready'?{version:1,action,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:operation?.call||sha(randomUUID()),...(action==='closed-ready'?{generation:this.current.generation}:{})}:undefined;
+    const restore=action==='restore-logins'||action==='database'&&extra.restoreStage!==undefined;
+    const diagnostic=action==='initialize'||ready||action==='closed-ready'||restore?{version:1,action,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:operation?.call||sha(randomUUID()),...(action==='closed-ready'?{generation:this.current.generation}:{}),...(action==='database'?{restoreStage:extra.restoreStage}:{})}:undefined;
     if(diagnostic){require('./diagnostics.cjs').validateProbeBinding(diagnostic);input.diagnostic=diagnostic;}
     if(ready){need(Number.isInteger(ms)&&ms>800&&ms<=1500,'readiness_deadline');input.readinessTimeoutMs=ms-400;}
     const result=await this.d(['exec','-i',this.probeContainer.id,'node','/proof/probe.cjs'],{input:JSON.stringify(input),ms,...(diagnostic?{probeDiagnostic:{binding:diagnostic,container:this.probeContainer.id}}:{})});const r=proofResult(result.stdout);
@@ -233,19 +234,22 @@ class Native{
     return{verified:true,counts:[5,2,0],ids:cohort.map(x=>x.id),hashes:this.previous.filter(x=>x.receipt).map(x=>x.receipt.sha256)};
   }
   async restore(){
-    const before=await this.probe('database',{noPools:true});
-    const dump=(await this.d(['exec',this.pg.id,'pg_dump','-U','postgres','-d','synthetic','--format=custom'],{ms:5000})).stdout;need(dump.length>0&&dump.length<=16*1024*1024,'dump_limit');
+    const trace=new(require('./restore-diagnostic.cjs').RestoreProgress)({run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest});
+    const before=await trace.at('database-before',()=>this.probe('database',{noPools:true,restoreStage:'before'}));
+    const dump=await trace.at('dump',async()=>(await this.d(['exec',this.pg.id,'pg_dump','-U','postgres','-d','synthetic','--format=custom'],{ms:5000})).stdout);
+    await trace.at('dump-check',()=>need(dump.length>0&&dump.length<=16*1024*1024,'dump_limit'));
     const base=require('./registry-bindings.json').images.find(x=>x.key==='postgres');
-    const env=path.join(this.privateRoot,'postgres.env');this.restorePg=await this.create(this.prefix+'-restore-postgres',base.imageId,['--network',this.networks.internal.name,'--network-alias','restore-db','--env-file',env,'--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=1g','--memory=1g','--pids-limit=128'],'restore-postgres');await this.start(this.restorePg);
-    await this.postgresReady('restore');
-    const globals=(await this.d(['exec',this.pg.id,'pg_dumpall','-U','postgres','--roles-only','--no-role-passwords'])).stdout.toString();
+    const env=path.join(this.privateRoot,'postgres.env');this.restorePg=await trace.at('postgres-create',()=>this.create(this.prefix+'-restore-postgres',base.imageId,['--network',this.networks.internal.name,'--network-alias','restore-db','--env-file',env,'--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=1g','--memory=1g','--pids-limit=128'],'restore-postgres'));
+    await trace.at('postgres-start',()=>this.start(this.restorePg));
+    await trace.at('postgres-ready',()=>this.postgresReady('restore'));
+    const globals=await trace.at('role-dump',async()=>(await this.d(['exec',this.pg.id,'pg_dumpall','-U','postgres','--roles-only','--no-role-passwords'])).stdout.toString());
     // Existing bootstrap role is the only intentionally omitted role declaration.
-    const sql=globals.replace(/^CREATE ROLE postgres;\n/m,'');
-    await this.d(['exec','-i',this.restorePg.id,'psql','-U','postgres','-d','synthetic','-v','ON_ERROR_STOP=1'],{input:sql});
-    await this.d(['exec','-i',this.restorePg.id,'pg_restore','-U','postgres','-d','synthetic','--exit-on-error'],{input:dump});
-    await this.probe('restore-logins',{host:'restore-db'});
-    const after=await this.probe('database',{host:'restore-db',expected:before.hashes[0],noPools:true});
-    return{verified:true,counts:after.counts,hashes:[sha(dump),...after.hashes]};
+    const sql=await trace.at('role-filter',()=>globals.replace(/^CREATE ROLE postgres;\n/m,''));
+    await trace.at('role-import',()=>this.d(['exec','-i',this.restorePg.id,'psql','-U','postgres','-d','synthetic','-v','ON_ERROR_STOP=1'],{input:sql}));
+    await trace.at('database-import',()=>this.d(['exec','-i',this.restorePg.id,'pg_restore','-U','postgres','-d','synthetic','--exit-on-error'],{input:dump}));
+    await trace.at('role-logins',()=>this.probe('restore-logins',{host:'restore-db'}));
+    const after=await trace.at('database-after',()=>this.probe('database',{host:'restore-db',expected:before.hashes[0],noPools:true,restoreStage:'after'}));
+    return trace.at('result',()=>({verified:true,counts:after.counts,hashes:[sha(dump),...after.hashes]}));
   }
   async finalInventory(){
     const final=await this.inventory();for(const key of Object.keys(this.initial))need(this.initial[key].every(x=>final[key].includes(x)),'preexisting_resource_changed');
