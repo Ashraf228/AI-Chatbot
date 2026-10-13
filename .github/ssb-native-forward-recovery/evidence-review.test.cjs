@@ -14,7 +14,7 @@ const options=output=>({authorization:'ONE_NATIVE_FORWARD_RECOVERY',run,attempt:
 function fixture(){
   const id=n=>n.toString(16).padStart(64,'0'),ids=Array.from({length:24},(_,i)=>id(i+1));
   const data={preflight:{counts:[901,4],hashes:[sha(fs.readFileSync(manifestPath))]},bases:{counts:[4],ids:require('./registry-bindings.json').images.map(x=>x.imageId)},
-    builds:{counts:[4,2],ids:[100,101,102,103,100].map(n=>'sha256:'+id(n))},initialize:{counts:[34,4,1],hashes:[id(200)]},roles:{counts:[32]},
+    builds:{hashes:[require('./reporter-source.cjs').manifest().hash],counts:[4,2],ids:[100,101,102,103,100].map(n=>'sha256:'+id(n))},initialize:{counts:[34,4,1],hashes:[id(200)]},roles:{counts:[32]},
     restore:{counts:[34,4,7],hashes:[id(201),id(202)]},inventory:{counts:[19,5,2],ids},closure:{counts:[19,19,1000],ids},complete:{}};
   for(const [i,g]of ['release','forward','normal'].entries()){
     const cohort=ids.slice(3+i*5,8+i*5);

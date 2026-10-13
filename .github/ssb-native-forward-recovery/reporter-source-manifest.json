@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "base": "94a25578e883a6d7bbd03f26c56735739f75e45e",
+  "purpose": "REPORTER_DIAGNOSTIC_OVERLAY_NOT_UNCHANGED_RELEASE",
+  "files": [
+    {
+      "path": "apps/reporter/src/main.ts",
+      "sha256": "469160fed6aab07ecf95c7681ed10dbc1b8ca16420f32502e3110b3602aaca6d",
+      "bytes": 770,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "5dd87ffa6dfe9b50509cea943c13bd3523ce0317",
+      "before": "3b12a79ea43f7980323ea376810e9a033501d17a314e8c279455e08b69824671"
+    },
+    {
+      "path": "apps/reporter/src/maintenance.ts",
+      "sha256": "39830f4625dabfd35bc5be19ece9bf1bc0c932109d959d839bcb1fafa32c6687",
+      "bytes": 6215,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "57476bc69f6f1828e4fa04b90e2320ac40a735c3",
+      "before": "d0591b4004d1a8623f158a568de6a8070840dbd444ce300776b2ebb867f6daad"
+    },
+    {
+      "path": "apps/reporter/scripts/reporter-entry.cjs",
+      "sha256": "82416f39f9bdf0c33626af95471d6e791fb8844e99727d97bc5d11612b99d091",
+      "bytes": 8770,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "4b5412328b8849988b75ac6ef13024017967cbc8",
+      "before": null
+    },
+    {
+      "path": "reporter.Dockerfile",
+      "sha256": "9ceed2d4fcbbfa0b50dd5c09ac3aa20f8e8a03a3895205d2fe52f774de8ea4b1",
+      "bytes": 841,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "2a5967d6d33e3851ac786264d0028e4560c97ffa",
+      "before": "f4a5401c13c85f6915a1ddd52854c8264968156e79563db73d24b054522370e5"
+    }
+  ]
+}

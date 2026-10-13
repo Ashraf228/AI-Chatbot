@@ -201,6 +201,7 @@ test('actual fixture Compose bytes escape dollars while raw config and operating
   const values=fixtures.secrets(),salt=Buffer.alloc(16,0xaa);
   values.passwordHash='scrypt$'+salt.toString('hex')+'$'+crypto.scryptSync(values.password,salt,64).toString('hex');
   const native={privateRoot:'/private-fixture',stateRoot:'/state',prefix:'offline-review',synthetic:values,options:{run:'123'},docker:'/not-invoked',daemonId:'not-invoked',images:Object.fromEntries(fixtures.services.map((s,i)=>[s,'sha256:'+String(i+1).repeat(64)])),networks:Object.fromEntries(fixtures.networks.map((s,i)=>[s,{name:s,id:String(i+1).repeat(64),internal:true}]))};
+  native.verifiedPublicationManifest=crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'publication-manifest.json'))).digest('hex');
   const g=fixtures.generation(native,'release','seed',[],policy),bytes=mem.readFileSync(g.common.files[0].path,'utf8'),serialized=JSON.parse(bytes);
   assert.equal(g.config.services.dashboard.environment.ADMIN_PANEL_PASSWORD_HASH,values.passwordHash);
   assert.equal(serialized.services.dashboard.environment.ADMIN_PANEL_PASSWORD_HASH,values.passwordHash.replace(/\$/g,()=> '$$'));

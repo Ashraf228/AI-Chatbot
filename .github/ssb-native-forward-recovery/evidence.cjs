@@ -30,6 +30,9 @@ function validateEvidence(r,prior){
   const checkStart=v=>{if(!v)return;if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
   for(const probe of probeCallsInFailure(r.detail.failure))need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
   const dashboardRecords=v=>v?[...(v.dashboard?[v.dashboard]:[]),...v.causes.flatMap(dashboardRecords)]:[];
+  const reporterRecords=v=>v?[...(v.reporter?[v.reporter]:[]),...v.causes.flatMap(reporterRecords)]:[];
+  for(const d of reporterRecords(r.detail.failure))need(d.binding.publication===prior[0]?.hashes[0]&&d.image===prior.find(x=>x.phase==='builds'&&x.ok)?.ids[2],'reporter_image_binding');
+  if(r.phase==='closure')for(const d of prior.flatMap(p=>reporterRecords(p.detail.failure)))need(r.detail.outcomes.some(o=>o.id===d.container&&o.role==='reporter'&&o.generation===d.binding.generation),'reporter_container_binding');
   for(const d of dashboardRecords(r.detail.failure))need(d.image===prior.find(x=>x.phase==='builds'&&x.ok)?.ids[1],'dashboard_image_binding');
   if(r.phase==='closure')for(const d of prior.flatMap(p=>dashboardRecords(p.detail.failure))){
     need(r.detail.outcomes.some(o=>o.id===d.container&&o.role==='dashboard'&&o.generation===d.binding.generation),'dashboard_container_binding');
@@ -74,7 +77,7 @@ function validateEvidence(r,prior){
     }
     case 'builds':
       // Native inserts api/dashboard/reporter/widget, then aliases admin-writer to api.
-      shape([4,2],5,0);need(r.ids.every(s=>/^sha256:[a-f0-9]{64}$/.test(s))&&unique(r.ids.slice(0,4))&&r.ids[4]===r.ids[0]&&!r.ids.some(s=>at('bases').ids.includes(s)),'phase_build_ids');break;
+      shape([4,2],5,1);need(same(r.hashes,[require('./reporter-source.cjs').manifest().hash]),'reporter_source_binding');need(r.ids.every(s=>/^sha256:[a-f0-9]{64}$/.test(s))&&unique(r.ids.slice(0,4))&&r.ids[4]===r.ids[0]&&!r.ids.some(s=>at('bases').ids.includes(s)),'phase_build_ids');break;
     case 'initialize':shape([34,4,1],0,1);break;
     case 'roles':shape([32],0,0);break;
     case 'release-start':case 'forward-start':case 'normal-start':
