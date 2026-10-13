@@ -209,6 +209,7 @@ function assertCompose(binding, c, config, cfg) {
     && e.ADMIN_WRITER_BASE_URL==='http://admin-writer:3011' && e.DASHBOARD_INTERNAL_TOKEN?.length>=32
     && e.ADMIN_WRITER_SIGNING_KEY_FILE===targets.writerKey,'dashboard_writer_binding_missing');
   if(c.service==='dashboard') {
+    deny(e.HOSTNAME==='0.0.0.0' && e.PORT==='3000','dashboard_listener_binding_invalid');
     let origin;try{origin=new URL(e.DASHBOARD_PUBLIC_URL);}catch{throw new MaintenanceDenied('dashboard_origin_invalid');}
     deny(origin.protocol==='https:' && !origin.username && !origin.password && !origin.search && !origin.hash
       && origin.pathname==='/', 'dashboard_origin_invalid');

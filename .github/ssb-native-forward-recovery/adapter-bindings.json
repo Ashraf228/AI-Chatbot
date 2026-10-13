@@ -20,8 +20,8 @@
     },
     {
       "path": "scripts/ops/maintenance-start-contract.cjs",
-      "sha256": "aa8654a6f60f1ea8dc0a45c64da3c1a1e97ecc9e2f5af02b07c741dba385b579",
-      "bytes": 21417,
+      "sha256": "e4effd280de02517a79e7072d81265a4e08597ba314730526f9999c26b4639fc",
+      "bytes": 21507,
       "gitMode": "100644"
     },
     {

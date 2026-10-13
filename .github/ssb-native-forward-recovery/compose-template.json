@@ -92,6 +92,8 @@
         "NODE_ENV": "production",
         "APP_ENV": "production",
         "BACKEND_BASE_URL": "http://api:5000",
+        "HOSTNAME": "0.0.0.0",
+        "PORT": "3000",
         "ADMIN_WRITER_BASE_URL": "http://admin-writer:3011",
         "ADMIN_WRITER_SIGNING_KEY_FILE": "/run/ssb-writer-signing-key",
         "ADMIN_SESSION_SECRET": "${ADMIN_SESSION_SECRET:?required}",
