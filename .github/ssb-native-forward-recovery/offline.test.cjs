@@ -14,7 +14,7 @@ function nativeEvidence(){
   const image=n=>'sha256:'+id(n),result={
     preflight:{counts:[901,4],hashes:[sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')))]},
     bases:{counts:[4],ids:require('./registry-bindings.json').images.map(x=>x.imageId)},
-    builds:{counts:[4,2],ids:[100,101,102,103,100].map(image)},initialize:{counts:[34,4,1],hashes:[id(200)]},roles:{counts:[32]},
+    builds:{hashes:[require('./reporter-source.cjs').manifest().hash],counts:[4,2],ids:[100,101,102,103,100].map(image)},initialize:{counts:[34,4,1],hashes:[id(200)]},roles:{counts:[32]},
     restore:{counts:[34,4,7],hashes:[id(210),id(211)]},inventory:{counts:[19,5,2],ids:all},closure:{counts:[19,19,1000],ids:all},complete:{},
   };
   for(const [i,g]of ['release','forward','normal'].entries()){
@@ -63,6 +63,7 @@ test('generated Compose and five start plans obey actual reviewed adapter',t=>{
   const dir=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'ssb-forward-fixture-'));
   t.mock.method(fs,'chownSync',()=>{});
   const n={privateRoot:dir,stateRoot:path.join(dir,'state'),toolsRoot:dir,prefix:'ssb-native-123',options:{run:'123'},synthetic:secrets(),images:{api:'sha256:'+'1'.repeat(64),'admin-writer':'sha256:'+'1'.repeat(64),dashboard:'sha256:'+'2'.repeat(64),reporter:'sha256:'+'3'.repeat(64),widget:'sha256:'+'4'.repeat(64)},docker:'/usr/bin/docker',daemonId:'bounded-native-daemon',networks:Object.fromEntries(networks.map((k,i)=>[k,{name:'ssb-native-'+k,id:String(i+5).repeat(64),internal:true}]))};
+  n.verifiedPublicationManifest=sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')));
   const g=generation(n,'release','seed',[],policy);
   for(const service of services){const c={...g.common,service,imageId:n.images[service]};policy.assertPlan(g.binding,c);
     const image={User:service==='widget'?'':'node',Cmd:policy.commands[service==='admin-writer'?'api':service],Entrypoint:service==='widget'?['/docker-entrypoint.sh']:service==='dashboard'?['docker-entrypoint.sh']:[],Env:[],Labels:{'com.ssb.maintenance-protocol':'2','com.ssb.reporter-lifecycle':'1','com.ssb.shutdown-protocol':'1'}};

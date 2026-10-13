@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cp=require('node:child_process'),vm=require('node:vm'),{createRequire}=require('node:module');
-const metadata=service=>({User:service==='widget'?'':'node',Cmd:service==='dashboard'?['node','app/server.js']:service==='reporter'?['node','dist/main.js','weekly']:service==='widget'?['nginx','-g','daemon off;']:['node','dist/main.js'],Entrypoint:service==='dashboard'?['docker-entrypoint.sh']:service==='widget'?['/docker-entrypoint.sh']:[],Env:[],Labels:{'com.ssb.maintenance-protocol':'2','com.ssb.shutdown-protocol':'1','com.ssb.reporter-lifecycle':'1'}});
+const metadata=service=>({User:service==='widget'?'':'node',Cmd:service==='dashboard'?['node','app/server.js']:service==='reporter'?['node','dist/reporter-entry.cjs','weekly']:service==='widget'?['nginx','-g','daemon off;']:['node','dist/main.js'],Entrypoint:service==='dashboard'?['docker-entrypoint.sh']:service==='widget'?['/docker-entrypoint.sh']:[],Env:[],Labels:{'com.ssb.maintenance-protocol':'2','com.ssb.shutdown-protocol':'1','com.ssb.reporter-lifecycle':'1'}});
 
 // This branch is a test-only preload. Every Docker/network transport is denied or simulated.
 if(process.env.SSB_START_OFFLINE_CHILD){

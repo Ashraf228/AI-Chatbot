@@ -10,7 +10,7 @@ const ids = value => /^sha256:[a-f0-9]{64}$/.test(value || '');
 const keys = value => Object.keys(value || {}).sort();
 const serviceNames = ['api', 'admin-writer', 'dashboard', 'reporter', 'widget'];
 const commands = { api: ['node','dist/main.js'], 'admin-writer': ['node','dist/admin-writer/server.js'],
-  dashboard: ['node','app/server.js'], reporter: ['node','dist/main.js','weekly'], widget: ['nginx','-g','daemon off;'] };
+  dashboard: ['node','app/server.js'], reporter: ['node','dist/reporter-entry.cjs','weekly'], widget: ['nginx','-g','daemon off;'] };
 const targets = { state: '/run/ssb-maintenance', runtime: '/run/ssb-runtime-contract.json',
   writerDb: '/run/ssb-writer-db', writerKey: '/run/ssb-writer-signing-key' };
 const mounts = { api: ['state','runtime'], 'admin-writer': ['state','runtime','writerDb','writerKey'],
@@ -30,7 +30,7 @@ const operatingKeys = {
     'SMTP_PASS','REPORTS_FROM_EMAIL','LEAD_NOTIFICATION_EMAIL','ADMIN_EMAIL','APP_URL'],
   dashboard: ['ADMIN_SESSION_SECRET','DASHBOARD_INTERNAL_TOKEN','ADMIN_PANEL_PASSWORD_HASH',
     'DASHBOARD_PUBLIC_URL','REDIS_URL','NEXT_PUBLIC_WIDGET_LOADER_URL','OPERATOR_PANEL_PASSWORD_HASH'],
-  reporter: ['SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASS','REPORTS_FROM_EMAIL'],
+  reporter: ['SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASS','REPORTS_FROM_EMAIL','SSB_REPORTER_DIAGNOSTIC_BINDING'],
   'admin-writer': ['ADMIN_SESSION_SECRET','DASHBOARD_INTERNAL_TOKEN'], widget: [],
 };
 const allowedEmpty = new Set(['INTEGRATION_SECRET_KEY_PREVIOUS','INTEGRATION_SECRET_LEGACY_KEYS',

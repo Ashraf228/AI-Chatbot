@@ -29,6 +29,7 @@ class Native{
     for(const f of require('./dockerfile-manifest.json'))bound(path.join(this.release,f.path),f);
     this.prefix=`ssb-native-${this.options.run}`;this.privateRoot=`/var/tmp/${this.prefix}`;fs.mkdirSync(this.privateRoot,{mode:0o711});
     fs.mkdirSync(path.join(this.privateRoot,'raw'),{mode:0o700});this.proc=new Processes({deadline:this.deadline,privateRoot:path.join(this.privateRoot,'raw')});
+    this.reporterSource=require('./reporter-source.cjs').prepare(this.release,this.privateRoot);
     this.docker='/usr/bin/docker';need(fs.statSync(this.docker).isFile(),'docker_path');
     const git=await this.command('/usr/bin/git',['-C',this.release,'rev-parse','HEAD']);need(git.stdout.toString().trim()===SOURCE,'source_commit_changed');
     need((await this.command('/usr/bin/git',['-C',this.release,'status','--porcelain'])).stdout.length===0,'release_worktree_changed');
@@ -54,12 +55,14 @@ class Native{
     for(const app of ['api','dashboard','reporter','widget']){
       const iid=path.join(this.privateRoot,app+'.iid');
       const args=['build','--platform=linux/amd64','--pull=false','--progress=plain','--network=default','--iidfile',iid,'--label',`org.opencontainers.image.revision=${SOURCE}`,'--build-arg',`APP_COMMIT_SHA=${SOURCE}`,'--build-arg',`BUILD_COMMIT=${SOURCE}`,'--build-arg',`BUILD_DATE=${BUILD_DATE}`,'-f',`dockerfiles/${app}.Dockerfile`,['api','dashboard'].includes(app)?`source/apps/${app}`:'source'];
-      await this.d(args,{cwd,ms:until-clock()});const id=regular(iid,80).toString().trim();need(/^sha256:[a-f0-9]{64}$/.test(id),'build_id_invalid');
+      if(app==='reporter'){require('./reporter-source.cjs').verify(this.reporterSource);args.splice(args.length-3,3,'--label',`com.ssb.reporter-source=${this.reporterSource.hash}`,'-f','reporter.Dockerfile','.');}
+      await this.d(args,{cwd:app==='reporter'?this.reporterSource.root:cwd,ms:until-clock()});const id=regular(iid,80).toString().trim();need(/^sha256:[a-f0-9]{64}$/.test(id),'build_id_invalid');
       const list=json((await this.d(['image','inspect',id])).stdout);need(list.length===1&&list[0].Id===id&&list[0].Os==='linux'&&list[0].Architecture==='amd64'&&list[0].Config?.Labels?.['org.opencontainers.image.revision']===SOURCE,'candidate_image_invalid');
+      if(app==='reporter')need(list[0].Config.Labels['com.ssb.reporter-source']===this.reporterSource.hash,'reporter_source_changed');
       this.images[app]=id;this.imageMetadata??={};this.imageMetadata[app]=list[0];
     }
     this.images['admin-writer']=this.images.api;
-    return{verified:true,counts:[4,2],ids:Object.values(this.images)};
+    return{verified:true,counts:[4,2],ids:Object.values(this.images),hashes:[this.reporterSource.hash]};
   }
   async create(name,image,args,role){
     need(!this.initial.containers.includes(name)&&this.owned.length<19&&!this.owned.some(x=>x.name===name),'resource_limit');
@@ -185,15 +188,18 @@ class Native{
       policy.assertImage([this.imageMetadata[service==='admin-writer'?'api':service]],contract);
       return write(path.join(this.current.root,service+'-start.json'),JSON.stringify({...planBase,action:'start-retained-participant',binding:this.current.binding,contract}));});
       const entry={name:this.current.names[service],image:this.images[service],role:service,generation:key,project:this.current.project,id:null,startRequested:true};this.owned.push(entry);
-      await this.startStep('participant-helper',service,key,b=>this.privilegedStart(plan.path,b,entry));
+      try{await this.startStep('participant-helper',service,key,b=>this.privilegedStart(plan.path,b,entry));}
+      catch(error){if(service==='reporter')await require('./reporter-diagnostic.cjs').collect(this,error,entry);throw error;}
       const operation=this.startBinding('participant-postinspect',service,key);
       try{const x=(await this.inspect(entry.name,{startOperation:{binding:operation,target:entry.name}}))[0];need(fullId(x.Id)&&x.Id===entry.id&&x.State.Running&&x.Image===entry.image,'started_identity');}
-      catch(error){error.startOperation=operation;throw error;}
-      await this.startStep('running-limit',service,key,()=>this.runningLimit());
+      catch(error){error.startOperation=operation;if(service==='reporter')await require('./reporter-diagnostic.cjs').collect(this,error,entry);throw error;}
+      try{await this.startStep('running-limit',service,key,()=>this.runningLimit());
       // Check real mount readability from each application, not only the inspect metadata.
       if(service!=='widget')await this.startStep('mount-readability',service,key,()=>this.d(['exec',entry.id,'node','-e',`const fs=require('fs'),assert=require('assert');assert.equal(process.getuid(),1000);for(const p of ${JSON.stringify(service==='admin-writer'?['/run/ssb-writer-db','/run/ssb-writer-signing-key']:service==='dashboard'?['/run/ssb-writer-signing-key']:[])})assert.ok(fs.readFileSync(p).length);for(const p of ${JSON.stringify(service==='admin-writer'?[]:service==='dashboard'?['/run/ssb-writer-db','/run/ssb-maintenance/runtime-state.json']:['/run/ssb-writer-db','/run/ssb-writer-signing-key'])})assert.throws(()=>fs.readFileSync(p));`]));
+      }catch(error){if(service==='reporter')await require('./reporter-diagnostic.cjs').collect(this,error,entry);throw error;}
     }
-    await this.startStep('reporter-closed-inspect','reporter',key,async()=>{const reporter=this.owned.find(x=>x.generation===key&&x.role==='reporter');need((await this.inspect(reporter.id))[0].State.Running,'reporter_closed_start_failed');});
+    try{await this.startStep('reporter-closed-inspect','reporter',key,async()=>{const reporter=this.owned.find(x=>x.generation===key&&x.role==='reporter');need((await this.inspect(reporter.id))[0].State.Running,'reporter_closed_start_failed');});}
+    catch(error){await require('./reporter-diagnostic.cjs').collect(this,error,this.owned.find(x=>x.generation===key&&x.role==='reporter'));throw error;}
     try{await this.startStep('closed-ready','probe',key,b=>this.probe('closed-ready',{},15000,b));}
     catch(error){
       const diagnostic=require('./dashboard-diagnostic.cjs');

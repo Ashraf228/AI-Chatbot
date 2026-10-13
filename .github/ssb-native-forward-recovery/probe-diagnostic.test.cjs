@@ -35,7 +35,7 @@ async function failure(config,extra={}){
  h.n.execute=async phase=>{
   if(phase==='preflight')return{verified:true,counts:[901,4],hashes:[pm()]};
   if(phase==='bases')return{verified:true,counts:[4],ids:require('./registry-bindings.json').images.map(x=>x.imageId)};
-  if(phase==='builds')return{verified:true,counts:[4,2],ids:[1,2,3,4,1].map(x=>'sha256:'+String(x).repeat(64))};
+  if(phase==='builds')return{verified:true,hashes:[require('./reporter-source.cjs').manifest().hash],counts:[4,2],ids:[1,2,3,4,1].map(x=>'sha256:'+String(x).repeat(64))};
   if(phase==='initialize'){const progress=new(require('./diagnostics.cjs').InitProgress)();progress.enter('redis-version');progress.confirm();progress.enter('database-initialize');try{return await h.n.probe('initialize');}catch(e){primaryErrors.push(e);throw progress.failure(e);}}
   return execute(phase);
  };
