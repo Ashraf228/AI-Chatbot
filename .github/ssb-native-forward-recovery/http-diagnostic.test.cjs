@@ -51,6 +51,7 @@ if(process.env.SSB_HTTP_OFFLINE){
  for(const generation of ['release','forward','normal'])for(const stage of ['request','body','status'])test(`real child/controller/receipt/receiver ${generation}/${stage}`,async t=>{
   const h=await receiptFailure(t,{generation,scenarios:[{stage,cause:'UND_ERR_SOCKET'}]}),d=diag(h);
   assert.equal(d.binding.generation,generation);assert.equal(d.primary.step,'closed-dashboard');assert.equal(d.primary.lastConfirmed,'closed-writer');
+  assert.equal(h.rows.at(-1).phase,'closure');assert.equal(h.rows.at(-1).ok,true);
   assert.equal(d.primary.httpStatus,stage==='request'?null:stage==='status'?418:200);
   assert.equal(d.primary.httpStage,stage==='status'?'complete':stage);assert.equal(d.primary.httpConfirmed,stage==='request'?'none':stage==='status'?'body':'headers');
   assert.equal(d.primary.causeNodeCode,stage==='status'?'unknown':'UND_ERR_SOCKET');assert.equal(d.readiness.attempts,3);assert.equal(d.readiness.firstFailure.attempt,1);assert.equal(d.readiness.lastFailure.attempt,3);

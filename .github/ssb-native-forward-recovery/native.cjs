@@ -194,7 +194,12 @@ class Native{
       if(service!=='widget')await this.startStep('mount-readability',service,key,()=>this.d(['exec',entry.id,'node','-e',`const fs=require('fs'),assert=require('assert');assert.equal(process.getuid(),1000);for(const p of ${JSON.stringify(service==='admin-writer'?['/run/ssb-writer-db','/run/ssb-writer-signing-key']:service==='dashboard'?['/run/ssb-writer-signing-key']:[])})assert.ok(fs.readFileSync(p).length);for(const p of ${JSON.stringify(service==='admin-writer'?[]:service==='dashboard'?['/run/ssb-writer-db','/run/ssb-maintenance/runtime-state.json']:['/run/ssb-writer-db','/run/ssb-writer-signing-key'])})assert.throws(()=>fs.readFileSync(p));`]));
     }
     await this.startStep('reporter-closed-inspect','reporter',key,async()=>{const reporter=this.owned.find(x=>x.generation===key&&x.role==='reporter');need((await this.inspect(reporter.id))[0].State.Running,'reporter_closed_start_failed');});
-    await this.startStep('closed-ready','probe',key,b=>this.probe('closed-ready',{},15000,b));
+    try{await this.startStep('closed-ready','probe',key,b=>this.probe('closed-ready',{},15000,b));}
+    catch(error){
+      const diagnostic=require('./dashboard-diagnostic.cjs');
+      try{await diagnostic.collect(this,error);}catch(extra){const found=diagnostic.target(error);if(found){found.primary.startOperation=found.binding;found.primary.dashboardError=diagnostic.code(extra);}}
+      throw error;
+    }
     await this.startStep('state-snapshot','generation',key,async()=>{const closed=await this.state('snapshot',this.current.binding);need(closed.phase==='closed'&&Object.values(closed.work).every(x=>x.state==='completed'),'closed_start_admitted_work');});
     await this.startStep('state-open','generation',key,()=>this.state('open',this.current.binding));
     const retired=['release','forward','normal'].slice(0,['release','forward','normal'].indexOf(key));

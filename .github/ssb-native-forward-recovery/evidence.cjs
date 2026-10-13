@@ -29,6 +29,12 @@ function validate(r){
 function validateEvidence(r,prior){
   const checkStart=v=>{if(!v)return;if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
   for(const probe of probeCallsInFailure(r.detail.failure))need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
+  const dashboardRecords=v=>v?[...(v.dashboard?[v.dashboard]:[]),...v.causes.flatMap(dashboardRecords)]:[];
+  for(const d of dashboardRecords(r.detail.failure))need(d.image===prior.find(x=>x.phase==='builds'&&x.ok)?.ids[1],'dashboard_image_binding');
+  if(r.phase==='closure')for(const d of prior.flatMap(p=>dashboardRecords(p.detail.failure))){
+    need(r.detail.outcomes.some(o=>o.id===d.container&&o.role==='dashboard'&&o.generation===d.binding.generation),'dashboard_container_binding');
+    for(const n of d.networks)need(r.ids[r.counts[1]+['internal','admin_writer','widget_api','ingress','egress'].indexOf(n.key)]===n.id,'dashboard_network_binding');
+  }
   const failed=prior.some(x=>!x.ok);
   const absent=r.phase==='closure'?r.detail.outcomes.filter(o=>o.state==='not_created'):[];
   const startFailures=v=>v?[...(v.start?[v.start]:[]),...v.causes.flatMap(startFailures)]:[];
