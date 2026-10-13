@@ -182,29 +182,35 @@ async function drain(input){
   }finally{await c.query('ROLLBACK').catch(()=>{});c.release();await p.end();}
 }
 async function database(input){
-  const p=pool(input,'postgres',input.host||'db');try{
+  return require('./restore-diagnostic.cjs').probeScope(input,async(step,using)=>using('pool-create','pool-close',()=>pool(input,'postgres',input.host||'db'),async p=>{
     const snapshot={};
-    snapshot.migrations=(await p.query('SELECT version FROM schema_migrations ORDER BY version')).rows;
-    snapshot.roles=(await p.query("SELECT rolname,rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolreplication,rolbypassrls FROM pg_roles WHERE rolname LIKE 'ssb_%' ORDER BY rolname")).rows;
-    snapshot.tables=(await p.query("SELECT n.nspname,c.relname,pg_get_userbyid(c.relowner) owner,c.relacl::text acl FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','maintenance_admin') AND c.relkind IN('r','p','S') ORDER BY 1,2")).rows;
-    snapshot.constraints=(await p.query("SELECT n.nspname,c.relname,k.conname,pg_get_constraintdef(k.oid) definition FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN('public','maintenance_admin') ORDER BY 1,2,3")).rows;
-    snapshot.markers=(await p.query("SELECT id,tenant_id,name FROM sites WHERE id IN('synthetic-site','foreign-site') ORDER BY id")).rows;
-    snapshot.receipts=(await p.query('SELECT id,request_sha256,completed_at FROM maintenance_admin.writer_receipts ORDER BY id')).rows;
-    assert.equal((await p.query('SELECT count(*)::integer n FROM provider_approval_grants')).rows[0].n,0);
-    assert.equal(snapshot.migrations.length,34);assert.equal(snapshot.roles.length,4);assert.equal(snapshot.markers.length,2);assert.ok(snapshot.receipts.length>=4);
-    if(input.noPools)assert.equal((await p.query("SELECT count(*)::integer n FROM pg_stat_activity WHERE usename IN('ssb_runtime','ssb_admin_writer')")).rows[0].n,0);
-    const digest=sha(JSON.stringify(snapshot));if(input.expected)assert.equal(digest,input.expected);
+    snapshot.migrations=await step('snapshot-migrations',async()=>(await p.query('SELECT version FROM schema_migrations ORDER BY version')).rows);
+    snapshot.roles=await step('snapshot-roles',async()=>(await p.query("SELECT rolname,rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolreplication,rolbypassrls FROM pg_roles WHERE rolname LIKE 'ssb_%' ORDER BY rolname")).rows);
+    snapshot.tables=await step('snapshot-tables',async()=>(await p.query("SELECT n.nspname,c.relname,pg_get_userbyid(c.relowner) owner,c.relacl::text acl FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','maintenance_admin') AND c.relkind IN('r','p','S') ORDER BY 1,2")).rows);
+    snapshot.constraints=await step('snapshot-constraints',async()=>(await p.query("SELECT n.nspname,c.relname,k.conname,pg_get_constraintdef(k.oid) definition FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN('public','maintenance_admin') ORDER BY 1,2,3")).rows);
+    snapshot.markers=await step('snapshot-markers',async()=>(await p.query("SELECT id,tenant_id,name FROM sites WHERE id IN('synthetic-site','foreign-site') ORDER BY id")).rows);
+    snapshot.receipts=await step('snapshot-receipts',async()=>(await p.query('SELECT id,request_sha256,completed_at FROM maintenance_admin.writer_receipts ORDER BY id')).rows);
+    await step('snapshot-grants',async()=>assert.equal((await p.query('SELECT count(*)::integer n FROM provider_approval_grants')).rows[0].n,0));
+    await step('snapshot-assertions',()=>{assert.equal(snapshot.migrations.length,34);assert.equal(snapshot.roles.length,4);assert.equal(snapshot.markers.length,2);assert.ok(snapshot.receipts.length>=4);});
+    if(input.noPools)await step('snapshot-pools',async()=>assert.equal((await p.query("SELECT count(*)::integer n FROM pg_stat_activity WHERE usename IN('ssb_runtime','ssb_admin_writer')")).rows[0].n,0));
+    const digest=await step('snapshot-compare',()=>{const value=sha(JSON.stringify(snapshot));if(input.expected)assert.equal(value,input.expected);return value;});
     return{verified:true,counts:[34,4,snapshot.receipts.length],hashes:[digest]};
-  }finally{await p.end();}
+  }));
 }
 async function main(input){
   phase=input.action;
   if(input.action==='restore-logins'){
-    assert.equal(input.host,'restore-db');const admin=pool(input,'postgres','restore-db');
-    try{for(const role of ['ssb_runtime','ssb_admin_writer']){
-      assert.match(input.passwords[role],/^[a-f0-9]{64}$/);await admin.query(`ALTER ROLE ${role} PASSWORD '${input.passwords[role]}'`);
-      const p=pool(input,role,'restore-db');try{assert.equal((await p.query('SELECT session_user AS name')).rows[0].name,role);await assert.rejects(p.query('SET ROLE postgres'),e=>e.code==='42501');}finally{await p.end();}
-    }return{verified:true,counts:[2,2]};}finally{await admin.end();}
+    return require('./restore-diagnostic.cjs').probeScope(input,async(step,using)=>{
+      assert.equal(input.host,'restore-db');return using('pool-create','pool-close',()=>pool(input,'postgres','restore-db'),async admin=>{
+        for(const role of ['ssb_runtime','ssb_admin_writer']){
+          await step('restore-password',async()=>{assert.match(input.passwords[role],/^[a-f0-9]{64}$/);await admin.query(`ALTER ROLE ${role} PASSWORD '${input.passwords[role]}'`);});
+          await using('restore-pool-create','restore-pool-close',()=>pool(input,role,'restore-db'),async p=>{
+            await step('restore-session',async()=>assert.equal((await p.query('SELECT session_user AS name')).rows[0].name,role));
+            await step('restore-denied',()=>assert.rejects(p.query('SET ROLE postgres'),e=>e.code==='42501'));
+          });
+        }return{verified:true,counts:[2,2]};
+      });
+    });
   }
   if(input.action==='closed-ready')return closedReady(input);
   if(input.action==='retired-admission')return retiredAdmission(input,require('/app/dist/maintenance/maintenance-state').MaintenanceState);

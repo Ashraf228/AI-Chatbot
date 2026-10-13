@@ -27,7 +27,7 @@ function validate(r){
   validateDetail(r);
 }
 function validateEvidence(r,prior){
-  const checkStart=v=>{if(!v)return;if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
+  const checkStart=v=>{if(!v)return;if(v.restore)need(v.restore.binding.publication===prior[0]?.hashes[0],'restore_binding_invalid');if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
   for(const probe of probeCallsInFailure(r.detail.failure))need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
   const dashboardRecords=v=>v?[...(v.dashboard?[v.dashboard]:[]),...v.causes.flatMap(dashboardRecords)]:[];
   const reporterRecords=v=>v?[...(v.reporter?[v.reporter]:[]),...v.causes.flatMap(reporterRecords)]:[];
