@@ -24,7 +24,7 @@ test('listener denial survives structured public receipt and partial receiver wi
   const output=[],ctx={workflowHead:'a'.repeat(40),dispatchNonce:'b'.repeat(64)},r=new Receipts('123',SOURCE,ctx,line=>output.push(line));
   r.emit('preflight',true,{counts:[901,4],hashes:[binding.publication]});
   r.emit('bases',true,{counts:[4],ids:require('./registry-bindings.json').images.map(x=>x.imageId)});
-  r.emit('builds',true,{counts:[4,2],ids:[native.images.api,native.images.dashboard,native.images.reporter,native.images.widget,native.images.api],hashes:[require('./reporter-source.cjs').manifest().hash]});
+  r.emit('builds',true,{counts:[4,2],ids:[native.images.api,native.images.dashboard,native.images.reporter,native.images.widget,native.images.api],hashes:[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash]});
   r.emit('initialize',true,{counts:[34,4,1],hashes:['d'.repeat(64)]});r.emit('roles',true,{counts:[32]});
   r.emit('release-start',false,{detail:{failure:diagnostics.publicFailure(primary),outcomes:[]}});
   // Additional closure failure must not convert or hide the original denial.
@@ -42,19 +42,19 @@ test('listener denial survives structured public receipt and partial receiver wi
   assert.equal(progress.result(false).primary.code,'dashboard_listener_binding_invalid');assert.equal(progress.result(false).cleanup[0].code,'ENOSPC');
 });
 const policy=load(path.join(root,'adapters/scripts/ops/maintenance-start-contract.cjs'),{
-  'node:fs':{},'node:path':path,'node:crypto':crypto,'../../apps/api/dist/maintenance/maintenance-state':{MaintenanceDenied}
+  './dashboard-shutdown-contract.cjs':require('./dashboard-shutdown-contract.cjs'),'node:fs':{},'node:path':path,'node:crypto':crypto,'../../apps/api/dist/maintenance/maintenance-state':{MaintenanceDenied}
 });
 const writes=new Map();
 const fixtures=load(path.join(__dirname,'fixtures.cjs'),{
   'node:fs':{mkdirSync(){},chownSync(){},writeFileSync(p,b,o){assert.equal(o.flag,'wx');writes.set(p,String(b));}},
   'node:path':path,'node:crypto':crypto,'./common.cjs':require('./common.cjs'),
-  './compose-template.json':template,'./reporter-contract.cjs':require('./reporter-contract.cjs')
+  './dashboard-shutdown-contract.cjs':require('./dashboard-shutdown-contract.cjs'),'./compose-template.json':template,'./reporter-contract.cjs':require('./reporter-contract.cjs')
 });
 const native={privateRoot:'/synthetic-only/private',stateRoot:'/synthetic-only/state',prefix:'ssb-native-123',options:{run:'123'},
   docker:'/usr/bin/docker',daemonId:'synthetic-bound-daemon',verifiedPublicationManifest:sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json'))),
   images:{api:'sha256:'+'1'.repeat(64),'admin-writer':'sha256:'+'1'.repeat(64),dashboard:'sha256:'+'2'.repeat(64),reporter:'sha256:'+'3'.repeat(64),widget:'sha256:'+'4'.repeat(64)},
   networks:Object.fromEntries(fixtures.networks.map((k,i)=>[k,{name:'ssb-native-'+k,id:String(i+5).repeat(64),internal:true}])),synthetic:fixtures.secrets()};
-const image={User:'node',Cmd:['node','app/server.js'],Entrypoint:['docker-entrypoint.sh'],Env:[]};
+const image={User:'node',Cmd:['node','app/scripts/dashboard-entry.cjs'],Entrypoint:[],Env:[]};
 function context(generation){
   const previous={release:'seed',forward:'release',normal:'forward'}[generation];
   const predecessors=previous==='seed'?[]:fixtures.services.map((service,i)=>({service,id:String(i+1).repeat(64),imageId:native.images[service],
@@ -118,7 +118,7 @@ for(const generation of ['release','forward','normal']){
       Config:{User:s.user,Cmd:image.Cmd,Entrypoint:image.Entrypoint,Labels:{'com.docker.compose.project':c.project,'com.docker.compose.service':'dashboard'},Env:Object.entries(s.environment).map(([k,v])=>`${k}=${v}`)},
       HostConfig:{Privileged:false,ReadonlyRootfs:false,RestartPolicy:{Name:'no'},SecurityOpt:s.security_opt,NetworkMode:c.networks.internal.name,
         Tmpfs:{'/tmp':'rw,nosuid,size=16m'}},
-      Mounts:[{Type:'bind',Source:c.mountFiles.writerKey.path,Destination:'/run/ssb-writer-signing-key',RW:false,Propagation:'rprivate'}],
+      Mounts:[{Type:'bind',Source:c.mountFiles.writerKey.path,Destination:'/run/ssb-writer-signing-key',RW:false,Propagation:'rprivate'},{Type:'bind',Source:g.binding.root,Destination:'/run/ssb-maintenance',RW:true,Propagation:'rprivate'}],
       NetworkSettings:{Networks:Object.fromEntries(c.serviceNetworks.dashboard.map(k=>[c.networks[k].name,{NetworkID:status==='created'?'':c.networks[k].id}]))}};
     assert.equal(policy.assertContainer(g.binding,c,g.config,image,[x],status,id),id);
     for(const env of [x.Config.Env.filter(v=>!v.startsWith('HOSTNAME=')),x.Config.Env.map(v=>v.startsWith('HOSTNAME=')?'HOSTNAME=abcdef123456':v),x.Config.Env.map(v=>v.startsWith('PORT=')?'PORT=3001':v)]){

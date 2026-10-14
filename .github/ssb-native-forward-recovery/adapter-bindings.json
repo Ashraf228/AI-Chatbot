@@ -1,34 +1,52 @@
 {
   "files": [
     {
+      "path": "docker-compose.admin-writer.yml",
+      "sha256": "badc5b51ee427fcee84b6234b2b393f5ed01fcf4eda773676aa7b2c0bf2ced1b",
+      "bytes": 7229,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "b05e5d6691754334e3d84b95ee04eb76344dca26"
+    },
+    {
       "path": "scripts/ops/admin-writer-roles.sql",
       "sha256": "6a27a6099490eed306852805e8dc611897ce477fd9f2908e373edd0d66ccee3b",
       "bytes": 7456,
-      "gitMode": "100644"
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "3edb420d6d185f095ae903e669ae9aed7577c080"
+    },
+    {
+      "path": "scripts/ops/dashboard-shutdown-contract.cjs",
+      "sha256": "a2b9271fb2a0668a47d8e30716ae88cf962ebcc2a4b7aa2c416aaa5baba3253a",
+      "bytes": 3249,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "99f3f6c108f30a070ed4dd9db7172e7055d08b0f"
     },
     {
       "path": "scripts/ops/maintenance-executor.cjs",
       "sha256": "2377c684d71cc54194267282917daf86ce407142c137e2652ad1bc62bac8c85a",
       "bytes": 9896,
-      "gitMode": "100644"
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "2f1cc597ef8615983b377337367a154473fd94e2"
     },
     {
       "path": "scripts/ops/maintenance-privileged-executor.cjs",
       "sha256": "1a33fc22f57885c5a3bdae9db36d5c2d97771445b4385f15dfcaf9e3d0043089",
       "bytes": 11076,
-      "gitMode": "100644"
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "9ac2adc293b970f9a8efceb05758e964732c84be"
     },
     {
       "path": "scripts/ops/maintenance-start-contract.cjs",
-      "sha256": "e4effd280de02517a79e7072d81265a4e08597ba314730526f9999c26b4639fc",
-      "bytes": 21507,
-      "gitMode": "100644"
-    },
-    {
-      "path": "docker-compose.admin-writer.yml",
-      "sha256": "badc5b51ee427fcee84b6234b2b393f5ed01fcf4eda773676aa7b2c0bf2ced1b",
-      "bytes": 7229,
-      "gitMode": "100644"
+      "sha256": "d394d9662f0106ddb10945f8171d22cce41ec5127f9aec075b58456a4621aa0a",
+      "bytes": 22600,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "6645d3155315ca64057ee93cdf6034ea0848b402"
     }
   ]
 }

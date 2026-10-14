@@ -20,7 +20,7 @@ if(process.env.SSB_CLOSED_OFFLINE){
  globalThis.fetch=async(url,options)=>{
   const host=new URL(url).hostname,step={'api':'closed-api','admin-writer':'closed-writer','dashboard':'closed-dashboard'}[host];assert.ok(step);assert.equal(options.redirect,'manual');requests++;
   if(cfg.fault===step&&cfg.kind)throw fail();
-  return{status:cfg.fault===step?418:host==='dashboard'?200:503,headers:new Headers(),text:async()=>privateMarker};
+  return{status:cfg.fault===step?418:503,headers:new Headers(),text:async()=>privateMarker};
  };
  const write=fs.writeSync;fs.writeSync=(fd,bytes,...a)=>{
   if(fd===2&&String(bytes).startsWith('SSB_INIT_PROBE_')){
@@ -36,6 +36,7 @@ if(process.env.SSB_CLOSED_OFFLINE){
 }else{
  const test=require('node:test'),assert=require('node:assert/strict'),os=require('node:os'),E=require('node:events').EventEmitter;
  const {sha,GateError}=require('./common.cjs'),{Native}=require('./native.cjs'),{publicFailure,probeCallsInFailure,validateProbe}=require('./diagnostics.cjs'),{main,SOURCE}=require('./controller.cjs'),{parseReceipts}=require('./evidence.cjs');
+ const shutdownFixture=require('./dashboard-shutdown-fixture.cjs');
  assert.equal(process.version,'v24.17.0');
  function load(name,overrides={},rewrite=s=>s){const file=path.join(__dirname,name),m={exports:{}},req=createRequire(file),scope={module:m,exports:m.exports,__dirname,__filename:file,require:k=>Object.hasOwn(overrides,k)?overrides[k]:req(k),process,Buffer,console,performance,setTimeout,clearTimeout,setInterval,clearInterval,structuredClone,Error,TypeError,SyntaxError,RangeError,ReferenceError,AggregateError};vm.compileFunction(rewrite(fs.readFileSync(file,'utf8')),Object.keys(scope),{filename:file})(...Object.values(scope));return m.exports;}
  const {generationHarness}=load('start-diagnostic.test.cjs',{'node:test':()=>{}},s=>s.replace('return{...h,calls,operations,stopped,stateCalls};','return{...h,calls,operations,stopped,stateCalls,transport};').replace('module.exports={load,setup,invoke};','module.exports={generationHarness};'));
@@ -69,10 +70,11 @@ if(process.env.SSB_CLOSED_OFFLINE){
  async function receiptFailure(t,config={}){
   const h=harness(t,config),lines=[],values=nativeEvidence(),execute=h.n.execute.bind(h.n);let primary;
   values.builds.ids=['api','dashboard','reporter','widget','admin-writer'].map(k=>h.n.images[k]);
+  shutdownFixture.attach(values,opts.run);
   if(['forward','normal'].includes(config.generation)){
    // Match the already simulated successful cohorts with their retained closure evidence.
    const close=h.n.close.bind(h.n),prefix=values.closure.detail.outcomes.slice(0,3+5*['release','forward','normal'].indexOf(config.generation));
-   h.n.close=async failed=>{const r=await close(failed),count=prefix.length;return{...r,counts:[r.counts[0]+count,r.counts[1]+count,r.counts[2]],ids:[...prefix.map(o=>o.id),...r.ids],detail:{...r.detail,outcomes:[...prefix,...r.detail.outcomes]}};};
+   h.n.close=async failed=>{const r=await close(failed),count=prefix.length;shutdownFixture.observeClosure(values.closure);return{...r,counts:[r.counts[0]+count,r.counts[1]+count,r.counts[2]],ids:[...prefix.map(o=>o.id),...r.ids],detail:{...r.detail,outcomes:[...prefix,...r.detail.outcomes]}};};
   }
   h.n.execute=async p=>p==='release-start'?execute(p):{verified:true,...values[p]};
   await assert.rejects(main({...opts,output:l=>{if(config.receiptFailure&&lines.length===5)throw Object.assign(Error(privateMarker),{code:'ENOSPC'});lines.push(l);}},h.n),e=>{primary=e;return true;});h.n.proc.assertClosed();

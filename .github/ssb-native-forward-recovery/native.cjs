@@ -30,6 +30,7 @@ class Native{
     this.prefix=`ssb-native-${this.options.run}`;this.privateRoot=`/var/tmp/${this.prefix}`;fs.mkdirSync(this.privateRoot,{mode:0o711});
     fs.mkdirSync(path.join(this.privateRoot,'raw'),{mode:0o700});this.proc=new Processes({deadline:this.deadline,privateRoot:path.join(this.privateRoot,'raw')});
     this.reporterSource=require('./reporter-source.cjs').prepare(this.release,this.privateRoot);
+    this.dashboardSource=require('./dashboard-source.cjs').prepare(this.release,this.privateRoot);
     this.docker='/usr/bin/docker';need(fs.statSync(this.docker).isFile(),'docker_path');
     const git=await this.command('/usr/bin/git',['-C',this.release,'rev-parse','HEAD']);need(git.stdout.toString().trim()===SOURCE,'source_commit_changed');
     need((await this.command('/usr/bin/git',['-C',this.release,'status','--porcelain'])).stdout.length===0,'release_worktree_changed');
@@ -56,13 +57,15 @@ class Native{
       const iid=path.join(this.privateRoot,app+'.iid');
       const args=['build','--platform=linux/amd64','--pull=false','--progress=plain','--network=default','--iidfile',iid,'--label',`org.opencontainers.image.revision=${SOURCE}`,'--build-arg',`APP_COMMIT_SHA=${SOURCE}`,'--build-arg',`BUILD_COMMIT=${SOURCE}`,'--build-arg',`BUILD_DATE=${BUILD_DATE}`,'-f',`dockerfiles/${app}.Dockerfile`,['api','dashboard'].includes(app)?`source/apps/${app}`:'source'];
       if(app==='reporter'){require('./reporter-source.cjs').verify(this.reporterSource);args.splice(args.length-3,3,'--label',`com.ssb.reporter-source=${this.reporterSource.hash}`,'-f','reporter.Dockerfile','.');}
-      await this.d(args,{cwd:app==='reporter'?this.reporterSource.root:cwd,ms:until-clock()});const id=regular(iid,80).toString().trim();need(/^sha256:[a-f0-9]{64}$/.test(id),'build_id_invalid');
+      if(app==='dashboard'){require('./dashboard-source.cjs').verify(this.dashboardSource);args.splice(args.length-3,3,'--label',`com.ssb.dashboard-source=${this.dashboardSource.hash}`,'-f','dashboard.Dockerfile','.');}
+      await this.d(args,{cwd:app==='reporter'?this.reporterSource.root:app==='dashboard'?this.dashboardSource.root:cwd,ms:until-clock()});const id=regular(iid,80).toString().trim();need(/^sha256:[a-f0-9]{64}$/.test(id),'build_id_invalid');
       const list=json((await this.d(['image','inspect',id])).stdout);need(list.length===1&&list[0].Id===id&&list[0].Os==='linux'&&list[0].Architecture==='amd64'&&list[0].Config?.Labels?.['org.opencontainers.image.revision']===SOURCE,'candidate_image_invalid');
       if(app==='reporter')need(list[0].Config.Labels['com.ssb.reporter-source']===this.reporterSource.hash,'reporter_source_changed');
+      if(app==='dashboard')need(list[0].Config.Labels['com.ssb.dashboard-source']===this.dashboardSource.hash,'dashboard_source_changed');
       this.images[app]=id;this.imageMetadata??={};this.imageMetadata[app]=list[0];
     }
     this.images['admin-writer']=this.images.api;
-    return{verified:true,counts:[4,2],ids:Object.values(this.images),hashes:[this.reporterSource.hash]};
+    return{verified:true,counts:[4,2],ids:Object.values(this.images),hashes:[this.reporterSource.hash,this.dashboardSource.hash]};
   }
   async create(name,image,args,role){
     need(!this.initial.containers.includes(name)&&this.owned.length<19&&!this.owned.some(x=>x.name===name),'resource_limit');
@@ -88,7 +91,7 @@ class Native{
     if(diagnostic)need(result.stderr.length===0,'probe_diagnostic_invalid');
     if(action==='database'&&diagnostic)require('./snapshot-diagnostic.cjs').result(r,diagnostic,input.snapshotBaseline);
     if(ready)return require('./postgres-readiness.cjs').validateResult(r,input);
-    const expected={initialize:[34,4,1],roles:[32],'closed-ready':[3,2],e1:[11,7],drain:[8,1,7],'restore-logins':[2,2],'retired-admission':[8,1]};
+    const expected={initialize:[34,4,1],roles:[32],'closed-ready':[3,2],e1:[11,7],drain:[8,2,7],'restore-logins':[2,2],'retired-admission':[8,1]};
     if(expected[action])need(JSON.stringify(r.counts)===JSON.stringify(expected[action]),'mandatory_proof_missing');
     if(action==='retired-admission')need(r.generation===this.current.generation&&r.retiredGeneration===extra.retiredGeneration&&r.code==='generation_retired','retired_proof_binding');
     if(['database','e1'].includes(action))need(Array.isArray(r.hashes)&&r.hashes.length===(action==='e1'?2:1)&&r.hashes.every(x=>/^[a-f0-9]{64}$/.test(x)),'mandatory_digest_missing');return r;
@@ -197,7 +200,19 @@ class Native{
       catch(error){error.startOperation=operation;if(service==='reporter')await require('./reporter-diagnostic.cjs').collect(this,error,entry);throw error;}
       try{await this.startStep('running-limit',service,key,()=>this.runningLimit());
       // Check real mount readability from each application, not only the inspect metadata.
-      if(service!=='widget')await this.startStep('mount-readability',service,key,()=>this.d(['exec',entry.id,'node','-e',`const fs=require('fs'),assert=require('assert');assert.equal(process.getuid(),1000);for(const p of ${JSON.stringify(service==='admin-writer'?['/run/ssb-writer-db','/run/ssb-writer-signing-key']:service==='dashboard'?['/run/ssb-writer-signing-key']:[])})assert.ok(fs.readFileSync(p).length);for(const p of ${JSON.stringify(service==='admin-writer'?[]:service==='dashboard'?['/run/ssb-writer-db','/run/ssb-maintenance/runtime-state.json']:['/run/ssb-writer-db','/run/ssb-writer-signing-key'])})assert.throws(()=>fs.readFileSync(p));`]));
+      if(service!=='widget')await this.startStep('mount-readability',service,key,()=>{
+        const readable=service==='admin-writer'?['/run/ssb-writer-db','/run/ssb-writer-signing-key']:service==='dashboard'?['/run/ssb-writer-signing-key']:[];
+        const forbidden=service==='admin-writer'?[]:service==='dashboard'?['/run/ssb-writer-db','/run/ssb-runtime-contract.json']:['/run/ssb-writer-db','/run/ssb-writer-signing-key'];
+        const stateProof=service==='dashboard'?`const b=${JSON.stringify({root:'/run/ssb-maintenance',service:this.current.binding.service,generation:key})};
+          assert.equal(process.env.MAINTENANCE_STATE_ROOT,b.root);assert.equal(process.env.MAINTENANCE_SERVICE,b.service);assert.equal(process.env.MAINTENANCE_GENERATION,b.generation);
+          const dir=fs.lstatSync(b.root);assert.ok(dir.isDirectory()&&!dir.isSymbolicLink()&&dir.uid===1000&&(dir.mode&511)===448);
+          fs.accessSync(b.root,fs.constants.R_OK|fs.constants.W_OK|fs.constants.X_OK);
+          const fd=fs.openSync(b.root+'/runtime-state.json',fs.constants.O_RDWR|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
+          try{const stat=fs.fstatSync(fd);assert.ok(stat.isFile()&&stat.nlink===1&&stat.uid===1000&&(stat.mode&511)===384&&stat.size>0&&stat.size<=8*1024*1024);
+            const state=JSON.parse(fs.readFileSync(fd,'utf8'));assert.equal(state.version,1);assert.equal(state.service,b.service);assert.ok(Array.isArray(state.generations)&&state.generations.includes(b.generation));assert.equal(state.phase,'closed');
+          }finally{fs.closeSync(fd);}`:'';
+        return this.d(['exec',entry.id,'node','-e',`const fs=require('fs'),assert=require('assert');assert.equal(process.getuid(),1000);for(const p of ${JSON.stringify(readable)})assert.ok(fs.readFileSync(p).length);for(const p of ${JSON.stringify(forbidden)})assert.throws(()=>fs.readFileSync(p));${stateProof}`]);
+      });
       }catch(error){if(service==='reporter')await require('./reporter-diagnostic.cjs').collect(this,error,entry);throw error;}
     }
     try{await this.startStep('reporter-closed-inspect','reporter',key,async()=>{const reporter=this.owned.find(x=>x.generation===key&&x.role==='reporter');need((await this.inspect(reporter.id))[0].State.Running,'reporter_closed_start_failed');});}
@@ -220,19 +235,32 @@ class Native{
   async drain(){const result=await this.probe('drain');this.epoch=result.epoch;return result;}
   async shutdown(){
     const cohort=this.owned.filter(x=>x.generation===this.current.generation);
+    const diagnostic=require('./dashboard-shutdown-diagnostic.cjs');
+    const until=Math.min(clock()+10000,this.deadline-30000,(this.probeDeadline||Infinity)-30000);
+    try{
     // Parallel bounded stop leaves each app its full seven-second shutdown contract.
-    const jobs=cohort.map(entry=>this.d(['stop','--time','8',entry.id],{ms:10000}));const ends=await Promise.allSettled(jobs);need(ends.every(x=>x.status==='fulfilled'),'stop_failed');
-    const policy=require(path.join(this.toolsRoot,'scripts/ops/maintenance-start-contract.cjs'));this.previous=[];
+    const jobs=cohort.map(entry=>this.d(['stop','--time','8',entry.id],{ms:10000}));const ends=await Promise.allSettled(jobs);
+    if(ends.some(x=>x.status==='rejected')){const error=new GateError('stop_failed');error.errors=ends.filter(x=>x.status==='rejected').map(x=>x.reason);throw error;}
+    const policy=require(path.join(this.toolsRoot,'scripts/ops/maintenance-start-contract.cjs'));this.previous=[];let dashboardShutdown;
     for(const entry of cohort){const list=await this.inspect(entry.id),x=list[0];need(x.State.Status==='exited'&&!x.State.Running&&!x.State.OOMKilled&&!x.State.Error,'exit_unverified');
       const p={service:entry.role,id:entry.id,imageId:entry.image,name:entry.name,project:entry.project};
-      if(['api','admin-writer'].includes(entry.role)){const file=path.join(this.stateRoot,`shutdown-${entry.name}.json`);p.receipt={path:file,sha256:sha(regular(file))};}
+      if(['api','admin-writer','dashboard'].includes(entry.role)){const file=path.join(this.stateRoot,`shutdown-${entry.name}.json`),bytes=entry.role==='dashboard'?diagnostic.bytes(file):regular(file);p.receipt={path:file,sha256:sha(bytes)};if(entry.role==='dashboard')dashboardShutdown=diagnostic.decode(bytes);}
       policy.assertPredecessor(this.current.binding,{...this.current.common,previousGeneration:this.current.generation},p,list);
       if(entry.role==='reporter')need(x.State.ExitCode===0,'reporter_exit_not_clean');this.previous.push(p);
     }
     const state=await this.state('drained',this.current.binding);need(state.completed===true,'global_drain_missing');
-    await this.probe('database',{noPools:true});this.previousGeneration=this.current.generation;
-    for(const entry of cohort)if(['api','admin-writer'].includes(entry.role))entry.orderedShutdown=true;
-    return{verified:true,counts:[5,2,0],ids:cohort.map(x=>x.id),hashes:this.previous.filter(x=>x.receipt).map(x=>x.receipt.sha256)};
+    await this.probe('database',{noPools:true});
+    need(dashboardShutdown.redisClients===1,'dashboard_shutdown_unverified');
+    const dashboard=this.previous.find(x=>x.service==='dashboard');
+    this.dashboardPredecessors??={};this.dashboardPredecessors[this.current.generation]=dashboard;
+    this.previousGeneration=this.current.generation;
+    for(const entry of cohort)if(['api','admin-writer','dashboard'].includes(entry.role))entry.orderedShutdown=true;
+    return{verified:true,counts:[5,3,0],ids:cohort.map(x=>x.id),hashes:this.previous.filter(x=>x.receipt).map(x=>x.receipt.sha256),detail:{failure:null,outcomes:[],dashboardShutdown}};
+    }catch(error){
+      // Even an unexpected diagnostic failure must not replace the shutdown failure.
+      try{await diagnostic.collect(this,error,cohort.find(x=>x.role==='dashboard'),until);}catch{}
+      throw error;
+    }
   }
   async restore(){
     const trace=new(require('./restore-diagnostic.cjs').RestoreProgress)({run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest});
@@ -319,7 +347,15 @@ class Native{
       Object.assign(outcome,{state:end.State.ExitCode===0?'exited':'exited_unclean',exit:end.State.ExitCode,code:end.State.ExitCode===0?'none':'forced_or_nonzero'});
       if(!failed&&['postgres','restore-postgres','redis','probe'].includes(entry.role))need(end.State.ExitCode===0,'infrastructure_shutdown_failed');
       if(!failed&&['postgres','restore-postgres'].includes(entry.role)){const logs=(await this.d(['logs','--tail','30',entry.id],{closure:true,ms:1500}));need(Buffer.concat([logs.stdout,logs.stderr]).toString().includes('database system is shut down'),'postgres_clean_shutdown_missing');}
-      if(entry.orderedShutdown===true){need(end.State.ExitCode===0,'container_completion_unverified');outcome.state='graceful';}
+      if(entry.orderedShutdown===true){
+        need(end.State.ExitCode===0,'container_completion_unverified');
+        if(entry.role==='dashboard'){
+          const p=this.dashboardPredecessors?.[entry.generation];need(p,'dashboard_shutdown_unverified');
+          const policy=require(path.join(this.toolsRoot,'scripts/ops/maintenance-start-contract.cjs'));
+          policy.assertPredecessor({root:this.stateRoot,service:this.prefix,generation:entry.generation},{...this.current.common,previousGeneration:entry.generation},p,[end]);
+        }
+        outcome.state='graceful';
+      }
     }catch(e){outcome.state='unverified';outcome.code=publicFailure(e).code;errors.push(e);}}));
     const publicReceipt={counts:[this.owned.length,this.owned.filter(x=>x.id).length,this.proc.calls.length],ids:[...this.owned.filter(x=>x.id).map(x=>x.id),...Object.values(this.networks).map(x=>x.id)],detail:{failure:null,outcomes}};
     errors.push(...(this.diagnosticFailures||[]));

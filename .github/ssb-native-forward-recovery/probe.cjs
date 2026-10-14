@@ -37,7 +37,7 @@ async function closedReady(input){
     while(performance.now()<until){trace.beginAttempt();try{
       await status('closed-api','http://api:5000/admin/sites',{headers:{'x-admin-key':input.admin}},503);
       await status('closed-writer','http://admin-writer:3011/v1/write',writerRequest(input,'/admin/sites/synthetic-site'),503);
-      await status('closed-dashboard','http://dashboard:3000/login',{},200);
+      await status('closed-dashboard','http://dashboard:3000/login',{},503);
       const after=await step('closed-after',()=>writerEffects(p));
       await step('closed-sites',()=>assert.deepEqual(after.sites,before.sites));
       await step('closed-receipts',()=>assert.deepEqual(after.receipts,before.receipts));
@@ -164,21 +164,25 @@ async function e1(input){
 async function drain(input){
   const {MaintenanceState}=require('/app/dist/maintenance/maintenance-state'),state=new MaintenanceState({root:'/state',service:input.service,generation:input.generation});
   const held=[];for(const kind of kinds.filter(k=>k!=='configuration'))held.push(state.begin(kind));
-  const p=pool(input),c=await p.connect();let pending;
+  const p=pool(input),c=await p.connect();let pending,dashboardPending;
   try{
+    const login=await http('http://dashboard:3000/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:'https://synthetic.invalid'},body:JSON.stringify({mode:'admin',password:input.password})});
+    assert.equal(login.status,200);const jar=new SessionCookieJar(login.headers.getSetCookie());
     await c.query('BEGIN');await c.query('LOCK TABLE public.sites IN ACCESS EXCLUSIVE MODE');
     pending=http('http://api:5000/admin/sites',{headers:{'x-admin-key':input.admin}});pending.catch(()=>{});
+    dashboardPending=http('http://dashboard:3000/api/sites',{headers:{cookie:jar.header()}});dashboardPending.catch(()=>{});
     const until=performance.now()+1800;let active=false;
-    while(performance.now()<until){active=(await p.query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE usename='ssb_runtime' AND wait_event_type='Lock') ok")).rows[0].ok;if(active)break;await new Promise(r=>setTimeout(r,10));}assert.equal(active,true);
+    while(performance.now()<until){active=(await p.query("SELECT count(*) >= 2 ok FROM pg_stat_activity WHERE usename='ssb_runtime' AND wait_event_type='Lock'")).rows[0].ok;if(active)break;await new Promise(r=>setTimeout(r,10));}assert.equal(active,true);
     fs.mkdirSync('/state/maintenance-window',{mode:0o700});fs.writeFileSync('/state/maintenance-window/owner.json',JSON.stringify({version:1,owner:input.owner}),{flag:'wx',mode:0o600});
     const epoch=state.close(input.owner);assert.throws(()=>state.drained(input.owner,epoch),e=>e.code==='drain_unproven');
     for(const kind of kinds)assert.throws(()=>state.begin(kind));
     assert.equal((await http('http://api:5000/admin/sites',{headers:{'x-admin-key':input.admin}})).status,503);
     assert.equal((await http('http://admin-writer:3011/v1/write',writerRequest(input,'/admin/sites/synthetic-site'))).status,503);
-    await c.query('COMMIT');assert.equal((await pending).status,200);for(const id of held)state.end(id);
+    assert.equal((await http('http://dashboard:3000/api/sites',{headers:{cookie:jar.header()}})).status,503);
+    await c.query('COMMIT');assert.equal((await pending).status,200);assert.equal((await dashboardPending).status,200);for(const id of held)state.end(id);
     const finish=performance.now()+1000;while(Object.values(state.snapshot().work).some(w=>w.state!=='completed')&&performance.now()<finish)await new Promise(r=>setTimeout(r,10));
     assert.equal(state.drained(input.owner,epoch).completed,true);
-    return{verified:true,counts:[kinds.length,1,held.length],epoch};
+    return{verified:true,counts:[kinds.length,2,held.length],epoch};
   }finally{await c.query('ROLLBACK').catch(()=>{});c.release();await p.end();}
 }
 async function database(input){

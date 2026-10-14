@@ -67,7 +67,7 @@ async function worker(){
   }else{
    const argv=read('/proc/1/cmdline').split('\0').filter(Boolean);
    // Node's bound short argv can truncate the title; that category does not confirm a version.
-   const process=argv.length===2&&['node','/usr/local/bin/node','/usr/bin/node'].includes(argv[0])&&['app/server.js','/app/app/server.js'].includes(argv[1])?'expected':argv.length===1&&argv[0]==='next-server (v16.3.8)'?'next-server':argv.length===1&&argv[0]==='next-server (v16.3'?'next-title-truncated':'other';
+   const process=argv.length===2&&['node','/usr/local/bin/node','/usr/bin/node'].includes(argv[0])&&['app/scripts/dashboard-entry.cjs','/app/app/scripts/dashboard-entry.cjs'].includes(argv[1])?'expected':argv.length===1&&argv[0]==='next-server (v16.3.8)'?'next-server':argv.length===1&&argv[0]==='next-server (v16.3'?'next-title-truncated':'other';
    const env=read('/proc/1/environ').split('\0'),selected={};
    for(const field of env){const pos=field.indexOf('='),key=field.slice(0,pos);if(['HOSTNAME','PORT'].includes(key)){if(Object.hasOwn(selected,key))invalid();selected[key]=field.slice(pos+1);}}
    const host=selected.HOSTNAME;

@@ -12,7 +12,7 @@ function evidence(){
   const ids=all.slice(3+i*5,8+i*5);r[g+'-start']={counts:generationCounts.start[g],ids};r[g+'-e1']={counts:generationCounts.e1,hashes:[id(220),id(221)]};r[g+'-drain']={counts:generationCounts.drain};r[g+'-shutdown']={counts:generationCounts.shutdown,ids,hashes:[id(230+i*2),id(231+i*2)]};
  }
  const observation=()=>({before:{status:'exited',running:false,exit:0,observedAt:'2026-10-13T00:00:02.000Z',startedAt:'2026-10-13T00:00:00.000Z',finishedAt:'2026-10-13T00:00:01.000Z'},stop:{requested:false,completed:false},after:{status:'exited',running:false,exit:0,observedAt:'2026-10-13T00:00:02.000Z',startedAt:'2026-10-13T00:00:00.000Z',finishedAt:'2026-10-13T00:00:01.000Z'}});
- r.closure={counts:[19,19,500],ids:all,detail:{failure:null,outcomes:all.slice(0,19).map((x,i)=>({id:x,role:i<3?['postgres','redis','probe'][i]:i===18?'restore-postgres':['api','admin-writer','dashboard','reporter','widget'][(i-3)%5],generation:i<3||i===18?'seed':['release','forward','normal'][Math.floor((i-3)/5)],state:i>=3&&i<18&&(i-3)%5<2?'graceful':'exited',exit:0,code:'none',observation:observation()}))}};return r;
+ r.closure={counts:[19,19,500],ids:all,detail:{failure:null,outcomes:all.slice(0,19).map((x,i)=>({id:x,role:i<3?['postgres','redis','probe'][i]:i===18?'restore-postgres':['api','admin-writer','dashboard','reporter','widget'][(i-3)%5],generation:i<3||i===18?'seed':['release','forward','normal'][Math.floor((i-3)/5)],state:i>=3&&i<18&&(i-3)%5<2?'graceful':'exited',exit:0,code:'none',observation:observation()}))}};return require('./dashboard-shutdown-fixture.cjs').attach(r,opts.run);
 }
 function fakeChild(answer,record){
  const child=new EventEmitter();for(const k of ['stdin','stdout','stderr'])child[k]=new EventEmitter();
@@ -51,7 +51,7 @@ function harness(cfg={},extra={}){
  if(extra.old){const old=load(path.resolve(__dirname,'../../../baseline/.github/ssb-native-forward-recovery/native.cjs'),{'node:fs':fakeFS}).Native;n.restore=old.prototype.restore;n.probe=old.prototype.probe;}
  // Only the already completed phases/closure are modelled. Restore/probe/d/command/Processes stay real.
  const original=n.execute.bind(n),data=evidence();n.execute=async phase=>phase==='restore'?original(phase):{verified:true,...data[phase]};
- n.close=async()=>{n.proc.assertClosed();if(extra.closureFailure)throw new GateError('closure_incomplete');return{verified:true,...data.closure};};
+ n.close=async()=>{n.proc.assertClosed();if(extra.closureFailure)throw new GateError('closure_incomplete');return{verified:true,...require('./dashboard-shutdown-fixture.cjs').observeClosure(data.closure)};};
  return{n,root,calls,children,counts};
 }
 async function run(cfg={},extra={}){
@@ -136,7 +136,7 @@ test('only the bound default-ACL expression changes; other queries and security 
  const before=fs.readFileSync(path.resolve(__dirname,'../../../baseline/.github/ssb-native-forward-recovery/probe.cjs'),'utf8'),after=fs.readFileSync(path.join(__dirname,'probe.cjs'),'utf8');
  const sql=s=>[...s.slice(s.indexOf('async function database(input)')).matchAll(/(?:p|admin)\.query\((['"`])([\s\S]*?)\1\)/g)].map(m=>m[2]);
  const acl=require('./default-acl-fixture.cjs'),oldLiteral=JSON.stringify(acl.oldExpression).slice(1,-1),newLiteral=JSON.stringify(acl.expression).slice(1,-1);
- assert.equal(before.split(oldLiteral).length,2);assert.equal(after,before.replace(oldLiteral,newLiteral));
+ assert.equal(before.split(oldLiteral).length,2);assert.equal(after.slice(after.indexOf('async function database(input)')),before.replace(oldLiteral,newLiteral).slice(before.indexOf('async function database(input)')));
  assert.deepEqual(sql(after.replace(newLiteral,oldLiteral)),sql(before));assert.equal(sql(before).length,11);
  for(const text of ['assert.equal(snapshot.migrations.length,34)','assert.equal(snapshot.roles.length,4)','assert.equal(snapshot.markers.length,2)','assert.ok(snapshot.receipts.length>=4)',"assert.rejects(p.query('SET ROLE postgres'),e=>e.code==='42501')"])assert.ok(before.includes(text)&&after.includes(text));
 });

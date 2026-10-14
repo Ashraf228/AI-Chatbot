@@ -24,16 +24,16 @@ function fixture(){
     data[g+'-drain']={counts:[...generationCounts.drain]};data[g+'-shutdown']={counts:[...generationCounts.shutdown],ids:cohort,hashes:[id(220+2*i),id(221+2*i)]};
   }
   data.closure.detail={failure:null,outcomes:ids.slice(0,19).map((id,i)=>{const cohort=i>=3&&i<18,generation=cohort?['release','forward','normal'][Math.floor((i-3)/5)]:'seed',role=cohort?['api','admin-writer','dashboard','reporter','widget'][(i-3)%5]:['postgres','redis','probe'][i]||'restore-postgres';return{id,role,generation,state:cohort&&(i-3)%5<2?'graceful':'exited',exit:0,code:'none',observation:closureObservation()};})};
-  return Object.fromEntries(Object.entries(data).map(([p,r])=>[p,structuredClone(r)]));
+  return Object.fromEntries(Object.entries(require('./dashboard-shutdown-fixture.cjs').attach(data,run)).map(([p,r])=>[p,structuredClone(r)]));
 }
 function sample(data=fixture()){
-  const lines=[],writer=new Receipts(run,SOURCE,context,x=>lines.push(x));for(const p of phases)writer.emit(p,true,data[p]);
+  const lines=[],writer=new Receipts(run,SOURCE,context,x=>lines.push(x));for(const p of phases)writer.emit(p,true,p==='closure'?require('./dashboard-shutdown-fixture.cjs').observeClosure(data[p]):data[p]);
   return{lines,rows:lines.map(x=>JSON.parse(Buffer.from(x.split(' ')[1],'base64')))};
 }
 function rechain(rows){
   let previous='0'.repeat(64);return rows.map((row,seq)=>{const bytes=JSON.stringify({...row,seq,previous}),digest=sha(bytes);previous=digest;return 'SSB_PUBLIC_RECEIPT_V2 '+Buffer.from(bytes).toString('base64')+' '+digest;}).join('\n');
 }
-function backend(data){return{async execute(p){return{verified:true,...data[p]};},async close(){return{verified:true,...data.closure};}};}
+function backend(data){return{async execute(p){return{verified:true,...data[p]};},async close(){return{verified:true,...require('./dashboard-shutdown-fixture.cjs').observeClosure(data.closure)};}};}
 function loadActual(file,replacements={},globals={},cli=false){
   const module={exports:{}},realRequire=createRequire(file),requireMock=id=>Object.hasOwn(replacements,id)?replacements[id]:realRequire(id);
   if(cli)requireMock.main=module;
@@ -149,7 +149,7 @@ for(const early of [true,false])test('successful partial cleanup stays true afte
   const stop=early?'preflight':'forward-start',execute=b.execute;
   b.execute=async p=>{if(p===stop)throw primary;return execute(p);};
   const owned=data.inventory.ids.slice(0,8),networks=data.inventory.ids.slice(19);
-  b.close=async failed=>{assert.equal(failed,true);return{verified:true,...(early?{counts:[0]}:{counts:[8,8,100],ids:[...owned,...networks],detail:{failure:null,outcomes:data.closure.detail.outcomes.slice(0,8)}})};};
+  b.close=async failed=>{assert.equal(failed,true);require('./dashboard-shutdown-fixture.cjs').observeClosure(data.closure);return{verified:true,...(early?{counts:[0]}:{counts:[8,8,100],ids:[...owned,...networks],detail:{failure:null,outcomes:data.closure.detail.outcomes.slice(0,8)}})};};
   await assert.rejects(main(options(x=>lines.push(x)),b),e=>e===primary);
   const rows=lines.map(x=>JSON.parse(Buffer.from(x.split(' ')[1],'base64')));
   assert.equal(rows.at(-2).phase,stop);assert.equal(rows.at(-2).ok,false);assert.equal(rows.at(-1).phase,'closure');assert.equal(rows.at(-1).ok,true);
@@ -173,7 +173,7 @@ for(const [field,value]of [['id',9],['run_id',9],['name','unrelated'],['labels',
 });
 test('receiver rejects old argument shape and wrong manifest without any acceptance',()=>{
   const h=receiverHarness(sample().lines.join('\n'));assert.throws(()=>h.invoke([run,job,context.workflowHead,path.join(root,'mock')]));assert.equal(h.calls.length,0);
-  const rows=sample().rows;rows[0].hashes=['f'.repeat(64)];rows.find(r=>r.phase==='restore').detail.snapshot.binding.publication='f'.repeat(64);rows.find(r=>r.phase==='restore').detail.snapshotBaseline.before.binding.publication='f'.repeat(64);const bad=receiverHarness(rechain(rows));assert.throws(()=>bad.invoke(),/received_publication_binding/);assert.equal(bad.files.size,0);
+  const rows=sample().rows;rows[0].hashes=['f'.repeat(64)];rows.find(r=>r.phase==='restore').detail.snapshot.binding.publication='f'.repeat(64);rows.find(r=>r.phase==='restore').detail.snapshotBaseline.before.binding.publication='f'.repeat(64);for(const r of rows.filter(r=>r.phase.endsWith('-shutdown'))){r.detail.dashboardShutdown.binding.publication='f'.repeat(64);r.hashes[2]=sha(JSON.stringify(r.detail.dashboardShutdown));}const bad=receiverHarness(rechain(rows));assert.throws(()=>bad.invoke(),/received_publication_binding/);assert.equal(bad.files.size,0);
 });
 test('private failure persistence is awaited and receives the original error tree',async()=>{
   const error=new AggregateError([Error('SYNTHETIC_PRIVATE_FAILURE'),Error('cleanup')],'both'),events=[];

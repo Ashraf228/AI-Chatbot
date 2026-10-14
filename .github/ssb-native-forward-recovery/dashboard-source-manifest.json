@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "base": "94a25578e883a6d7bbd03f26c56735739f75e45e",
+  "purpose": "DASHBOARD_EXPLICIT_SHUTDOWN_OVERLAY_NOT_UNCHANGED_RELEASE",
+  "files": [
+    {
+      "path": "dashboard.Dockerfile",
+      "sha256": "d9d6ff7cc85d8ef4d9544d01fdf278f7e9f1c83eeba1cad23a53cbc5714b255b",
+      "bytes": 1378,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "235e41c95cda64483941b49db2b393785297d555",
+      "before": "6ea63470e964423b0a6fc571b99ee443bb80ac2aa44c01a7a0befbfea96f70db"
+    },
+    {
+      "path": "lib/redis.ts",
+      "sha256": "403d55594841d2334e9337eb1ac9ddf8c3ca32c8fb98f4fb7a9a36b5e3f688b8",
+      "bytes": 865,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "2b66c15053af8f8b2fe8da7001c44572a28a264b",
+      "before": "35a1df7ebfedf599c8a0f6a34c9c157b12b1537ed047a1b86a02d3194aea526c"
+    },
+    {
+      "path": "scripts/compile-state.cjs",
+      "sha256": "be065a2ee8d685bdb48b4e78fbd5523b80642e36cbad202ae10230b66e4b5776",
+      "bytes": 502,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "b1aa4ad57383e46f770fe2a003d2042cd691efc9",
+      "before": null
+    },
+    {
+      "path": "scripts/dashboard-entry.cjs",
+      "sha256": "cc503e173f8e8cd3ce01b58a610338f2e82f5703a0d45e34160942d10f771b6a",
+      "bytes": 3358,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "ce1545633ce7b782a6031221de0a233d5fc67c57",
+      "before": null
+    },
+    {
+      "path": "scripts/dashboard-lifecycle.cjs",
+      "sha256": "a651324d5dfd9df43500a887322612e3a82c2b4d2c7ae62862451cbba237084a",
+      "bytes": 7101,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "24d0bbf68145ede5df5d90bd2bf75564d8d0fd6d",
+      "before": null
+    },
+    {
+      "path": "scripts/dashboard-next-close.cjs",
+      "sha256": "de149731b59ebc352697564f92cb55f542e1e0eba6f1ad47f4b636de30d3a0f3",
+      "bytes": 2821,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "95131e4e970dc406fba4bb004ad6bc3eb25ed07a",
+      "before": null
+    },
+    {
+      "path": "scripts/dashboard-shutdown-contract.cjs",
+      "sha256": "a2b9271fb2a0668a47d8e30716ae88cf962ebcc2a4b7aa2c416aaa5baba3253a",
+      "bytes": 3249,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "99f3f6c108f30a070ed4dd9db7172e7055d08b0f",
+      "before": null
+    }
+  ]
+}

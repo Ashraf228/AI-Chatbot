@@ -9,7 +9,7 @@ if(process.env.SSB_LISTENER_OFFLINE){
   if(String(p).startsWith('/proc/1/')){
    if(cfg.error)fail(cfg.error);
    const values={
-    '/proc/1/cmdline':cfg.cmdline||(cfg.other?'other\0private/path\0':'node\0app/server.js\0'),
+    '/proc/1/cmdline':cfg.cmdline||(cfg.other?'other\0private/path\0':'node\0app/scripts/dashboard-entry.cjs\0'),
     '/proc/1/environ':'PRIVATE_SECRET='+privateMarker+'\0'+(cfg.unset?'':'HOSTNAME='+(cfg.hostname||id.slice(0,12))+'\0')+(cfg.port===undefined?'':'PORT='+cfg.port+'\0'),
     '/proc/1/net/tcp':'  sl  local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n'+(cfg.noListener?'':cfg.badTcp?'truncated\n':'0: '+(cfg.addressHex||'00000000')+':'+(cfg.listenerPort||'0BB8')+' 00000000:0000 0A 0:0 00:0 0 1000 0 '+(cfg.foreign?'555':'123')+'\n'),
     '/proc/1/net/tcp6':'  sl  local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n'+(cfg.ipv6?'0: 00000000000000000000000000000000:0BB8 00000000000000000000000000000000:0000 0A 0:0 00:0 0 1000 0 123\n':'')

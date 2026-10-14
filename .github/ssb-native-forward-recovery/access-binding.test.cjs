@@ -52,7 +52,7 @@ function runner(failure='load'){
  const copier=load('state-code.cjs',{'node:fs':fakeFS,'./common.cjs':proxyCommon});
  const env={GITHUB_ACTIONS:'true',GITHUB_REPOSITORY:'Ashraf228/AI-Chatbot',RUNNER_ARCH:'X64',RUNNER_OS:'Linux',SSB_REPOSITORY_VISIBILITY:'public',SSB_JOB_DEADLINE_MS:String(Date.now()+990000),SSB_PUBLICATION_MANIFEST:failure==='manifest-digest'?'f'.repeat(64):hash,SSB_RELEASE_ROOT:path.resolve(__dirname,'../../../../AI-Chatbot-worktrees/ssb-state-entry-followup-20261009')};
  const modeled={...process,platform:'linux',arch:'x64',getuid:()=>failure==='host'?501:0,env};
- const C=load('native.cjs',{'node:fs':fakeFS,'./common.cjs':proxyCommon,'./state-code.cjs':copier,'./reporter-source.cjs':{prepare(r,p){const v=require('./reporter-source.cjs').prepare(r,map(p));return{...v,root:prefix+'/reporter-build'};}}},{process:modeled,setInterval:()=>0,clearInterval:()=>{}}).Native;
+ const C=load('native.cjs',{'node:fs':fakeFS,'./common.cjs':proxyCommon,'./state-code.cjs':copier,'./dashboard-source.cjs':{prepare(r,p){const v=require('./dashboard-source.cjs').prepare(r,map(p));return{...v,root:prefix+'/dashboard-build'};}},'./reporter-source.cjs':{prepare(r,p){const v=require('./reporter-source.cjs').prepare(r,map(p));return{...v,root:prefix+'/reporter-build'};}}},{process:modeled,setInterval:()=>0,clearInterval:()=>{}}).Native;
  const opts={authorization:'ONE_NATIVE_FORWARD_RECOVERY',run,attempt:'1',...context},n=new C(opts),calls=[];
  n.command=async(bin,args,o={})=>{
   calls.push({bin,args,o});

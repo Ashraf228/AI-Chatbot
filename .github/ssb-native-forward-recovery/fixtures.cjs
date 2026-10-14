@@ -42,11 +42,14 @@ function generation(native,generation,previous,predecessors,policyOverride){
   const config=expand(require('./compose-template.json'),values);config.name=project;
   const reporterBinding=require('./reporter-contract.cjs').binding(native.options.run,generation,native.verifiedPublicationManifest);
   config.services.reporter.environment.SSB_REPORTER_DIAGNOSTIC_BINDING=JSON.stringify(reporterBinding);
+  const dashboardBinding=require('./dashboard-shutdown-contract.cjs').binding({version:1,run:native.options.run,source:'94a25578e883a6d7bbd03f26c56735739f75e45e',publication:native.verifiedPublicationManifest,service:native.prefix,generation,participant:names.dashboard,imageId:images.dashboard});
+  Object.assign(config.services.dashboard.environment,{SSB_DASHBOARD_SHUTDOWN_BINDING:JSON.stringify(dashboardBinding),MAINTENANCE_STATE_ROOT:'/run/ssb-maintenance',MAINTENANCE_SERVICE:native.prefix,MAINTENANCE_GENERATION:generation});
+  config.services.dashboard.volumes.push({type:'bind',source:native.stateRoot,target:'/run/ssb-maintenance',bind:{create_host_path:false}});
   for(const v of Object.values(config.services)){v.networks=Object.fromEntries(v.networks.map(k=>[k,{aliases:[]}])) ;v.mem_limit=v.image===images.api?'2g':'1g';v.pids_limit=256;v.cpus=1;v.labels={'com.ssb.native-run':native.options.run};}
   // Compose interpolates even JSON strings. Bind file bytes separately from raw runtime values.
   const files=[write(path.join(root,'compose.json'),JSON.stringify(composeLiteral(config)))],envFile=write(path.join(root,'empty.env'),'');
   const policy=policyOverride||require(path.join(native.toolsRoot,'scripts/ops/maintenance-start-contract.cjs'));
-  const common={version:3,project,action:'start-retained',platform:'linux/amd64',fileUid:1000,bootstrap:previous==='seed',previousGeneration:previous,predecessors,containerNames:names,
+  const common={version:3,run:native.options.run,publication:native.verifiedPublicationManifest,project,action:'start-retained',platform:'linux/amd64',fileUid:1000,bootstrap:previous==='seed',previousGeneration:previous,predecessors,containerNames:names,
     timeoutMs:10000,docker:native.docker,dockerHost:'unix:///var/run/docker.sock',daemonId:native.daemonId,files,envFile,images,mountFiles,database:{host:'db',port:5432,name:'synthetic'},
     roles:{runtime:'ssb_runtime',writer:'ssb_admin_writer',reporter:'ssb_reporter',migrator:'ssb_migrator',ledger:'maintenance_admin.writer_receipts'},
     serviceNetworks:Object.fromEntries(services.map(k=>[k,Object.keys(config.services[k].networks)])),ports:Object.fromEntries(services.map(k=>[k,[]])),networks:native.networks,
