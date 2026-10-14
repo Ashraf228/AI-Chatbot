@@ -132,10 +132,12 @@ test('previous and current probe preserve SQL primary and pool close error',asyn
   assert.ok(error instanceof AggregateError);assert.equal(error.errors[0],primary);assert.equal(error.errors[1],cleanup);assert.ok(primary.stack);
  }
 });
-test('query literals and security assertions remain byte-identical despite step wrappers',()=>{
+test('only the bound default-ACL expression changes; other queries and security assertions stay identical',()=>{
  const before=fs.readFileSync(path.resolve(__dirname,'../../../baseline/.github/ssb-native-forward-recovery/probe.cjs'),'utf8'),after=fs.readFileSync(path.join(__dirname,'probe.cjs'),'utf8');
  const sql=s=>[...s.slice(s.indexOf('async function database(input)')).matchAll(/(?:p|admin)\.query\((['"`])([\s\S]*?)\1\)/g)].map(m=>m[2]);
- assert.deepEqual(sql(after),sql(before));assert.equal(sql(after).length,11);
+ const acl=require('./default-acl-fixture.cjs'),oldLiteral=JSON.stringify(acl.oldExpression).slice(1,-1),newLiteral=JSON.stringify(acl.expression).slice(1,-1);
+ assert.equal(before.split(oldLiteral).length,2);assert.equal(after,before.replace(oldLiteral,newLiteral));
+ assert.deepEqual(sql(after.replace(newLiteral,oldLiteral)),sql(before));assert.equal(sql(before).length,11);
  for(const text of ['assert.equal(snapshot.migrations.length,34)','assert.equal(snapshot.roles.length,4)','assert.equal(snapshot.markers.length,2)','assert.ok(snapshot.receipts.length>=4)',"assert.rejects(p.query('SET ROLE postgres'),e=>e.code==='42501')"])assert.ok(before.includes(text)&&after.includes(text));
 });
 test('receiver rejects swapped before/after context and misplaced restore subdiagnosis',async()=>{
@@ -206,4 +208,50 @@ test('driver baseline retained through aggregate context, contradictory inherite
 });
 for(const omitCounts of ['before','after'])test('missing successful child counts rejected at Native boundary: '+omitCounts,async()=>{
  const h=await run({omitCounts});assert.ok(h.error);assert.ok(find(h.error,e=>e.code==='snapshot_diagnostic_invalid'));assert.equal(h.calls.some(c=>c.step==='dump'),omitCounts==='after');assert.equal(h.rows.at(-1).phase,'closure');receive(h.lines);
+});
+test('hash-confirmed 35-row historical ACL case fails original probe and passes full corrected receipt path',async()=>{
+ const acl=require('./default-acl-fixture.cjs'),rows=acl.historical();
+ assert.equal(sha(JSON.stringify(acl.project(rows.before,acl.oldQuery))),'9b557dd660988020ec2b8a5608f132ecd7e6cb9839759933c26eecf0f380771d');
+ assert.equal(sha(JSON.stringify(acl.project(rows.after,acl.oldQuery))),'ee1a746b966de32a239ff5a9122744a337eae082dc316733841ab751ac2963ab');
+ let stage='before',ends=0;
+ const file=path.resolve(__dirname,'../../../baseline/.github/ssb-native-forward-recovery/probe.cjs');
+ const old=load(file,{'/app/node_modules/pg':{Pool:class{
+  async query(sql){
+   if(sql.includes('FROM pg_class c JOIN pg_namespace'))return{rows:acl.project(rows[stage],sql)};
+   if(sql.startsWith('SELECT version FROM'))return{rows:Array.from({length:34},(_,i)=>({version:String(i)}))};
+   if(sql.startsWith('SELECT rolname'))return{rows:Array.from({length:4},(_,i)=>({rolname:'ssb_'+i}))};
+   if(sql.includes('pg_get_constraintdef'))return{rows:[]};
+   if(sql.startsWith('SELECT id,tenant_id'))return{rows:[{id:'synthetic-site'},{id:'foreign-site'}]};
+   if(sql.startsWith('SELECT id,request_sha256'))return{rows:Array.from({length:4},(_,i)=>({id:String(i)}))};
+   if(sql.includes('FROM provider_approval_grants')||sql.includes('FROM pg_stat_activity'))return{rows:[{n:0}]};
+   assert.fail('unexpected old query');
+  }
+  async end(){ends++;}
+ }}});
+ const input={action:'database',passwords:{postgres:'1'.repeat(64)},noPools:true};
+ const before=await old.main(input);stage='after';await assert.rejects(old.main({...input,expected:before.hashes[0]}),e=>e.code==='ERR_ASSERTION');assert.equal(ends,2);
+ const h=await run({acl:rows});assert.ifError(h.error);const comparison=h.rows[17].detail.snapshot;
+ assert.equal(comparison.components[2].beforeRows,35);assert.equal(comparison.components[2].beforeHash,'9b557dd660988020ec2b8a5608f132ecd7e6cb9839759933c26eecf0f380771d');assert.equal(comparison.beforeHash,comparison.afterHash);receive(h.lines,undefined,true);
+});
+const relation=(kind='r',owner='ssb_migrator',acl='{ssb_migrator=arwdDxt/ssb_migrator}')=>({nspname:'public',relname:'synthetic_relation',owner,acl,kind});
+for(const kind of ['r','p','S'])for(const reverse of [false,true])test('default ACL is type/owner bound through actual child and receiver: '+kind+' '+reverse,async()=>{
+ const owner='synthetic_owner',explicit='{'+owner+'='+(kind==='S'?'rwU':'arwdDxt')+'/'+owner+'}',a=relation(kind,owner,explicit),b=relation(kind,owner,null),h=await run({acl:{before:[reverse?b:a],after:[reverse?a:b]}});
+ assert.ifError(h.error);assert.ok(h.rows[17].detail.snapshot.components.every(c=>c.equal));receive(h.lines,undefined,true);
+});
+for(const [name,change]of Object.entries({
+ empty:r=>r.acl='{}',owner:r=>{r.owner='foreign_owner';r.acl=null;},missingRight:r=>r.acl='{ssb_migrator=arwdDx/ssb_migrator}',
+ recipient:r=>r.acl='{ssb_migrator=arwdDxt/ssb_migrator,ssb_runtime=r/ssb_migrator}',public:r=>r.acl='{ssb_migrator=arwdDxt/ssb_migrator,=r/ssb_migrator}',
+ grantor:r=>r.acl='{ssb_migrator=arwdDxt/foreign_owner}',grantOption:r=>r.acl='{ssb_migrator=a*rwdDxt/ssb_migrator}',
+ schema:r=>r.nspname='maintenance_admin',relation:r=>r.relname='different_relation',objectType:r=>{r.kind='S';r.acl=null;}
+}))test('default ACL correction still rejects '+name+' through full receipt path',async()=>{
+ const a=relation(),b=structuredClone(a);change(b);const h=await run({acl:{before:[a],after:[b]}});assert.ok(h.error);const d=probeCallsInFailure(fail(h))[0];assert.equal(d.primary.assertionCode,'ERR_ASSERTION');assert.deepEqual(d.snapshot.components.filter(c=>!c.equal).map(c=>c.name),['tables']);receive(h.lines);
+});
+test('nondefault ACL stays byte-exact and cannot collapse to default',async()=>{
+ const a=relation('r','ssb_migrator','{ssb_migrator=arwdDxt/ssb_migrator,ssb_runtime=r/ssb_migrator}');
+ const same=await run({acl:{before:[a],after:[a]}});assert.ifError(same.error);receive(same.lines,undefined,true);
+ for(const b of [{...a,acl:null},{...a,acl:'{ssb_runtime=r/ssb_migrator,ssb_migrator=arwdDxt/ssb_migrator}'}]){const h=await run({acl:{before:[a],after:[b]}});assert.ok(h.error);receive(h.lines);}
+});
+test('ACL mismatch primary survives pool-close, evidence-write and closure failures',async()=>{
+ const h=await run({action:'database',restoreStage:'after',acl:{before:[relation()],after:[relation('r','ssb_migrator','{}')]},closeFailure:true},{rawWriteFailure:true,closureFailure:true});
+ assert.ok(h.error);assert.ok(find(h.error,e=>e.code==='evidence_write_failed'));const p=probeCallsInFailure(fail(h))[0];assert.equal(p.primary.assertionCode,'ERR_ASSERTION');assert.equal(p.cleanup[0].nodeCode,'EIO');assert.equal(p.snapshot.components[2].equal,false);receive(h.lines);
 });

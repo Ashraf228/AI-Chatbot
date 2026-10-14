@@ -17,7 +17,7 @@ function fault(step){
 const rows=sql=>{
  if(sql.startsWith('SELECT version FROM')){fault('snapshot-migrations');return Array.from({length:34},(_,i)=>({version:String(i+1).padStart(3,'0')}));}
  if(sql.startsWith('SELECT rolname')){fault('snapshot-roles');return Array.from({length:4},(_,i)=>({rolname:'ssb_'+i}));}
- if(sql.includes('c.relacl::text')){fault('snapshot-tables');return[{nspname:'public',relname:'sites',owner:'ssb_migrator',acl:'synthetic-acl'}];}
+ if(sql.includes('FROM pg_class c JOIN pg_namespace')){fault('snapshot-tables');const acl=require('./default-acl-fixture.cjs');assert.ok(sql===acl.query||sql===acl.oldQuery);return cfg.acl?acl.project(cfg.acl[input.restoreStage],sql):[{nspname:'public',relname:'sites',owner:'ssb_migrator',acl:'synthetic-acl'}];}
  if(sql.includes('pg_get_constraintdef')){fault('snapshot-constraints');return[{nspname:'public',relname:'sites',conname:'synthetic_pk',definition:'PRIMARY KEY (id)'}];}
  if(sql.startsWith('SELECT id,tenant_id')){fault('snapshot-markers');return[{id:'synthetic-site',name:applies()&&cfg.step==='snapshot-compare'?'changed':'Synthetic'},{id:'foreign-site',name:'Foreign'}];}
  if(sql.startsWith('SELECT id,request_sha256')){fault('snapshot-receipts');return Array.from({length:7},(_,i)=>({id:String(i),request_sha256:'a'.repeat(64),completed_at:'2026-10-13T00:00:00.000Z'}));}
