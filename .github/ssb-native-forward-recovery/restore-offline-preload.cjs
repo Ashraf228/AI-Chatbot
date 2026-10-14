@@ -2,7 +2,7 @@
 // Synthetic protocol fixture only. No database or external transport is opened.
 const fs=require('node:fs'),Module=require('node:module'),assert=require('node:assert/strict');
 const cfg=JSON.parse(process.env.SSB_RESTORE_TEST||'{}'),load=Module._load,write=fs.writeSync;
-const marker='SYNTHETIC_PRIVATE_RESTORE_SQL_PASSWORD_PATH';let bytes='',input,pools=0,ends=0;
+const marker='SYNTHETIC_PRIVATE_RESTORE_SQL_PASSWORD_PATH';let bytes='',input,pools=0,ends=0;const queries=[];
 process.stdin.on('data',b=>{bytes+=b;});
 process.stdin.on('end',()=>{input=JSON.parse(bytes);});
 const applies=()=>input.action===cfg.action&&(cfg.restoreStage===undefined||input.restoreStage===cfg.restoreStage);
@@ -26,6 +26,8 @@ const rows=sql=>{
  assert.fail('unexpected synthetic SQL');
 };
 Module._load=function(id,...args){
+ if(id==='./snapshot-diagnostic.cjs'&&cfg.falseCounts){const contract=load.call(this,id,...args);return{...contract,measure(...params){const s=contract.measure(...params);s.components.find(c=>c.name===cfg.falseCounts).rows=0;return s;}};}
+ if(id==='./snapshot-diagnostic.cjs'&&input?.restoreStage==='after'&&cfg.metadataFailure){const contract=load.call(this,id,...args);return{...contract,measure(){if(cfg.metadataFailure==='type')throw new TypeError(marker);if(cfg.metadataFailure==='json')JSON.parse('{');throw Object.assign(Error(marker),{code:'EACCES'});}};}
  if(['node:net','net','node:dgram','dgram','node:http','http','node:https','https'].includes(id))throw Error('offline_transport_forbidden');
  if(['node:child_process','child_process'].includes(id))return new Proxy({},{get:()=>()=>{throw Error('offline_process_forbidden');}});
  if(id==='/app/node_modules/pg')return{Client:class extends require('node:events').EventEmitter{
@@ -39,16 +41,33 @@ Module._load=function(id,...args){
    if(sql.startsWith('ALTER ROLE ')){fault('restore-password');assert.match(sql,/^ALTER ROLE ssb_(runtime|admin_writer) PASSWORD '[a-f0-9]{64}'$/);return{rows:[]};}
    if(sql==='SELECT session_user AS name'){fault('restore-session');return{rows:[{name:cfg.wrongUser?'postgres':this.role}]};}
    if(sql==='SET ROLE postgres'){fault('restore-denied');if(cfg.superuserAllowed)return{rows:[]};throw Object.assign(Error(marker),{code:'42501'});}
-   return{rows:rows(sql)};
+   queries.push(sql);const values=rows(sql),names=['migrations','roles','tables','constraints','markers','receipts'];
+   if(input.restoreStage==='after'&&names.includes(cfg.component)&&names[queries.length-1]===cfg.component){
+    if(cfg.representation)values[0]=Object.fromEntries(Object.entries(values[0]).reverse());
+    else values[0][Object.keys(values[0])[0]]+='-changed';
+   }
+   return{rows:values};
   }
   async end(){await new Promise(r=>setImmediate(r));ends++;if(applies()&&cfg.closeFailure)throw Object.assign(Error(marker),{code:'EIO'});fault(this.role==='postgres'?'pool-close':'restore-pool-close');}
  }};
  return load.call(this,id,...args);
 };
 global.fetch=()=>{throw Error('offline_transport_forbidden');};
+const stdoutWrite=process.stdout.write.bind(process.stdout);
+process.stdout.write=function(data,...args){if(cfg.omitCounts!==undefined&&cfg.omitCounts===input?.restoreStage&&String(data).includes('SSB_PROOF_JSON ')){const v=JSON.parse(String(data).split('SSB_PROOF_JSON ')[1]);delete v.counts;return stdoutWrite('\nSSB_PROOF_JSON '+JSON.stringify(v)+'\n',...args);}return stdoutWrite(data,...args);};
 fs.writeSync=function(fd,data,...args){
  if(fd===2&&String(data).startsWith('SSB_INIT_PROBE_DIAGNOSTIC_V1 ')&&applies()){
   let s=String(data),v=JSON.parse(s.slice(s.indexOf(' ')+1));
+  if(cfg.snapshotMutation&&v.snapshot){
+   const c=v.snapshot;
+   if(cfg.snapshotMutation==='missing')delete v.snapshot;
+   else if(cfg.snapshotMutation==='component')c.components.pop();
+   else if(cfg.snapshotMutation==='archive')c.binding.archive='f'.repeat(64);
+   else if(cfg.snapshotMutation==='beforeCall')c.binding.beforeCall='f'.repeat(64);
+   else if(cfg.snapshotMutation==='beforeHash'){c.components[0].beforeHash='f'.repeat(64);c.components[0].equal=false;}
+   else if(cfg.snapshotMutation==='private')c.raw=marker;
+   s='SSB_INIT_PROBE_DIAGNOSTIC_V1 '+JSON.stringify(v)+'\n';
+  }
   if(cfg.output==='missing')return s.length;
   if(cfg.output==='truncated')s=s.slice(0,-8);
   if(cfg.output==='json')s='SSB_INIT_PROBE_DIAGNOSTIC_V1 {\n';
@@ -60,4 +79,4 @@ fs.writeSync=function(fd,data,...args){
  }
  return write.call(this,fd,data,...args);
 };
-process.on('exit',()=>{if(cfg.countsFile)fs.writeFileSync(cfg.countsFile,JSON.stringify({pools,ends}),{flag:'wx',mode:0o600});});
+process.on('exit',()=>{if(cfg.countsFile)fs.writeFileSync(cfg.countsFile,JSON.stringify({pools,ends,queries}),{flag:'wx',mode:0o600});});

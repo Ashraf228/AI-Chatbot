@@ -41,6 +41,8 @@ class Processes {
     if(probeDiagnostic!==undefined){
       const {validateProbeBinding}=require('./diagnostics.cjs'),b=validateProbeBinding(probeDiagnostic.binding),request=json(input);
       need(bin==='/usr/bin/docker'&&/^[a-f0-9]{64}$/.test(probeDiagnostic.container)&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','exec','-i',probeDiagnostic.container,'node','/proof/probe.cjs'])&&!allowFailure&&!closure&&!stateDiagnostic&&baseReference===undefined&&request.action===b.action&&request.source===b.source&&request.service==='ssb-native-'+b.run&&(b.action!=='closed-ready'||request.generation===b.generation)&&(b.action!=='database'||request.restoreStage===b.restoreStage)&&JSON.stringify(request.diagnostic)===JSON.stringify(b),'probe_binding_invalid');
+      if(b.action==='database'&&b.restoreStage==='after'){require('./snapshot-diagnostic.cjs').baseline(probeDiagnostic.snapshotBaseline,b,request.expected);need(JSON.stringify(probeDiagnostic.snapshotBaseline)===JSON.stringify(request.snapshotBaseline),'snapshot_binding_invalid');}
+      else need(!Object.hasOwn(probeDiagnostic,'snapshotBaseline')&&!Object.hasOwn(request,'snapshotBaseline'),'snapshot_binding_invalid');
     }
     if(baseReference!==undefined){require('./base-diagnostics.cjs').boundReference(baseReference);need(bin==='/usr/bin/docker'&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','pull','--platform=linux/amd64',baseReference])&&!allowFailure&&!closure&&!stateDiagnostic,'base_diagnostic_binding');}
     need(Number.isFinite(deadline)&&deadline<=this.deadline,'deadline_binding');
@@ -81,7 +83,7 @@ class Processes {
         if(primary&&startRecord)primary.startDiagnostic=startRecord;
         if(primary&&baseReference!==undefined&&primary.code==='command_failed'&&Number.isInteger(code)&&code!==0&&!signal){primary.baseDiagnostic=require('./base-diagnostics.cjs').classifyBase(out,err,baseReference);}
         if(primary&&stateDiagnostic&&code===1&&!signal&&!timeout&&!overflow&&!spawnError){try{need(out.length===0,'state_diagnostic_invalid');primary.stateDiagnostic=require('./diagnostics.cjs').decodeState(err);}catch(cause){primary.cause=cause;}}
-        if(primary&&probeDiagnostic&&primary.code==='command_failed'&&code===1&&!signal&&!timeout&&!overflow&&!spawnError){try{need(out.length===0,'probe_diagnostic_invalid');primary.probeDiagnostic=require('./diagnostics.cjs').decodeProbe(err,probeDiagnostic.binding);}catch(cause){primary.cause=cause;}}
+        if(primary&&probeDiagnostic&&primary.code==='command_failed'&&code===1&&!signal&&!timeout&&!overflow&&!spawnError){try{need(out.length===0,'probe_diagnostic_invalid');const record=require('./diagnostics.cjs').decodeProbe(err,probeDiagnostic.binding);if(record.snapshot)require('./snapshot-diagnostic.cjs').comparison(record.snapshot,probeDiagnostic.binding,probeDiagnostic.snapshotBaseline);primary.probeDiagnostic=record;}catch(cause){primary.cause=cause;}}
         if(!primary&&probeDiagnostic&&err.length){primary=new GateError('probe_diagnostic_invalid');primary.process={...rec};}
         let reporterRecord;
         if(!primary&&reporterLogs)try{reporterRecord=require('./reporter-contract.cjs').decode(out,err,reporterLogs.binding);}catch(e){primary=e;primary.process={...rec};}

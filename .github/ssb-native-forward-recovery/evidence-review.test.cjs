@@ -16,6 +16,8 @@ function fixture(){
   const data={preflight:{counts:[901,4],hashes:[sha(fs.readFileSync(manifestPath))]},bases:{counts:[4],ids:require('./registry-bindings.json').images.map(x=>x.imageId)},
     builds:{hashes:[require('./reporter-source.cjs').manifest().hash],counts:[4,2],ids:[100,101,102,103,100].map(n=>'sha256:'+id(n))},initialize:{counts:[34,4,1],hashes:[id(200)]},roles:{counts:[32]},
     restore:{counts:[34,4,7],hashes:[id(201),id(202)]},inventory:{counts:[19,5,2],ids},closure:{counts:[19,19,1000],ids},complete:{}};
+  data.restore.detail={failure:null,outcomes:[],snapshot:{version:1,binding:{run,source:SOURCE,publication:data.preflight.hashes[0],beforeCall:id(300),afterCall:id(301),archive:id(201)},beforeHash:id(202),afterHash:id(202),components:require('./snapshot-diagnostic.cjs').names.map(name=>({name,beforeHash:id(202),afterHash:id(202),beforeRows:({migrations:34,roles:4,markers:2,receipts:7}[name]||1),afterRows:({migrations:34,roles:4,markers:2,receipts:7}[name]||1),equal:true}))}};
+  {const s=data.restore.detail.snapshot;data.restore.detail.snapshotBaseline={version:1,archive:s.binding.archive,before:{version:1,binding:{version:1,action:'database',run,source:SOURCE,publication:s.binding.publication,call:s.binding.beforeCall,restoreStage:'before'},hash:s.beforeHash,components:s.components.map(c=>({name:c.name,rows:c.beforeRows,hash:c.beforeHash}))}};}
   for(const [i,g]of ['release','forward','normal'].entries()){
     const cohort=ids.slice(3+i*5,8+i*5);
     data[g+'-start']={counts:[...generationCounts.start[g]],ids:cohort};data[g+'-e1']={counts:[...generationCounts.e1],hashes:[id(210),id(211)]};
@@ -171,7 +173,7 @@ for(const [field,value]of [['id',9],['run_id',9],['name','unrelated'],['labels',
 });
 test('receiver rejects old argument shape and wrong manifest without any acceptance',()=>{
   const h=receiverHarness(sample().lines.join('\n'));assert.throws(()=>h.invoke([run,job,context.workflowHead,path.join(root,'mock')]));assert.equal(h.calls.length,0);
-  const rows=sample().rows;rows[0].hashes=['f'.repeat(64)];const bad=receiverHarness(rechain(rows));assert.throws(()=>bad.invoke(),/received_publication_binding/);assert.equal(bad.files.size,0);
+  const rows=sample().rows;rows[0].hashes=['f'.repeat(64)];rows.find(r=>r.phase==='restore').detail.snapshot.binding.publication='f'.repeat(64);rows.find(r=>r.phase==='restore').detail.snapshotBaseline.before.binding.publication='f'.repeat(64);const bad=receiverHarness(rechain(rows));assert.throws(()=>bad.invoke(),/received_publication_binding/);assert.equal(bad.files.size,0);
 });
 test('private failure persistence is awaited and receives the original error tree',async()=>{
   const error=new AggregateError([Error('SYNTHETIC_PRIVATE_FAILURE'),Error('cleanup')],'both'),events=[];

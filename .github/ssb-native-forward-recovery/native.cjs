@@ -84,8 +84,9 @@ class Native{
     const diagnostic=action==='initialize'||ready||action==='closed-ready'||restore?{version:1,action,run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest,call:operation?.call||sha(randomUUID()),...(action==='closed-ready'?{generation:this.current.generation}:{}),...(action==='database'?{restoreStage:extra.restoreStage}:{})}:undefined;
     if(diagnostic){require('./diagnostics.cjs').validateProbeBinding(diagnostic);input.diagnostic=diagnostic;}
     if(ready){need(Number.isInteger(ms)&&ms>800&&ms<=1500,'readiness_deadline');input.readinessTimeoutMs=ms-400;}
-    const result=await this.d(['exec','-i',this.probeContainer.id,'node','/proof/probe.cjs'],{input:JSON.stringify(input),ms,...(diagnostic?{probeDiagnostic:{binding:diagnostic,container:this.probeContainer.id}}:{})});const r=proofResult(result.stdout);
+    const result=await this.d(['exec','-i',this.probeContainer.id,'node','/proof/probe.cjs'],{input:JSON.stringify(input),ms,...(diagnostic?{probeDiagnostic:{binding:diagnostic,container:this.probeContainer.id,...(input.snapshotBaseline?{snapshotBaseline:input.snapshotBaseline}:{})}}:{})});const r=proofResult(result.stdout);
     if(diagnostic)need(result.stderr.length===0,'probe_diagnostic_invalid');
+    if(action==='database'&&diagnostic)require('./snapshot-diagnostic.cjs').result(r,diagnostic,input.snapshotBaseline);
     if(ready)return require('./postgres-readiness.cjs').validateResult(r,input);
     const expected={initialize:[34,4,1],roles:[32],'closed-ready':[3,2],e1:[11,7],drain:[8,1,7],'restore-logins':[2,2],'retired-admission':[8,1]};
     if(expected[action])need(JSON.stringify(r.counts)===JSON.stringify(expected[action]),'mandatory_proof_missing');
@@ -237,7 +238,7 @@ class Native{
     const trace=new(require('./restore-diagnostic.cjs').RestoreProgress)({run:this.options.run,source:SOURCE,publication:this.verifiedPublicationManifest});
     const before=await trace.at('database-before',()=>this.probe('database',{noPools:true,restoreStage:'before'}));
     const dump=await trace.at('dump',async()=>(await this.d(['exec',this.pg.id,'pg_dump','-U','postgres','-d','synthetic','--format=custom'],{ms:5000})).stdout);
-    await trace.at('dump-check',()=>need(dump.length>0&&dump.length<=16*1024*1024,'dump_limit'));
+    const snapshotBaseline=await trace.at('dump-check',()=>{need(dump.length>0&&dump.length<=16*1024*1024,'dump_limit');return require('./snapshot-diagnostic.cjs').bind(before.snapshot,sha(dump));});
     const base=require('./registry-bindings.json').images.find(x=>x.key==='postgres');
     const env=path.join(this.privateRoot,'postgres.env');this.restorePg=await trace.at('postgres-create',()=>this.create(this.prefix+'-restore-postgres',base.imageId,['--network',this.networks.internal.name,'--network-alias','restore-db','--env-file',env,'--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=1g','--memory=1g','--pids-limit=128'],'restore-postgres'));
     await trace.at('postgres-start',()=>this.start(this.restorePg));
@@ -246,10 +247,12 @@ class Native{
     // Existing bootstrap role is the only intentionally omitted role declaration.
     const sql=await trace.at('role-filter',()=>globals.replace(/^CREATE ROLE postgres;\n/m,''));
     await trace.at('role-import',()=>this.d(['exec','-i',this.restorePg.id,'psql','-U','postgres','-d','synthetic','-v','ON_ERROR_STOP=1'],{input:sql}));
-    await trace.at('database-import',()=>this.d(['exec','-i',this.restorePg.id,'pg_restore','-U','postgres','-d','synthetic','--exit-on-error'],{input:dump}));
+    await trace.at('database-import',()=>{need(sha(dump)===snapshotBaseline.archive,'snapshot_binding_invalid');return this.d(['exec','-i',this.restorePg.id,'pg_restore','-U','postgres','-d','synthetic','--exit-on-error'],{input:dump});});
     await trace.at('role-logins',()=>this.probe('restore-logins',{host:'restore-db'}));
-    const after=await trace.at('database-after',()=>this.probe('database',{host:'restore-db',expected:before.hashes[0],noPools:true,restoreStage:'after'}));
-    return trace.at('result',()=>({verified:true,counts:after.counts,hashes:[sha(dump),...after.hashes]}));
+    let after;
+    try{after=await trace.at('database-after',()=>this.probe('database',{host:'restore-db',expected:before.hashes[0],noPools:true,restoreStage:'after',snapshotBaseline}));}
+    catch(error){try{error.restoreSnapshot=require('./snapshot-diagnostic.cjs').baseline(snapshotBaseline);}catch(cause){throw new AggregateError([error,cause],'restore_snapshot_binding_failed');}throw error;}
+    return trace.at('result',()=>({verified:true,counts:after.counts,hashes:[sha(dump),...after.hashes],detail:{failure:null,outcomes:[],snapshotBaseline,snapshot:after.snapshotComparison}}));
   }
   async finalInventory(){
     const final=await this.inventory();for(const key of Object.keys(this.initial))need(this.initial[key].every(x=>final[key].includes(x)),'preexisting_resource_changed');
