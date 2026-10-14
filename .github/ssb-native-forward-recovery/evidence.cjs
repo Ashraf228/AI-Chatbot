@@ -117,12 +117,17 @@ const canonical=r=>JSON.stringify(Object.fromEntries(fields.map(k=>[k,r[k]])));
 const receiptLine=(bytes,digest)=>MARKER+' '+Buffer.from(bytes).toString('base64')+' '+digest;
 class Receipts{
   constructor(run,source,context,output=console.log){binding(run,source,context);this.run=run;this.source=source;this.workflowHead=context.workflowHead;this.dispatchNonce=context.dispatchNonce;this.output=output;this.records=[];this.bytes=0;}
-  emit(phase,ok,data={}){
+  check(phase,ok,data={}){
     need(Object.keys(data).every(k=>['counts','hashes','ids','elapsedMs','detail'].includes(k)),'nonpublic_field');
     const r={seq:this.records.length,run:this.run,source:this.source,workflowHead:this.workflowHead,dispatchNonce:this.dispatchNonce,phase,ok,counts:[],hashes:[],ids:[],elapsedMs:0,...data,utc:new Date().toISOString(),previous:this.records.at(-1)?.sha256||'0'.repeat(64),detail:data.detail||{failure:ok?null:publicFailure(null),outcomes:[]}};
     validate(r);validateEvidence(r,this.records);
     const bytes=canonical(r),digest=sha(bytes),line=receiptLine(bytes,digest);
     need(this.bytes+Buffer.byteLength(line)+1<=LIMIT,'receipt_limit');
+    return{bytes,digest,line};
+  }
+  emit(phase,ok,data={},beforeOutput=()=>{}){
+    const {bytes,digest,line}=this.check(phase,ok,data);
+    beforeOutput();
     this.output(line);this.bytes+=Buffer.byteLength(line)+1;this.records.push({...json(bytes),sha256:digest});return digest;
   }
 }

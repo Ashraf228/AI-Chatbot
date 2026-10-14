@@ -1,7 +1,7 @@
 'use strict';
 function historicalPrimary(error){
  // Historical closures lack the new mandatory observation schema; never hide the original error.
- if(error instanceof AggregateError){require('node:assert/strict').equal(error.errors.length,2);require('node:assert/strict').equal(error.errors[1].code,'closure_outcome_invalid');return error.errors[0];}return error;
+ if(error instanceof AggregateError){require('node:assert/strict').ok(error.errors.length>=2);for(const secondary of error.errors.slice(1))require('node:assert/strict').equal(secondary.code,'closure_outcome_invalid');return historicalPrimary(error.errors[0]);}return error;
 }
 // Offline transport only. Real Native.initialize/main/receipt/receiver code; no Docker or GitHub process.
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),vm=require('node:vm'),{createRequire}=require('node:module'),{EventEmitter}=require('node:events');
