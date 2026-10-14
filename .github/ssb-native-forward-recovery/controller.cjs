@@ -10,7 +10,7 @@ async function main(options,backend){
     for(phase of phases.filter(x=>!['closure','complete'].includes(x))){
       need(clock()-started<960000,'overall_work_deadline');
       const result=await backend.execute(phase);need(result&&result.verified===true,'phase_result_invalid');
-      receipts.emit(phase,true,{counts:result.counts===undefined?[]:result.counts,ids:result.ids===undefined?[]:result.ids,hashes:result.hashes===undefined?[]:result.hashes,...(phase==='restore'?{detail:result.detail}:{}),elapsedMs:Math.round(clock()-started)});
+      receipts.emit(phase,true,{counts:result.counts===undefined?[]:result.counts,ids:result.ids===undefined?[]:result.ids,hashes:result.hashes===undefined?[]:result.hashes,...(phase==='restore'||phase.endsWith('-shutdown')?{detail:result.detail}:{}),elapsedMs:Math.round(clock()-started)});
     }
   }catch(e){primary=e;failed=true;try{
     const verified=backend.verifiedPublicationManifest;

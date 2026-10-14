@@ -153,7 +153,7 @@ function transport(h,mutation={}){
       if(mutation.closedEffect==='receipts')h.db.receipts.push({id:crypto.randomUUID(),request_sha256:'invalid',completed_at:'synthetic'});
       return response;
     }
-    if(u.pathname==='/login')return reply('login');
+    if(u.pathname==='/login')return reply('login',mutation.closed?503:200);
     if(u.pathname==='/admin/widget/report-subscriptions')return reply([],options.method==='POST'||u.searchParams.get('siteId')==='foreign-site'?403:200);
     if(u.pathname==='/admin/sites'||u.pathname==='/admin/sites/synthetic-site')return reply({},mutation.closed?503:403);
     if(u.pathname==='/healthz')return reply('ok');
@@ -181,6 +181,22 @@ function closedInput(){
  return{...input,action:'closed-ready',source,service:'ssb-native-'+run,diagnostic:{version:1,action:'closed-ready',run,source,publication,call:'f'.repeat(64),generation:input.generation}};
 }
 
+for(const brokenDashboard of [false,true])test('actual drain waits API and Dashboard work, rejects new Dashboard request '+brokenDashboard,async()=>{
+ const h=await releaseHarness(),state=new h.MaintenanceState({root:'/state',service:input.service,generation:'release'}),pending=[],events=[];let ended=false,released=false;
+ const reply=(status,cookies=[])=>({status,headers:{getSetCookie:()=>cookies},text:async()=>''});
+ const query=async sql=>{events.push(sql);if(sql==='COMMIT'||sql==='ROLLBACK')for(const resolve of pending)resolve(reply(200));return{rows:[]};};
+ class Pool{async connect(){return{query,release(){released=true;}};}async query(sql){assert(sql.includes('count(*) >= 2'));return{rows:[{ok:pending.length===2}]};}async end(){ended=true;}}
+ const fetch=async(url,options)=>{
+  const u=new URL(url);if(u.pathname==='/api/auth/login')return reply(200,['ssb_admin=synthetic; Path=/; HttpOnly; Secure; SameSite=Strict','ssb_writer_session=synthetic; Path=/; HttpOnly; Secure; SameSite=Strict']);
+  if(state.snapshot().phase==='closed')return reply(brokenDashboard&&u.hostname==='dashboard'?200:503);
+  assert(['api','dashboard'].includes(u.hostname));events.push('inflight:'+u.hostname);return new Promise(resolve=>pending.push(resolve));
+ };
+ const probe=loadCjs(path.join(target,'probe.cjs'),{'node:fs':h.mem,'/app/node_modules/pg':{Pool},'/app/dist/maintenance/maintenance-state':{MaintenanceState:h.MaintenanceState}},{fetch});
+ const run=probe.drain({...input,owner:'f'.repeat(64)});
+ if(brokenDashboard)await assert.rejects(run);else assert.deepEqual(plain(await run),{verified:true,counts:[8,2,7],epoch:1});
+ assert(events.includes('inflight:api')&&events.includes('inflight:dashboard'));assert(ended&&released);
+});
+
 test('closed-ready reaches real writer maintenance admission with valid signed payload and zero DB/ledger effects',async()=>{
   const h=await releaseHarness({closed:true}),wire=transport(h,{closed:true}),{probe}=probes(h,wire),before=plain(h.db);
   assert.equal((await h.writerHttp()).status,401);
@@ -200,7 +216,7 @@ test('actual fixture Compose bytes escape dollars while raw config and operating
   const policy=loadCjs(path.join(__dirname,'adapters/scripts/ops/maintenance-start-contract.cjs'),{'node:fs':mem,'../../apps/api/dist/maintenance/maintenance-state':{MaintenanceDenied:class extends Error{}}});
   const values=fixtures.secrets(),salt=Buffer.alloc(16,0xaa);
   values.passwordHash='scrypt$'+salt.toString('hex')+'$'+crypto.scryptSync(values.password,salt,64).toString('hex');
-  const native={privateRoot:'/private-fixture',stateRoot:'/state',prefix:'offline-review',synthetic:values,options:{run:'123'},docker:'/not-invoked',daemonId:'not-invoked',images:Object.fromEntries(fixtures.services.map((s,i)=>[s,'sha256:'+String(i+1).repeat(64)])),networks:Object.fromEntries(fixtures.networks.map((s,i)=>[s,{name:s,id:String(i+1).repeat(64),internal:true}]))};
+  const native={privateRoot:'/private-fixture',stateRoot:'/state',prefix:'ssb-native-123',synthetic:values,options:{run:'123'},docker:'/not-invoked',daemonId:'not-invoked',images:Object.fromEntries(fixtures.services.map((s,i)=>[s,'sha256:'+String(i+1).repeat(64)])),networks:Object.fromEntries(fixtures.networks.map((s,i)=>[s,{name:s,id:String(i+1).repeat(64),internal:true}]))};
   native.verifiedPublicationManifest=crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname,'publication-manifest.json'))).digest('hex');
   const g=fixtures.generation(native,'release','seed',[],policy),bytes=mem.readFileSync(g.common.files[0].path,'utf8'),serialized=JSON.parse(bytes);
   assert.equal(g.config.services.dashboard.environment.ADMIN_PANEL_PASSWORD_HASH,values.passwordHash);

@@ -1,27 +1,52 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 const {createRequire}=require('node:module');
-const {Native}=require('./native.cjs'),{main,SOURCE}=require('./controller.cjs');
+const {main,SOURCE}=require('./controller.cjs');
 const {GateError,sha}=require('./common.cjs'),{parseReceipts,Receipts}=require('./evidence.cjs');
 const {publicFailure,validateFailure}=require('./diagnostics.cjs');
 const options={authorization:'ONE_NATIVE_FORWARD_RECOVERY',run:'12345678',attempt:'1',workflowHead:'a'.repeat(40),dispatchNonce:'b'.repeat(64)};
 const marker='SYNTHETIC_PRIVATE_CLOSURE_CONTENT';
 function load(file,replacements={},suffix=''){
- const m={exports:{}},req=createRequire(file),g={module:m,exports:m.exports,require:id=>Object.hasOwn(replacements,id)?replacements[id]:req(id),__dirname:path.dirname(file),Buffer,console,performance,setTimeout,clearTimeout,Error,TypeError,AggregateError,process,structuredClone};
+ const m={exports:{}},req=createRequire(file),g={module:m,exports:m.exports,require:id=>Object.hasOwn(replacements,id)?replacements[id]:req(id),__dirname:path.dirname(file),Buffer,console,performance,setTimeout,clearTimeout,setInterval,clearInterval,Error,TypeError,AggregateError,process,structuredClone};
  vm.compileFunction(fs.readFileSync(file,'utf8')+suffix,Object.keys(g),{filename:file})(...Object.values(g));return m.exports;
 }
 // Reuse the existing synthetic evidence catalogue; do not execute its registered tests.
 const fixtureModule=load(path.join(__dirname,'evidence-review.test.cjs'),{'node:test':()=>{}},'\nmodule.exports={fixture,receiverHarness,rechain};');
 const {fixture,receiverHarness,rechain}=fixtureModule;
+// The package baseline already includes the closure fix; pin the original regression input.
+const historicalRoot=path.resolve(__dirname,'../../../../ssb-closure-diagnostic-fix-20261014.UL8V1H');
+function historical(name,replacements={},suffix=''){
+ const relative='baseline/.github/ssb-native-forward-recovery/'+name,file=path.join(historicalRoot,relative);
+ const entry=JSON.parse(fs.readFileSync(path.join(historicalRoot,'artifact-manifest.json'))).files.find(f=>f.path===relative),bytes=fs.readFileSync(file);
+ assert.ok(entry);assert.equal(bytes.length,entry.bytes);assert.equal(sha(bytes),entry.sha256);
+ return load(file,replacements,suffix);
+}
 function harness(config={}){
  assert.equal(process.version,'v24.17.0');
- const data=fixture(),n=new Native(options),calls=[],states=new Map();
+ const data=config.old?historical('evidence-review.test.cjs',{'node:test':()=>{}},'\nmodule.exports={fixture};').fixture():fixture(),calls=[],states=new Map(),files=new Map(),openFiles=new Map(),receiptReads=[];
+ let fd=0;
+ const receiptFS={...fs,
+  openSync(file,flags){assert.ok(files.has(file));assert.equal(flags,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);openFiles.set(++fd,files.get(file));receiptReads.push(file);return fd;},
+  fstatSync(handle){const bytes=openFiles.get(handle);assert.ok(bytes);return{isFile:()=>true,size:bytes.length,nlink:1,mode:0o600,uid:1000};},
+  readFileSync(handle){assert.ok(openFiles.has(handle));return openFiles.get(handle);},
+  closeSync(handle){assert.ok(openFiles.delete(handle));}
+ };
+ const toolsRoot=path.join(__dirname,'adapters'),policyPath=path.join(toolsRoot,'scripts/ops/maintenance-start-contract.cjs');
+ const policy=load(policyPath,{'node:fs':receiptFS,'../../apps/api/dist/maintenance/maintenance-state':{MaintenanceDenied:GateError}});
+ const {Native}=load(path.join(__dirname,'native.cjs'),{[policyPath]:policy}),n=new Native(options);
+ Object.assign(n,{toolsRoot,stateRoot:'/synthetic-closure/state',prefix:'ssb-native-'+options.run,dashboardPredecessors:{},current:{common:{run:options.run,publication:data.preflight.hashes[0],fileUid:1000}}});
  n.initial={containers:[]};n.proc={calls,assertClosed(){if(config.processFailure)throw config.processFailure;}};
  n.networks=Object.fromEntries(data.inventory.ids.slice(19).map((id,i)=>['net'+i,{id}]));
  n.owned=data.closure.detail.outcomes.map((o,i)=>{
-  const entry={id:o.id,name:'synthetic-'+i,image:'sha256:'+'f'.repeat(64),role:o.role,generation:o.generation,startRequested:true,orderedShutdown:o.state==='graceful'};
+  const project=o.generation==='seed'?undefined:n.prefix+'-'+o.generation;
+  const entry={id:o.id,name:project?project+'-'+o.role:n.prefix+'-'+o.role,project,image:o.role==='dashboard'?data.builds.ids[1]:'sha256:'+'f'.repeat(64),role:o.role,generation:o.generation,startRequested:true,orderedShutdown:o.state==='graceful'};
+  if(o.role==='dashboard'&&entry.orderedShutdown){
+   const row=data[o.generation+'-shutdown'],record=row.detail.dashboardShutdown,file=path.join(n.stateRoot,`shutdown-${entry.name}.json`),bytes=Buffer.from(JSON.stringify(record));
+   assert.equal(sha(bytes),row.hashes[2]);files.set(file,bytes);
+   n.dashboardPredecessors[o.generation]={service:entry.role,id:entry.id,name:entry.name,project:entry.project,imageId:entry.image,receipt:{path:file,sha256:row.hashes[2]}};
+  }
   const exit=i===config.index?(config.exit||0):0;
-  const x={Id:entry.id,Name:'/'+entry.name,Image:entry.image,Config:{Labels:{'com.ssb.native-run':options.run}},RestartCount:0,State:{Status:'exited',Running:false,Paused:false,Restarting:false,Dead:false,OOMKilled:false,Error:'',Pid:0,ExitCode:exit,StartedAt:'2026-10-14T00:00:00Z',FinishedAt:'2026-10-14T00:00:01Z'}};
+  const x={Id:entry.id,Name:'/'+entry.name,Image:entry.image,Config:{Labels:{'com.ssb.native-run':options.run,'com.docker.compose.project':project,'com.docker.compose.service':entry.role}},HostConfig:{RestartPolicy:{Name:'no'}},RestartCount:0,State:{Status:'exited',Running:false,Paused:false,Restarting:false,Dead:false,OOMKilled:false,Error:'',Pid:0,ExitCode:exit,StartedAt:o.observation.before.startedAt,FinishedAt:o.observation.before.finishedAt}};
   if(i===config.index&&config.running)Object.assign(x.State,{Status:'running',Running:true,Pid:10,FinishedAt:'0001-01-01T00:00:00Z'});
   if(i===config.index&&config.mutateInspect)config.mutateInspect(x);
   states.set(entry.id,x);return entry;
@@ -38,11 +63,11 @@ function harness(config={}){
  n.execute=async phase=>{if(phase===config.failPhase)throw config.primary;return{verified:true,...data[phase]};};
  const close=n.close.bind(n);
  n.close=async failed=>{const result=await close(failed);if(config.afterClose)config.afterClose(result);return result;};
- return{n,calls,data};
+ return{n,calls,data,receiptReads,openFiles};
 }
 async function run(config={}){
  const h=harness(config),lines=[];let error,writes=0;
- const controller=config.old?load(path.resolve(__dirname,'../../../baseline/.github/ssb-native-forward-recovery/controller.cjs')):{main};
+ const controller=config.old?historical('controller.cjs'):{main};
  try{await controller.main({...options,output:line=>{
   const r=JSON.parse(Buffer.from(line.split(' ')[1],'base64'));
   if(r.phase==='closure'&&config.outputError&&(!writes++||config.alwaysFailOutput))throw config.outputError;
@@ -67,12 +92,14 @@ test('actual Native.close and controller retain the unchanged all-zero successfu
  const h=await run();assert.ifError(h.error);assert.equal(h.rows.at(-1).phase,'complete');
  assert.equal(parseReceipts(h.lines.join('\n'),options.run,SOURCE,options).proof.status,'RECEIVED_AND_VERIFIED');
  assert.equal(h.calls.filter(c=>c.args[0]==='container').length,38);assert.equal(h.calls.filter(c=>c.args[0]==='logs').length,2);
+ assert.equal(h.receiptReads.length,3);assert.equal(h.openFiles.size,0);
+ assert.deepEqual(h.rows.find(r=>r.phase==='closure').detail.outcomes.filter(o=>o.role==='dashboard').map(o=>o.state),['graceful','graceful','graceful']);
 });
 for(const exit of [143,137])test('actual close -> strict final validation: exit '+exit+' remains failed with retained observations',async()=>{
- const old=await run({old:true,index:5,exit}),next=await run({index:5,exit});
+ const old=await run({old:true,index:6,exit}),next=await run({index:6,exit});
  assert.ok(old.error);assert.deepEqual(old.rows.at(-1).detail.outcomes,[]);assert.equal(old.rows.at(-1).detail.failure.code,'unclassified');
  const r=received(next);assert.equal(r.detail.closure.stage,'validation');assert.ok(codes(r.detail.failure).includes('closure_not_clean'));
- assert.equal(r.detail.outcomes.length,19);assert.equal(r.detail.outcomes[5].exit,exit);assert.equal(r.detail.outcomes[5].state,'exited_unclean');
+ assert.equal(r.detail.outcomes.length,19);assert.equal(r.detail.outcomes[6].exit,exit);assert.equal(r.detail.outcomes[6].state,'exited_unclean');
  assert.deepEqual(next.calls.map(c=>c.args),old.calls.map(c=>c.args));
 });
 test('generation shutdown contradiction retains observations but never becomes successful shutdown',async()=>{
@@ -90,9 +117,9 @@ test('a second output failure preserves both original errors without claiming re
  assert.throws(()=>parseReceipts(h.lines.join('\n'),options.run,SOURCE,options,{partial:true}));
 });
 for(const code of ['command_timeout','cleanup_ownership','PRIVATE_UNKNOWN'])test('backend close failure remains distinct and retains checked partial observations: '+code,async()=>{
- const original=Object.assign(Error(marker),{code}),h=await run({index:5,inspectError:original}),r=received(h);
- assert.ok(contains(h.error,original));assert.equal(r.detail.closure.stage,'backend');assert.equal(r.detail.outcomes.length,19);assert.equal(r.detail.outcomes[5].state,'unverified');
- assert.equal(r.detail.outcomes[5].code,code==='PRIVATE_UNKNOWN'?'unclassified':code);assert.equal(r.detail.outcomes[5].observation.after,null);
+ const original=Object.assign(Error(marker),{code}),h=await run({index:6,inspectError:original}),r=received(h);
+ assert.ok(contains(h.error,original));assert.equal(r.detail.closure.stage,'backend');assert.equal(r.detail.outcomes.length,19);assert.equal(r.detail.outcomes[6].state,'unverified');
+ assert.equal(r.detail.outcomes[6].code,code==='PRIVATE_UNKNOWN'?'unclassified':code);assert.equal(r.detail.outcomes[6].observation.after,null);
 });
 test('prior work error remains primary through close failure and secondary receipt write failure',async()=>{
  const primary=new GateError('state_operation_failed'),closeError=new GateError('process_completion_unverified'),outputError=Object.assign(Error(marker),{code:'ENOSPC'});
@@ -113,12 +140,12 @@ for(const [name,mutate]of [
  assert.equal(r.detail.closure.observations,'rejected');assert.notEqual(r.detail.closure.rejectedBy,null);assert.deepEqual(r.detail.outcomes,[]);assert.deepEqual(r.counts,[]);
 });
 test('running before stop, requested stop and observed final state stay separate',async()=>{
- const h=await run({index:5,running:true,exit:143}),r=received(h),o=r.detail.outcomes[5];
+ const h=await run({index:6,running:true,exit:143}),r=received(h),o=r.detail.outcomes[6];
  assert.equal(o.observation.before.status,'running');assert.deepEqual(o.observation.stop,{requested:true,completed:true});assert.equal(o.observation.after.status,'exited');assert.equal(o.exit,143);
  assert.deepEqual(h.calls.filter(c=>c.args[0]==='stop').map(c=>c.args.slice(0,3)),[['stop','--time','8']]);
 });
 test('missing final state cannot become successful termination',async()=>{
- const h=await run({index:5,mutateInspect:x=>{delete x.State.Status;}}),r=received(h);assert.equal(r.detail.closure.stage,'backend');assert.equal(r.detail.outcomes[5].state,'unverified');
+ const h=await run({index:6,mutateInspect:x=>{delete x.State.Status;}}),r=received(h);assert.equal(r.detail.closure.stage,'backend');assert.equal(r.detail.outcomes[6].state,'unverified');
 });
 test('ordinary backend exception with no observation payload stays explicitly unobserved',async()=>{
  const lines=[],original=new TypeError(marker),b={execute:async()=>{throw new GateError('state_operation_failed');},close:async()=>{throw original;}};
@@ -133,8 +160,8 @@ test('preflight manifest and elapsed/resource limits remain bound; check has no 
  w.emit('preflight',true,data);assert.equal(w.records[0].hashes[0],sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json'))));
 });
 test('receiver rejects tampered failure codes, binding and closure states even with a new hash chain',async()=>{
- const h=await run({index:5,exit:143});received(h);
- for(const mutate of [r=>{r.at(-1).detail.failure.code='PRIVATE_UNKNOWN';},r=>{r.at(-1).run='12345679';},r=>{r.at(-1).detail.outcomes[5].state='graceful';},r=>{r[0].hashes[0]='f'.repeat(64);}]){
+ const h=await run({index:6,exit:143});received(h);
+ for(const mutate of [r=>{r.at(-1).detail.failure.code='PRIVATE_UNKNOWN';},r=>{r.at(-1).run='12345679';},r=>{r.at(-1).detail.outcomes[6].state='graceful';},r=>{r[0].hashes[0]='f'.repeat(64);}]){
   const rows=structuredClone(h.rows);mutate(rows);const rx=receiverHarness(rechain(rows),{conclusion:'failure'},{conclusion:'failure'});assert.throws(()=>rx.invoke());assert.equal(rx.files.size,0);
  }
 });

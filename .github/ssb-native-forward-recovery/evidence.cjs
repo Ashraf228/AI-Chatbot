@@ -4,7 +4,7 @@ const {validateDetail,publicFailure,probeCallsInFailure}=require('./diagnostics.
 const phases=['preflight','bases','builds','initialize','roles','release-start','release-e1','release-drain','release-shutdown','forward-start','forward-e1','forward-drain','forward-shutdown','normal-start','normal-e1','normal-drain','normal-shutdown','restore','inventory','closure','complete'];
 const MARKER='SSB_PUBLIC_RECEIPT_V2',LIMIT=2*1024*1024;
 // Keep the reviewed generation contract together when native/probe obligations change.
-const generationCounts=Object.freeze({start:Object.freeze({release:Object.freeze([5,5,0]),forward:Object.freeze([5,5,8]),normal:Object.freeze([5,5,16])}),e1:Object.freeze([11,7]),drain:Object.freeze([8,1,7]),shutdown:Object.freeze([5,2,0])});
+const generationCounts=Object.freeze({start:Object.freeze({release:Object.freeze([5,5,0]),forward:Object.freeze([5,5,8]),normal:Object.freeze([5,5,16])}),e1:Object.freeze([11,7]),drain:Object.freeze([8,2,7]),shutdown:Object.freeze([5,3,0])});
 const fields=['seq','run','source','workflowHead','dispatchNonce','phase','ok','counts','hashes','ids','elapsedMs','utc','previous','detail'];
 const hex=(s,n)=>typeof s==='string'&&new RegExp('^[a-f0-9]{'+n+'}$').test(s);
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b),unique=a=>new Set(a).size===a.length;
@@ -27,6 +27,26 @@ function validate(r){
   validateDetail(r);
 }
 function validateEvidence(r,prior){
+  const shutdownRecords=v=>v?[...(v.dashboardShutdown?[v.dashboardShutdown]:[]),...v.causes.flatMap(shutdownRecords)]:[];
+  for(const d of shutdownRecords(r.detail.failure)){
+    const b=d.binding;
+    need(b.publication===prior.find(x=>x.phase==='preflight'&&x.ok)?.hashes[0]
+      &&b.imageId===prior.find(x=>x.phase==='builds'&&x.ok)?.ids[1]
+      &&d.container===prior.find(x=>x.phase===b.generation+'-start'&&x.ok)?.ids[2]
+      &&Date.parse(d.record.recordedAt)<=Date.parse(r.utc),'dashboard_shutdown_unverified');
+  }
+  if(r.phase==='closure'&&(r.ok||r.detail.outcomes.length))for(const shutdown of prior.filter(x=>x.ok&&x.phase.endsWith('-shutdown'))){
+    const d=shutdown.detail.dashboardShutdown,at=Date.parse(d.recordedAt);
+    const o=r.detail.outcomes.find(x=>x.id===shutdown.ids[2]&&x.role==='dashboard'&&x.generation===d.binding.generation);
+    const before=o?.observation.before,after=o?.observation.after;
+    need(before&&after&&!o.observation.stop.requested
+      &&[before,after].every(s=>s.status==='exited'&&s.running===false&&s.exit===0
+        &&Number.isFinite(Date.parse(s.startedAt))&&Date.parse(s.startedAt)>0
+        &&Date.parse(s.startedAt)<=at&&at<=Date.parse(s.finishedAt)
+        &&Date.parse(s.finishedAt)<=Date.parse(shutdown.utc)
+        &&Date.parse(shutdown.utc)<=Date.parse(s.observedAt)&&Date.parse(s.observedAt)<=Date.parse(r.utc))
+      &&before.startedAt===after.startedAt&&before.finishedAt===after.finishedAt,'dashboard_shutdown_unverified');
+  }
   const checkStart=v=>{if(!v)return;if(v.restoreSnapshot)need(v.restoreSnapshot.before.binding.publication===prior[0]?.hashes[0],'snapshot_binding_invalid');if(v.restore)need(v.restore.binding.publication===prior[0]?.hashes[0],'restore_binding_invalid');if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
   for(const probe of probeCallsInFailure(r.detail.failure)){
     need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
@@ -54,7 +74,7 @@ function validateEvidence(r,prior){
   need((r.phase===phases[prior.length]&&!failed)||(r.phase==='closure'&&failed&&!prior.some(x=>x.phase==='closure')),'receipt_phase_order');
   if(r.phase==='preflight'&&!r.ok)need(r.counts.length===0&&r.ids.length===0&&r.hashes.length<=1,'failed_preflight_shape');
   need(!prior.length||r.elapsedMs>=prior.at(-1).elapsedMs,'receipt_elapsed_order');
-  if(r.phase==='closure')for(const o of r.detail.outcomes.filter(x=>x.state==='graceful')){const shutdown=prior.find(x=>x.ok&&x.phase===o.generation+'-shutdown');need(['api','admin-writer'].includes(o.role)&&shutdown?.ids[['api','admin-writer'].indexOf(o.role)]===o.id,'graceful_shutdown_receipt_missing');}
+  if(r.phase==='closure')for(const o of r.detail.outcomes.filter(x=>x.state==='graceful')){const shutdown=prior.find(x=>x.ok&&x.phase===o.generation+'-shutdown');need(['api','admin-writer','dashboard'].includes(o.role)&&shutdown?.ids[['api','admin-writer','dashboard'].indexOf(o.role)]===o.id,'graceful_shutdown_receipt_missing');}
   if(!r.ok)return;
   if(failed){
     // Cleanup success is independent of work success; it must never authorize complete.
@@ -80,7 +100,7 @@ function validateEvidence(r,prior){
     }
     case 'builds':
       // Native inserts api/dashboard/reporter/widget, then aliases admin-writer to api.
-      shape([4,2],5,1);need(same(r.hashes,[require('./reporter-source.cjs').manifest().hash]),'reporter_source_binding');need(r.ids.every(s=>/^sha256:[a-f0-9]{64}$/.test(s))&&unique(r.ids.slice(0,4))&&r.ids[4]===r.ids[0]&&!r.ids.some(s=>at('bases').ids.includes(s)),'phase_build_ids');break;
+      shape([4,2],5,2);need(same(r.hashes,[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash]),'reporter_source_binding');need(r.ids.every(s=>/^sha256:[a-f0-9]{64}$/.test(s))&&unique(r.ids.slice(0,4))&&r.ids[4]===r.ids[0]&&!r.ids.some(s=>at('bases').ids.includes(s)),'phase_build_ids');break;
     case 'initialize':shape([34,4,1],0,1);break;
     case 'roles':shape([32],0,0);break;
     case 'release-start':case 'forward-start':case 'normal-start':
@@ -90,8 +110,13 @@ function validateEvidence(r,prior){
       if(r.phase!=='release-e1')need(same(r.hashes,at('release-e1').hashes),'widget_hashes_changed');break;
     case 'release-drain':case 'forward-drain':case 'normal-drain':shape(generationCounts.drain,0,0);break;
     case 'release-shutdown':case 'forward-shutdown':case 'normal-shutdown':
-      shape(generationCounts.shutdown,5,2);containerIds();need(same(r.ids,at(r.phase.replace('-shutdown','-start')).ids),'shutdown_cohort_changed');
-      need(unique(r.hashes)&&!prior.filter(x=>x.phase.endsWith('-shutdown')).some(x=>x.hashes.some(h=>r.hashes.includes(h))),'shutdown_receipts_reused');break;
+      shape(generationCounts.shutdown,5,3);containerIds();need(same(r.ids,at(r.phase.replace('-shutdown','-start')).ids),'shutdown_cohort_changed');
+      need(unique(r.hashes)&&!prior.filter(x=>x.phase.endsWith('-shutdown')).some(x=>x.hashes.some(h=>r.hashes.includes(h))),'shutdown_receipts_reused');
+      {const d=r.detail.dashboardShutdown,b=d.binding;require('./dashboard-shutdown-contract.cjs').validate(d);
+        need(d.status==='graceful'&&d.redisClients===1&&b.run===r.run&&b.source===r.source&&b.generation===r.phase.split('-')[0]
+          &&b.publication===at('preflight').hashes[0]&&b.imageId===at('builds').ids[1]&&sha(JSON.stringify(d))===r.hashes[2]
+          &&Date.parse(d.recordedAt)<=Date.parse(r.utc),'dashboard_shutdown_unverified');}
+      break;
     case 'restore':
       // database() returns migration/role counts and a variable retained writer-receipt count.
       need(r.counts.length===3&&r.counts[0]===34&&r.counts[1]===4&&r.counts[2]>=4,'phase_restore_counts');
@@ -108,7 +133,7 @@ function validateEvidence(r,prior){
       need(r.counts.length===3&&r.counts[0]===19&&r.counts[1]===19&&r.counts[2]>0,'phase_closure_counts');
       shape(r.counts,24,0);need(same(r.ids,at('inventory').ids),'closure_inventory_changed');
       need(r.detail.outcomes.every(o=>['exited','graceful'].includes(o.state)&&o.exit===0),'closure_not_clean');
-      for(const [i,g] of ['release','forward','normal'].entries())for(const [j,role] of ['api','admin-writer','dashboard','reporter','widget'].entries()){const o=r.detail.outcomes[3+i*5+j];need(o.role===role&&o.generation===g&&(j>1||o.state==='graceful'),'closure_generation_shutdown');}break;
+      for(const [i,g] of ['release','forward','normal'].entries())for(const [j,role] of ['api','admin-writer','dashboard','reporter','widget'].entries()){const o=r.detail.outcomes[3+i*5+j];need(o.role===role&&o.generation===g&&(j>2||o.state==='graceful'),'closure_generation_shutdown');}break;
     case 'complete':shape([],0,0);break;
     default:need(false,'unknown_phase');
   }

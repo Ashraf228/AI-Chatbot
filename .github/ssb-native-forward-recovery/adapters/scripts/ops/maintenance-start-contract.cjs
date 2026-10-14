@@ -10,11 +10,11 @@ const ids = value => /^sha256:[a-f0-9]{64}$/.test(value || '');
 const keys = value => Object.keys(value || {}).sort();
 const serviceNames = ['api', 'admin-writer', 'dashboard', 'reporter', 'widget'];
 const commands = { api: ['node','dist/main.js'], 'admin-writer': ['node','dist/admin-writer/server.js'],
-  dashboard: ['node','app/server.js'], reporter: ['node','dist/reporter-entry.cjs','weekly'], widget: ['nginx','-g','daemon off;'] };
+  dashboard: ['node','app/scripts/dashboard-entry.cjs'], reporter: ['node','dist/reporter-entry.cjs','weekly'], widget: ['nginx','-g','daemon off;'] };
 const targets = { state: '/run/ssb-maintenance', runtime: '/run/ssb-runtime-contract.json',
   writerDb: '/run/ssb-writer-db', writerKey: '/run/ssb-writer-signing-key' };
 const mounts = { api: ['state','runtime'], 'admin-writer': ['state','runtime','writerDb','writerKey'],
-  dashboard: ['writerKey'], reporter: ['state'], widget: [] };
+  dashboard: ['writerKey','state'], reporter: ['state'], widget: [] };
 const serviceNetworks = {api:['internal','egress','widget_api'], 'admin-writer':['internal','admin_writer'],
   dashboard:['internal','admin_writer','ingress'],reporter:['internal','egress'],widget:['widget_api','ingress']};
 const tmpfs = { api: ['/tmp:rw,nosuid,size=16m'], 'admin-writer': [],
@@ -29,7 +29,7 @@ const operatingKeys = {
     'PUBLIC_WIDGET_BUNDLE_URL','NEXT_PUBLIC_WIDGET_LOADER_URL','SMTP_HOST','SMTP_PORT','SMTP_USER',
     'SMTP_PASS','REPORTS_FROM_EMAIL','LEAD_NOTIFICATION_EMAIL','ADMIN_EMAIL','APP_URL'],
   dashboard: ['ADMIN_SESSION_SECRET','DASHBOARD_INTERNAL_TOKEN','ADMIN_PANEL_PASSWORD_HASH',
-    'DASHBOARD_PUBLIC_URL','REDIS_URL','NEXT_PUBLIC_WIDGET_LOADER_URL','OPERATOR_PANEL_PASSWORD_HASH'],
+    'DASHBOARD_PUBLIC_URL','REDIS_URL','NEXT_PUBLIC_WIDGET_LOADER_URL','OPERATOR_PANEL_PASSWORD_HASH','SSB_DASHBOARD_SHUTDOWN_BINDING'],
   reporter: ['SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASS','REPORTS_FROM_EMAIL','SSB_REPORTER_DIAGNOSTIC_BINDING'],
   'admin-writer': ['ADMIN_SESSION_SECRET','DASHBOARD_INTERNAL_TOKEN'], widget: [],
 };
@@ -79,7 +79,7 @@ function assertPlan(binding, c) {
     && new Set(c.predecessors.map(p=>p.id)).size===5 && c.predecessors.every(p=>
       /^[a-f0-9]{64}$/.test(p.id||'') && ids(p.imageId) && p.project===`${binding.service}-${c.previousGeneration}`
       && p.name===`${p.project}-${p.service}` && p.name!==c.containerNames[p.service]
-      && (!['api','admin-writer'].includes(p.service) || p.receipt?.path===path.join(binding.root,`shutdown-${p.name}.json`))),
+      && (!['api','admin-writer','dashboard'].includes(p.service) || p.receipt?.path===path.join(binding.root,`shutdown-${p.name}.json`))),
   'predecessor_binding_invalid');
   deny(same(keys(c.mountFiles), ['runtime','writerDb','writerKey'])
     && Array.isArray(c.serviceNetworks?.[c.service]) && c.serviceNetworks[c.service].length > 0
@@ -134,10 +134,12 @@ function assertImage(image, c) {
   const cfg = image[0].Config, app = c.service !== 'widget';
   deny(app ? cfg.User === 'node' : (cfg.User === undefined || cfg.User === ''), 'image_user_invalid');
   const command = c.service === 'admin-writer' ? commands.api : commands[c.service];
-  deny(same(cfg.Cmd,command) && (c.service === 'dashboard' ? same(cfg.Entrypoint,['docker-entrypoint.sh']) : app ? (cfg.Entrypoint == null || same(cfg.Entrypoint,[]))
+  deny(same(cfg.Cmd,command) && (app ? (cfg.Entrypoint == null || same(cfg.Entrypoint,[]))
     : same(cfg.Entrypoint,['/docker-entrypoint.sh'])), 'image_command_invalid');
   if (['api','admin-writer','reporter'].includes(c.service)) deny(cfg.Labels?.['com.ssb.maintenance-protocol'] === '2', 'image_not_instrumented');
   if (c.service === 'reporter') deny(cfg.Labels?.['com.ssb.reporter-lifecycle'] === '1', 'image_reporter_lifecycle_missing');
+  if (c.service === 'dashboard') deny(cfg.Labels?.['com.ssb.dashboard-shutdown']==='1' && cfg.Labels?.['com.ssb.maintenance-protocol']==='2'
+    && cfg.StopSignal==='SIGTERM','dashboard_shutdown_unverified');
   if (['api','admin-writer'].includes(c.service)) {
     deny(cfg.Labels?.['com.ssb.shutdown-protocol']==='1','image_shutdown_protocol_missing');
     deny(cfg.StopSignal===undefined || cfg.StopSignal==='SIGTERM','image_stop_signal_invalid');
@@ -190,7 +192,7 @@ function assertCompose(binding, c, config, cfg) {
   if(!['api','dashboard'].includes(c.service)) forbidden.push('REDIS_URL');
   deny(forbidden.every(k=>!e[k]),'service_credentials_forbidden');
   deny(operatingDigest(c.service,e)===c.operatingEnvironmentSha256[c.service], 'operating_binding_changed');
-  if(['api','admin-writer','reporter'].includes(c.service)) deny(e.NODE_ENV==='production' && e.APP_ENV==='production'
+  if(['api','admin-writer','reporter','dashboard'].includes(c.service)) deny(e.NODE_ENV==='production' && e.APP_ENV==='production'
     && e.MAINTENANCE_STATE_ROOT===targets.state && e.MAINTENANCE_SERVICE===binding.service
     && e.MAINTENANCE_GENERATION===binding.generation,'maintenance_binding_invalid');
   if(['api','admin-writer'].includes(c.service)) deny(e.ADMIN_WRITER_RUNTIME_FILE===targets.runtime
@@ -209,6 +211,9 @@ function assertCompose(binding, c, config, cfg) {
     && e.ADMIN_WRITER_BASE_URL==='http://admin-writer:3011' && e.DASHBOARD_INTERNAL_TOKEN?.length>=32
     && e.ADMIN_WRITER_SIGNING_KEY_FILE===targets.writerKey,'dashboard_writer_binding_missing');
   if(c.service==='dashboard') {
+    const expected={version:1,run:c.run,source:'94a25578e883a6d7bbd03f26c56735739f75e45e',publication:c.publication,service:binding.service,generation:binding.generation,participant:c.containerNames.dashboard,imageId:c.imageId};
+    require('./dashboard-shutdown-contract.cjs').binding(expected);
+    deny(e.SSB_DASHBOARD_SHUTDOWN_BINDING===JSON.stringify(expected),'dashboard_shutdown_unverified');
     deny(e.HOSTNAME==='0.0.0.0' && e.PORT==='3000','dashboard_listener_binding_invalid');
     let origin;try{origin=new URL(e.DASHBOARD_PUBLIC_URL);}catch{throw new MaintenanceDenied('dashboard_origin_invalid');}
     deny(origin.protocol==='https:' && !origin.username && !origin.password && !origin.search && !origin.hash
@@ -241,6 +246,11 @@ function assertPredecessor(binding,c,p,list) {
       && r.imageId===p.imageId && r.remainingWork===0 && r.poolsClosed===true
       && Number.isFinite(r.elapsedMs) && r.elapsedMs>=0 && r.elapsedMs<7000
       && Number.isFinite(at) && at>=Date.parse(s.StartedAt) && at<=Date.parse(s.FinishedAt), 'predecessor_shutdown_unverified');
+  }
+  if(p.service==='dashboard') {
+    deny(p.receipt?.path===path.join(binding.root,`shutdown-${p.name}.json`),'dashboard_shutdown_unverified');
+    const expected={version:1,run:c.run,source:'94a25578e883a6d7bbd03f26c56735739f75e45e',publication:c.publication,service:binding.service,generation:c.previousGeneration,participant:p.name,imageId:p.imageId};
+    require('./dashboard-shutdown-contract.cjs').completed(JSON.parse(readBoundFile(p.receipt,c.fileUid)),expected,s);
   }
 }
 

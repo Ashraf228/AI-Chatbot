@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cp=require('node:child_process'),vm=require('node:vm'),{createRequire}=require('node:module');
-const metadata=service=>({User:service==='widget'?'':'node',Cmd:service==='dashboard'?['node','app/server.js']:service==='reporter'?['node','dist/reporter-entry.cjs','weekly']:service==='widget'?['nginx','-g','daemon off;']:['node','dist/main.js'],Entrypoint:service==='dashboard'?['docker-entrypoint.sh']:service==='widget'?['/docker-entrypoint.sh']:[],Env:[],Labels:{'com.ssb.maintenance-protocol':'2','com.ssb.shutdown-protocol':'1','com.ssb.reporter-lifecycle':'1'}});
+const metadata=service=>({User:service==='widget'?'':'node',Cmd:service==='dashboard'?['node','app/scripts/dashboard-entry.cjs']:service==='reporter'?['node','dist/reporter-entry.cjs','weekly']:service==='widget'?['nginx','-g','daemon off;']:['node','dist/main.js'],Entrypoint:service==='widget'?['/docker-entrypoint.sh']:[],Env:[],StopSignal:'SIGTERM',Labels:{'com.ssb.dashboard-shutdown':'1','com.ssb.maintenance-protocol':'2','com.ssb.shutdown-protocol':'1','com.ssb.reporter-lifecycle':'1'}});
 
 // This branch is a test-only preload. Every Docker/network transport is denied or simulated.
 if(process.env.SSB_START_OFFLINE_CHILD){
@@ -137,6 +137,10 @@ if(process.env.SSB_START_OFFLINE_CHILD){
     if(['api','admin-writer'].includes(service)){
      const bytes=JSON.stringify({version:1,status:'graceful',component:service,service:n.prefix,generation:'release',participant:p.name,imageId:p.imageId,remainingWork:0,poolsClosed:true,elapsedMs:1000,recordedAt});
      p.receipt={path:path.join(n.stateRoot,'shutdown-'+p.name+'.json'),sha256:sha(bytes)};fs.writeFileSync(p.receipt.path,bytes,{mode:0o600});
+    }
+    if(service==='dashboard'){
+      const bytes=JSON.stringify({version:1,binding:{version:1,run:opts.run,source:SOURCE,publication,service:n.prefix,generation:'release',participant:p.name,imageId:p.imageId},status:'graceful',signal:'SIGTERM',admissionClosed:true,remainingWork:0,httpClosed:true,nextClosed:true,redisClosed:true,redisClients:1,recordedAt:'2026-10-10T00:00:01.000Z',elapsedMs:100,failure:null,secondary:[]});
+      p.receipt={path:path.join(n.stateRoot,'shutdown-'+p.name+'.json'),sha256:sha(bytes)};fs.writeFileSync(p.receipt.path,bytes,{mode:0o600});
     }
     predecessorStates[p.id]={Id:p.id,Name:'/'+p.name,Image:p.imageId,Config:{Labels:{'com.docker.compose.project':p.project,'com.docker.compose.service':service}},HostConfig:{RestartPolicy:{Name:'no'}},State:{Status:'exited',Running:false,Paused:false,Restarting:false,OOMKilled:false,ExitCode:0,StartedAt:startedAt,FinishedAt:finishedAt}};
     return p;
@@ -301,7 +305,7 @@ if(process.env.SSB_START_OFFLINE_CHILD){
  test('forward entry verifies five retained release predecessors through every actual participant helper',async t=>{
   const h=generationHarness(t,{key:'forward'}),r=await h.n.startGeneration('forward');
   assert.equal(h.c.bootstrap,false);assert.equal(h.c.previousGeneration,'release');assert.equal(h.c.predecessors.length,5);
-  assert.deepEqual(h.c.predecessors.map(p=>p.service),h.f.services);assert.equal(h.c.predecessors.filter(p=>p.receipt).length,2);
+  assert.deepEqual(h.c.predecessors.map(p=>p.service),h.f.services);assert.equal(h.c.predecessors.filter(p=>p.receipt).length,3);
   assert.deepEqual(r.counts,[5,5,8]);assert.ok(h.operations.every(x=>x.binding.generation==='forward'));
   const events=fs.readFileSync(h.events,'utf8').trim().split('\n').map(JSON.parse);
   for(const p of h.c.predecessors)assert.equal(events.filter(e=>e.kind==='predecessor-inspect'&&e.value===p.id).length,15);
@@ -391,7 +395,10 @@ if(process.env.SSB_START_OFFLINE_CHILD){
   assert.equal(h.d.resource.state,'planned');assert.equal(h.d.resource.id,null);
   assert.deepEqual(h.eventsRead.filter(e=>e.kind==='predecessor-inspect').map(e=>e.value),[h.c.predecessors[0].id]);
   assert.ok(!h.eventsRead.some(e=>e.kind==='docker'&&['create','container:start','container:ls'].includes(e.value)));
-  assert.equal(h.operations.length,2);assert.equal(h.stopped.size,0);assert.equal(h.rows.at(-1).detail.outcomes[0].state,'unverified');
+  assert.equal(h.operations.length,2);assert.equal(h.stopped.size,0);
+  // This focused helper fixture does not retain the preceding generation's closure observations.
+  const closure=h.rows.at(-1);assert.equal(closure.ok,false);assert.deepEqual(closure.detail.outcomes,[]);
+  assert.equal(closure.detail.closure.observations,'rejected');assert.equal(closure.detail.closure.rejectedBy,'dashboard_shutdown_unverified');
  });
  for(const fault of ['helper','accounting','postinspect','postidentity'])test('actual controller start -> helper/process -> closure -> receipt -> receiver: '+fault,async t=>{
   const h=generationHarness(t,{fault}),lines=[],values=nativeEvidence(),execute=h.n.execute.bind(h.n);
