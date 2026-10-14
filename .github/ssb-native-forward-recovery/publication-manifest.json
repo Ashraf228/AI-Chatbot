@@ -132,6 +132,14 @@
       "gitBlob": "7116a70abb54d510d1ba806e3f38c60f6aa9a280"
     },
     {
+      "path": ".github/ssb-native-forward-recovery/default-acl-fixture.cjs",
+      "sha256": "616f440410da2c14757c7464f51a801244922d7884f3a3d14996fc968cf657c4",
+      "bytes": 2708,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "e9e3aecab2f7a83217b0d041f574aab85157c69e"
+    },
+    {
       "path": ".github/ssb-native-forward-recovery/diagnostics.cjs",
       "sha256": "4ef1dc2062da5e7f0b00ace6c9f4f32896fcaadc20213af2ed3d85bccc4a3533",
       "bytes": 42548,
@@ -261,11 +269,11 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/probe.cjs",
-      "sha256": "c61f8ed14a08ca352ee5482ea434d88c0541ce4684a7c1ba6a7b6b227c4ef7f6",
-      "bytes": 25643,
+      "sha256": "8710de2d18fe69fef72f6949af5f9e8c65332c44da04c864a34918f5f9094945",
+      "bytes": 25732,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "418997f66cd6f6d68fe055923383281dde7cba3b"
+      "gitBlob": "4e881110612cb1d789e8b7b2a82629fca2fe61d1"
     },
     {
       "path": ".github/ssb-native-forward-recovery/real-pools.cjs",
@@ -381,19 +389,19 @@
     },
     {
       "path": ".github/ssb-native-forward-recovery/restore-diagnostic.test.cjs",
-      "sha256": "ef5b04c472f282714995f7fdce759ad2dd6d8b8cc34b01a3f0dba03f39a90a80",
-      "bytes": 28271,
+      "sha256": "95a490e1af54fba9c97d27208bf6cdfec25e4c5f795705e1cdc8b96e968ea2df",
+      "bytes": 33394,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "fe56ecee0ac96068b84363e3275c44a6bffabb67"
+      "gitBlob": "78e5f0bae14cdcd17f7565512fde6331e3a9c465"
     },
     {
       "path": ".github/ssb-native-forward-recovery/restore-offline-preload.cjs",
-      "sha256": "e06aa57f4196d7506c8dac663146f16908a6e6bdde356f97b031383068ed1a6e",
-      "bytes": 7379,
+      "sha256": "1c8ca013f978de4c1583e3ec158ced96c43ae6362418a7d60b59a7af9db7bcde",
+      "bytes": 7546,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "e77a97447c4f459f594fdf1ea378d734b8e174e6"
+      "gitBlob": "97c7357d71b992573ece6ce5c61ae9a8e52972cc"
     },
     {
       "path": ".github/ssb-native-forward-recovery/review-regression.test.cjs",
