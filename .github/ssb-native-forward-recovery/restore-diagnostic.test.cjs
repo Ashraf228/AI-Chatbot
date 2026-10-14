@@ -41,7 +41,7 @@ function harness(cfg={},extra={}){
   const fail=cfg.driverStep!==undefined&&cfg.driverStep===step;record.step=step;
   return fakeChild({stdout:fail?'':stdout,stderr:fail?marker:'',exit:fail?1:0,signal:fail&&cfg.signal?cfg.signal:null},record);
  };
- const processFS={...fs,writeFileSync(p,...args){if(extra.rawWriteFailure&&p.endsWith('.stderr'))throw Object.assign(Error(marker),{code:'ENOSPC'});return fs.writeFileSync(p,...args);}};
+ const processFS={...fs,writeFileSync(p,...args){if(extra.rawWriteFailure&&p.endsWith('.stderr')&&args[0].length>0)throw Object.assign(Error(marker),{code:'ENOSPC'});return fs.writeFileSync(p,...args);}};
  const C=load(path.join(__dirname,'common.cjs'),{'node:fs':processFS,'node:child_process':{spawn:transport}});
  const fakeFS={...fs,statfsSync:()=>({bavail:1e9,bsize:4096,ffree:1e9}),readFileSync:(p,...args)=>p==='/proc/meminfo'?'MemAvailable: 16000000 kB\n':fs.readFileSync(p,...args)};
  const restoreModule=load(path.join(__dirname,'restore-diagnostic.cjs'),{'./common.cjs':C});
@@ -61,11 +61,11 @@ async function run(cfg={},extra={}){
  const rows=lines.map(l=>JSON.parse(Buffer.from(l.split(' ')[1],'base64')));assert.doesNotMatch(JSON.stringify(rows),/SYNTHETIC_PRIVATE|synthetic-private|SELECT |ALTER ROLE|PASSWORD|stack|\.env/);
  return{...h,lines,rows,error};
 }
-function receive(lines,writeFailure){
- const dest=path.join(tmp(),'received'),logs=[],api=(bin,args)=>{assert.equal(bin,'gh');const u=args[1];if(u.endsWith('/runs/'+opts.run))return JSON.stringify({id:+opts.run,event:'workflow_dispatch',run_attempt:1,head_sha:opts.workflowHead,display_title:dispatchTitle(opts.workflowHead,opts.dispatchNonce),status:'completed',conclusion:'failure',path:'.github/workflows/ssb-native-forward-recovery.yml'});if(u.endsWith('/jobs/'+job))return JSON.stringify({id:+job,run_id:+opts.run,conclusion:'failure',name:'Native forward recovery',labels:['ubuntu-24.04']});assert.ok(u.endsWith('/logs'));return lines.join('\n');};
+function receive(lines,writeFailure,complete=false){
+ const dest=path.join(tmp(),'received'),logs=[],api=(bin,args)=>{assert.equal(bin,'gh');const u=args[1];if(u.endsWith('/runs/'+opts.run))return JSON.stringify({id:+opts.run,event:'workflow_dispatch',run_attempt:1,head_sha:opts.workflowHead,display_title:dispatchTitle(opts.workflowHead,opts.dispatchNonce),status:'completed',conclusion:complete?'success':'failure',path:'.github/workflows/ssb-native-forward-recovery.yml'});if(u.endsWith('/jobs/'+job))return JSON.stringify({id:+job,run_id:+opts.run,conclusion:complete?'success':'failure',name:'Native forward recovery',labels:['ubuntu-24.04']});assert.ok(u.endsWith('/logs'));return lines.join('\n');};
  const f={...fs,writeFileSync(p,...a){if(path.basename(p)===writeFailure)throw Object.assign(Error(marker),{code:'ENOSPC'});return fs.writeFileSync(p,...a);}};
  load(path.join(__dirname,'receive.cjs'),{'node:fs':f,'node:child_process':{execFileSync:api}},{console:{log:x=>logs.push(x)}}).main([opts.run,job,opts.workflowHead,opts.dispatchNonce,dest]);
- assert.equal(logs.length,1);const proof=JSON.parse(fs.readFileSync(path.join(dest,'Empfang.json')));assert.equal(proof.status,'PARTIAL_FAILURE_RECEIVED');assert.equal(proof.publicationManifest,pm());return proof;
+ assert.equal(logs.length,1);const proof=JSON.parse(fs.readFileSync(path.join(dest,'Empfang.json')));assert.equal(proof.status,complete?'RECEIVED_AND_VERIFIED':'PARTIAL_FAILURE_RECEIVED');assert.equal(proof.publicationManifest,pm());return proof;
 }
 const fail=h=>h.rows.find(r=>r.phase==='restore').detail.failure;
 function find(e,fn){return e&&(fn(e)||find(e.cause,fn)||Array.isArray(e.errors)&&e.errors.some(x=>find(x,fn)));}
@@ -98,8 +98,8 @@ const cases=[
 for(const [name,cfg,step,substep,kind,sqlstate,nodeCode]of cases)test('real Node stdin entry -> process -> driver -> receipt -> receiver: '+name,async()=>{
  const h=await run(cfg);assert.ok(h.error);const d=fail(h),p=probeCallsInFailure(d)[0];assert.equal(d.restore.step,step);assert.equal(p.primary.step,substep);assert.equal(p.primary.errorClass,kind);assert.equal(p.primary.sqlstate,sqlstate);assert.equal(p.primary.nodeCode,nodeCode);assert.equal(p.binding.publication,pm());receive(h.lines);
 });
-test('historical driver drops role import operation; corrected driver retains it without asserting historical SQL cause',async()=>{
- const old=await run({driverStep:'role-import'},{old:true});assert.ok(old.error);assert.equal(fail(old).restore,undefined);assert.equal(fail(old).code,'command_failed');
+test('previous and current driver retain role import operation without asserting historical SQL cause',async()=>{
+ const old=await run({driverStep:'role-import'},{old:true});assert.ok(old.error);assert.equal(fail(old).restore.step,'role-import');assert.equal(fail(old).code,'command_failed');
  const next=await run({driverStep:'role-import'});assert.equal(fail(next).restore.step,'role-import');
 });
 for(const output of ['missing','truncated','json','call','run','publication','action','private','write-failed','exit-zero'])test('unusable or misbound probe diagnosis never accepts restore: '+output,async()=>{
@@ -123,13 +123,13 @@ test('receiver rejects wrong restore binding, extra fields, absent/truncated rec
  for(const file of ['receipts.txt','Empfang.json'])assert.throws(()=>receive(h.lines,file));
 });
 test('forced process termination remains error, never clean restore',async()=>{const h=await run({driverStep:'database-import',signal:'SIGKILL'});assert.ok(h.error);assert.equal(fail(h).process.signal,'SIGKILL');receive(h.lines);});
-test('confirmed old probe finally masks SQL primary with pool close error; corrected path preserves both',async()=>{
+test('previous and current probe preserve SQL primary and pool close error',async()=>{
  for(const old of [true,false]){
   const primary=Object.assign(Error(marker),{code:'42P01'}),cleanup=Object.assign(Error(marker),{code:'EIO'});let ends=0;
   const file=path.join(old?path.resolve(__dirname,'../../../baseline/.github/ssb-native-forward-recovery'):__dirname,'probe.cjs');
   const m=load(file,{'/app/node_modules/pg':{Pool:class{async query(){throw primary;}async end(){ends++;throw cleanup;}}}});
   let error;try{await m.main({action:'database',passwords:{postgres:'1'.repeat(64)}});}catch(e){error=e;}assert.equal(ends,1);
-  if(old)assert.equal(error,cleanup);else{assert.ok(error instanceof AggregateError);assert.equal(error.errors[0],primary);assert.equal(error.errors[1],cleanup);assert.ok(primary.stack);}
+  assert.ok(error instanceof AggregateError);assert.equal(error.errors[0],primary);assert.equal(error.errors[1],cleanup);assert.ok(primary.stack);
  }
 });
 test('query literals and security assertions remain byte-identical despite step wrappers',()=>{
@@ -156,4 +156,54 @@ test('readiness subdiagnosis agrees with enclosing restore step; legacy absence 
  const legacy=structuredClone(h.rows);delete legacy[17].detail.failure.restore;receive(rechain(legacy));
  const nested=structuredClone(h.rows),v=nested[17].detail.failure,restore=v.restore;delete v.restore;nested[17].detail.failure={code:'aggregate',process:null,state:null,causes:[v],restore};receive(rechain(nested));
  restore.step='role-import';restore.lastConfirmed='role-filter';assert.throws(()=>receive(rechain(nested)));
+});
+test('complete success exports all six exact equalities and binds the actual binary dump',async()=>{
+ const h=await run();assert.ifError(h.error);const receipt=h.rows.find(r=>r.phase==='restore'),s=receipt.detail.snapshot;
+ assert.deepEqual(s.components.map(c=>c.name),require('./snapshot-diagnostic.cjs').names);assert.ok(s.components.every(c=>c.equal));assert.equal(s.beforeHash,s.afterHash);assert.equal(s.binding.archive,sha(h.calls.find(c=>c.step==='database-import').input));
+ const requests=h.calls.filter(c=>c.a.at(-1)==='/proof/probe.cjs').map(c=>JSON.parse(c.input)).filter(c=>c.action==='database');
+ assert.equal(s.binding.beforeCall,requests[0].diagnostic.call);assert.equal(s.binding.afterCall,requests[1].diagnostic.call);assert.deepEqual(requests[1].snapshotBaseline.before.binding,requests[0].diagnostic);
+ const counts=[h.counts[0],h.counts.at(-1)].map(p=>JSON.parse(fs.readFileSync(p)));assert.equal(counts[0].queries.length,8);assert.deepEqual(counts[0].queries,counts[1].queries);assert.ok(counts.every(c=>c.pools===c.ends));
+});
+for(const component of require('./snapshot-diagnostic.cjs').names)test('actual comparison failure -> regular receiver identifies only '+component,async()=>{
+ const h=await run({action:'database',restoreStage:'after',component});assert.ok(h.error);const p=probeCallsInFailure(fail(h))[0];assert.equal(p.primary.step,'snapshot-compare');assert.equal(p.primary.assertionCode,'ERR_ASSERTION');assert.deepEqual(p.snapshot.components.filter(c=>!c.equal).map(c=>c.name),[component]);assert.notEqual(p.snapshot.beforeHash,p.snapshot.afterHash);assert.equal(p.snapshot.binding.archive,sha(h.calls.find(c=>c.step==='database-import').input));receive(h.lines);
+});
+test('representation-only key order difference stays a mismatch, never normalized to success',async()=>{
+ const h=await run({action:'database',restoreStage:'after',component:'tables',representation:true});assert.ok(h.error);const p=probeCallsInFailure(fail(h))[0];assert.equal(p.primary.assertionCode,'ERR_ASSERTION');assert.deepEqual(p.snapshot.components.filter(c=>!c.equal).map(c=>c.name),['tables']);assert.ok(p.snapshot.components.every(c=>c.beforeRows===c.afterRows));receive(h.lines);
+});
+for(const snapshotMutation of ['missing','component','archive','beforeCall','beforeHash','private'])test('damaged/misbound child metadata remains rejecting: '+snapshotMutation,async()=>{
+ const h=await run({action:'database',restoreStage:'after',component:'markers',snapshotMutation});assert.ok(h.error);assert.equal(fail(h).code,'command_failed');assert.equal(probeCallsInFailure(fail(h)).length,0);assert.ok(find(h.error,e=>e.code.startsWith?.('snapshot_')||e.code==='probe_diagnostic_invalid'));receive(h.lines);
+});
+test('comparison primary survives additional pool, process-evidence and closure errors',async()=>{
+ const h=await run({action:'database',restoreStage:'after',component:'markers',closeFailure:true},{rawWriteFailure:true,closureFailure:true});assert.ok(h.error);assert.ok(find(h.error,e=>e.code==='command_failed'));assert.ok(find(h.error,e=>e.code==='evidence_write_failed'));const p=probeCallsInFailure(fail(h))[0];assert.equal(p.primary.assertionCode,'ERR_ASSERTION');assert.equal(p.cleanup[0].nodeCode,'EIO');assert.equal(p.snapshot.components[4].equal,false);receive(h.lines);
+});
+test('receiver rejects missing, extra, misbound and inconsistent component diagnostics',async()=>{
+ const h=await run({action:'database',restoreStage:'after',component:'markers'});
+ for(const mutate of [p=>delete p.snapshot,p=>p.snapshot.binding.run='999',p=>p.snapshot.binding.afterCall='f'.repeat(64),p=>p.snapshot.binding.publication='f'.repeat(64),p=>p.snapshot.components.pop(),p=>p.snapshot.components[4].equal=true,p=>p.snapshot.raw=marker]){const rows=structuredClone(h.rows);mutate(rows[17].detail.failure.probe);assert.throws(()=>receive(rechain(rows)));}
+ for(const file of ['receipts.txt','Empfang.json'])assert.throws(()=>receive(h.lines,file));
+});
+for(const metadataFailure of ['type','json','access'])test('metadata failure stays rejecting without replacing original comparison: '+metadataFailure,async()=>{
+ for(const component of [undefined,'markers']){
+  const h=await run({action:'database',restoreStage:'after',metadataFailure,component});assert.ok(h.error);const p=probeCallsInFailure(fail(h))[0];assert.equal(p.primary.step,'snapshot-compare');assert.equal(p.snapshotError,'unknown');assert.equal(p.snapshot,undefined);
+  if(component)assert.equal(p.primary.assertionCode,'ERR_ASSERTION');else assert.equal(p.primary.errorClass,metadataFailure==='type'?'TypeError':metadataFailure==='json'?'SyntaxError':'Error');receive(h.lines);
+ }
+});
+for(const falseCounts of ['migrations','roles','markers','receipts'])test('Native rejects successful child with contradictory row count: '+falseCounts,async()=>{
+ const h=await run({falseCounts});assert.ok(h.error);assert.ok(find(h.error,e=>e.code==='snapshot_diagnostic_invalid'));assert.ok(!h.calls.some(c=>c.step==='dump'));receive(h.lines);
+});
+test('driver baseline anchor is independently checked at actual success/failure receiver',async()=>{
+ for(const mismatch of [false,true]){
+  const h=await run(mismatch?{action:'database',restoreStage:'after',component:'markers'}:{});assert.equal(Boolean(h.error),mismatch);receive(h.lines,undefined,!mismatch);
+  for(const mutate of [s=>s.binding.beforeCall='f'.repeat(64),s=>s.binding.archive='f'.repeat(64),s=>s.beforeHash='f'.repeat(64),s=>{s.components[0].beforeRows=0;s.components[0].afterRows=0;},s=>{s.components[1].beforeRows=0;s.components[1].afterRows=0;},s=>{s.components[4].beforeRows=0;s.components[4].afterRows=0;},s=>{s.components[5].beforeRows=0;s.components[5].afterRows=0;}]){
+   const rows=structuredClone(h.rows),r=rows[17];mutate(mismatch?r.detail.failure.probe.snapshot:r.detail.snapshot);assert.throws(()=>receive(rechain(rows),undefined,!mismatch));
+  }
+  const rows=structuredClone(h.rows);if(mismatch)delete rows[17].detail.failure.restoreSnapshot;else delete rows[17].detail.snapshotBaseline;assert.throws(()=>receive(rechain(rows),undefined,!mismatch));
+ }
+});
+test('driver baseline retained through aggregate context, contradictory inherited anchor rejected',async()=>{
+ const h=await run({action:'database',restoreStage:'after',component:'markers'}),rows=structuredClone(h.rows),original=rows[17].detail.failure,anchor=original.restoreSnapshot;delete original.restoreSnapshot;
+ rows[17].detail.failure={code:'aggregate',process:null,state:null,causes:[original],restoreSnapshot:anchor};receive(rechain(rows));
+ anchor.archive='f'.repeat(64);assert.throws(()=>receive(rechain(rows)));
+});
+for(const omitCounts of ['before','after'])test('missing successful child counts rejected at Native boundary: '+omitCounts,async()=>{
+ const h=await run({omitCounts});assert.ok(h.error);assert.ok(find(h.error,e=>e.code==='snapshot_diagnostic_invalid'));assert.equal(h.calls.some(c=>c.step==='dump'),omitCounts==='after');assert.equal(h.rows.at(-1).phase,'closure');receive(h.lines);
 });

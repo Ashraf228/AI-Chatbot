@@ -9,7 +9,7 @@ const {phases,Receipts,receive,generationCounts}=require('./evidence.cjs'),{expa
 const {sha}=require('./common.cjs');
 const context={workflowHead:'a'.repeat(40),dispatchNonce:'b'.repeat(64)};
 const options=output=>({authorization:'ONE_NATIVE_FORWARD_RECOVERY',run:'12345678',attempt:'1',...context,output});
-function nativeEvidence(){
+function nativeEvidence(run='12345678'){
   const id=n=>n.toString(16).padStart(64,'0'),all=Array.from({length:24},(_,i)=>id(i+1));
   const image=n=>'sha256:'+id(n),result={
     preflight:{counts:[901,4],hashes:[sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')))]},
@@ -17,6 +17,8 @@ function nativeEvidence(){
     builds:{hashes:[require('./reporter-source.cjs').manifest().hash],counts:[4,2],ids:[100,101,102,103,100].map(image)},initialize:{counts:[34,4,1],hashes:[id(200)]},roles:{counts:[32]},
     restore:{counts:[34,4,7],hashes:[id(210),id(211)]},inventory:{counts:[19,5,2],ids:all},closure:{counts:[19,19,1000],ids:all},complete:{},
   };
+  result.restore.detail={failure:null,outcomes:[],snapshot:{version:1,binding:{run,source:SOURCE,publication:result.preflight.hashes[0],beforeCall:id(300),afterCall:id(301),archive:id(210)},beforeHash:id(211),afterHash:id(211),components:require('./snapshot-diagnostic.cjs').names.map(name=>({name,beforeHash:id(211),afterHash:id(211),beforeRows:({migrations:34,roles:4,markers:2,receipts:7}[name]||1),afterRows:({migrations:34,roles:4,markers:2,receipts:7}[name]||1),equal:true}))}};
+  {const s=result.restore.detail.snapshot;result.restore.detail.snapshotBaseline={version:1,archive:s.binding.archive,before:{version:1,binding:{version:1,action:'database',run,source:SOURCE,publication:s.binding.publication,call:s.binding.beforeCall,restoreStage:'before'},hash:s.beforeHash,components:s.components.map(c=>({name:c.name,rows:c.beforeRows,hash:c.beforeHash}))}};}
   for(const [i,g]of ['release','forward','normal'].entries()){
     const ids=all.slice(3+i*5,8+i*5);
     result[g+'-start']={counts:[...generationCounts.start[g]],ids};result[g+'-e1']={counts:[...generationCounts.e1],hashes:[id(220),id(221)]};
@@ -50,7 +52,7 @@ for(const data of ['', '{}','SSB_PROOF_JSON {','SSB_PROOF_JSON {"verified":false
 test('valid complete stdout receipt',()=>assert.equal(proofResult(Buffer.from('private app log\nSSB_PROOF_JSON {"verified":true,"counts":[32]}\n')).verified,true));
 test('actual probe method preserves stdin and rejects missing mandatory checks',async()=>{const n=new Native(options(()=>{}));n.synthetic={passwords:{}};n.probeContainer={id:'a'.repeat(64)};n.images={api:'sha256:'+'b'.repeat(64)};let seen;n.d=async(args,o)=>{seen={args,o};return{stdout:Buffer.from('SSB_PROOF_JSON {"verified":true,"counts":[]}\n')};};await assert.rejects(n.probe('roles'));assert.equal(JSON.parse(seen.o.input).action,'roles');assert.deepEqual(seen.args.slice(0,2),['exec','-i']);});
 test('receipt refuses private fields and arbitrary text',()=>{const r=new Receipts('123',SOURCE,context,()=>{});assert.throws(()=>r.emit('roles',true,{token:'private'}));assert.throws(()=>r.emit('roles',true,{ids:['private-credential']}));});
-test('receipt detects truncation, corruption, wrong run and phase omission',()=>{const logs=[],r=new Receipts('123',SOURCE,context,x=>logs.push(x)),evidence=nativeEvidence();for(const p of phases)r.emit(p,true,evidence[p]);assert.throws(()=>receive(logs.slice(0,-1).join('\n'),'123',SOURCE,context));assert.throws(()=>receive(logs.join('\n'),'124',SOURCE,context));assert.throws(()=>receive(logs.join('\n').replace(/SSB_PUBLIC_RECEIPT_V2 ./,'SSB_PUBLIC_RECEIPT_V2 z'),'123',SOURCE,context));assert.throws(()=>receive(logs.filter((_,i)=>i!==5).join('\n'),'123',SOURCE,context));});
+test('receipt detects truncation, corruption, wrong run and phase omission',()=>{const logs=[],r=new Receipts('123',SOURCE,context,x=>logs.push(x)),evidence=nativeEvidence('123');for(const p of phases)r.emit(p,true,evidence[p]);assert.throws(()=>receive(logs.slice(0,-1).join('\n'),'123',SOURCE,context));assert.throws(()=>receive(logs.join('\n'),'124',SOURCE,context));assert.throws(()=>receive(logs.join('\n').replace(/SSB_PUBLIC_RECEIPT_V2 ./,'SSB_PUBLIC_RECEIPT_V2 z'),'123',SOURCE,context));assert.throws(()=>receive(logs.filter((_,i)=>i!==5).join('\n'),'123',SOURCE,context));});
 test('strict fixture substitution rejects missing references',()=>{assert.equal(expand('${BOUND:?required}',{BOUND:'exact'}),'exact');assert.throws(()=>expand('${BOUND:?required}',{}));assert.deepEqual(expand({a:['${BOUND:?required}']},{BOUND:'value'}),{a:['value']});});
 test('native platform and missing approval reject before any process',async()=>{const n=new Native(options(()=>{}));if(process.platform!=='linux'||process.arch!=='x64'||process.getuid()!==0){await assert.rejects(n.preflight());assert.equal(n.proc,undefined);}});
 test('reviewed adapter hashes unchanged',()=>{const m=require('./adapter-bindings.json');for(const f of m.files)assert.equal(sha(fs.readFileSync(path.join(__dirname,'adapters',f.path))),f.sha256);});

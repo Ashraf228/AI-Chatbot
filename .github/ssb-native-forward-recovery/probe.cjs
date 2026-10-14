@@ -182,7 +182,7 @@ async function drain(input){
   }finally{await c.query('ROLLBACK').catch(()=>{});c.release();await p.end();}
 }
 async function database(input){
-  return require('./restore-diagnostic.cjs').probeScope(input,async(step,using)=>using('pool-create','pool-close',()=>pool(input,'postgres',input.host||'db'),async p=>{
+  return require('./restore-diagnostic.cjs').probeScope(input,async(step,using,observe)=>using('pool-create','pool-close',()=>pool(input,'postgres',input.host||'db'),async p=>{
     const snapshot={};
     snapshot.migrations=await step('snapshot-migrations',async()=>(await p.query('SELECT version FROM schema_migrations ORDER BY version')).rows);
     snapshot.roles=await step('snapshot-roles',async()=>(await p.query("SELECT rolname,rolsuper,rolinherit,rolcreaterole,rolcreatedb,rolcanlogin,rolreplication,rolbypassrls FROM pg_roles WHERE rolname LIKE 'ssb_%' ORDER BY rolname")).rows);
@@ -193,8 +193,13 @@ async function database(input){
     await step('snapshot-grants',async()=>assert.equal((await p.query('SELECT count(*)::integer n FROM provider_approval_grants')).rows[0].n,0));
     await step('snapshot-assertions',()=>{assert.equal(snapshot.migrations.length,34);assert.equal(snapshot.roles.length,4);assert.equal(snapshot.markers.length,2);assert.ok(snapshot.receipts.length>=4);});
     if(input.noPools)await step('snapshot-pools',async()=>assert.equal((await p.query("SELECT count(*)::integer n FROM pg_stat_activity WHERE usename IN('ssb_runtime','ssb_admin_writer')")).rows[0].n,0));
-    const digest=await step('snapshot-compare',()=>{const value=sha(JSON.stringify(snapshot));if(input.expected)assert.equal(value,input.expected);return value;});
-    return{verified:true,counts:[34,4,snapshot.receipts.length],hashes:[digest]};
+    let digest,primary,failed=false,metadata,comparison;
+    try{digest=await step('snapshot-compare',()=>{const value=sha(JSON.stringify(snapshot));if(input.expected)assert.equal(value,input.expected);return value;});}catch(error){primary=error;failed=true;}
+    // Derive diagnostics from the existing rows, after preserving the original comparison result.
+    try{if(input.diagnostic){const contract=require('./snapshot-diagnostic.cjs');metadata=contract.measure(snapshot,input.diagnostic);if(input.restoreStage==='after'){comparison=contract.compare(input.snapshotBaseline,metadata);observe.record(comparison);}}}
+    catch(error){observe.failure(error);throw failed?new AggregateError([primary,error],'primary_and_snapshot_diagnostic_failed'):error;}
+    if(failed)throw primary;
+    return{verified:true,counts:[34,4,snapshot.receipts.length],hashes:[digest],...(metadata?{snapshot:metadata}:{}),...(comparison?{snapshotComparison:comparison}:{})};
   }));
 }
 async function main(input){

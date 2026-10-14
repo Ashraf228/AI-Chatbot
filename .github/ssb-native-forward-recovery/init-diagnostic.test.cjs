@@ -53,6 +53,7 @@ function harness({fault=null,old=false,processFailure=null,now}={}){
   if(a[0]==='exec'&&a.includes('pg_restore')){assert.equal(o.input.toString(),'SYNTHETIC_DUMP');return response();}
   if(a[0]==='exec'&&a.includes('/proof/probe.cjs')){const input=JSON.parse(o.input);
    if(['postgres-ready-init','postgres-ready-restore'].includes(input.action))return response('SSB_PROOF_JSON '+JSON.stringify({verified:true,counts:[1,1],ready:true,closed:true,target:input.readiness,binding:input.diagnostic}));
+   if(input.action==='database'&&input.diagnostic){const contract=require('./snapshot-diagnostic.cjs'),snapshot=contract.measure(Object.fromEntries(contract.names.map(k=>[k,Array.from({length:{migrations:34,roles:4,markers:2,receipts:7}[k]||1},()=>({synthetic:true}))])),input.diagnostic);return response('SSB_PROOF_JSON '+JSON.stringify({verified:true,counts:[34,4,7],hashes:[snapshot.hash],snapshot,...(input.restoreStage==='after'?{snapshotComparison:contract.compare(input.snapshotBaseline,snapshot)}:{})}));}
    assert.ok(['initialize','database','restore-logins'].includes(input.action));hit('probe');await new Promise(r=>setImmediate(r));return response(fault?.at==='probe-json'?'SSB_PROOF_JSON {':'SSB_PROOF_JSON '+JSON.stringify({verified:true,counts:input.action==='initialize'?[34,4,1]:input.action==='restore-logins'?[2,2]:[1],hashes:['c'.repeat(64)]}));}
   assert.fail('unapproved offline command');
  };

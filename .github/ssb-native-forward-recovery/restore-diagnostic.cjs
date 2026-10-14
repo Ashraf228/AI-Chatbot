@@ -38,11 +38,16 @@ async function probeScope(input,body){
  try{
   if(trace){
    need(['database','restore-logins'].includes(input.action)&&input.action===trace.binding.action&&input.source===trace.binding.source&&input.service==='ssb-native-'+trace.binding.run&&require('./common.cjs').sha(require('node:fs').readFileSync(require('node:path').join(__dirname,'publication-manifest.json')))===trace.binding.publication,'probe_binding_invalid');
-   if(input.action==='database')need(input.restoreStage===trace.binding.restoreStage&&input.noPools===true&&(input.restoreStage==='before'?input.host===undefined&&input.expected===undefined:input.host==='restore-db'&&/^[a-f0-9]{64}$/.test(input.expected||'')),'probe_binding_invalid');
+   if(input.action==='database'){
+    need(input.restoreStage===trace.binding.restoreStage&&input.noPools===true&&(input.restoreStage==='before'?input.host===undefined&&input.expected===undefined:input.host==='restore-db'&&/^[a-f0-9]{64}$/.test(input.expected||'')),'probe_binding_invalid');
+    if(input.restoreStage==='after')require('./snapshot-diagnostic.cjs').baseline(input.snapshotBaseline,trace.binding,input.expected);
+    else need(!Object.hasOwn(input,'snapshotBaseline'),'snapshot_binding_invalid');
+   }
    else need(input.host==='restore-db','probe_binding_invalid');
    trace.confirm();
   }
-  return await body(step,using);
+  const observe={record(value){need(trace?.binding.restoreStage==='after','snapshot_binding_invalid');trace.snapshot=require('./snapshot-diagnostic.cjs').comparison(value,trace.binding,input.snapshotBaseline);},failure(error){if(trace){if(!trace.primary)trace.capture(error);if(trace.binding.restoreStage==='after')trace.snapshotError=require('./snapshot-diagnostic.cjs').errorCode(error);}}};
+  return await body(step,using,observe);
  }catch(cause){const error=cause instanceof Error?cause:new Error('restore_probe_failed',{cause});if(trace){if(!trace.primary)trace.capture(cause);error.probeDiagnostic=trace.diagnostic();}throw error;}
 }
 module.exports={RestoreProgress,validate,binding,steps,probeScope};

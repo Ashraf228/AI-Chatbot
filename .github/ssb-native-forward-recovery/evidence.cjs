@@ -27,8 +27,11 @@ function validate(r){
   validateDetail(r);
 }
 function validateEvidence(r,prior){
-  const checkStart=v=>{if(!v)return;if(v.restore)need(v.restore.binding.publication===prior[0]?.hashes[0],'restore_binding_invalid');if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
-  for(const probe of probeCallsInFailure(r.detail.failure))need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
+  const checkStart=v=>{if(!v)return;if(v.restoreSnapshot)need(v.restoreSnapshot.before.binding.publication===prior[0]?.hashes[0],'snapshot_binding_invalid');if(v.restore)need(v.restore.binding.publication===prior[0]?.hashes[0],'restore_binding_invalid');if(v.operation)need(v.operation.publication===prior[0]?.hashes[0],'start_binding_invalid');for(const c of v.causes)checkStart(c);};checkStart(r.detail.failure);
+  for(const probe of probeCallsInFailure(r.detail.failure)){
+    need(probe.binding.publication===prior[0]?.hashes[0],'probe_publication_binding');
+    if(probe.snapshot)need(r.phase==='restore'&&probe.snapshot.binding.run===r.run&&probe.snapshot.binding.source===r.source,'snapshot_binding_invalid');
+  }
   const dashboardRecords=v=>v?[...(v.dashboard?[v.dashboard]:[]),...v.causes.flatMap(dashboardRecords)]:[];
   const reporterRecords=v=>v?[...(v.reporter?[v.reporter]:[]),...v.causes.flatMap(reporterRecords)]:[];
   for(const d of reporterRecords(r.detail.failure))need(d.binding.publication===prior[0]?.hashes[0]&&d.image===prior.find(x=>x.phase==='builds'&&x.ok)?.ids[2],'reporter_image_binding');
@@ -92,7 +95,9 @@ function validateEvidence(r,prior){
     case 'restore':
       // database() returns migration/role counts and a variable retained writer-receipt count.
       need(r.counts.length===3&&r.counts[0]===34&&r.counts[1]===4&&r.counts[2]>=4,'phase_restore_counts');
-      shape(r.counts,0,2);need(unique(r.hashes),'phase_restore_hashes');break;
+      shape(r.counts,0,2);need(unique(r.hashes),'phase_restore_hashes');
+      {const s=r.detail.snapshot;need(s.binding.run===r.run&&s.binding.source===r.source&&s.binding.publication===at('preflight').hashes[0]&&s.binding.archive===r.hashes[0]&&s.beforeHash===r.hashes[1]&&s.afterHash===r.hashes[1]&&s.components.every(x=>x.equal),'snapshot_binding_invalid');}
+      break;
     case 'inventory':{
       shape([19,5,2],24,0);containerIds();
       // Native owns three infrastructure containers, three ordered cohorts, then restore-postgres.
