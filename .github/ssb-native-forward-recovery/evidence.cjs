@@ -100,7 +100,7 @@ function validateEvidence(r,prior){
     }
     case 'builds':
       // Native inserts api/dashboard/reporter/widget, then aliases admin-writer to api.
-      shape([4,2],5,2);need(same(r.hashes,[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash]),'reporter_source_binding');need(r.ids.every(s=>/^sha256:[a-f0-9]{64}$/.test(s))&&unique(r.ids.slice(0,4))&&r.ids[4]===r.ids[0]&&!r.ids.some(s=>at('bases').ids.includes(s)),'phase_build_ids');break;
+      shape([4,2],5,3);need(same(r.hashes,[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash,require('./api-source.cjs').manifest().hash]),'build_source_binding');need(r.ids.every(s=>/^sha256:[a-f0-9]{64}$/.test(s))&&unique(r.ids.slice(0,4))&&r.ids[4]===r.ids[0]&&!r.ids.some(s=>at('bases').ids.includes(s)),'phase_build_ids');break;
     case 'initialize':shape([34,4,1],0,1);break;
     case 'roles':shape([32],0,0);break;
     case 'release-start':case 'forward-start':case 'normal-start':

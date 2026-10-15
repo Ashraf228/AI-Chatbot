@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "base": "94a25578e883a6d7bbd03f26c56735739f75e45e",
+  "purpose": "MUTEX_ORDERING_AND_BOOTSTRAP_OVERLAY_NOT_UNCHANGED_RELEASE",
+  "files": [
+    {
+      "path": "api.Dockerfile",
+      "sha256": "8e12a30fd93df840b11c13c25e0cc60342f55edb665cb07e850b36ce807fe802",
+      "bytes": 948,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "41cb364a7786ea877a83331391967fd3db6789e4",
+      "before": "8e12a30fd93df840b11c13c25e0cc60342f55edb665cb07e850b36ce807fe802"
+    },
+    {
+      "path": "src/maintenance/maintenance-mutex.ts",
+      "sha256": "5b3e40deedc42a3e4934fb100e4275c35490b10cc1fd1b1951b34b4fdf351dbf",
+      "bytes": 6928,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "c70153e2eea2459a770b60f73332e5e8b18d57ff",
+      "before": null
+    },
+    {
+      "path": "src/maintenance/maintenance-runtime.ts",
+      "sha256": "9c661f908823f06b360b592d44a8577ff48f682de31345206d412f64e8e52f94",
+      "bytes": 9819,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "6a3aa4fbb3378f0dc5ef3bb726ed04d4b6ded8f4",
+      "before": "ffa9836204691e3bc3b9c7707181705bdfb4cf58f1029e10edb01530c4a4e5ec"
+    },
+    {
+      "path": "src/maintenance/maintenance-state.ts",
+      "sha256": "0887b751730c7ca4566912fa8dc87f4a7164c5493ca1ee0f5082aeaa8921b76a",
+      "bytes": 41508,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "729aed8a3193596d707d95677f5d6e9e8e0366e3",
+      "before": "f3bb348b07494efdaef20b53b1ced098bea00039c71274250ed658d7b60b3f96"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ RUN npm ci
 
 COPY apps/reporter/ .
 COPY apps/api/src/maintenance/maintenance-state.ts /api/src/maintenance/maintenance-state.ts
+COPY apps/api/src/maintenance/maintenance-mutex.ts /api/src/maintenance/maintenance-mutex.ts
 RUN npm run build
 RUN npm prune --omit=dev
 

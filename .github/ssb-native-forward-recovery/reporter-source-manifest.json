@@ -1,8 +1,44 @@
 {
   "version": 1,
   "base": "94a25578e883a6d7bbd03f26c56735739f75e45e",
-  "purpose": "REPORTER_DIAGNOSTIC_OVERLAY_NOT_UNCHANGED_RELEASE",
+  "purpose": "MUTEX_ORDERING_AND_BOOTSTRAP_OVERLAY_NOT_UNCHANGED_RELEASE",
   "files": [
+    {
+      "path": "apps/api/src/maintenance/maintenance-mutex.ts",
+      "sha256": "5b3e40deedc42a3e4934fb100e4275c35490b10cc1fd1b1951b34b4fdf351dbf",
+      "bytes": 6928,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "c70153e2eea2459a770b60f73332e5e8b18d57ff",
+      "before": null
+    },
+    {
+      "path": "apps/api/src/maintenance/maintenance-state.ts",
+      "sha256": "5258c0cda80b83db821576fb50df47aee58bca1fda5dedcb36aed2553a623005",
+      "bytes": 43529,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "6303442680e29aac8c0dff1627e37ae95c84aa77",
+      "before": "f3bb348b07494efdaef20b53b1ced098bea00039c71274250ed658d7b60b3f96"
+    },
+    {
+      "path": "apps/reporter/scripts/build-maintenance.cjs",
+      "sha256": "bab30c620ddd9b6d744b1b9b3251590df778fc33d0e6aee242fb2f8ceaed790c",
+      "bytes": 978,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "3f6c6cc0e500e1548695f6185ef0aecf42408052",
+      "before": "883253ae73edcffcb8861d0509d89f52673a3b5bb33ea139b71724852e987c36"
+    },
+    {
+      "path": "apps/reporter/scripts/reporter-entry.cjs",
+      "sha256": "8fb3ad5a74e08a4ac76faac8570b2850f1586692e5d702ae91745212edd913f0",
+      "bytes": 10102,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "c973fce85ec0962a440133b7348197b4e230785e",
+      "before": null
+    },
     {
       "path": "apps/reporter/src/main.ts",
       "sha256": "469160fed6aab07ecf95c7681ed10dbc1b8ca16420f32502e3110b3602aaca6d",
@@ -14,29 +50,20 @@
     },
     {
       "path": "apps/reporter/src/maintenance.ts",
-      "sha256": "39830f4625dabfd35bc5be19ece9bf1bc0c932109d959d839bcb1fafa32c6687",
-      "bytes": 6215,
+      "sha256": "f8501de07a1ce5889268d3c423c35678d7a4dd230c0b7a8496403a2cfed2de3b",
+      "bytes": 6348,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "57476bc69f6f1828e4fa04b90e2320ac40a735c3",
+      "gitBlob": "09d8a2218d2878dc8b5aa995649c82ef4bf872f4",
       "before": "d0591b4004d1a8623f158a568de6a8070840dbd444ce300776b2ebb867f6daad"
     },
     {
-      "path": "apps/reporter/scripts/reporter-entry.cjs",
-      "sha256": "82416f39f9bdf0c33626af95471d6e791fb8844e99727d97bc5d11612b99d091",
-      "bytes": 8770,
-      "mode": 420,
-      "gitMode": "100644",
-      "gitBlob": "4b5412328b8849988b75ac6ef13024017967cbc8",
-      "before": null
-    },
-    {
       "path": "reporter.Dockerfile",
-      "sha256": "9ceed2d4fcbbfa0b50dd5c09ac3aa20f8e8a03a3895205d2fe52f774de8ea4b1",
-      "bytes": 841,
+      "sha256": "b7d9d5d3f9d78ae6a8f813936b9adcfcccdeae6baf5c5c88dc8194919be8cbda",
+      "bytes": 934,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "2a5967d6d33e3851ac786264d0028e4560c97ffa",
+      "gitBlob": "98d22d11247b9a3a8053a563ba8be0fb8065c8b3",
       "before": "f4a5401c13c85f6915a1ddd52854c8264968156e79563db73d24b054522370e5"
     }
   ]

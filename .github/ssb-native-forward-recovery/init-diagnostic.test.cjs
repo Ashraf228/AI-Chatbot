@@ -58,7 +58,7 @@ function harness({fault=null,old=false,processFailure=null,now}={}){
   assert.fail('unapproved offline command');
  };
  const actual=n.execute.bind(n),pm=sha(fs.readFileSync(path.join(__dirname,'publication-manifest.json')));
- n.execute=async phase=>phase==='preflight'?{verified:true,counts:[901,4],hashes:[pm]}:phase==='bases'?{verified:true,counts:[4],ids:require('./registry-bindings.json').images.map(x=>x.imageId)}:phase==='builds'?{verified:true,hashes:[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash],counts:[4,2],ids:[100,101,102,103,100].map(i=>'sha256:'+id(i))}:actual(phase);
+ n.execute=async phase=>phase==='preflight'?{verified:true,counts:[901,4],hashes:[pm]}:phase==='bases'?{verified:true,counts:[4],ids:require('./registry-bindings.json').images.map(x=>x.imageId)}:phase==='builds'?{verified:true,hashes:[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash,require('./api-source.cjs').manifest().hash],counts:[4,2],ids:[100,101,102,103,100].map(i=>'sha256:'+id(i))}:actual(phase);
  return{n,root,calls,pm,snapshots};
 }
 function receiver(log,{badManifest=false,writeFailure=null}={}){

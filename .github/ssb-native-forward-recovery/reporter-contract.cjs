@@ -18,12 +18,24 @@ function validateBinding(b){
  const expected={version:1,service:'reporter',run:b.run,generation:b.generation,source:SOURCE,publication:b.publication};
  need(b.call===sha(JSON.stringify(expected)),'reporter_binding_invalid');return b;
 }
-function classify(e,MaintenanceDenied){
+function stateIo(value){
+ need(own(value,['operation','resource','attempts','elapsedMs','limitMs'])&&['mutex-acquire','state-temp-create','mutex-release'].includes(value.operation),'reporter_diagnostic_invalid');
+ need(value.resource===(value.operation==='state-temp-create'?'state-temp':'state-mutex'),'reporter_diagnostic_invalid');
+ if(value.operation==='mutex-acquire')need(Number.isSafeInteger(value.attempts)&&value.attempts>=1&&Number.isSafeInteger(value.elapsedMs)&&value.elapsedMs>=0&&value.limitMs===50,'reporter_diagnostic_invalid');
+ else need(value.attempts===null&&value.elapsedMs===null&&value.limitMs===null,'reporter_diagnostic_invalid');
+ return value;
+}
+function classify(e,MaintenanceDenied,readStateIo){
  const errorClass=MaintenanceDenied&&e instanceof MaintenanceDenied?'MaintenanceDenied':e instanceof TypeError?'TypeError':e instanceof SyntaxError?'SyntaxError':e instanceof RangeError?'RangeError':e instanceof ReferenceError?'ReferenceError':e instanceof AggregateError?'AggregateError':e instanceof require('node:assert/strict').AssertionError?'AssertionError':e instanceof Error?'Error':'unknown';
- return{errorClass,nodeCode:nodeCodes.includes(e?.code)?e.code:'unknown',gate:errorClass==='MaintenanceDenied'&&gates.includes(e?.code)?e.code:'unknown'};
+ let io;try{const value=readStateIo?.(e);if(value!==undefined)io=stateIo(value);}catch{}
+ return{errorClass,nodeCode:nodeCodes.includes(e?.code)?e.code:'unknown',gate:errorClass==='MaintenanceDenied'&&gates.includes(e?.code)?e.code:'unknown',...(io?{stateIo:io}:{})};
 }
 function validatePoint(p){
- need(own(p,['step','lastConfirmed','errorClass','nodeCode','gate'])&&steps.includes(p.step)&&(p.lastConfirmed==='none'||steps.includes(p.lastConfirmed))&&classes.includes(p.errorClass)&&(p.nodeCode==='unknown'||nodeCodes.includes(p.nodeCode))&&(p.gate==='unknown'||gates.includes(p.gate))&&(p.gate==='unknown'||p.errorClass==='MaintenanceDenied'),'reporter_diagnostic_invalid');return p;
+ need((own(p,['step','lastConfirmed','errorClass','nodeCode','gate'])||own(p,['step','lastConfirmed','errorClass','nodeCode','gate','stateIo']))&&steps.includes(p.step)&&(p.lastConfirmed==='none'||steps.includes(p.lastConfirmed))&&classes.includes(p.errorClass)&&(p.nodeCode==='unknown'||nodeCodes.includes(p.nodeCode))&&(p.gate==='unknown'||gates.includes(p.gate))&&(p.gate==='unknown'||p.errorClass==='MaintenanceDenied'),'reporter_diagnostic_invalid');
+ if(Object.hasOwn(p,'stateIo')){
+  stateIo(p.stateIo);need(['admission','action','work-close','completion','shutdown'].includes(p.step)&&p.gate==='unknown','reporter_diagnostic_invalid');
+  if(p.stateIo.operation==='mutex-acquire'&&p.nodeCode==='EEXIST')need(p.stateIo.elapsedMs>=50,'reporter_diagnostic_invalid');
+ }return p;
 }
 function validateRecord(r,expected){
  need(own(r,['version','binding','ok','primary','cleanup','truncated','delivery'])&&r.version===1&&r.ok===false&&typeof r.truncated==='boolean'&&Array.isArray(r.cleanup)&&r.cleanup.length<=2,'reporter_diagnostic_invalid');validateBinding(r.binding);
@@ -36,12 +48,13 @@ class Progress{
  constructor(b){this.binding=validateBinding(b);this.step='entry';this.lastConfirmed='none';this.primary=null;this.cleanup=[];this.truncated=false;this.seen=new Set();}
  enter(step){need(steps.includes(step),'reporter_diagnostic_invalid');this.step=step;}
  useMaintenanceDenied(ctor){need(typeof ctor==='function'&&ctor.prototype instanceof Error,'reporter_diagnostic_invalid');this.MaintenanceDenied=ctor;}
+ useStateIoReader(reader){need(typeof reader==='function','reporter_diagnostic_invalid');this.readStateIo=reader;}
  confirm(){this.lastConfirmed=this.step;}
  capture(e,depth=0){
   if(this.seen.has(e))return;this.seen.add(e);
   if(depth>3){this.truncated=true;return;}
   if(e instanceof AggregateError){for(const child of e.errors.slice(0,4))this.capture(child,depth+1);if(e.errors.length>4)this.truncated=true;if(e.errors.length)return;}
-  const p={step:this.step,lastConfirmed:this.lastConfirmed,...classify(e,this.MaintenanceDenied)};
+  const p={step:this.step,lastConfirmed:this.lastConfirmed,...classify(e,this.MaintenanceDenied,this.readStateIo)};
   if(!this.primary)this.primary=p;else if(this.cleanup.length<2)this.cleanup.push(p);else this.truncated=true;
  }
  result(){return validateRecord({version:1,binding:this.binding,ok:false,primary:this.primary,cleanup:this.cleanup,truncated:this.truncated,delivery:this.delivery||{channel:'stderr',stderrBytes:0,writeError:null}});}
@@ -86,4 +99,4 @@ async function run({env=process.env,entry=path.join(__dirname,'main.js'),write=f
  }
 }
 if(require.main===module)run().catch(()=>{process.exit(1);});
-module.exports={SOURCE,MARKER,steps,classes,nodeCodes,gates,binding,validateBinding,classify,validatePoint,validateRecord,Progress,decode,writeAll,emit,run};
+module.exports={SOURCE,MARKER,steps,classes,nodeCodes,gates,binding,validateBinding,stateIo,classify,validatePoint,validateRecord,Progress,decode,writeAll,emit,run};

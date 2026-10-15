@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path');
 const {bound,regular,json,need,sha}=require('./common.cjs');
 const overlayFiles=['lib/redis.ts','scripts/dashboard-entry.cjs','scripts/dashboard-lifecycle.cjs',
-  'scripts/dashboard-shutdown-contract.cjs','scripts/dashboard-next-close.cjs','scripts/compile-state.cjs','dashboard.Dockerfile'];
+  'scripts/dashboard-shutdown-contract.cjs','scripts/dashboard-next-close.cjs','scripts/compile-state.cjs','scripts/maintenance-state.ts','scripts/maintenance-mutex.ts','dashboard.Dockerfile'];
 function manifest(){
   const bytes=regular(path.join(__dirname,'dashboard-source-manifest.json')),m=json(bytes);
   need(m.version===1&&m.base==='94a25578e883a6d7bbd03f26c56735739f75e45e'
@@ -24,7 +24,7 @@ function prepare(release,privateRoot){
     const to=path.join(root,f.path);fs.mkdirSync(path.dirname(to),{recursive:true});fs.writeFileSync(to,bound(original,f),{flag:'wx',mode:0o644});
   }
   for(const f of m.files){
-    const original=f.path==='dashboard.Dockerfile'?path.join(release,'.github/ssb-capacity-diagnostic/dockerfiles/dashboard.Dockerfile'):path.join(source,'apps/dashboard',f.path);
+    const original=f.path==='dashboard.Dockerfile'?path.join(release,'.github/ssb-capacity-diagnostic/dockerfiles/dashboard.Dockerfile'):f.path==='scripts/maintenance-state.ts'?path.join(source,'apps/api/src/maintenance/maintenance-state.ts'):path.join(source,'apps/dashboard',f.path);
     need(f.before===null?!fs.existsSync(original):sha(regular(original))===f.before,'dashboard_source_changed');
     const to=path.join(root,f.path);fs.mkdirSync(path.dirname(to),{recursive:true});
     fs.writeFileSync(to,bound(path.join(__dirname,'dashboard-overlay',f.path),f),{flag:f.before===null||f.path==='dashboard.Dockerfile'?'wx':'w',mode:0o644});

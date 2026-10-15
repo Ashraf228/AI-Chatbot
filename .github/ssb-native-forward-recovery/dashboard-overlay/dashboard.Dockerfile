@@ -25,7 +25,7 @@ RUN mkdir -p /app/.next/cache && chown -R node:node /app
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./app/.next/static
 COPY --from=build --chown=node:node /app/public ./app/public
-COPY --from=build --chown=node:node /app/scripts/dashboard-entry.cjs /app/scripts/dashboard-lifecycle.cjs /app/scripts/dashboard-next-close.cjs /app/scripts/dashboard-shutdown-contract.cjs /app/scripts/maintenance-state.cjs ./app/scripts/
+COPY --from=build --chown=node:node /app/scripts/dashboard-entry.cjs /app/scripts/dashboard-lifecycle.cjs /app/scripts/dashboard-next-close.cjs /app/scripts/dashboard-shutdown-contract.cjs /app/scripts/maintenance-state.cjs /app/scripts/maintenance-mutex.cjs ./app/scripts/
 USER node
 ENTRYPOINT []
 STOPSIGNAL SIGTERM
