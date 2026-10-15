@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs'),path=require('node:path');
 const {bound,regular,json,need,sha}=require('./common.cjs');
-const overlayFiles=['apps/reporter/src/main.ts','apps/reporter/src/maintenance.ts','apps/reporter/scripts/reporter-entry.cjs','reporter.Dockerfile'];
+const overlayFiles=['apps/reporter/src/main.ts','apps/reporter/src/maintenance.ts','apps/reporter/scripts/reporter-entry.cjs','apps/reporter/scripts/build-maintenance.cjs','apps/api/src/maintenance/maintenance-state.ts','apps/api/src/maintenance/maintenance-mutex.ts','reporter.Dockerfile'];
 function manifest(){
  const bytes=regular(path.join(__dirname,'reporter-source-manifest.json')),m=json(bytes);
  need(m.version===1&&m.base==='94a25578e883a6d7bbd03f26c56735739f75e45e'&&JSON.stringify(m.files.map(f=>f.path).sort())===JSON.stringify([...overlayFiles].sort()),'reporter_source_invalid');

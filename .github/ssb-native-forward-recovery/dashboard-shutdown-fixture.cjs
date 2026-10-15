@@ -3,7 +3,7 @@
 const {sha}=require('./common.cjs');
 function attach(data,run){
   const source=require('./controller.cjs').SOURCE,publication=data.preflight.hashes[0];
-  data.builds.hashes=[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash];
+  data.builds.hashes=[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash,require('./api-source.cjs').manifest().hash];
   for(const generation of ['release','forward','normal']){
     const row=data[generation+'-shutdown'];if(!row)continue;
     const dashboardShutdown={version:1,binding:{version:1,run,source,publication,service:'ssb-native-'+run,generation,

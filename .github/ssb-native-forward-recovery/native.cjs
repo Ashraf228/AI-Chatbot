@@ -29,6 +29,7 @@ class Native{
     for(const f of require('./dockerfile-manifest.json'))bound(path.join(this.release,f.path),f);
     this.prefix=`ssb-native-${this.options.run}`;this.privateRoot=`/var/tmp/${this.prefix}`;fs.mkdirSync(this.privateRoot,{mode:0o711});
     fs.mkdirSync(path.join(this.privateRoot,'raw'),{mode:0o700});this.proc=new Processes({deadline:this.deadline,privateRoot:path.join(this.privateRoot,'raw')});
+    this.apiSource=require('./api-source.cjs').prepare(this.release,this.privateRoot);
     this.reporterSource=require('./reporter-source.cjs').prepare(this.release,this.privateRoot);
     this.dashboardSource=require('./dashboard-source.cjs').prepare(this.release,this.privateRoot);
     this.docker='/usr/bin/docker';need(fs.statSync(this.docker).isFile(),'docker_path');
@@ -56,16 +57,18 @@ class Native{
     for(const app of ['api','dashboard','reporter','widget']){
       const iid=path.join(this.privateRoot,app+'.iid');
       const args=['build','--platform=linux/amd64','--pull=false','--progress=plain','--network=default','--iidfile',iid,'--label',`org.opencontainers.image.revision=${SOURCE}`,'--build-arg',`APP_COMMIT_SHA=${SOURCE}`,'--build-arg',`BUILD_COMMIT=${SOURCE}`,'--build-arg',`BUILD_DATE=${BUILD_DATE}`,'-f',`dockerfiles/${app}.Dockerfile`,['api','dashboard'].includes(app)?`source/apps/${app}`:'source'];
+      if(app==='api'){require('./api-source.cjs').verify(this.apiSource);args.splice(args.length-3,3,'--label',`com.ssb.api-source=${this.apiSource.hash}`,'-f','api.Dockerfile','.');}
       if(app==='reporter'){require('./reporter-source.cjs').verify(this.reporterSource);args.splice(args.length-3,3,'--label',`com.ssb.reporter-source=${this.reporterSource.hash}`,'-f','reporter.Dockerfile','.');}
       if(app==='dashboard'){require('./dashboard-source.cjs').verify(this.dashboardSource);args.splice(args.length-3,3,'--label',`com.ssb.dashboard-source=${this.dashboardSource.hash}`,'-f','dashboard.Dockerfile','.');}
-      await this.d(args,{cwd:app==='reporter'?this.reporterSource.root:app==='dashboard'?this.dashboardSource.root:cwd,ms:until-clock()});const id=regular(iid,80).toString().trim();need(/^sha256:[a-f0-9]{64}$/.test(id),'build_id_invalid');
+      await this.d(args,{cwd:app==='api'?this.apiSource.root:app==='reporter'?this.reporterSource.root:app==='dashboard'?this.dashboardSource.root:cwd,ms:until-clock()});const id=regular(iid,80).toString().trim();need(/^sha256:[a-f0-9]{64}$/.test(id),'build_id_invalid');
       const list=json((await this.d(['image','inspect',id])).stdout);need(list.length===1&&list[0].Id===id&&list[0].Os==='linux'&&list[0].Architecture==='amd64'&&list[0].Config?.Labels?.['org.opencontainers.image.revision']===SOURCE,'candidate_image_invalid');
+      if(app==='api')need(list[0].Config.Labels['com.ssb.api-source']===this.apiSource.hash,'api_source_changed');
       if(app==='reporter')need(list[0].Config.Labels['com.ssb.reporter-source']===this.reporterSource.hash,'reporter_source_changed');
       if(app==='dashboard')need(list[0].Config.Labels['com.ssb.dashboard-source']===this.dashboardSource.hash,'dashboard_source_changed');
       this.images[app]=id;this.imageMetadata??={};this.imageMetadata[app]=list[0];
     }
     this.images['admin-writer']=this.images.api;
-    return{verified:true,counts:[4,2],ids:Object.values(this.images),hashes:[this.reporterSource.hash,this.dashboardSource.hash]};
+    return{verified:true,counts:[4,2],ids:Object.values(this.images),hashes:[this.reporterSource.hash,this.dashboardSource.hash,this.apiSource.hash]};
   }
   async create(name,image,args,role){
     need(!this.initial.containers.includes(name)&&this.owned.length<19&&!this.owned.some(x=>x.name===name),'resource_limit');
@@ -150,7 +153,7 @@ class Native{
     trace.confirm();trace.enter('probe-ingress-connect');
     await this.d(['network','connect',this.networks.ingress.id,this.probeContainer.id]);trace.confirm();trace.enter('probe-writer-connect');await this.d(['network','connect',this.networks.admin_writer.id,this.probeContainer.id]);
     trace.confirm();trace.enter('maintenance-directory');
-    const dist=path.join(this.toolsRoot,'apps/api/dist/maintenance');fs.mkdirSync(dist,{recursive:true});trace.confirm();trace.enter('maintenance-copy');await this.d(['cp',`${this.probeContainer.id}:/app/dist/maintenance/maintenance-state.js`,path.join(dist,'maintenance-state.js')]);trace.confirm();trace.enter('maintenance-permissions');fs.chmodSync(path.join(dist,'maintenance-state.js'),0o644);
+    const dist=path.join(this.toolsRoot,'apps/api/dist/maintenance');fs.mkdirSync(dist,{recursive:true});trace.confirm();trace.enter('maintenance-copy');for(const name of ['maintenance-state.js','maintenance-mutex.js'])await this.d(['cp',`${this.probeContainer.id}:/app/dist/maintenance/${name}`,path.join(dist,name)]);trace.confirm();trace.enter('maintenance-permissions');for(const name of ['maintenance-state.js','maintenance-mutex.js'])fs.chmodSync(path.join(dist,name),0o644);
     trace.confirm();trace.enter('runtime-load');
     await this.stateLoadCheck(true);trace.confirm();trace.enter('state-initialize');
     await this.state('initialize',{root:this.stateRoot,service:this.prefix,generation:'seed'});

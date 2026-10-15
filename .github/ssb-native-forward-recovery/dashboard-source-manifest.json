@@ -1,15 +1,15 @@
 {
   "version": 1,
   "base": "94a25578e883a6d7bbd03f26c56735739f75e45e",
-  "purpose": "DASHBOARD_EXPLICIT_SHUTDOWN_OVERLAY_NOT_UNCHANGED_RELEASE",
+  "purpose": "MUTEX_ORDERING_AND_BOOTSTRAP_OVERLAY_NOT_UNCHANGED_RELEASE",
   "files": [
     {
       "path": "dashboard.Dockerfile",
-      "sha256": "d9d6ff7cc85d8ef4d9544d01fdf278f7e9f1c83eeba1cad23a53cbc5714b255b",
-      "bytes": 1378,
+      "sha256": "5b80fcd5ccbc4f3b4da10c9a262e2ca3215899e83aa39f9d0f580be8f719b85e",
+      "bytes": 1413,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "235e41c95cda64483941b49db2b393785297d555",
+      "gitBlob": "47d1ec403801de22eafeef58baeb3e21823cd02b",
       "before": "6ea63470e964423b0a6fc571b99ee443bb80ac2aa44c01a7a0befbfea96f70db"
     },
     {
@@ -23,11 +23,11 @@
     },
     {
       "path": "scripts/compile-state.cjs",
-      "sha256": "be065a2ee8d685bdb48b4e78fbd5523b80642e36cbad202ae10230b66e4b5776",
-      "bytes": 502,
+      "sha256": "68244a10750123453d4061325020f742c4856761639b6670775d546863a94d71",
+      "bytes": 782,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "b1aa4ad57383e46f770fe2a003d2042cd691efc9",
+      "gitBlob": "3b71e3de1a29608e51ec2fdf483851eb751d1272",
       "before": null
     },
     {
@@ -65,6 +65,24 @@
       "gitMode": "100644",
       "gitBlob": "99f3f6c108f30a070ed4dd9db7172e7055d08b0f",
       "before": null
+    },
+    {
+      "path": "scripts/maintenance-mutex.ts",
+      "sha256": "5b3e40deedc42a3e4934fb100e4275c35490b10cc1fd1b1951b34b4fdf351dbf",
+      "bytes": 6928,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "c70153e2eea2459a770b60f73332e5e8b18d57ff",
+      "before": null
+    },
+    {
+      "path": "scripts/maintenance-state.ts",
+      "sha256": "0887b751730c7ca4566912fa8dc87f4a7164c5493ca1ee0f5082aeaa8921b76a",
+      "bytes": 41508,
+      "mode": 420,
+      "gitMode": "100644",
+      "gitBlob": "729aed8a3193596d707d95677f5d6e9e8e0366e3",
+      "before": "f3bb348b07494efdaef20b53b1ced098bea00039c71274250ed658d7b60b3f96"
     }
   ]
 }

@@ -24,7 +24,7 @@ test('listener denial survives structured public receipt and partial receiver wi
   const output=[],ctx={workflowHead:'a'.repeat(40),dispatchNonce:'b'.repeat(64)},r=new Receipts('123',SOURCE,ctx,line=>output.push(line));
   r.emit('preflight',true,{counts:[901,4],hashes:[binding.publication]});
   r.emit('bases',true,{counts:[4],ids:require('./registry-bindings.json').images.map(x=>x.imageId)});
-  r.emit('builds',true,{counts:[4,2],ids:[native.images.api,native.images.dashboard,native.images.reporter,native.images.widget,native.images.api],hashes:[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash]});
+  r.emit('builds',true,{counts:[4,2],ids:[native.images.api,native.images.dashboard,native.images.reporter,native.images.widget,native.images.api],hashes:[require('./reporter-source.cjs').manifest().hash,require('./dashboard-source.cjs').manifest().hash,require('./api-source.cjs').manifest().hash]});
   r.emit('initialize',true,{counts:[34,4,1],hashes:['d'.repeat(64)]});r.emit('roles',true,{counts:[32]});
   r.emit('release-start',false,{detail:{failure:diagnostics.publicFailure(primary),outcomes:[]}});
   // Additional closure failure must not convert or hide the original denial.

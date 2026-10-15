@@ -8,12 +8,18 @@ if(process.env.SSB_REPORTER_CHILD){
  global.fetch=async()=>{record('external-denied');throw fault('NETWORK_NOT_AUTHORIZED');};
  for(const k of ['spawn','spawnSync','exec','execSync','execFile','execFileSync','fork'])cp[k]=()=>{throw fault('PROCESS_NOT_AUTHORIZED');};
  const map=p=>typeof p==='string'&&p.startsWith('/run/ssb-maintenance')?cfg.state+p.slice(20):p;
- for(const name of ['lstatSync','openSync','mkdirSync','rmdirSync','renameSync','unlinkSync']){const original=fs[name];fs[name]=function(p,...args){
+ for(const name of ['lstatSync','openSync','mkdirSync','rmdirSync','renameSync','unlinkSync','opendirSync']){const original=fs[name];fs[name]=function(p,...args){
   if(name==='openSync'&&String(p).endsWith('/runtime-state.json')){record('state-read');if(cfg.fault==='state-access')throw fault('EACCES');}
+  if(name==='mkdirSync'&&String(p).endsWith('/runtime-state-mutex')&&cfg.fault==='mutex-access')throw fault('EACCES');
+  if(name==='openSync'&&/\/state-[a-f0-9-]+\.tmp$/.test(String(p))&&cfg.fault==='temp-collision'){
+   require('node:assert/strict').ok(args[0]&fs.constants.O_EXCL);
+   const collision=original.call(fs,map(p),fs.constants.O_WRONLY|fs.constants.O_CREAT|fs.constants.O_EXCL,0o600);fs.closeSync(collision);
+  }
+  if(name==='rmdirSync'&&String(p).endsWith('/runtime-state-mutex')&&cfg.fault==='mutex-release')throw fault('EIO');
   if(name==='renameSync')args[0]=map(args[0]);return original.call(fs,map(p),...args);
  };}
  const load=Module._load;Module._load=function(id,...args){if(id.endsWith('maintenance-state.cjs')&&cfg.fault==='maintenance-missing')throw fault('MODULE_NOT_FOUND');const result=load.call(this,id,...args);if(id.endsWith('maintenance-state.cjs')&&['work-close','action-and-close'].includes(cfg.fault))result.MaintenanceState.prototype.end=()=>{throw fault('EIO');};return result;};
- if(['stderr-write','partial-stderr'].includes(cfg.fault)){const write=fs.writeSync;let first=true;fs.writeSync=(fd,...args)=>{if(fd===2){if(cfg.fault==='partial-stderr'&&first){first=false;return write(fd,args[0],args[1],7);}throw fault('EPIPE');}return write(fd,...args);};}
+ if(['stderr-write','partial-stderr','mutex-timeout-write'].includes(cfg.fault)){const write=fs.writeSync;let first=true;fs.writeSync=(fd,...args)=>{if(fd===2){if(cfg.fault==='partial-stderr'&&first){first=false;return write(fd,args[0],args[1],7);}throw fault('EPIPE');}return write(fd,...args);};}
 }else{
  const test=require('node:test'),assert=require('node:assert/strict'),{EventEmitter}=require('node:events');
  const proto=require('./reporter-contract.cjs'),{sha,GateError}=require('./common.cjs'),{Native}=require('./native.cjs'),{main,SOURCE}=require('./controller.cjs'),{parseReceipts}=require('./evidence.cjs');
@@ -33,10 +39,13 @@ if(process.env.SSB_REPORTER_CHILD){
   const reporter=path.join(source,'apps/reporter/src');
   const walk=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(path.join(d,e.name)):[path.join(d,e.name)]);
   for(const file of walk(reporter).filter(p=>p.endsWith('.ts'))){const rel=path.relative(reporter,file),patch=path.join(overlay,'apps/reporter/src',rel);const text=fs.readFileSync(fs.existsSync(patch)?patch:file,'utf8');write(path.join(dist,rel.replace(/\.ts$/,'.js')),ts.transpileModule(text,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2021,esModuleInterop:true}}).outputText);}
-  const maintenance=fs.readFileSync(path.join(source,'apps/api/src/maintenance/maintenance-state.ts'),'utf8');write(path.join(dist,'maintenance-state.cjs'),ts.transpileModule(maintenance,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021,esModuleInterop:true}}).outputText);
+  for(const name of ['maintenance-state','maintenance-mutex']){const input=fs.readFileSync(path.join(overlay,'apps/api/src/maintenance',name+'.ts'),'utf8');let output=ts.transpileModule(input,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2021,esModuleInterop:true}}).outputText;if(name==='maintenance-state'){assert.equal(output.split('require("./maintenance-mutex")').length,2);output=output.replace('require("./maintenance-mutex")','require("./maintenance-mutex.cjs")');}write(path.join(dist,name+'.cjs'),output);}
   write(path.join(dist,'reporter-entry.cjs'),fs.readFileSync(path.join(overlay,'apps/reporter/scripts/reporter-entry.cjs')));
   fs.symlinkSync(deps,path.join(root,'node_modules'),'dir');
   write(path.join(state,'runtime-state.json'),JSON.stringify({version:1,service:'ssb-native-'+options.run,generations:['release'],epoch:0,phase:'closed',legacy:'new-empty-service',work:{}}));
+  if(['mutex-timeout','mutex-timeout-write'].includes(fault))fs.mkdirSync(path.join(state,'runtime-state-mutex'),{mode:0o700});
+  if(fault==='mutex-file')write(path.join(state,'runtime-state-mutex'),'synthetic-file-not-lock-owner');
+  if(fault==='temp-collision'){const s=JSON.parse(fs.readFileSync(path.join(state,'runtime-state.json')));s.phase='open';write(path.join(state,'runtime-state.json'),JSON.stringify(s));}
   if(fault==='entry-missing')fs.renameSync(path.join(dist,'main.js'),path.join(dist,'main-unavailable.js'));
   if(fault==='import-missing')fs.renameSync(path.join(dist,'jobs/generateWeeklyReports.js'),path.join(dist,'jobs/unavailable.js'));
   if(fault==='syntax')write(path.join(dist,'main.js'),'throw ??? SYNTHETIC_PRIVATE_NOT_EXPORT');
@@ -138,21 +147,24 @@ if(process.env.SSB_REPORTER_CHILD){
   await assert.rejects(main({...options,output:l=>{if(JSON.parse(Buffer.from(l.split(' ')[1],'base64')).phase==='release-start')throw Object.assign(Error('private'),{code:'ENOSPC'});lines.push(l);}},h.n),e=>{const contains=e=>e===original||e instanceof AggregateError&&e.errors.some(contains);return contains(e);});
   assert.equal(original.reporterDiagnostic.record.primary.errorClass,'TypeError');assert.throws(()=>receiver(lines.join('\n')).invoke());
  });
- test('reporter overlay only replaces exact allowed source bytes, dependencies and shared state remain unchanged',t=>{
+ test('reporter overlay binds diagnostic-only state copy while dependencies and original release source remain unchanged',t=>{
   const root=tmp(t),release=path.resolve(source,'../../..'),prepared=require('./reporter-source.cjs').prepare(release,root);
   assert.equal(prepared.hash,require('./reporter-source.cjs').manifest().hash);
-  for(const p of ['apps/reporter/package.json','apps/reporter/package-lock.json','apps/api/src/maintenance/maintenance-state.ts'])assert.deepEqual(fs.readFileSync(path.join(prepared.root,p)),fs.readFileSync(path.join(source,p)));
+  for(const p of ['apps/reporter/package.json','apps/reporter/package-lock.json'])assert.deepEqual(fs.readFileSync(path.join(prepared.root,p)),fs.readFileSync(path.join(source,p)));
+  const statePath='apps/api/src/maintenance/maintenance-state.ts',row=require('./reporter-source.cjs').manifest().m.files.find(f=>f.path===statePath);
+  assert.equal(sha(fs.readFileSync(path.join(source,statePath))),row.before);
+  assert.deepEqual(fs.readFileSync(path.join(prepared.root,statePath)),fs.readFileSync(path.join(overlay,statePath)));
   assert.deepEqual(fs.readFileSync(path.join(prepared.root,'apps/reporter/scripts/reporter-entry.cjs')),fs.readFileSync(path.join(__dirname,'reporter-contract.cjs')));
   write(path.join(prepared.root,'unexpected.txt'),'synthetic');assert.throws(()=>require('./reporter-source.cjs').verify(prepared));fs.unlinkSync(path.join(prepared.root,'unexpected.txt'));
   fs.appendFileSync(path.join(prepared.root,'apps/reporter/package-lock.json'),' ');assert.throws(()=>require('./reporter-source.cjs').verify(prepared));
  });
- test('actual build driver binds only Reporter overlay while keeping four build limits and origin labels',async t=>{
-  const n=new Native(options),root=tmp(t),release=path.resolve(source,'../../..');n.release=release;n.privateRoot=root;n.reporterSource=require('./reporter-source.cjs').prepare(release,root);n.dashboardSource=require('./dashboard-source.cjs').prepare(release,root);const calls=[];let app;
+ test('actual build driver binds all three overlays while keeping four build limits and origin labels',async t=>{
+  const n=new Native(options),root=tmp(t),release=path.resolve(source,'../../..');n.release=release;n.privateRoot=root;n.apiSource=require('./api-source.cjs').prepare(release,root);n.reporterSource=require('./reporter-source.cjs').prepare(release,root);n.dashboardSource=require('./dashboard-source.cjs').prepare(release,root);const calls=[];let app;
   n.d=async(args,o={})=>{calls.push({args,o});if(args[0]==='build'){app=['api','dashboard','reporter','widget'][calls.filter(c=>c.args[0]==='build').length-1];assert.equal(args[1],'--platform=linux/amd64');assert.ok(o.ms>0&&o.ms<=270000);assert.ok(args.includes('--pull=false'));assert.ok(args.includes('org.opencontainers.image.revision='+SOURCE));
-   if(app==='reporter'){assert.equal(o.cwd,n.reporterSource.root);assert.deepEqual(args.slice(-5),['--label','com.ssb.reporter-source='+n.reporterSource.hash,'-f','reporter.Dockerfile','.']);}else if(app==='dashboard')assert.equal(o.cwd,n.dashboardSource.root);else assert.equal(o.cwd,path.join(release,'.github/ssb-capacity-diagnostic'));
+   if(app==='reporter'){assert.equal(o.cwd,n.reporterSource.root);assert.deepEqual(args.slice(-5),['--label','com.ssb.reporter-source='+n.reporterSource.hash,'-f','reporter.Dockerfile','.']);}else if(app==='dashboard')assert.equal(o.cwd,n.dashboardSource.root);else if(app==='api'){assert.equal(o.cwd,n.apiSource.root);assert.deepEqual(args.slice(-5),['--label','com.ssb.api-source='+n.apiSource.hash,'-f','api.Dockerfile','.']);}else assert.equal(o.cwd,path.join(release,'.github/ssb-capacity-diagnostic'));
    write(args[args.indexOf('--iidfile')+1],'sha256:'+sha(app));return{stdout:Buffer.alloc(0)};
-  }assert.deepEqual(args.slice(0,2),['image','inspect']);return{stdout:Buffer.from(JSON.stringify([{Id:'sha256:'+sha(app),Os:'linux',Architecture:'amd64',Config:{Labels:{'org.opencontainers.image.revision':SOURCE,'com.ssb.dashboard-source':n.dashboardSource.hash,'com.ssb.reporter-source':n.reporterSource.hash}}}]))};};
-  const r=await n.builds();assert.deepEqual(r.counts,[4,2]);assert.deepEqual(r.hashes,[n.reporterSource.hash,n.dashboardSource.hash]);assert.equal(calls.filter(c=>c.args[0]==='build').length,4);assert.equal(n.images['admin-writer'],n.images.api);
+  }assert.deepEqual(args.slice(0,2),['image','inspect']);return{stdout:Buffer.from(JSON.stringify([{Id:'sha256:'+sha(app),Os:'linux',Architecture:'amd64',Config:{Labels:{'org.opencontainers.image.revision':SOURCE,'com.ssb.api-source':n.apiSource.hash,'com.ssb.dashboard-source':n.dashboardSource.hash,'com.ssb.reporter-source':n.reporterSource.hash}}}]))};};
+  const r=await n.builds();assert.deepEqual(r.counts,[4,2]);assert.deepEqual(r.hashes,[n.reporterSource.hash,n.dashboardSource.hash,n.apiSource.hash]);assert.equal(calls.filter(c=>c.args[0]==='build').length,4);assert.equal(n.images['admin-writer'],n.images.api);
  });
  for(const kind of ['wrong-image','wrong-publication','wrong-container','private-field','truncated'])test('regular receiver rejects tampered Reporter binding: '+kind,async t=>{
   const h=harness(t,results.get('type')),lines=[];await assert.rejects(main({...options,output:l=>lines.push(l)},h.n));const rows=lines.map(l=>JSON.parse(Buffer.from(l.split(' ')[1],'base64'))),failure=rows.find(r=>r.phase==='release-start').detail.failure;
@@ -160,4 +172,5 @@ if(process.env.SSB_REPORTER_CHILD){
   let previous='0'.repeat(64);const logs=rows.map(r=>{r.previous=previous;const bytes=JSON.stringify(r);previous=sha(bytes);return'SSB_PUBLIC_RECEIPT_V2 '+Buffer.from(bytes).toString('base64')+' '+previous;}).join('\n');
   assert.throws(()=>receiver(kind==='truncated'?logs.slice(0,-8):logs).invoke());
  });
+ module.exports={fixture,harness,receiver,globalOptions};
 }
