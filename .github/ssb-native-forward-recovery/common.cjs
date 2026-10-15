@@ -25,8 +25,13 @@ function failureRecord(error){
 }
 class Processes {
   constructor({deadline,privateRoot,now=clock}){this.deadline=deadline;this.privateRoot=privateRoot;this.now=now;this.calls=[];this.children=new Set();this.bytes=0;this.workBytes=0;this.closureBytes=0;}
-  async run(bin,args,{input,ms=10000,allowFailure=false,cwd,env,uid,gid,closure=false,stateDiagnostic=false,probeDiagnostic,baseReference,startDiagnostic,startOperation,reporterLogs,deadline=this.deadline}={}){
+  async run(bin,args,{input,ms=10000,allowFailure=false,cwd,env,uid,gid,closure=false,stateDiagnostic=false,probeDiagnostic,baseReference,startDiagnostic,startOperation,reporterLogs,reporterCompletion,deadline=this.deadline}={}){
     need(Array.isArray(args)&&args.every(a=>typeof a==='string'),'argv_invalid');
+    if(reporterCompletion!==undefined){
+      need(reporterCompletion&&typeof reporterCompletion==='object'&&!Array.isArray(reporterCompletion)&&Object.keys(reporterCompletion).sort().join(',')==='binding,container','reporter_binding_invalid');
+      require('./reporter-contract.cjs').validateBinding(reporterCompletion.binding);
+      need(typeof reporterCompletion.container==='string'&&/^[a-f0-9]{64}$/.test(reporterCompletion.container)&&bin==='/usr/bin/docker'&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','logs','--tail','4',reporterCompletion.container])&&Number.isFinite(ms)&&ms>0&&ms<=1000&&input===undefined&&allowFailure===false&&closure===false&&stateDiagnostic===false&&probeDiagnostic===undefined&&baseReference===undefined&&startDiagnostic===undefined&&startOperation===undefined&&reporterLogs===undefined,'reporter_binding_invalid');
+    }
     if(reporterLogs!==undefined){require('./reporter-contract.cjs').validateBinding(reporterLogs.binding);need(/^[a-f0-9]{64}$/.test(reporterLogs.container)&&bin==='/usr/bin/docker'&&JSON.stringify(args)===JSON.stringify(['--host','unix:///var/run/docker.sock','logs','--tail','4',reporterLogs.container])&&input===undefined&&!allowFailure&&!closure&&!stateDiagnostic&&!probeDiagnostic&&!baseReference&&!startDiagnostic&&!startOperation,'reporter_binding_invalid');}
     if(startDiagnostic!==undefined){
       const {startArgs,startProtocol}=require('./diagnostics.cjs');startProtocol().binding(startDiagnostic.binding);
@@ -87,6 +92,8 @@ class Processes {
         if(!primary&&probeDiagnostic&&err.length){primary=new GateError('probe_diagnostic_invalid');primary.process={...rec};}
         let reporterRecord;
         if(!primary&&reporterLogs)try{reporterRecord=require('./reporter-contract.cjs').decode(out,err,reporterLogs.binding);}catch(e){primary=e;primary.process={...rec};}
+        // Validate received proof before private persistence can fail and mask it.
+        if(!primary&&reporterCompletion)try{require('./reporter-contract.cjs').decodeCompletion(out,err,reporterCompletion.binding);}catch(e){primary=e;primary.process={...rec};}
         try{fs.writeFileSync(`${this.privateRoot}/process-${index}.stdout`,out,{mode:0o600,flag:'wx'});fs.writeFileSync(`${this.privateRoot}/process-${index}.stderr`,err,{mode:0o600,flag:'wx'});}catch(e){const evidence=new GateError('evidence_write_failed');evidence.ioCode=e.code;if(operation)evidence.startOperation=operation;if(startRecord)evidence.startDiagnostic=startRecord;if(reporterRecord)evidence.reporterRecord=reporterRecord;if(closure&&!primary)evidence.result={stdout:out,stderr:err,code,signal,closed:true};reject(primary?new AggregateError([primary,evidence],'primary_and_evidence_failed'):evidence);return;}
         if(primary){reject(primary);return;}
         resolve({stdout:out,stderr:err,code,signal,closed:true,...(startRecord?{startDiagnostic:startRecord}:{}),...(reporterRecord?{reporterRecord}:{})});

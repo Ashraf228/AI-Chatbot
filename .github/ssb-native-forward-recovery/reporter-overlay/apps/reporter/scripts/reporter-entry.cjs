@@ -2,6 +2,8 @@
 // This file is also the byte-bound Reporter bootstrap. Before import it uses only Node builtins.
 const fs=require('node:fs'),path=require('node:path'),{pathToFileURL}=require('node:url'),{createHash}=require('node:crypto');
 const SOURCE='94a25578e883a6d7bbd03f26c56735739f75e45e',MARKER='SSB_REPORTER_DIAGNOSTIC_V1 ';
+const COMPLETION_MARKER='SSB_REPORTER_COMPLETED_V1 ';
+const completionSteps=Object.freeze(['admission','action','work-close','completion']);
 const steps=Object.freeze(['entry','entry-import','maintenance-binding','maintenance-load','maintenance-construct','admission','action','work-close','completion','shutdown','diagnostic-write']);
 const classes=Object.freeze(['Error','TypeError','SyntaxError','RangeError','ReferenceError','AggregateError','AssertionError','MaintenanceDenied','unknown']);
 const nodeCodes=Object.freeze(['EACCES','EPERM','ENOENT','ENOTDIR','EISDIR','EEXIST','ENOSPC','EROFS','EIO','EMFILE','ENFILE','ELOOP','EPIPE','MODULE_NOT_FOUND','ERR_MODULE_NOT_FOUND','ERR_UNKNOWN_FILE_EXTENSION','ERR_INVALID_ARG_TYPE','ERR_INVALID_ARG_VALUE','ERR_OUT_OF_RANGE','ERR_ASSERTION']);
@@ -67,12 +69,12 @@ function validateRecord(r,expected){
  if(d.channel==='stderr')need(d.stderrBytes===0&&d.writeError===null,'reporter_diagnostic_invalid');else{validatePoint(d.writeError);need(d.writeError.step==='diagnostic-write','reporter_diagnostic_invalid');}return r;
 }
 class Progress{
- constructor(b){this.binding=validateBinding(b);this.step='entry';this.lastConfirmed='none';this.primary=null;this.cleanup=[];this.truncated=false;this.seen=new Set();}
+ constructor(b){this.binding=validateBinding(b);this.step='entry';this.lastConfirmed='none';this.primary=null;this.cleanup=[];this.truncated=false;this.seen=new Set();this.completedSteps=[];}
  enter(step){need(steps.includes(step),'reporter_diagnostic_invalid');this.step=step;}
  useMaintenanceDenied(ctor){need(typeof ctor==='function'&&ctor.prototype instanceof Error,'reporter_diagnostic_invalid');this.MaintenanceDenied=ctor;}
  useStateIoReader(reader){need(typeof reader==='function','reporter_diagnostic_invalid');this.readStateIo=reader;}
  useMutexReader(reader){need(typeof reader==='function','reporter_diagnostic_invalid');this.readMutex=reader;}
- confirm(){this.lastConfirmed=this.step;}
+ confirm(){if(this.step===completionSteps[this.completedSteps.length])this.completedSteps.push(this.step);this.lastConfirmed=this.step;}
  capture(e,depth=0){
   if(this.seen.has(e))return;this.seen.add(e);
   if(depth>3){this.truncated=true;return;}
@@ -82,6 +84,16 @@ class Progress{
   if(!this.primary)this.primary=p;else if(this.cleanup.length<2)this.cleanup.push(p);else this.truncated=true;
  }
  result(){return validateRecord({version:1,binding:this.binding,ok:false,primary:this.primary,cleanup:this.cleanup,truncated:this.truncated,delivery:this.delivery||{channel:'stderr',stderrBytes:0,writeError:null}});}
+}
+function validateCompletion(r,expected){
+ need(own(r,['version','binding','status','steps'])&&r.version===1&&r.status==='completed'&&Array.isArray(r.steps)&&JSON.stringify(r.steps)===JSON.stringify(completionSteps),'reporter_completion_invalid');
+ validateBinding(r.binding);need(JSON.stringify(r.binding)===JSON.stringify(validateBinding(expected)),'reporter_completion_misbound');return r;
+}
+function decodeCompletion(stdout,stderr,expected){
+ const bytes=Buffer.from(stdout),err=Buffer.from(stderr);need(bytes.length>0,'reporter_completion_missing');need(bytes.length<=2048&&err.length===0,'reporter_completion_invalid');
+ const text=bytes.toString('utf8');need(text.startsWith(COMPLETION_MARKER),'reporter_completion_invalid');let record;
+ try{record=JSON.parse(text.slice(COMPLETION_MARKER.length));}catch{need(false,'reporter_completion_invalid');}
+ validateCompletion(record,expected);need(text===COMPLETION_MARKER+JSON.stringify(record)+'\n','reporter_completion_invalid');return record;
 }
 function decode(stdout,stderr,expected){
  const out=Buffer.from(stdout).toString('utf8'),err=Buffer.from(stderr).toString('utf8');
@@ -116,6 +128,13 @@ async function run({env=process.env,entry=path.join(__dirname,'main.js'),write=f
   progress=new Progress(b);progress.confirm();progress.enter('entry-import');
   const main=await import(pathToFileURL(entry).href);need(typeof main.startReporter==='function','reporter_entry_invalid');progress.confirm();
   await main.startReporter(progress);
+  // Completed journal entries may be compacted later. Preserve the confirmed work path,
+  // not a later snapshot; stopping while admission is closed is not completed work.
+  if(progress.completedSteps.length){
+   need(progress.primary===null&&progress.cleanup.length===0&&!progress.truncated&&progress.lastConfirmed==='completion','reporter_completion_invalid');
+   const receipt=validateCompletion({version:1,binding:b,status:'completed',steps:[...progress.completedSteps]},b);
+   progress.enter('diagnostic-write');writeAll(1,COMPLETION_MARKER+JSON.stringify(receipt)+'\n',write);
+  }
  }catch(primary){
   if(progress)emit(progress,primary,write);
   else try{writeAll(2,'SSB_REPORTER_DIAGNOSTIC_UNBOUND\n',write);}catch(secondary){throw new AggregateError([primary,secondary],'reporter_diagnostic_write_failed');}
@@ -123,4 +142,4 @@ async function run({env=process.env,entry=path.join(__dirname,'main.js'),write=f
  }
 }
 if(require.main===module)run().catch(()=>{process.exit(1);});
-module.exports={SOURCE,MARKER,steps,classes,nodeCodes,gates,binding,validateBinding,stateIo,classify,validatePoint,validateRecord,Progress,decode,writeAll,emit,run};
+module.exports={SOURCE,MARKER,COMPLETION_MARKER,completionSteps,validateCompletion,decodeCompletion,steps,classes,nodeCodes,gates,binding,validateBinding,stateIo,classify,validatePoint,validateRecord,Progress,decode,writeAll,emit,run};

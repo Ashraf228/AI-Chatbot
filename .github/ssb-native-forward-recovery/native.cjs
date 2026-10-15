@@ -232,7 +232,17 @@ class Native{
     for(const retiredGeneration of retired)await this.startStep('retired-admission','probe',key,()=>this.probe('retired-admission',{retiredGeneration}));
     return{verified:true,counts:[5,5,retired.length*8],ids:this.owned.filter(x=>x.generation===key).map(x=>x.id)};
   }
-  async e1(){const result=await this.probe('e1');const r=this.owned.find(x=>x.generation===this.current.generation&&x.role==='reporter');const x=(await this.inspect(r.id))[0];need(x.State.Status==='exited'&&x.State.ExitCode===0&&!x.State.OOMKilled,'reporter_completion_failed');const state=await this.state('snapshot',this.current.binding);need(Object.values(state.work).some(w=>w.generation===this.current.generation&&w.kind==='worker'&&w.state==='completed'),'reporter_work_missing');
+  async e1(){
+    const result=await this.probe('e1'),contract=require('./reporter-contract.cjs');
+    const r=this.owned.find(x=>x.generation===this.current.generation&&x.role==='reporter');
+    need(r&&fullId(r.id),'reporter_completion_identity');
+    const expected=contract.binding(this.options.run,this.current.generation,this.verifiedPublicationManifest);
+    need(JSON.stringify(expected)===JSON.stringify(this.current.reporterBinding),'reporter_completion_identity');
+    const xs=await this.inspect(r.id);need(Array.isArray(xs)&&xs.length===1,'reporter_completion_identity');const x=xs[0];
+    need(x.Id===r.id&&x.Image===r.image&&x.Name==='/'+r.name&&x.Config?.Labels?.['com.ssb.native-run']===this.options.run&&x.Config.Labels['com.docker.compose.service']==='reporter'&&x.Config.Labels['com.docker.compose.project']===r.project&&Array.isArray(x.Config.Env)&&JSON.stringify(x.Config.Env.filter(s=>typeof s==='string'&&s.startsWith('SSB_REPORTER_DIAGNOSTIC_BINDING=')))===JSON.stringify(['SSB_REPORTER_DIAGNOSTIC_BINDING='+JSON.stringify(expected)]),'reporter_completion_identity');
+    need(x.State?.Status==='exited'&&x.State.Running===false&&x.State.ExitCode===0&&x.State.OOMKilled===false&&x.State.Error===''&&x.RestartCount===0,'reporter_completion_failed');
+    const receipt=await this.d(['logs','--tail','4',r.id],{ms:1000,reporterCompletion:{container:r.id,binding:expected}});
+    contract.decodeCompletion(receipt.stdout,receipt.stderr,expected);
     const widget=this.owned.find(x=>x.generation===this.current.generation&&x.role==='widget');
     const bytes=(await this.d(['exec',widget.id,'sha256sum','/usr/share/nginx/html/widget.js','/usr/share/nginx/html/loader.js'])).stdout.toString().trim().split('\n').map(x=>x.split(/\s+/)[0]);need(JSON.stringify(bytes)===JSON.stringify(result.hashes),'widget_bytes_changed');return result;}
   async drain(){const result=await this.probe('drain');this.epoch=result.epoch;return result;}
