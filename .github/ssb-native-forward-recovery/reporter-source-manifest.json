@@ -32,11 +32,11 @@
     },
     {
       "path": "apps/reporter/scripts/reporter-entry.cjs",
-      "sha256": "92ecee31bbd766da10a3fe7a698112e50526cd897907755710ab947bfad5c615",
-      "bytes": 12319,
+      "sha256": "5e8fae5053974e259f2658eb1b0ffb22c4801a28965cd1c135571e6f4a650cbc",
+      "bytes": 14235,
       "mode": 420,
       "gitMode": "100644",
-      "gitBlob": "26e6ec882202c13e95017109bb6960bd3f303afe",
+      "gitBlob": "22e7cb4e8ab6dab289be4ace7f868bd4ca1f7948",
       "before": null
     },
     {

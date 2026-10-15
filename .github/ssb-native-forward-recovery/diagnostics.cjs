@@ -10,6 +10,8 @@ codes.push('closure_unverified','closure_not_clean','closure_generation_shutdown
  'clean_exit_invalid','unclean_exit_invalid','unverified_code_required','never_started_invalid','not_created_invalid','not_created_duplicate','not_created_evidence_missing','graceful_shutdown_receipt_missing',
  'EACCES','ENOSPC','EIO','EPIPE','ENOENT','EPERM','ELOOP','regular_file_required','invalid_json','stop_failed','exit_unverified','predecessor_not_stopped','predecessor_shutdown_unverified','global_drain_missing','reporter_exit_not_clean','dashboard_shutdown_missing','dashboard_shutdown_invalid');
 const signals=['SIGTERM','SIGKILL','SIGINT','SIGABRT','SIGSEGV'];
+// E1 controller gates are fixed public vocabulary, never arbitrary error messages.
+codes.push('reporter_completion_identity','reporter_completion_failed','reporter_completion_missing','reporter_completion_invalid','reporter_completion_misbound','reporter_binding_invalid','widget_bytes_changed','mandatory_digest_missing','mandatory_proof_missing','proof_receipt_missing','proof_failed','phase_widget_hashes','widget_hashes_changed');
 const roles=['postgres','redis','probe','restore-postgres','api','admin-writer','dashboard','reporter','widget'];
 const states=['not_created','never_started','exited','exited_unclean','graceful','unverified'];
 const own=(v,keys)=>v&&typeof v==='object'&&!Array.isArray(v)&&JSON.stringify(Object.keys(v).sort())===JSON.stringify([...keys].sort());
