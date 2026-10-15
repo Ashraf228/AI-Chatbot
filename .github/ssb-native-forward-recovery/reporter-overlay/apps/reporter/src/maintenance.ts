@@ -9,7 +9,7 @@ type State = { begin(kind: Kind, parent?: string): string; end(id: string, uncer
 const context = new AsyncLocalStorage<{ state: State; id: string }>();
 let cached: { key: string; state: State } | undefined;
 let stopping = false;
-export type ReporterProgress = { enter(step: string): void; confirm(): void; capture(error: unknown): void; useMaintenanceDenied(ctor: new (...args: any[]) => Error): void; useStateIoReader(reader: (error: unknown) => unknown): void };
+export type ReporterProgress = { enter(step: string): void; confirm(): void; capture(error: unknown): void; useMaintenanceDenied(ctor: new (...args: any[]) => Error): void; useStateIoReader(reader: (error: unknown) => unknown): void; useMutexReader(reader: (error: unknown) => unknown): void };
 
 function state(progress?: ReporterProgress): State | undefined {
   progress?.enter('maintenance-binding');
@@ -22,9 +22,10 @@ function state(progress?: ReporterProgress): State | undefined {
   progress?.confirm();
   if (cached?.key !== key) {
     progress?.enter('maintenance-load');
-    const { MaintenanceState, MaintenanceDenied, readStateIoFailure } = createRequire(import.meta.url)('../dist/maintenance-state.cjs');
+    const { MaintenanceState, MaintenanceDenied, readStateIoFailure, readMutexDiagnostic } = createRequire(import.meta.url)('../dist/maintenance-state.cjs');
     progress?.useMaintenanceDenied(MaintenanceDenied);
     progress?.useStateIoReader(readStateIoFailure);
+    progress?.useMutexReader(readMutexDiagnostic);
     progress?.confirm();
     progress?.enter('maintenance-construct');
     cached = { key, state: new MaintenanceState({ root, service, generation }) };

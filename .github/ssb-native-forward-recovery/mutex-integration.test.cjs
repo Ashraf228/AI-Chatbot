@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cp=require('node:child_process');
 const {sha}=require('./common.cjs');
 const source=process.env.SSB_PROBE_TEST_SOURCE,deps=process.env.SSB_REPORTER_TEST_DEPS;
-const release=path.resolve(source,'../../..'),expected='5b3e40deedc42a3e4934fb100e4275c35490b10cc1fd1b1951b34b4fdf351dbf';
+const release=path.resolve(source,'../../..'),expected='d12828f4d4bead5eee5d53c5d4605d58dc9114482aa8d4da20e562c1de55a15c';
 const tmp=()=>fs.mkdtempSync(path.join(os.tmpdir(),'ssb-mutex-binding-'));
 const helper={api:'src/maintenance/maintenance-mutex.ts',reporter:'apps/api/src/maintenance/maintenance-mutex.ts',dashboard:'scripts/maintenance-mutex.ts'};
 test('all three source manifests bind the identical reviewed mutex without replacing dependency files',()=>{
