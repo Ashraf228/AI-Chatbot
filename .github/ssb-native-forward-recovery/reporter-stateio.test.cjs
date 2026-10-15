@@ -73,7 +73,9 @@ for(const broken of ['maintenance-mutex.ts','maintenance-state.ts'])test('diagno
  }}));
  const state=new code.MaintenanceState({root:f.state,service:binding.service+'-'+binding.run,generation:'release'});
  assert.throws(()=>state.begin('worker'),e=>e===original);assert.equal(code.readStateIoFailure(original),undefined);
- assert.deepEqual(writes,{'maintenance-mutex.ts':1,'maintenance-state.ts':broken==='maintenance-state.ts'?1:0});
+ // Both the legacy I/O map and the new provenance map may fail independently.
+ assert.deepEqual(writes,{'maintenance-mutex.ts':2,'maintenance-state.ts':broken==='maintenance-state.ts'?2:0});
+ assert.equal(code.readMutexDiagnostic(original),undefined);
  const p=new proto.Progress(binding);p.useStateIoReader(code.readStateIoFailure);p.enter('admission');
  assert.throws(()=>proto.emit(p,original,()=>{throw Object.assign(Error('PRIVATE'),{code:'EPIPE'});}),e=>e instanceof AggregateError&&e.errors[0]===original);
  assert.equal(p.result().primary.nodeCode,'EACCES');assert.equal(p.result().primary.stateIo,undefined);

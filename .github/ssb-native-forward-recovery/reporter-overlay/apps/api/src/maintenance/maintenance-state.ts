@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
-import { acquireStateMutex, readMutexIoFailure } from './maintenance-mutex';
+import { acquireStateMutex, readMutexIoFailure, readMutexFailure } from './maintenance-mutex';
 
 export type Binding = { root: string; service: string; generation: string };
 export type WorkKind = 'http' | 'handler' | 'import' | 'worker' | 'job' | 'database' | 'provider' | 'grant' | 'migration' | 'deployment' | 'configuration';
@@ -31,6 +31,11 @@ export class MaintenanceDenied extends Error {
 type StateIoFailure = Readonly<{ operation: 'mutex-acquire' | 'state-temp-create' | 'mutex-release';
   resource: 'state-mutex' | 'state-temp'; attempts: number | null; elapsedMs: number | null; limitMs: 50 | null }>;
 const stateIoFailures = new WeakMap<object, StateIoFailure>();
+type MutexDiagnostic = NonNullable<ReturnType<typeof readMutexFailure>> & Readonly<{ attempts: number; elapsedMs: number; limitMs: 50 }>;
+const mutexFailures = new WeakMap<object, MutexDiagnostic>();
+export function readMutexDiagnostic(error: unknown): MutexDiagnostic | undefined {
+  return error !== null && typeof error === 'object' ? mutexFailures.get(error) : undefined;
+}
 export function readStateIoFailure(error: unknown): StateIoFailure | undefined {
   return error !== null && typeof error === 'object' ? stateIoFailures.get(error) : undefined;
 }
@@ -52,6 +57,10 @@ function noteBoundMutexFailures(error: unknown, attempts: number, startedAt: num
     const pending = [error], seen = new Set<unknown>();
     for (let count = 0; pending.length && count < 16; count++) {
       const current = pending.pop();if (seen.has(current)) continue;seen.add(current);
+      const detail = readMutexFailure(current);
+      if (detail && current !== null && typeof current === 'object') {
+        try { mutexFailures.set(current, Object.freeze({ ...detail, attempts, elapsedMs: Math.floor(performance.now() - startedAt), limitMs: 50 })); } catch { /* Preserve the primary error. */ }
+      }
       const operation = readMutexIoFailure(current);
       if (operation) noteStateIoFailure(current, operation, attempts, startedAt);
       if (current instanceof AggregateError) pending.push(...current.errors.slice(0, 4));

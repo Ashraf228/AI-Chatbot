@@ -106,27 +106,35 @@ if(process.env.SSB_REPORTER_CHILD){
   const f=fixture(t,fault),r=cp.spawnSync(process.execPath,f.args,{env:f.env,encoding:'utf8',timeout:2500,maxBuffer:8192});assert.equal(r.status,1);const d=proto.decode(r.stdout,r.stderr,binding);
   assert.equal(d.primary.step,fault==='work-close'?'work-close':'action');assert.equal(d.primary.lastConfirmed,fault==='work-close'?'action':'admission');assert.equal(d.primary.nodeCode,fault==='work-close'?'EIO':'unknown');if(fault==='action-and-close'){assert.equal(d.primary.errorClass,'TypeError');assert.equal(d.cleanup.length,1);assert.equal(d.cleanup[0].step,'work-close');assert.equal(d.cleanup[0].nodeCode,'EIO');}assert.doesNotMatch(fs.readFileSync(f.events,'utf8'),/external-denied/);
  });
- function harness(t,child,{writeFailure=false,identity=false,closureFailure=false,mountFailure=false}={}){
+ function harness(t,child,{writeFailure=false,identity=false,closureFailure=false,mountFailure=false,generation='release',delayedReporterExit=false}={}){
+  const binding=proto.binding(options.run,generation,publication);
   const root=tmp(t),raw=path.join(root,'raw');fs.mkdirSync(raw);const values=nativeEvidence(),n=new Native(options),stopped=new Set(),calls=[];
   n.verifiedPublicationManifest=publication;Object.assign(n,{privateRoot:root,prefix:'ssb-native-'+options.run,stateRoot:path.join(root,'state'),toolsRoot:path.join(root,'tools'),docker:'/usr/bin/docker',initial:{containers:[]},probeDeadline:performance.now()+90000,images:Object.fromEntries(['api','dashboard','reporter','widget'].map((s,i)=>[s,values.builds.ids[i]])),imageMetadata:{},synthetic:{owner:'a'.repeat(64)}});n.images['admin-writer']=n.images.api;n.resources=()=>{};
-  const current={generation:'release',root:tmp(t),binding:{root:n.stateRoot,service:n.prefix,generation:'release'},common:{},names:Object.fromEntries(['api','admin-writer','dashboard','reporter','widget'].map(s=>[s,n.prefix+'-release-'+s])),project:n.prefix+'-release',reporterBinding:binding};
+  const current={generation,root:tmp(t),binding:{root:n.stateRoot,service:n.prefix,generation},common:{},names:Object.fromEntries(['api','admin-writer','dashboard','reporter','widget'].map(s=>[s,n.prefix+'-'+generation+'-'+s])),project:n.prefix+'-'+generation,reporterBinding:binding};
   const fakeFixtures={...require('./fixtures.cjs'),generation(){return current;},write(p,b){write(p,b);return{path:p,sha256:sha(b)};}};
   const C=load('native.cjs',{'./fixtures.cjs':fakeFixtures,[path.join(n.toolsRoot,'scripts/ops/maintenance-start-contract.cjs')]:{assertPlan(){},verifyFiles(){},assertImage(){}}}).Native;Object.setPrototypeOf(n,C.prototype);
   n.privilegedStart=async(_p,_b,e)=>{if(e)e.id=sha(e.role);return{};};
-  let reporterEnded=!mountFailure;
+  let reporterEnded=!mountFailure&&!delayedReporterExit;
   const transport={spawn(bin,args){assert.equal(bin,'/usr/bin/docker');assert.deepEqual(args.slice(0,2),['--host','unix:///var/run/docker.sock']);const a=args.slice(2);calls.push(a);let stdout='',stderr='',status=0;
    if(a[0]==='logs'){assert.deepEqual(a,['logs','--tail','4',sha('reporter')]);stdout=child.stdout;stderr=child.stderr;}
    else if(a[0]==='exec'){if(mountFailure&&a[1]===sha('reporter')){reporterEnded=true;status=1;}}
    else if(a[0]==='stop'){assert.equal(a[2],'8');assert.notEqual(a[3],sha('reporter'));if(closureFailure)status=1;else stopped.add(a[3]);}
    else if(a[1]==='ls')stdout=n.owned.filter(e=>e.role!=='reporter'&&!stopped.has(e.id)).map(e=>e.id).join('\n');
    else if(a[1]==='inspect'){
-    const e=n.owned.find(e=>e.name===a[2]||e.id===a[2]);assert.ok(e);const exited=e.role==='reporter'&&reporterEnded||stopped.has(e.id);
+    const e=n.owned.find(e=>e.name===a[2]||e.id===a[2]);assert.ok(e);if(delayedReporterExit&&a[2]===sha('reporter')&&n.owned.length===5)reporterEnded=true;const exited=e.role==='reporter'&&reporterEnded||stopped.has(e.id);
     stdout=JSON.stringify([{Id:identity&&e.role==='reporter'?'f'.repeat(64):e.id,Name:'/'+e.name,Image:e.image,Config:{Labels:{'com.ssb.native-run':options.run,'com.docker.compose.service':e.role,'com.docker.compose.project':e.project},Env:['SSB_REPORTER_DIAGNOSTIC_BINDING='+JSON.stringify(binding)]},RestartCount:0,State:{Status:exited?'exited':'running',Running:!exited,Paused:false,Restarting:false,Dead:false,OOMKilled:false,Error:'',Pid:exited?0:123,ExitCode:e.role==='reporter'?1:0,StartedAt:'2026-10-13T11:00:00Z',FinishedAt:exited?'2026-10-13T11:00:01Z':'0001-01-01T00:00:00Z'}}]);
    }else assert.fail('unapproved synthetic transport');
    const c=new EventEmitter();c.stdout=new EventEmitter();c.stderr=new EventEmitter();c.stdin=new EventEmitter();c.stdin.end=()=>queueMicrotask(()=>{if(stdout)c.stdout.emit('data',Buffer.from(stdout));if(stderr)c.stderr.emit('data',Buffer.from(stderr));c.emit('close',status,null);});return c;
   }};
   const P=load('common.cjs',{'node:child_process':transport,'node:fs':{...fs,writeFileSync(p,...args){if(writeFailure&&calls.at(-1)?.[0]==='logs')throw Object.assign(Error('PRIVATE'),{code:'ENOSPC'});return fs.writeFileSync(p,...args);}}}).Processes;n.proc=new P({deadline:n.deadline,privateRoot:raw});
-  const execute=n.execute.bind(n);n.execute=phase=>phase==='release-start'?execute(phase):Promise.resolve({verified:true,...values[phase]});
+  const execute=n.execute.bind(n);n.execute=phase=>phase===generation+'-start'?execute(phase):Promise.resolve({verified:true,...values[phase]});
+  if(generation!=='release'){
+   // Prior generations are synthetic completed fixtures; the current generation uses real close().
+   const close=n.close.bind(n);n.close=async failed=>{
+    const result=await close(failed),previous=require('./dashboard-shutdown-fixture.cjs').observeClosure(structuredClone(values.closure)).detail.outcomes.slice(0,3+['release','forward','normal'].indexOf(generation)*5);
+    return{...result,counts:[result.counts[0]+previous.length,result.counts[1]+previous.length,result.counts[2]],ids:[...previous.map(o=>o.id),...result.ids],detail:{...result.detail,outcomes:[...previous,...result.detail.outcomes]}};
+   };
+  }
   return{n,calls};
  }
  for(const options of [{},{writeFailure:true},{closureFailure:true},{identity:true},{mountFailure:true},{partialWrite:true}])test('bootstrap -> real process decoder -> native start -> controller -> regular receiver '+JSON.stringify(options),async t=>{
